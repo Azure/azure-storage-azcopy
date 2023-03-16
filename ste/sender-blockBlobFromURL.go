@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"fmt"
 	"net/url"
 	"sync/atomic"
 
@@ -133,6 +134,13 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 
 		// step 3: put block to remote
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+
+		if (c.ChunkAlreadyUploaded(blockIndex)) {
+			c.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, fmt.Sprintf("Skipping chunk %d.", blockIndex))
+			atomic.AddInt32(&c.atomicChunksWritten, 1)
+			return
+			
+		}
 
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)

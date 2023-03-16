@@ -22,9 +22,11 @@ package ste
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,6 +64,7 @@ type blockBlobSenderBase struct {
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
 	blockNamePrefix	string
+	completedBlockList map[int]string
 }
 
 func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSize int64, numChunks uint32, err error) {
@@ -322,4 +325,60 @@ func (s *blockBlobSenderBase) setBlockID(index int32, value string) {
 
 func (s *blockBlobSenderBase) generateEncodedBlockID(index int32) string {
 	return common.GenerateBlockBlobBlockID(s.blockNamePrefix, index)
+}
+
+func (s *blockBlobSenderBase) buildCommittedBlockMap() {
+	invalidAzCopyBlockNameMsg := "buildCommittedBlockMap: Found blocks which are not comitted by AzCopy. Restarting whole file"
+	changedChunkSize := "buildCommittedBlockMap: Chunksize mismatch on uncomitted blocks"
+	list := make(map[int]string)
+
+	blockList, err := s.destBlockBlobURL.GetBlockList(s.jptm.Context(), azblob.BlockListUncommitted, azblob.LeaseAccessConditions{})
+	if err != nil {
+		s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogError, "Failed to get blocklist. Restarting whole file.")
+		return
+	}
+
+	if len(blockList.UncommittedBlocks) == 0 {
+		s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "No uncomitted chunks found.")
+		return
+	}
+
+	// We return empty list if
+	// 1. We find chunks by a different actor
+	// 2. Chunk size differs
+	for _, block := range blockList.UncommittedBlocks {
+		if len(block.Name) != common.AZCOPY_BLOCKNAME_LENTGH {
+			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			return
+		}
+		
+		tmp, err := base64.StdEncoding.DecodeString(block.Name)
+		decodedBlockName := string(tmp)
+		if err != nil || !strings.HasPrefix(decodedBlockName, s.blockNamePrefix) {
+			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			return
+		}
+
+		index, err := strconv.Atoi(decodedBlockName[len(decodedBlockName) - len(s.blockNamePrefix):])
+		if err != nil || index < 0 || index > int(s.numChunks) {
+			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			return
+		}
+
+		// Last chunk may have different blockSize
+		if block.Size != s.ChunkSize() && index != int(s.numChunks) {
+			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, changedChunkSize)
+			return
+		}
+
+		list[index] = decodedBlockName
+	}
+	
+	// We are here only if all the uncommitted blocks are uploaded by this job with same blockSize
+	s.completedBlockList = list
+}
+
+func (s *blockBlobSenderBase) ChunkAlreadyUploaded(index int32) bool {
+	_, ok := s.completedBlockList[int(index)]
+	return ok
 }

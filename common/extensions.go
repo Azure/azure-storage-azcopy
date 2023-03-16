@@ -185,7 +185,8 @@ func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
 // we have to generate a 36B string and then base64-encode this to retain the
 // same size.
 // Block Names of blobs are of format noted below.
-// <5B empty placeholder> <16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum> 
+// <5B empty placeholder> <16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum>
+const AZCOPY_BLOCKNAME_LENTGH = 48 
 func GenerateBlockBlobBlockID(blockNamePrefix string, index int32) string {
 	blockID := []byte(fmt.Sprintf("%s%05d", blockNamePrefix, index))
 	return base64.StdEncoding.EncodeToString(blockID)
