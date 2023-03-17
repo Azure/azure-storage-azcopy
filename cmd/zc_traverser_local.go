@@ -536,7 +536,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					"",
 					common.EEntityType.File(),
 					singleFileInfo.ModTime(),
-					0,
+					singleFileInfo.Size(),
 					noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 					noBlobProps,
 					noMetdata,

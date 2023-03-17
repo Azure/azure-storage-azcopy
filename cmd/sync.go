@@ -180,7 +180,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(raw.AzcopyCurrentJobID, AzcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(raw.AzcopyCurrentJobID, AzcopyLogVerbosity, AzcopyAppPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()

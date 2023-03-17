@@ -350,7 +350,7 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		// 2. cfdMode = TargetCompare.
 		// This means whenever we come here, we don't tranfers the folder property and hence we should call incrementNotTransferred().
 		//
-		if f.incrementNotTransferred != nil {
+		if f.incrementNotTransferred != nil && !so.isSingleFile {
 			f.incrementNotTransferred(so.entityType)
 		}
 	}
