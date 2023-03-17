@@ -251,6 +251,19 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		size += storedObjectSize(storedObject)
 		delete(folderMap.indexMap, file)
 
+		/*
+		 * This is special case to handle single file case.
+		 * Relative path for singleFile case is "" as we want to transfer this only file.
+		 * But for sync algorithm to work correctly we created fake it with dummy folder and it being present underneath.
+		 * f.e. file1.txt we want to transfer
+		 * ["."]["."] ---> dummy folder
+		 * ["."]["file1.txt"] --> file entry with relativePath (file1.txt) w.r.t dummy folder.
+		 * After it's processed we need to revert back to original relative path which "".
+		 */
+		if storedObject.isSingleFile {
+			storedObject.relativePath = ""
+		}
+
 		// If finalizeAll==true we need to blindly copy *all* files/folders present in folderMap.indexMap.
 		dataChange, metaDataChange := true, true
 
@@ -317,7 +330,7 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 	size += storedObjectSize(so)
 	delete(folderMap.indexMap, ".")
 
-	if finalizeAll {
+	if finalizeAll && !so.isSingleFile {
 		//
 		// Note: We actually want to update the directory properties and *not* create a new directory.
 		//
@@ -493,6 +506,20 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			panic(fmt.Sprintf("Relative Path at source[%s] not matched with destination[%s]", sourceObjectInMap.relativePath, destinationObject.relativePath))
 		}
 		dataChanged, metadataChanged := f.HasFileChangedSinceLastSyncUsingTargetCompare(destinationObject, sourceObjectInMap)
+		size := storedObjectSize(sourceObjectInMap)
+
+		/*
+		 * This is special case to handle single file case.
+		 * Relative path for singleFile case is "" as we want to transfer this only file.
+		 * But for sync algorithm to work correctly we created fake it with dummy folder and it being present underneath.
+		 * f.e. file1.txt we want to transfer
+		 * ["."]["."] ---> dummy folder
+		 * ["."]["file1.txt"] --> file entry with relativePath (file1.txt) w.r.t dummy folder.
+		 * After it's processed we need to revert back to original relative path which "".
+		 */
+		if sourceObjectInMap.isSingleFile {
+			sourceObjectInMap.relativePath = ""
+		}
 
 		var err error
 		if f.disableComparison || dataChanged {
@@ -512,7 +539,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			}
 		}
 
-		atomic.AddInt64(&f.sourceFolderIndex.totalSize, -storedObjectSize(sourceObjectInMap))
+		atomic.AddInt64(&f.sourceFolderIndex.totalSize, -size)
 		delete(foldermap.indexMap, lcFileName)
 
 		f.sourceFolderIndex.lock.Unlock()

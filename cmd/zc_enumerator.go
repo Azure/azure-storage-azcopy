@@ -102,6 +102,7 @@ type StoredObject struct {
 	//
 	isFolderEndMarker bool
 	isFinalizeAll     bool
+	isSingleFile      bool
 }
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject) bool {

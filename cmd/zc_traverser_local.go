@@ -527,11 +527,38 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.File())
 		}
-		err := processIfPassedFilters(filters,
-			newStoredObject(
+
+		if !t.isSync {
+			err = processIfPassedFilters(filters,
+				newStoredObject(
+					preprocessor,
+					singleFileInfo.Name(),
+					"",
+					common.EEntityType.File(),
+					singleFileInfo.ModTime(),
+					0,
+					noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+					noBlobProps,
+					noMetdata,
+					"", // Local has no such thing as containers
+				),
+				processor,
+			)
+			_, err = getProcessingError(err)
+			return err
+		} else {
+			//
+			// For sync we try mimick as there is one dummyFolder underneath this file is present.
+			// So if 1.txt file needs to synced, we create stored object for that.
+			// After that dummy entry for folder created.
+			// IndexerMap looks like this :-
+			// ["."]["."] --> represents dummy folder
+			// ["."]["1.txt"] --> file itself.
+			//
+			so := newStoredObject(
 				preprocessor,
 				singleFileInfo.Name(),
-				"",
+				singleFileInfo.Name(),
 				common.EEntityType.File(),
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
@@ -539,11 +566,64 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				noBlobProps,
 				noMetdata,
 				"", // Local has no such thing as containers
-			),
-			processor,
-		)
-		_, err = getProcessingError(err)
-		return err
+			)
+
+			extendedProp, err := common.GetExtendedProperties(common.CleanLocalPath(t.fullPath))
+			if err != nil {
+				err = fmt.Errorf("GetExtendedProperties for file path[%s] returned error: %v", t.fullPath, err)
+				t.scannerLogger.Log(pipeline.LogError, err.Error())
+				return err
+			}
+
+			// Fill the missing Ctime and inode properties for the file.
+			so.lastChangeTime = extendedProp.CTime()
+			so.inode = extendedProp.INode()
+			so.isSingleFile = true
+
+			err = processIfPassedFilters(filters,
+				so,
+				processor,
+			)
+			_, err = getProcessingError(err)
+			if err != nil {
+				return err
+			}
+
+			// Add the dummy folder entry to folderIndexerMap.
+			dummyso := newStoredObject(
+				preprocessor,
+				parallel.DotSpecialGUID,
+				parallel.DotSpecialGUID,
+				common.EEntityType.Folder(),
+				singleFileInfo.ModTime(),
+				0,
+				noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+				noBlobProps,
+				noMetdata,
+				"", // Local has no such thing as containers
+			)
+			dummyso.isSingleFile = true
+
+			err = processIfPassedFilters(filters,
+				dummyso,
+				processor,
+			)
+			_, err = getProcessingError(err)
+			if err != nil {
+				return err
+			}
+
+			entry := ""
+			tqueue := t.orderedTqueue.GetTqueue()
+			if tqueue != nil {
+				tqueue <- entry
+			} else {
+				err = fmt.Errorf("[SINGLE FILE] tqueue is nil for file path[%s]", t.fullPath)
+				t.scannerLogger.Log(pipeline.LogError, err.Error())
+				return err
+			}
+			return nil
+		}
 	} else {
 		if t.recursive {
 			//
