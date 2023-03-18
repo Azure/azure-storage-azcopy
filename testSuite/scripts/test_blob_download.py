@@ -41,7 +41,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dst = os.devnull
         result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info")
 
-        def test_download_1kb_blob_to_root(self):
+    def test_download_1kb_blob_to_root(self):
         # create file of size 1kb
         filename = "test_1kb_blob_upload_download_null.txt"
         file_path = util.create_test_file(filename, 1024)
