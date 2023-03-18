@@ -42,20 +42,28 @@ const PreserveOwnerDefault = true
 var RootDriveRegex = regexp.MustCompile(`(?i)(^[A-Z]:\/?$)`)
 var RootShareRegex = regexp.MustCompile(`(^\/\/[^\/]*\/?$)`)
 
+func isRootPath(s string) bool {
+	shortParentDir := strings.ReplaceAll(ToShortPath(s), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING)
+	return  RootDriveRegex.MatchString(shortParentDir)  ||
+		RootShareRegex.MatchString(shortParentDir)  ||
+		strings.EqualFold(shortParentDir, "/")
+}
+
+
 func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreationTracker) error {
-	// find the parent directory
-	lastIndex := strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))
-	if lastIndex == -1 {
-		// This would be root. We dont have to create it.
+	// If we're pointing at the root of a drive, don't try because it won't work.
+	if isRootPath(destinationPath) {
 		return nil
 	}
+
+	lastIndex := strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))
 	directory := destinationPath[:lastIndex]
 	return CreateDirectoryIfNotExist(directory, tracker)
 }
 
 func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) error {
 	// If we're pointing at the root of a drive, don't try because it won't work.
-	if shortParentDir := strings.ReplaceAll(ToShortPath(directory), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING); RootDriveRegex.MatchString(shortParentDir) || RootShareRegex.MatchString(shortParentDir) || strings.EqualFold(shortParentDir, "/") {
+	if isRootPath(directory) {
 		return nil
 	}
 
