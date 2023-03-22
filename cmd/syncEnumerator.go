@@ -65,7 +65,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			if entityType == common.EEntityType.File() {
 				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			}
-		}, nil, cca.s2sPreserveBlobTags, cca.compareHash, azcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */)
+		}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(),
+        cca.cpkOptions, nil /* errorChannel */, false)
 
 	if err != nil {
 		return nil, err
@@ -86,7 +87,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, azcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil /* errorChannel */)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(),
+    cca.cpkOptions, nil /* errorChannel */, false)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +131,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := newFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, cca.isHNSToHNS, strings.EqualFold(cca.destination.Value, common.Dev_Null), false) // sync always acts like stripTopDir=true
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, cca.isHNSToHNS, strings.EqualFold(cca.destination.Value, common.Dev_Null), false) // sync always acts like stripTopDir=true
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}

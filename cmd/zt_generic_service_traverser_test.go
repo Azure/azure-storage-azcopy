@@ -58,7 +58,7 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -174,7 +174,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -183,7 +183,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
-	blobAccountTraverser := newBlobAccountTraverser(rawBSU, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -357,7 +357,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
 
 	// Create a local traversal
-	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
+	localTraverser := newLocalTraverser(context.TODO(), dstDirName, true, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
 
 	// Invoke the traversal with an indexer so the results are indexed for easy validation
 	localIndexer := newObjectIndexer()
@@ -367,7 +367,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
 	container := "objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{})
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}

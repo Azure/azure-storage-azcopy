@@ -760,6 +760,7 @@ func (BlockBlobTier) None() BlockBlobTier    { return BlockBlobTier(0) }
 func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
 func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(2) }
 func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(3) }
+func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(4) }
 
 func (bbt BlockBlobTier) String() string {
 	return enum.StringInt(bbt, reflect.TypeOf(bbt))
@@ -1515,9 +1516,10 @@ var EEntityType = EntityType(0)
 
 type EntityType uint8
 
-func (EntityType) File() EntityType    { return EntityType(0) }
-func (EntityType) Folder() EntityType  { return EntityType(1) }
-func (EntityType) Symlink() EntityType { return EntityType(2) }
+func (EntityType) File() EntityType           { return EntityType(0) }
+func (EntityType) Folder() EntityType         { return EntityType(1) }
+func (EntityType) Symlink() EntityType        { return EntityType(2) }
+func (EntityType) FileProperties() EntityType { return EntityType(3) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
@@ -1588,6 +1590,7 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 ////////////////////////////////////////////////////////////////
 func ToClientProvidedKeyOptions(cpkInfo blob.CPKInfo, cpkScopeInfo blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
 	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySHA256 == nil) && cpkScopeInfo.EncryptionScope == nil {
+
 		return azblob.ClientProvidedKeyOptions{}
 	}
 

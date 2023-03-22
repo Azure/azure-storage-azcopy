@@ -957,8 +957,8 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
 	return runtime.GOOS == "linux" && (
-		// fromTo == common.EFromTo.BlobLocal() || TODO
-		fromTo == common.EFromTo.LocalBlob()) ||
+    fromTo == common.EFromTo.BlobLocal() ||
+	  fromTo == common.EFromTo.LocalBlob()) ||
 		fromTo == common.EFromTo.BlobBlob()
 }
 

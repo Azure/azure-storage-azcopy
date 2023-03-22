@@ -332,7 +332,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context,
 	credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties,
 	includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string,
-	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo) (ResourceTraverser, error) {
+	s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool) (ResourceTraverser, error) {
 	var output ResourceTraverser
 	var p *pipeline.Pipeline
 
@@ -380,7 +380,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		}
 
 		output = newListTraverser(resource, location, credential, ctx, recursive, symlinkHandling, getProperties,
-			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
+			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions)
 		return output, nil
 	}
 
@@ -389,7 +389,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		_, err := common.OSStat(resource.ValueLocal())
 
 		// If wildcard is present and this isn't an existing file/folder, glob and feed the globbed list into a list enum.
-		if strings.Contains(resource.ValueLocal(), "*") && err != nil {
+		if strings.Contains(resource.ValueLocal(), "*") && (stripTopDir || err != nil) {
 			basePath := getPathBeforeFirstWildcard(resource.ValueLocal())
 			matches, err := filepath.Glob(resource.ValueLocal())
 
@@ -408,12 +408,12 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
 			output = newListTraverser(baseResource, location, nil, nil, recursive, symlinkHandling, getProperties,
-				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions)
+				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions)
 		} else {
 			if ctx != nil {
-				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
 			} else {
-				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
+				output = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
 			}
 		}
 	case common.ELocation.Benchmark():
@@ -450,11 +450,11 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions)
+			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions)
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion)
+			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()
