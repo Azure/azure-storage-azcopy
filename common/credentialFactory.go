@@ -212,6 +212,18 @@ func CreateBlobClient(blobURL string, credInfo *CredentialInfo, options azcore.C
 	return blobClient, nil
 }
 
+func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blob.Client, error) {
+	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
+	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
+	if blobURLParts.Snapshot != "" {
+		return blobClient.WithSnapshot(blobURLParts.Snapshot)
+	}
+	if blobURLParts.VersionID != "" {
+		return blobClient.WithVersionID(blobURLParts.VersionID)
+	}
+	return blobClient, nil
+}
+
 func CreateBlockBlobClient(blobURL string, credInfo *CredentialInfo, options azcore.ClientOptions, credOpOptions *CredentialOpOptions) (*blockblob.Client, error) {
 	blobURLParts, err := blob.ParseURL(blobURL)
 	if err != nil {
