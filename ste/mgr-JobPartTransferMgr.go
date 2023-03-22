@@ -125,6 +125,11 @@ type TransferInfo struct {
 	RehydratePriority blob.RehydratePriority
 }
 
+
+func (i TransferInfo) IsFilePropertiesTransfer() bool {
+	return i.EntityType == common.EEntityType.FileProperties()
+}
+
 func (i TransferInfo) IsFolderPropertiesTransfer() bool {
 	return i.EntityType == common.EEntityType.Folder()
 }
@@ -149,6 +154,8 @@ func (i TransferInfo) ShouldTransferLastWriteTime() bool {
 func (i TransferInfo) entityTypeLogIndicator() string {
 	if i.IsFolderPropertiesTransfer() {
 		return "(folder properties) "
+	} else if i.IsFilePropertiesTransfer() {
+		return "(file properties) "
 	} else {
 		return ""
 	}

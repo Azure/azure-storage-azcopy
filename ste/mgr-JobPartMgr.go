@@ -176,6 +176,17 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		// NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
+		// Bump the service version when using the Cold access tier.
+		pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
+			// TODO: Remove me when bumping the service version is no longer relevant.
+			return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+				if request.Header.Get("x-ms-access-tier") == common.EBlockBlobTier.Cold().String() {
+					request.Header.Set("x-ms-version", "2021-12-02")
+				}
+
+				return next.Do(ctx, request)
+			}
+		}),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
 			SyslogDisabled:               common.IsForceLoggingDisabled(),
