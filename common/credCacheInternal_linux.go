@@ -92,7 +92,7 @@ func (c *CredCacheInternalIntegration) LoadToken() (*OAuthTokenInfo, error) {
 
 // hasCachedTokenInternal returns if there is cached token in token manager.
 func (c *CredCacheInternalIntegration) hasCachedTokenInternal() (bool, error) {
-	if _, err := c.keyring.Get(c.serviceName, c.accountName); err != nil {
+	if _, err := c.keyring.Get(c.serviceName, c.accountName); err != nil { //nolint:staticcheck
 		return false, fmt.Errorf("failed to find token from gnome keyring, %v", err)
 	}
 
@@ -106,6 +106,7 @@ func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
 }
 
 // loadTokenInternal restores a Token object from file cache.
+//nolint:staticcheck
 func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, error) {
 	data, err := c.keyring.Get(c.serviceName, c.accountName)
 	if err != nil {
