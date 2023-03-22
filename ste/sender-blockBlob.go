@@ -362,7 +362,7 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 			return
 		}
 
-		index, err := strconv.Atoi(decodedBlockName[len(decodedBlockName)-len(s.blockNamePrefix):])
+		index, err := strconv.Atoi(decodedBlockName[len(s.blockNamePrefix):])
 		if err != nil || index < 0 || index > int(s.numChunks) {
 			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
 			return
