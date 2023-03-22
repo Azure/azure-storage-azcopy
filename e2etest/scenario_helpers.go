@@ -138,7 +138,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 				mode = *file.creationProperties.posixProperties.mode
 			}
 			switch {
-			case mode & common.S_IFIFO == common.S_IFIFO || mode & common.S_IFSOCK == common.S_IFSOCK:
+			case mode&common.S_IFIFO == common.S_IFIFO || mode&common.S_IFSOCK == common.S_IFSOCK:
 				osScenarioHelper{}.Mknod(c, destFile, mode, 0)
 			default:
 				sourceData, err := s.generateLocalFile(
@@ -371,10 +371,10 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 }
 
 type generateFromListOptions struct {
-	fs          []*testObject
-	defaultSize string
+	fs                      []*testObject
+	defaultSize             string
 	preservePosixProperties bool
-	accountType AccountType
+	accountType             AccountType
 }
 
 type generateBlobFromListOptions struct {
@@ -391,7 +391,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 	for _, b := range options.fs {
 		switch b.creationProperties.entityType {
 		case common.EEntityType.Folder(): // it's fine to create folders even when we're not explicitly testing them, UNLESS we're testing CPK-- AzCopy can't properly pick that up!
-			if !options.cpkInfo.Empty() || b.name == "" {
+			if !(options.cpkInfo.EncryptionKey == nil || options.cpkInfo.EncryptionKeySHA256 == nil) || b.name == "" {
 				continue // can't write root, and can't handle dirs with CPK
 			}
 
@@ -425,7 +425,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				mode := *b.creationProperties.posixProperties.mode
 
 				// todo: support for device rep files may be difficult in a testing environment.
-				if mode & common.S_IFSOCK == common.S_IFSOCK || mode & common.S_IFIFO == common.S_IFIFO {
+				if mode&common.S_IFSOCK == common.S_IFSOCK || mode&common.S_IFIFO == common.S_IFIFO {
 					b.body = make([]byte, 0)
 				}
 			}
