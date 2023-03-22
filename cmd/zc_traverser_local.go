@@ -45,6 +45,7 @@ const MAX_SYMLINKS_TO_FOLLOW = 40
 type localTraverser struct {
 	fullPath        string
 	recursive       bool
+	stripTopDir    bool
 	symlinkHandling common.SymlinkHandlingType
 	appCtx          context.Context
 	// a generic function to notify that a new stored object has been enumerated
@@ -71,6 +72,10 @@ func (t *localTraverser) IsDirectory(bool) (bool, error) {
 }
 
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
+	if t.stripTopDir {
+		return nil, false, nil // StripTopDir can NEVER be a single file. If a user wants to target a single file, they must escape the *.
+	}
+
 	fileInfo, err := common.OSStat(t.fullPath)
 
 	if err != nil {
@@ -239,17 +244,8 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				computedRelativePath = ""
 			}
 
-			// TODO: Later we might want to transfer these special files as such.
-			unsupportedFileTypes := (os.ModeSocket | os.ModeNamedPipe | os.ModeIrregular | os.ModeDevice)
-
 			if fileInfo == nil {
 				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
-				WarnStdoutAndScanningLog(err.Error())
-				return nil
-			}
-
-			if (fileInfo.Mode() & unsupportedFileTypes) != 0 {
-				err := fmt.Errorf("Unsupported file type %s: %v", filePath, fileInfo.Mode())
 				WarnStdoutAndScanningLog(err.Error())
 				return nil
 			}
@@ -802,7 +798,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, symlinkHandling common.SymlinkHandlingType, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
+func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, stripTopDir bool, symlinkHandling common.SymlinkHandlingType, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
@@ -810,7 +806,9 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, sym
 		appCtx:                      ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		errorChannel:                errorChannel,
-		targetHashType:              syncHashType}
+		targetHashType:              syncHashType,
+		stripTopDir: stripTopDir,
+	}
 	return &traverser
 }
 

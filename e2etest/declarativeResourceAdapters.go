@@ -60,8 +60,13 @@ func (a blobResourceAdapter) toHeaders() azblob.BlobHTTPHeaders {
 
 func (a blobResourceAdapter) toMetadata() azblob.Metadata {
 	if a.obj.creationProperties.nameValueMetadata == nil {
-		return azblob.Metadata{}
+		a.obj.creationProperties.nameValueMetadata = azblob.Metadata{}
 	}
+
+	if a.obj.creationProperties.posixProperties != nil {
+		a.obj.creationProperties.posixProperties.AddToMetadata(a.obj.creationProperties.nameValueMetadata)
+	}
+
 	return a.obj.creationProperties.nameValueMetadata
 }
 

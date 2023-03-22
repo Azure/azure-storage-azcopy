@@ -35,7 +35,7 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 		if err != nil && err != unix.ENOSYS {
 			return nil, err
 		} else if err == nil {
-			return statxTAdapter(stat), nil
+			return StatxTAdapter(stat), nil
 		}
 	}
 
@@ -45,130 +45,130 @@ func (f localFileSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter
 		return nil, err
 	}
 
-	return statTAdapter(stat), nil
+	return StatTAdapter(stat), nil
 }
 
-type statxTAdapter unix.Statx_t
+type StatxTAdapter unix.Statx_t
 
-func (s statxTAdapter) Extended() bool {
+func (s StatxTAdapter) Extended() bool {
 	return true
 }
 
-func (s statxTAdapter) StatxMask() uint32 {
+func (s StatxTAdapter) StatxMask() uint32 {
 	return s.Mask
 }
 
-func (s statxTAdapter) Attribute() uint64 {
+func (s StatxTAdapter) Attribute() uint64 {
 	return s.Attributes
 }
 
-func (s statxTAdapter) AttributeMask() uint64 {
+func (s StatxTAdapter) AttributeMask() uint64 {
 	return s.Attributes_mask
 }
 
-func (s statxTAdapter) BTime() time.Time {
+func (s StatxTAdapter) BTime() time.Time {
 	return time.Unix(s.Btime.Sec, int64(s.Btime.Nsec))
 }
 
-func (s statxTAdapter) NLink() uint64 {
+func (s StatxTAdapter) NLink() uint64 {
 	return uint64(s.Nlink)
 }
 
-func (s statxTAdapter) Owner() uint32 {
+func (s StatxTAdapter) Owner() uint32 {
 	return s.Uid
 }
 
-func (s statxTAdapter) Group() uint32 {
+func (s StatxTAdapter) Group() uint32 {
 	return s.Gid
 }
 
-func (s statxTAdapter) FileMode() uint32 {
+func (s StatxTAdapter) FileMode() uint32 {
 	return uint32(s.Mode)
 }
 
-func (s statxTAdapter) INode() uint64 {
+func (s StatxTAdapter) INode() uint64 {
 	return s.Ino
 }
 
-func (s statxTAdapter) Device() uint64 {
+func (s StatxTAdapter) Device() uint64 {
 	return unix.Mkdev(s.Dev_major, s.Dev_minor)
 }
 
-func (s statxTAdapter) RDevice() uint64 {
+func (s StatxTAdapter) RDevice() uint64 {
 	return unix.Mkdev(s.Rdev_major, s.Rdev_minor)
 }
 
-func (s statxTAdapter) ATime() time.Time {
+func (s StatxTAdapter) ATime() time.Time {
 	return time.Unix(s.Atime.Sec, int64(s.Atime.Nsec))
 }
 
-func (s statxTAdapter) MTime() time.Time {
+func (s StatxTAdapter) MTime() time.Time {
 	return time.Unix(s.Mtime.Sec, int64(s.Mtime.Nsec))
 }
 
-func (s statxTAdapter) CTime() time.Time {
+func (s StatxTAdapter) CTime() time.Time {
 	return time.Unix(s.Ctime.Sec, int64(s.Ctime.Nsec))
 }
 
-type statTAdapter unix.Stat_t
+type StatTAdapter unix.Stat_t
 
-func (s statTAdapter) Extended() bool {
+func (s StatTAdapter) Extended() bool {
 	return false
 }
 
-func (s statTAdapter) StatxMask() uint32 {
+func (s StatTAdapter) StatxMask() uint32 {
 	return 0
 }
 
-func (s statTAdapter) Attribute() uint64 {
+func (s StatTAdapter) Attribute() uint64 {
 	return 0
 }
 
-func (s statTAdapter) AttributeMask() uint64 {
+func (s StatTAdapter) AttributeMask() uint64 {
 	return 0
 }
 
-func (s statTAdapter) BTime() time.Time {
+func (s StatTAdapter) BTime() time.Time {
 	return time.Time{}
 }
 
-func (s statTAdapter) NLink() uint64 {
+func (s StatTAdapter) NLink() uint64 {
 	return uint64(s.Nlink) // On amd64, this is a uint64. On arm64, this is a uint32. Do not remove this typecast.
 }
 
-func (s statTAdapter) Owner() uint32 {
+func (s StatTAdapter) Owner() uint32 {
 	return s.Uid
 }
 
-func (s statTAdapter) Group() uint32 {
+func (s StatTAdapter) Group() uint32 {
 	return s.Gid
 }
 
-func (s statTAdapter) FileMode() uint32 {
+func (s StatTAdapter) FileMode() uint32 {
 	return s.Mode
 }
 
-func (s statTAdapter) INode() uint64 {
+func (s StatTAdapter) INode() uint64 {
 	return s.Ino
 }
 
-func (s statTAdapter) Device() uint64 {
+func (s StatTAdapter) Device() uint64 {
 	return s.Dev
 }
 
-func (s statTAdapter) RDevice() uint64 {
+func (s StatTAdapter) RDevice() uint64 {
 	return s.Rdev
 }
 
-func (s statTAdapter) ATime() time.Time {
+func (s StatTAdapter) ATime() time.Time {
 	return time.Unix(s.Atim.Unix())
 }
 
-func (s statTAdapter) MTime() time.Time {
+func (s StatTAdapter) MTime() time.Time {
 	return time.Unix(s.Mtim.Unix())
 }
 
-func (s statTAdapter) CTime() time.Time {
+func (s StatTAdapter) CTime() time.Time {
 	return time.Unix(s.Ctim.Unix())
 }
 

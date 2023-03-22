@@ -2,6 +2,7 @@ package common
 
 import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"os"
 	"strconv"
 	"time"
 )
@@ -45,6 +46,11 @@ var AllLinuxProperties = []string{
 	POSIXOwnerMeta,
 	POSIXGroupMeta,
 	POSIXModeMeta,
+	LINUXStatxMaskMeta,
+	LINUXAttributeMaskMeta,
+	POSIXCTimeMeta,
+	POSIXModTimeMeta,
+	LINUXAttributeMeta,
 }
 
 //goland:noinspection GoCommentStart
@@ -338,7 +344,22 @@ func ClearStatFromBlobMetadata(metadata azblob.Metadata) {
 }
 
 func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
-	// TODO: File mode properties (hdi_isfolder, etc.)
+	applyMode := func(mode os.FileMode) {
+		modes := map[uint32]string {
+			S_IFCHR: POSIXCharDeviceMeta,
+			S_IFBLK: POSIXBlockDeviceMeta,
+			S_IFSOCK: POSIXSocketMeta,
+			S_IFIFO: POSIXFIFOMeta,
+			S_IFDIR: POSIXFolderMeta,
+		}
+
+		for modeToTest, metaToApply := range modes {
+			if mode & os.FileMode(modeToTest) == os.FileMode(modeToTest) {
+				tryAddMetadata(metadata, metaToApply, "true")
+			}
+		}
+	}
+
 	if s.Extended() { // try to poll the other properties
 		mask := s.StatxMask()
 
@@ -350,7 +371,7 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 			tryAddMetadata(metadata, LINUXBTimeMeta, strconv.FormatInt(s.BTime().UnixNano(), 10))
 		}
 
-		if StatXReturned(mask, STATX_MODE) {
+		if StatXReturned(mask, STATX_NLINK) {
 			tryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
 		}
 
@@ -364,6 +385,7 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 
 		if StatXReturned(mask, STATX_MODE) {
 			tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+			applyMode(os.FileMode(s.FileMode()))
 		}
 
 		if StatXReturned(mask, STATX_INO) {
@@ -395,6 +417,7 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
 		tryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
 		tryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
 		tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+		applyMode(os.FileMode(s.FileMode()))
 		tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
 		tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
 

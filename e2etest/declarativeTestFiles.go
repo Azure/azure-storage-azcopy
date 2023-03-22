@@ -26,6 +26,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,6 +90,7 @@ func (h *contentHeaders) String() string {
 type objectProperties struct {
 	entityType         common.EntityType
 	symlinkTarget      *string
+	posixProperties    *objectUnixStatContainer
 	size               *int64
 	contentHeaders     *contentHeaders
 	nameValueMetadata  map[string]string
@@ -101,6 +103,112 @@ type objectProperties struct {
 	adlsPermissionsACL *string // TODO: Test owner and group; needs a good target though.
 	cpkInfo            *blob.CPKInfo
 	cpkScopeInfo       *blob.CPKScopeInfo
+}
+
+type objectUnixStatContainer struct {
+	// mode can contain THE FOLLOWING file type specifier bits (common.S_IFSOCK, common.S_IFIFO)
+	// common.S_IFDIR and common.S_IFLNK are achievable using folder() and symlink().
+	// TODO/Spike: common.S_IFBLK and common.S_IFCHR may be difficult to replicate consistently in a test environment
+	mode       *uint32
+
+	accessTime *time.Time
+	modTime    *time.Time
+}
+
+func (o *objectUnixStatContainer) Empty() bool {
+	if o == nil {
+		return true
+	}
+
+	return o.mode == nil &&
+		o.accessTime == nil &&
+		o.modTime == nil
+}
+
+func (o *objectUnixStatContainer) DeepCopy() *objectUnixStatContainer {
+	if o == nil {
+		return nil
+	}
+	out := &objectUnixStatContainer{}
+
+	if o.mode != nil {
+		mode := *o.mode
+		out.mode = &mode
+	}
+
+	if o.accessTime != nil {
+		accessTime := *o.accessTime
+		out.accessTime = &accessTime
+	}
+
+	if o.modTime != nil {
+		modTime := *o.modTime
+		out.modTime = &modTime
+	}
+
+	return out
+}
+
+func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapter) string {
+	if o == nil {
+		return "" // no comparison to make
+	}
+
+	mismatched := make([]string, 0)
+	// only compare if we set it
+	if o.mode != nil {
+		if s.FileMode() != *o.mode {
+			mismatched = append(mismatched, "mode")
+		}
+	}
+
+	if o.accessTime != nil {
+		if o.accessTime.UnixNano() != s.ATime().UnixNano() {
+			mismatched = append(mismatched, "atime")
+		}
+	}
+
+	if o.modTime != nil {
+		if o.modTime.UnixNano() != s.MTime().UnixNano() {
+			mismatched = append(mismatched, "mtime")
+		}
+	}
+
+	return strings.Join(mismatched, ", ")
+}
+
+func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]string) {
+	if o == nil {
+		return
+	}
+
+	mask := uint32(0)
+
+	if o.mode != nil { // always overwrite; perhaps it got changed in one of the hooks.
+		mask |= common.STATX_MODE
+		metadata[common.POSIXModeMeta] = strconv.FormatUint(uint64(*o.mode), 10)
+
+		delete(metadata, common.POSIXFIFOMeta)
+		delete(metadata, common.POSIXSocketMeta)
+		switch {
+		case *o.mode & common.S_IFIFO == common.S_IFIFO:
+			metadata[common.POSIXFIFOMeta] = "true"
+		case *o.mode & common.S_IFSOCK == common.S_IFSOCK:
+			metadata[common.POSIXSocketMeta] = "true"
+		}
+	}
+
+	if o.accessTime != nil {
+		mask |= common.STATX_ATIME
+		metadata[common.POSIXATimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
+	}
+
+	if o.modTime != nil {
+		mask |= common.STATX_MTIME
+		metadata[common.POSIXModTimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
+	}
+
+	metadata[common.LINUXStatxMaskMeta] = strconv.FormatUint(uint64(mask), 10)
 }
 
 // returns op.size, if present, else defaultSize
@@ -129,6 +237,10 @@ func (op objectProperties) DeepCopy() objectProperties {
 	if op.symlinkTarget != nil {
 		target := *op.symlinkTarget
 		ret.symlinkTarget = &target
+	}
+
+	if !op.posixProperties.Empty() {
+		ret.posixProperties = op.posixProperties.DeepCopy()
 	}
 
 	if op.size != nil {
@@ -313,13 +425,13 @@ func symlink(new, target string) *testObject {
 	name := strings.TrimLeft(new, "/")
 	result := f(name)
 
-	// result.creationProperties todo: entityType
+	// result.creationProperties
 	result.creationProperties.entityType = common.EEntityType.Symlink()
 	result.creationProperties.symlinkTarget = &target
-	if result.verificationProperties != nil {
-		result.verificationProperties.entityType = common.EEntityType.Symlink()
-		result.verificationProperties.symlinkTarget = &target
-	}
+
+	result.verificationProperties = &objectProperties{}
+	result.verificationProperties.entityType = common.EEntityType.Symlink()
+	result.verificationProperties.symlinkTarget = &target
 
 	return result
 }

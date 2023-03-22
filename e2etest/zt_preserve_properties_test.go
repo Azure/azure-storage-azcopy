@@ -62,7 +62,7 @@ func TestProperties_HNSACLs(t *testing.T) {
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
-			folder(""),
+			folder("", with{adlsPermissionsACL: "user::rwx,group::rw-,other::r--"}),
 			f("filea", with{adlsPermissionsACL: "user::rwx,group::rwx,other::r--"}),
 			folder("a", with{adlsPermissionsACL: "user::rwx,group::rwx,other::-w-"}),
 			f("a/fileb", with{adlsPermissionsACL: "user::rwx,group::rwx,other::--x"}),
