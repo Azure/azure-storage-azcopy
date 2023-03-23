@@ -434,7 +434,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
 		if ts == common.ETransferStatus.Failed() {
-			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+			jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
 		}
 
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {

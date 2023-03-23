@@ -424,7 +424,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 				// If the transfer status is less than -1, it means the transfer failed because of some reason.
 				// Transfer Status needs to reset.
 				if jppt.TransferStatus() <= common.ETransferStatus.Failed() {
-					jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+					jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
 					jppt.SetErrorCode(0, true)
 				}
 			}
@@ -579,6 +579,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.ETransferStatus.NotStarted(),
 				common.ETransferStatus.FolderCreated(),
 				common.ETransferStatus.Started(),
+				common.ETransferStatus.Restarted(),
 				common.ETransferStatus.Cancelled():
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():

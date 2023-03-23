@@ -97,6 +97,7 @@ type IJobPartTransferMgr interface {
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 	SuccessfulBytesTransferred() int64
 	TransferIndex() (partNum, transferIndex uint32)
+	RestartedTransfer() bool
 }
 
 type TransferInfo struct {
@@ -346,7 +347,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	// does not exceeds 50000 (max number of block per blob)
 	if blockSize == 0 {
 		blockSize = common.DefaultBlockBlobBlockSize
-		for ; sourceSize >= common.MaxNumberOfBlocksPerBlob * blockSize; blockSize = 2 * blockSize {
+		for ; sourceSize >= common.MaxNumberOfBlocksPerBlob*blockSize; blockSize = 2 * blockSize {
 			if blockSize > common.BlockSizeThreshold {
 				/*
 				 * For a RAM usage of 0.5G/core, we would have 4G memory on typical 8 core device, meaning at a blockSize of 256M,
@@ -438,9 +439,9 @@ func (jptm *jobPartTransferMgr) FileCountLimiter() common.CacheLimiter {
 // As at Oct 2019, cases where we mutate destination names are
 // (i)  when destination is Windows or Azure Files, and source contains characters unsupported at the destination
 // (ii) when downloading with --decompress and there are two files that differ only in an extension that will will strip
-//e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
+// e.g. foo.txt and foo.txt.gz (if we decompress the latter, we'll strip the extension and the names will collide)
 // (iii) For completeness, there's also bucket->container name resolution when copying from S3, but that is not expected to ever
-//create collisions, since it already takes steps to prevent them.
+// create collisions, since it already takes steps to prevent them.
 func (jptm *jobPartTransferMgr) WaitUntilLockDestination(ctx context.Context) error {
 	if strings.EqualFold(jptm.Info().Destination, common.Dev_Null) {
 		return nil // nothing to lock
@@ -559,6 +560,11 @@ func (jptm *jobPartTransferMgr) ResetSourceSize() {
 // This will identity a file in a job
 func (jptm *jobPartTransferMgr) TransferIndex() (partNum, transferIndex uint32) {
 	return uint32(jptm.jobPartMgr.Plan().PartNum), jptm.transferIndex
+}
+
+func (jptm *jobPartTransferMgr) RestartedTransfer() bool {
+	return (jptm.jobPartMgr.Plan().FromTo.To() == common.ELocation.Blob() &&
+		jptm.TransferStatusIgnoringCancellation() == common.ETransferStatus.Restarted())
 }
 
 // JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job

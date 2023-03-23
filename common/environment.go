@@ -370,3 +370,11 @@ func (EnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
 		Description:  "Configures azcopy to download to a temp path before actual download. Allowed values are true/false",
 	}
 }
+
+func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
+	return EnvironmentVariable {
+		Name: "AZCOPY_DISABLE_INCOMPLETE_BLOB_TRANSFER",
+		DefaultValue: "false",
+		Description: "An incomplete transfer to blob endpoint will be resumed from start if set to true",
+	}
+}

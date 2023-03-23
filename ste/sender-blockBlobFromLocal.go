@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -87,6 +88,13 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		// step 1: generate block ID
 		encodedBlockID := u.generateEncodedBlockID(blockIndex)
+
+		if u.ChunkAlreadyTransferred(blockIndex) {
+			u.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug,
+				fmt.Sprintf("Skipping chunk %d as it was already transferred.", blockIndex))
+			atomic.AddInt32(&u.atomicChunksWritten, 1)
+			return
+		}
 
 		// step 2: save the block ID into the list of block IDs
 		u.setBlockID(blockIndex, encodedBlockID)
