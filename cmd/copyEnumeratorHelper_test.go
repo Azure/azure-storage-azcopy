@@ -42,6 +42,7 @@ func newRemoteRes(url string) common.ResourceString {
 }
 
 func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
+	// TODO: this test will fail
 	// setup
 	request := common.CopyJobPartOrderRequest{
 		SourceRoot:      newLocalRes("a/b/"),
