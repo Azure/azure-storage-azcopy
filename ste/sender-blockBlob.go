@@ -335,6 +335,10 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	changedChunkSize := "buildCommittedBlockMap: Chunksize mismatch on uncommitted blocks"
 	list := make(map[int]string)
 
+	if common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DisableBlobTransferResume()) == "true" {
+		return
+	}
+
 	blockList, err := s.destBlockBlobURL.GetBlockList(s.jptm.Context(), azblob.BlockListUncommitted, azblob.LeaseAccessConditions{})
 	if err != nil {
 		s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogError, "Failed to get blocklist. Restarting whole file.")
@@ -381,7 +385,10 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	s.completedBlockList = list
 }
 
-func (s *blockBlobSenderBase) ChunkAlreadyUploaded(index int32) bool {
+func (s *blockBlobSenderBase) ChunkAlreadyTransferred(index int32) bool {
+	if s.completedBlockList != nil {
+		return false
+	}
 	_, ok := s.completedBlockList[int(index)]
 	return ok
 }

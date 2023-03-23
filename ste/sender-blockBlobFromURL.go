@@ -132,8 +132,8 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		// step 2: save the block ID into the list of block IDs
 		c.setBlockID(blockIndex, encodedBlockID)
 
-		if (c.ChunkAlreadyUploaded(blockIndex)) {
-			c.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, fmt.Sprintf("Skipping chunk %d.", blockIndex))
+		if c.ChunkAlreadyTransferred(blockIndex) {
+			c.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, fmt.Sprintf("Skipping chunk %d as it was already transferred.", blockIndex))
 			atomic.AddInt32(&c.atomicChunksWritten, 1)
 			return
 		}
