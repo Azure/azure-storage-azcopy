@@ -29,6 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"math"
 	"strings"
@@ -215,6 +216,18 @@ func CreateBlobClient(blobURL string, credInfo *CredentialInfo, options azcore.C
 func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blob.Client, error) {
 	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
 	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
+	if blobURLParts.Snapshot != "" {
+		return blobClient.WithSnapshot(blobURLParts.Snapshot)
+	}
+	if blobURLParts.VersionID != "" {
+		return blobClient.WithVersionID(blobURLParts.VersionID)
+	}
+	return blobClient, nil
+}
+
+func CreatePageBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*pageblob.Client, error) {
+	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
+	blobClient := containerClient.NewPageBlobClient(blobURLParts.BlobName)
 	if blobURLParts.Snapshot != "" {
 		return blobClient.WithSnapshot(blobURLParts.Snapshot)
 	}

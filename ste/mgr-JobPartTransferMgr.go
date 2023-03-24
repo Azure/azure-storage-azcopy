@@ -60,6 +60,7 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	SourceServiceClient() common.ClientInfo
 	SourceProviderPipeline() pipeline.Pipeline
 	SourceCredential() pipeline.Factory
 	FailActiveUpload(where string, err error)
@@ -124,7 +125,6 @@ type TransferInfo struct {
 
 	RehydratePriority blob.RehydratePriority
 }
-
 
 func (i TransferInfo) IsFilePropertiesTransfer() bool {
 	return i.EntityType == common.EEntityType.FileProperties()
@@ -956,6 +956,10 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
+}
+
+func (jptm *jobPartTransferMgr) SourceServiceClient() common.ClientInfo {
+	return jptm.jobPartMgr.SourceServiceClient()
 }
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {

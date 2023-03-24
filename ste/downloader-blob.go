@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -64,7 +65,7 @@ func newBlobDownloader() downloader {
 	}
 }
 
-func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, client common.ClientInfo, srcPipeline pipeline.Pipeline) {
+func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, serviceClient common.ClientInfo, srcPipeline pipeline.Pipeline) {
 	bd.txInfo = jptm.Info()
 	bd.jptm = jptm
 
@@ -138,10 +139,9 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, service
 		u, _ := url.Parse(info.Source)
 		blobURLParts, _ := blob.ParseURL(info.Source)
 		blobClient, _ := common.CreateBlobClientFromServiceClient(blobURLParts, serviceClient.BlobServiceClient)
-		//srcBlobURL := azblob.NewBlobURL(*u, srcPipeline)
 
 		// set access conditions, to protect against inconsistencies from changes-while-being-read
-		lmt := jptm.LastModifiedTime()
+		lmt := jptm.LastModifiedTime().In(time.FixedZone("GMT", 0)) // TODO : This should be fixed by the Track 2 GO SDK.
 		accessConditions := &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfUnmodifiedSince: &lmt}}
 		if isInManagedDiskImportExportAccount(*u) {
 			// no access conditions (and therefore no if-modified checks) are supported on managed disk import/export (md-impexp)

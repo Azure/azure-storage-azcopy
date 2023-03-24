@@ -56,6 +56,7 @@ type IJobPartMgr interface {
 	ExclusiveDestinationMap() *common.ExclusiveStringMap
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
+	SourceServiceClient() common.ClientInfo
 	SourceProviderPipeline() pipeline.Pipeline
 	SourceCredential() pipeline.Factory
 	getOverwritePrompter() *overwritePrompter
@@ -307,13 +308,13 @@ type jobPartMgr struct {
 	fileCountLimiter        common.CacheLimiter
 	exclusiveDestinationMap *common.ExclusiveStringMap
 
-	client          common.ClientInfo
-	secondaryClient common.ClientInfo // For ADLS transfers
+	serviceClient          common.ClientInfo
+	secondaryServiceClient common.ClientInfo // For ADLS transfers
 
 	// For s2s transfers
-	sourceCredential      azcore.TokenCredential
-	sourceClient          common.ClientInfo
-	secondarySourceClient common.ClientInfo // For ADLS transfers
+	sourceCredential             azcore.TokenCredential
+	sourceServiceClient          common.ClientInfo
+	secondarySourceServiceClient common.ClientInfo // For ADLS transfers
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
@@ -580,6 +581,51 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	}
 
 	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
+	clientOptions := NewClientOptions(
+		retryOptions,
+		policy.TelemetryOptions{ApplicationID: userAgent},
+		jpm.jobMgr.HttpClient(),
+		statsAccForSip,
+		LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()},
+	)
+
+	// Use first transfer's source/destination since we know its host will be service URL.
+	source, destination, _ := jpm.Plan().TransferSrcDstStrings(0)
+	// If the length of destination SAS is greater than 0
+	// it means the destination is remote url and destination SAS
+	// has been stripped from the destination before persisting it in
+	// part plan file.
+	// SAS needs to be appended before executing the transfer
+	if len(jpm.destinationSAS) > 0 {
+		dUrl, e := url.Parse(destination)
+		if e != nil {
+			panic(e)
+		}
+		if len(dUrl.RawQuery) > 0 {
+			dUrl.RawQuery += "&" + jpm.destinationSAS
+		} else {
+			dUrl.RawQuery = jpm.destinationSAS
+		}
+		destination = dUrl.String()
+	}
+
+	// If the length of source SAS is greater than 0
+	// it means the source is a remote url and source SAS
+	// has been stripped from the source before persisting it in
+	// part plan file.
+	// SAS needs to be appended before executing the transfer
+	if len(jpm.sourceSAS) > 0 {
+		sUrl, e := url.Parse(source)
+		if e != nil {
+			panic(e)
+		}
+		if len(sUrl.RawQuery) > 0 {
+			sUrl.RawQuery += "&" + jpm.sourceSAS
+		} else {
+			sUrl.RawQuery = jpm.sourceSAS
+		}
+		source = sUrl.String()
+	}
 
 	// Create source info provider's pipeline for S2S copy or download (in some cases).
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
@@ -597,6 +643,14 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 				v1SourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
 				jpm.v1SourceCredential = v1SourceCred
 			}
+		}
+		root := source
+		// TODO : Should we make credInfo and credOption not a pointer?
+		// TODO : error handling
+		bsc, _ := common.CreateBlobServiceClient(root, &credInfo, clientOptions, &credOption)
+		jpm.sourceServiceClient = common.ClientInfo{
+			ClientType:        common.ELocation.Blob(),
+			BlobServiceClient: bsc,
 		}
 
 		jpm.sourceProviderPipeline = NewBlobPipeline(
@@ -650,46 +704,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			jpm.jobMgr.HttpClient(),
 			statsAccForSip)
 	}
-
-	// Use first transfer's source/destination since we know its host will be service URL.
-	source, destination, _ := jpm.Plan().TransferSrcDstStrings(0)
-	// If the length of destination SAS is greater than 0
-	// it means the destination is remote url and destination SAS
-	// has been stripped from the destination before persisting it in
-	// part plan file.
-	// SAS needs to be appended before executing the transfer
-	if len(jpm.destinationSAS) > 0 {
-		dUrl, e := url.Parse(destination)
-		if e != nil {
-			panic(e)
-		}
-		if len(dUrl.RawQuery) > 0 {
-			dUrl.RawQuery += "&" + jpm.destinationSAS
-		} else {
-			dUrl.RawQuery = jpm.destinationSAS
-		}
-		destination = dUrl.String()
-	}
-
-	// If the length of source SAS is greater than 0
-	// it means the source is a remote url and source SAS
-	// has been stripped from the source before persisting it in
-	// part plan file.
-	// SAS needs to be appended before executing the transfer
-	if len(jpm.sourceSAS) > 0 {
-		sUrl, e := url.Parse(source)
-		if e != nil {
-			panic(e)
-		}
-		if len(sUrl.RawQuery) > 0 {
-			sUrl.RawQuery += "&" + jpm.sourceSAS
-		} else {
-			sUrl.RawQuery = jpm.sourceSAS
-		}
-		source = sUrl.String()
-	}
 	// Create pipeline for data transfer.
-	clientOptions := NewClientOptions(
+	clientOptions = NewClientOptions(
 		retryOptions,
 		policy.TelemetryOptions{ApplicationID: userAgent},
 		jpm.jobMgr.HttpClient(),
@@ -713,7 +729,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 		// TODO : Should we make credInfo and credOption not a pointer?
 		// TODO : error handling
 		bsc, _ := common.CreateBlobServiceClient(root, &credInfo, clientOptions, &credOption)
-		jpm.client = common.ClientInfo{
+		jpm.serviceClient = common.ClientInfo{
 			ClientType:        common.ELocation.Blob(),
 			BlobServiceClient: bsc,
 		}
@@ -807,7 +823,7 @@ func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
-	jpm.newJobXfer(jptm, jpm.client, jpm.pipeline, jpm.pacer)
+	jpm.newJobXfer(jptm, jpm.serviceClient, jpm.pipeline, jpm.pacer)
 }
 
 func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
@@ -1022,6 +1038,10 @@ func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log
 func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
 func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jpm.jobMgr.ChunkStatusLogger()
+}
+
+func (jpm *jobPartMgr) SourceServiceClient() common.ClientInfo {
+	return jpm.sourceServiceClient
 }
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
