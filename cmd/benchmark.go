@@ -194,7 +194,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 			return "", errors.New("the blob target must be a container")
 		}
 		p.BlobName = virtualDir
-		return result.String(), err
+		return p.String(), err
 
 	case common.ELocation.File():
 		p := azfile.NewFileURLParts(*u)
