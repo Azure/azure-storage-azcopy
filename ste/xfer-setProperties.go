@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func SetProperties(jptm IJobPartTransferMgr, client common.ClientInfo, p pipeline.Pipeline, pacer pacer) {
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytes transferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()

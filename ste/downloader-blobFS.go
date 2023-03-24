@@ -36,7 +36,7 @@ func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
-func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr, client common.ClientInfo, srcPipeline pipeline.Pipeline) {
 	// noop
 }
 
@@ -46,7 +46,7 @@ func (bd *blobFSDownloader) Epilogue() {
 
 // Returns a chunk-func for ADLS gen2 downloads
 
-func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, client common.ClientInfo, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
@@ -79,7 +79,7 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.Body(azbfs.RetryReaderOptions{
 			MaxRetryRequests: MaxRetryPerDownloadBody,
-			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+			NotifyFailedRead: common.V1NewReadLogFunc(jptm, u),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

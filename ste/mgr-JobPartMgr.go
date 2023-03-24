@@ -307,11 +307,19 @@ type jobPartMgr struct {
 	fileCountLimiter        common.CacheLimiter
 	exclusiveDestinationMap *common.ExclusiveStringMap
 
+	client          common.ClientInfo
+	secondaryClient common.ClientInfo // For ADLS transfers
+
+	// For s2s transfers
+	sourceCredential      azcore.TokenCredential
+	sourceClient          common.ClientInfo
+	secondarySourceClient common.ClientInfo // For ADLS transfers
+
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
 	secondaryPipeline pipeline.Pipeline
 
-	sourceCredential       pipeline.Factory // must satisfy azblob.TokenCredential currently
+	v1SourceCredential     pipeline.Factory // must satisfy azblob.TokenCredential currently
 	sourceProviderPipeline pipeline.Pipeline
 	// TODO: Ditto
 	secondarySourceProviderPipeline pipeline.Pipeline
@@ -530,8 +538,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
 		panic("init client and pipelines for same jobPartMgr twice")
 	}
-	if jpm.sourceCredential == nil {
-		jpm.sourceCredential = sourceBlobToken
+	if jpm.v1SourceCredential == nil {
+		jpm.v1SourceCredential = sourceBlobToken
 	}
 	fromTo := jpm.planMMF.Plan().FromTo
 	credInfo := jpm.credInfo
@@ -564,11 +572,18 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
+	retryOptions := policy.RetryOptions{
+		MaxRetries:    UploadMaxTries,
+		TryTimeout:    UploadTryTimeout,
+		RetryDelay:    UploadRetryDelay,
+		MaxRetryDelay: UploadMaxRetryDelay,
+	}
+
 	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy or download (in some cases).
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
-		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
+		var v1SourceCred azblob.Credential = azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
 		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
 			credOption := common.CredentialOpOptions{
@@ -578,14 +593,14 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
 				Cancel:   jpm.jobMgr.Cancel,
 			}
-			if jpm.sourceCredential == nil {
-				sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
-				jpm.sourceCredential = sourceCred
+			if jpm.v1SourceCredential == nil {
+				v1SourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
+				jpm.v1SourceCredential = v1SourceCred
 			}
 		}
 
 		jpm.sourceProviderPipeline = NewBlobPipeline(
-			sourceCred,
+			v1SourceCred,
 			azblob.PipelineOptions{
 				Log: jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{
@@ -636,12 +651,73 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			statsAccForSip)
 	}
 
+	// Use first transfer's source/destination since we know its host will be service URL.
+	source, destination, _ := jpm.Plan().TransferSrcDstStrings(0)
+	// If the length of destination SAS is greater than 0
+	// it means the destination is remote url and destination SAS
+	// has been stripped from the destination before persisting it in
+	// part plan file.
+	// SAS needs to be appended before executing the transfer
+	if len(jpm.destinationSAS) > 0 {
+		dUrl, e := url.Parse(destination)
+		if e != nil {
+			panic(e)
+		}
+		if len(dUrl.RawQuery) > 0 {
+			dUrl.RawQuery += "&" + jpm.destinationSAS
+		} else {
+			dUrl.RawQuery = jpm.destinationSAS
+		}
+		destination = dUrl.String()
+	}
+
+	// If the length of source SAS is greater than 0
+	// it means the source is a remote url and source SAS
+	// has been stripped from the source before persisting it in
+	// part plan file.
+	// SAS needs to be appended before executing the transfer
+	if len(jpm.sourceSAS) > 0 {
+		sUrl, e := url.Parse(source)
+		if e != nil {
+			panic(e)
+		}
+		if len(sUrl.RawQuery) > 0 {
+			sUrl.RawQuery += "&" + jpm.sourceSAS
+		} else {
+			sUrl.RawQuery = jpm.sourceSAS
+		}
+		source = sUrl.String()
+	}
 	// Create pipeline for data transfer.
+	clientOptions := NewClientOptions(
+		retryOptions,
+		policy.TelemetryOptions{ApplicationID: userAgent},
+		jpm.jobMgr.HttpClient(),
+		jpm.jobMgr.PipelineNetworkStats(),
+		LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()},
+	)
+
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+
+		root := ""
+		// Destination takes precedence for S2S copies since the copy is performed by the destination client.
+		if fromTo.To() == common.ELocation.Blob() {
+			root = destination
+		} else if fromTo.From() == common.ELocation.Blob() {
+			root = source
+		}
+		// TODO : Should we make credInfo and credOption not a pointer?
+		// TODO : error handling
+		bsc, _ := common.CreateBlobServiceClient(root, &credInfo, clientOptions, &credOption)
+		jpm.client = common.ClientInfo{
+			ClientType:        common.ELocation.Blob(),
+			BlobServiceClient: bsc,
+		}
+
 		jpm.pipeline = NewBlobPipeline(
 			credential,
 			azblob.PipelineOptions{
@@ -731,7 +807,7 @@ func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
-	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
+	jpm.newJobXfer(jptm, jpm.client, jpm.pipeline, jpm.pacer)
 }
 
 func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
@@ -953,7 +1029,7 @@ func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 }
 
 func (jpm *jobPartMgr) SourceCredential() pipeline.Factory {
-	return jpm.sourceCredential
+	return jpm.v1SourceCredential
 }
 
 /* Status update messages should not fail */

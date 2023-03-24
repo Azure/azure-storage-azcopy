@@ -151,7 +151,7 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, blobURL az
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
-func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote(jptm IJobPartTransferMgr, client common.ClientInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	info := jptm.Info()
 	fromTo := jptm.FromTo()
 
@@ -182,22 +182,22 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 	switch info.EntityType {
 	case common.EEntityType.Folder():
-		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_folder(jptm, info, client, p, pacer, senderFactory, sipf)
 	case common.EEntityType.FileProperties():
-		anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_fileProperties(jptm, info, client, p, pacer, senderFactory, sipf)
 	case common.EEntityType.File():
 		if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
-			anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
+			anyToRemote_fileProperties(jptm, info, client, p, pacer, senderFactory, sipf)
 		} else {
-			anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
+			anyToRemote_file(jptm, info, client, p, pacer, senderFactory, sipf)
 		}
 	case common.EEntityType.Symlink():
-		anyToRemote_symlink(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_symlink(jptm, info, client, p, pacer, senderFactory, sipf)
 	}
 }
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
-func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, client common.ClientInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())

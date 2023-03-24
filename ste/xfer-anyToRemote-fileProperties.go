@@ -26,7 +26,7 @@ import (
 )
 
 // anyToRemote_folder handles all kinds of sender operations for FOLDERS - both uploads from local files, and S2S copies
-func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info TransferInfo, client common.ClientInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 	// smaller "transfer initiation pool", where this code runs.
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
@@ -49,8 +49,8 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info TransferInfo, p p
 		return
 	}
 
-	if (jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties() ||
-						srcInfoProvider.EntityType() != common.EEntityType.File()) {
+	if jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties() ||
+			srcInfoProvider.EntityType() != common.EEntityType.File() {
 		panic("configuration error. Source Info Provider does not have FileProperties entity type")
 	}
 
@@ -80,5 +80,5 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info TransferInfo, p p
 
 	jptm.SetNumberOfChunks(1)
 	jptm.SetActionAfterLastChunk(func() { commonSenderCompletion(jptm, baseSender, info) }) // for consistency run standard Epilogue
-	jptm.ScheduleChunks(s.GenerateCopyMetadata(id)) // Just one chunk to schedule
+	jptm.ScheduleChunks(s.GenerateCopyMetadata(id))                                         // Just one chunk to schedule
 }

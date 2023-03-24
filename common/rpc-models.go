@@ -2,6 +2,7 @@ package common
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"net/url"
 	"reflect"
 	"strings"
@@ -163,6 +164,13 @@ type CopyJobPartOrderRequest struct {
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
+}
+
+type ClientInfo struct {
+	ClientType        Location
+	BlobServiceClient *blobservice.Client
+	// FileServiceClient
+	// DatalakeServiceClient
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,

@@ -37,19 +37,19 @@ const azcopyTempDownloadPrefix string = ".azDownload-%s-"
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for downloads and redirects for each transfer to a file or folder implementation
-func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+func remoteToLocal(jptm IJobPartTransferMgr, client common.ClientInfo, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
 	info := jptm.Info()
 	if info.IsFolderPropertiesTransfer() {
 		remoteToLocal_folder(jptm, p, pacer, df)
 	} else if info.EntityType == common.EEntityType.Symlink() {
 		remoteToLocal_symlink(jptm, p, pacer, df)
 	} else {
-		remoteToLocal_file(jptm, p, pacer, df)
+		remoteToLocal_file(jptm, client, p, pacer, df)
 	}
 }
 
 // general-purpose "any remote persistence location" to local, for files
-func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+func remoteToLocal_file(jptm IJobPartTransferMgr, client common.ClientInfo, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
 
 	info := jptm.Info()
 
@@ -169,7 +169,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		}
 
 		if !needChunks { // If no chunks need to be transferred (e.g. this is 0-bytes long, a symlink, etc.), treat it as a 0-byte transfer
-			dl.Prologue(jptm, p)
+			dl.Prologue(jptm, client, p)
 			epilogueWithCleanupDownload(jptm, dl, nil, nil)
 			return
 		}
@@ -203,7 +203,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 			// For files, it just sets a few properties.
 			// For blobs, it sets up a page blob pacer if it's a page blob.
 			// For blobFS, it's a noop.
-			dl.Prologue(jptm, p)
+			dl.Prologue(jptm, client, p)
 			epilogueWithCleanupDownload(jptm, dl, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 			return
 		}
@@ -285,7 +285,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 
 	// step 5c: run prologue in downloader (here it can, for example, create things that will require cleanup in the epilogue)
 	common.GetLifecycleMgr().E2EAwaitAllowOpenFiles()
-	dl.Prologue(jptm, p)
+	dl.Prologue(jptm, client, p)
 
 	// step 5d: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
@@ -318,7 +318,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), id, adjustedChunkSize)
 
 		// create download func that is a appropriate to the remote data source
-		downloadFunc := dl.GenerateDownloadFunc(jptm, p, dstWriter, id, adjustedChunkSize, pacer)
+		downloadFunc := dl.GenerateDownloadFunc(jptm, client, p, dstWriter, id, adjustedChunkSize, pacer)
 
 		// schedule the download chunk job
 		jptm.ScheduleChunks(downloadFunc)

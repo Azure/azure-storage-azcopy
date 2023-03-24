@@ -60,7 +60,7 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 
 	symlinkBuf, err := io.ReadAll(resp.Body(azblob.RetryReaderOptions{
 		MaxRetryRequests: 5,
-		NotifyFailedRead: common.NewReadLogFunc(p.jptm, uri),
+		NotifyFailedRead: common.V1NewReadLogFunc(p.jptm, uri),
 	}))
 	if err != nil {
 		return "", err

@@ -96,7 +96,7 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	return "", nil
 }
 
-func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, client common.ClientInfo, srcPipeline pipeline.Pipeline) {
 	bd.init(jptm)
 }
 
@@ -113,7 +113,7 @@ func (bd *azureFilesDownloader) Epilogue() {
 }
 
 // GenerateDownloadFunc returns a chunk-func for file downloads
-func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, client common.ClientInfo, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
@@ -142,7 +142,7 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.Body(azfile.RetryReaderOptions{
 			MaxRetryRequests: MaxRetryPerDownloadBody,
-			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+			NotifyFailedRead: common.V1NewReadLogFunc(jptm, u),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

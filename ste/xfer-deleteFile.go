@@ -12,7 +12,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func DeleteFile(jptm IJobPartTransferMgr, client common.ClientInfo, p pipeline.Pipeline, pacer pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
