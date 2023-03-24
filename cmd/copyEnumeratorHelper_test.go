@@ -41,8 +41,8 @@ func newRemoteRes(url string) common.ResourceString {
 	return r
 }
 
-func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
-	// TODO: this test will fail
+/*func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
+	// TODO: this test will fail because root trimming behavior in addTransfer() is removed
 	// setup
 	request := common.CopyJobPartOrderRequest{
 		SourceRoot:      newLocalRes("a/b/"),
@@ -61,4 +61,26 @@ func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C
 	c.Assert(err, chk.IsNil)
 	c.Assert(request.Transfers.List[0].Source, chk.Equals, "c.txt")
 	c.Assert(request.Transfers.List[0].Destination, chk.Equals, "c.txt")
+}*/
+
+func (s *copyEnumeratorHelperTestSuite) TestRelativePath(c *chk.C) {
+	// setup
+	cca := CookedCopyCmdArgs{
+		Source:      newLocalRes("a/b/"),
+		Destination: newLocalRes("y/z/"),
+	}
+
+	object := StoredObject{
+		name:         "c.txt",
+		entityType:   1,
+		relativePath: "c.txt",
+	}
+
+	// execute
+	srcRelPath := cca.MakeEscapedRelativePath(true, false, false, object)
+	destRelPath := cca.MakeEscapedRelativePath(false, true, false, object)
+
+	// assert
+	c.Assert(srcRelPath, chk.Equals, "/c.txt")
+	c.Assert(destRelPath, chk.Equals, "/c.txt")
 }
