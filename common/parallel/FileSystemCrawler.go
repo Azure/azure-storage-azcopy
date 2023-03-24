@@ -75,6 +75,10 @@ func Walk(appCtx context.Context, root string, relBase string, parallelism int, 
 		_ = walkFn(root, nil, e)
 	}
 
+	// walk the stuff inside the root
+	reader, remainingParallelism := NewDirReader(parallelism, parallelStat)
+	defer reader.Close()
+
 	// relBase is not empty only in case of follow-symlinks. Where symlink pointing to directory traversed separately and
 	// this following code cause wrong entries created in ObjectIndexer Map.
 	// Main intention of following code to check if accessing root folder having any issue or not.
@@ -98,6 +102,14 @@ func Walk(appCtx context.Context, root string, relBase string, parallelism int, 
 			return
 		}
 
+		// For windows NFS share this call fail, even if file has no read and execute permission.
+		// Let's check it before adding the entry to indexerMap.
+		_, err = reader.Readdir(r, 10240)
+		if err != nil {
+			signalRootError(err)
+			return
+		}
+
 		err = walkFn(root, rs, nil)
 		if err != nil {
 			signalRootError(err)
@@ -106,9 +118,6 @@ func Walk(appCtx context.Context, root string, relBase string, parallelism int, 
 
 		_ = r.Close()
 	}
-	// walk the stuff inside the root
-	reader, remainingParallelism := NewDirReader(parallelism, parallelStat)
-	defer reader.Close()
 
 	ctx, cancel = context.WithCancel(appCtx)
 	//
