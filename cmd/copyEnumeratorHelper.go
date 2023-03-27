@@ -13,11 +13,7 @@ var EnumerationParallelStatFiles = false
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
-	// Remove the source and destination roots from the path to save space in the plan files
-
-	// TODO: Remove this line because transfer.Source and transfer.Destination are already a relative paths
-	// transfer.Source = strings.TrimPrefix(transfer.Source, e.SourceRoot.Value)
-	// transfer.Destination = strings.TrimPrefix(transfer.Destination, e.DestinationRoot.Value)
+	// Source and destination paths are and should be relative paths. 
 
 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
 	// we do this so that in the case of large transfer, the transfer engine can get started

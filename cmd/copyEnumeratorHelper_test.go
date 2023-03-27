@@ -41,28 +41,6 @@ func newRemoteRes(url string) common.ResourceString {
 	return r
 }
 
-/*func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
-	// TODO: this test will fail because root trimming behavior in addTransfer() is removed
-	// setup
-	request := common.CopyJobPartOrderRequest{
-		SourceRoot:      newLocalRes("a/b/"),
-		DestinationRoot: newLocalRes("y/z/"),
-	}
-
-	transfer := common.CopyTransfer{
-		Source:      "a/b/c.txt",
-		Destination: "y/z/c.txt",
-	}
-
-	// execute
-	err := addTransfer(&request, transfer, &CookedCopyCmdArgs{})
-
-	// assert
-	c.Assert(err, chk.IsNil)
-	c.Assert(request.Transfers.List[0].Source, chk.Equals, "c.txt")
-	c.Assert(request.Transfers.List[0].Destination, chk.Equals, "c.txt")
-}*/
-
 func (s *copyEnumeratorHelperTestSuite) TestRelativePath(c *chk.C) {
 	// setup
 	cca := CookedCopyCmdArgs{
