@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/http"
 	"time"
 )
@@ -32,6 +33,17 @@ type responseError interface {
 
 type lastModifiedTimerProvider interface {
 	LastModified() time.Time
+}
+
+type blobPropertiesAdapter struct {
+	BlobProperties *blob.GetPropertiesResponse
+}
+
+func (a blobPropertiesAdapter) LastModified() time.Time {
+	if a.BlobProperties.LastModified == nil {
+		return time.Time{}
+	}
+	return *a.BlobProperties.LastModified
 }
 
 // remoteObjectExists takes the error returned when trying to access a remote object, sees whether is
