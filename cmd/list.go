@@ -180,7 +180,7 @@ func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
 		case contentEncoding:
 			builder.WriteString(propertyStr + ": " + object.contentEncoding + "; ")
 		case contentMD5:
-			builder.WriteString(propertyStr + ": " + ase64.StdEncoding.DecodeString(string(object.md5())) + "; ")
+			builder.WriteString(propertyStr + ": " + base64.StdEncoding.DecodeString(string(object.md5())) + "; ")
 		case leaseState:
 			builder.WriteString(propertyStr + ": " + string(object.leaseState) + "; ")
 		case leaseStatus:
