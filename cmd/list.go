@@ -202,6 +202,10 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		return err
 	}
 
+	if err := common.VerifyIsURLResolvable(raw.sourcePath); cooked.location.IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve target: %w", err)
+	}
+
 	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
 
 	if err != nil {
