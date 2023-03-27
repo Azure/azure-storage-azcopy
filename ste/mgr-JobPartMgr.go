@@ -535,60 +535,19 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azblob.Credential) {
-	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
-		panic("init client and pipelines for same jobPartMgr twice")
-	}
-	if jpm.v1SourceCredential == nil {
-		jpm.v1SourceCredential = sourceBlobToken
-	}
-	fromTo := jpm.planMMF.Plan().FromTo
-	credInfo := jpm.credInfo
-	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
-		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
-	}
-	var userAgent string
+func (jpm *jobPartMgr) getUserAgent(fromTo common.FromTo) string {
 	if fromTo.From() == common.ELocation.S3() {
-		userAgent = common.S3ImportUserAgent
+		return common.S3ImportUserAgent
 	} else if fromTo.From() == common.ELocation.GCP() {
-		userAgent = common.GCPImportUserAgent
+		return common.GCPImportUserAgent
 	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
-		userAgent = common.BenchmarkUserAgent
+		return common.BenchmarkUserAgent
 	} else {
-		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
+		return common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
 	}
+}
 
-	credOption := common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-		Panic:    jpm.Panic,
-		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-		Cancel:   jpm.jobMgr.Cancel,
-	}
-	// TODO: Consider to remove XferRetryPolicy and Options?
-	xferRetryOption := XferRetryOptions{
-		Policy:        0,
-		MaxTries:      UploadMaxTries, // TODO: Consider to unify options.
-		TryTimeout:    UploadTryTimeout,
-		RetryDelay:    UploadRetryDelay,
-		MaxRetryDelay: UploadMaxRetryDelay}
-
-	retryOptions := policy.RetryOptions{
-		MaxRetries:    UploadMaxTries,
-		TryTimeout:    UploadTryTimeout,
-		RetryDelay:    UploadRetryDelay,
-		MaxRetryDelay: UploadMaxRetryDelay,
-	}
-
-	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
-	clientOptions := NewClientOptions(
-		retryOptions,
-		policy.TelemetryOptions{ApplicationID: userAgent},
-		jpm.jobMgr.HttpClient(),
-		statsAccForSip,
-		LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()},
-	)
-
+func (jpm *jobPartMgr) getSourceAndDestination() (string, string) {
 	// Use first transfer's source/destination since we know its host will be service URL.
 	source, destination, _ := jpm.Plan().TransferSrcDstStrings(0)
 	// If the length of destination SAS is greater than 0
@@ -626,28 +585,71 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 		}
 		source = sUrl.String()
 	}
+	return source, destination
+}
+
+func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azblob.Credential) {
+	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
+		panic("init client and pipelines for same jobPartMgr twice")
+	}
+	source, destination := jpm.getSourceAndDestination()
+	fromTo := jpm.planMMF.Plan().FromTo
+	userAgent := jpm.getUserAgent(fromTo)
+	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
+	clientOptions := NewClientOptions(
+		policy.RetryOptions{
+			MaxRetries:    UploadMaxTries,
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay,
+		},
+		policy.TelemetryOptions{ApplicationID: userAgent},
+		jpm.jobMgr.HttpClient(),
+		statsAccForSip,
+		LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()},
+	)
+
+	if jpm.v1SourceCredential == nil {
+		jpm.v1SourceCredential = sourceBlobToken
+	}
+
+	credInfo := jpm.credInfo
+	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
+		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
+	}
+
+	credOption := common.CredentialOpOptions{
+		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		Panic:    jpm.Panic,
+		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+		Cancel:   jpm.jobMgr.Cancel,
+	}
+	// TODO: Consider to remove XferRetryPolicy and Options?
+	xferRetryOption := XferRetryOptions{
+		Policy:        0,
+		MaxTries:      UploadMaxTries, // TODO: Consider to unify options.
+		TryTimeout:    UploadTryTimeout,
+		RetryDelay:    UploadRetryDelay,
+		MaxRetryDelay: UploadMaxRetryDelay}
 
 	// Create source info provider's pipeline for S2S copy or download (in some cases).
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
-		var v1SourceCred azblob.Credential = azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
+		sourceCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
+
+		var v1SourceCred azblob.Credential = azblob.NewAnonymousCredential()
 		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			credOption := common.CredentialOpOptions{
-				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-				Panic:    jpm.Panic,
-				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-				Cancel:   jpm.jobMgr.Cancel,
-			}
 			if jpm.v1SourceCredential == nil {
 				v1SourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
 				jpm.v1SourceCredential = v1SourceCred
+				sourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
 			}
 		}
 		root := source
 		// TODO : Should we make credInfo and credOption not a pointer?
 		// TODO : error handling
-		bsc, _ := common.CreateBlobServiceClient(root, &credInfo, clientOptions, &credOption)
+		bsc, _ := common.CreateBlobServiceClient(root, &sourceCredInfo, clientOptions, &credOption)
 		jpm.sourceServiceClient = common.ClientInfo{
 			ClientType:        common.ELocation.Blob(),
 			BlobServiceClient: bsc,
@@ -706,7 +708,12 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	}
 	// Create pipeline for data transfer.
 	clientOptions = NewClientOptions(
-		retryOptions,
+		policy.RetryOptions{
+			MaxRetries:    UploadMaxTries,
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay,
+		},
 		policy.TelemetryOptions{ApplicationID: userAgent},
 		jpm.jobMgr.HttpClient(),
 		jpm.jobMgr.PipelineNetworkStats(),
