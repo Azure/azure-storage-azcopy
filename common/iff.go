@@ -114,6 +114,14 @@ func IffStringNotNil(wanted *string, instead string) string {
 	return *wanted
 }
 
+func Iffint64NotNil(wanted *int64, instead int64) int64 {
+	if wanted == nil {
+		return instead
+	}
+
+	return *wanted
+}
+
 func IffBoolNotNil(wanted *bool, instead bool) bool {
 	if wanted == nil {
 		return instead

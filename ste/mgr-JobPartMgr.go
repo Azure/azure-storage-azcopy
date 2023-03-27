@@ -428,7 +428,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
 	jpm.blobTypeOverride = plan.DstBlobData.BlobType
-	jpm.newJobXfer = computeJobXfer(plan.FromTo, plan.DstBlobData.BlobType)
+	jpm.newJobXfer = computeJobXfer(plan.FromTo)
 
 	jpm.priority = plan.Priority
 

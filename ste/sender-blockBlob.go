@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"net/url"
 	"strings"
 	"sync"
@@ -42,14 +43,15 @@ import (
 var lowMemoryLimitAdvice sync.Once
 
 type blockBlobSenderBase struct {
-	jptm             IJobPartTransferMgr
-	sip              ISourceInfoProvider
-	destBlockBlobURL azblob.BlockBlobURL
-	chunkSize        int64
-	numChunks        uint32
-	pacer            pacer
-	blockIDs         []string
-	destBlobTier     blob.AccessTier
+	jptm                IJobPartTransferMgr
+	sip                 ISourceInfoProvider
+	destBlockBlobClient *blockblob.Client
+	destBlockBlobURL    azblob.BlockBlobURL
+	chunkSize           int64
+	numChunks           uint32
+	pacer               pacer
+	blockIDs            []string
+	destBlobTier        blob.AccessTier
 
 	// Headers and other info that we will apply to the destination object.
 	// 1. For S2S, these come from the source service.
@@ -58,6 +60,8 @@ type blockBlobSenderBase struct {
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
+	cpk             blob.CPKInfo
+	cpkScope        blob.CPKScopeInfo
 
 	atomicChunksWritten    int32
 	atomicPutListIndicator int32
@@ -117,7 +121,7 @@ func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32
 	return fmt.Sprintf("%s%s%05d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*blockBlobSenderBase, error) {
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*blockBlobSenderBase, error) {
 	// compute chunk count
 	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit())
 	if err != nil {
@@ -130,6 +134,15 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	}
 
 	destBlockBlobURL := azblob.NewBlockBlobURL(*destURL, p)
+
+	destURLParts, err := blob.ParseURL(destination)
+	if err != nil {
+		return nil, err
+	}
+	destBlockBlobClient, err := common.CreateBlockBlobClientFromServiceClient(destURLParts, serviceClient.BlobServiceClient)
+	if err != nil {
+		return nil, err
+	}
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
@@ -154,20 +167,23 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	partNum, transferIndex := jptm.TransferIndex()
 
 	return &blockBlobSenderBase{
-		jptm:             jptm,
-		sip:              srcInfoProvider,
-		destBlockBlobURL: destBlockBlobURL,
-		chunkSize:        chunkSize,
-		numChunks:        numChunks,
-		pacer:            pacer,
-		blockIDs:         make([]string, numChunks),
-		headersToApply:   props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
-		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
-		destBlobTier:     destBlobTier,
-		cpkToApply:       cpkToApply,
-		muBlockIDs:       &sync.Mutex{},
-		blockNamePrefix:  getBlockNamePrefix(jptm.Info().JobID, partNum, transferIndex),
+		jptm:                jptm,
+		sip:                 srcInfoProvider,
+		destBlockBlobClient: destBlockBlobClient,
+		destBlockBlobURL:    destBlockBlobURL,
+		chunkSize:           chunkSize,
+		numChunks:           numChunks,
+		pacer:               pacer,
+		blockIDs:            make([]string, numChunks),
+		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		metadataToApply:     props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:     props.SrcBlobTags.ToAzBlobTagsMap(),
+		destBlobTier:        destBlobTier,
+		cpkToApply:          cpkToApply,
+		cpk:                 jptm.CpkInfo(),
+		cpkScope:            jptm.CpkScopeInfo(),
+		muBlockIDs:          &sync.Mutex{},
+		blockNamePrefix:     getBlockNamePrefix(jptm.Info().JobID, partNum, transferIndex),
 	}, nil
 }
 
@@ -184,7 +200,8 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
+	prop, err := s.destBlockBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &s.cpk})
+	return remoteObjectExists(blobPropertiesAdapter{prop}, err)
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {

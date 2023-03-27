@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -34,8 +35,8 @@ type urlToAppendBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider)
+func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+	senderBase, err := newAppendBlobSenderBase(jptm, destination, serviceClient, p, pacer, srcInfoProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -73,10 +74,14 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 
 // GetDestinationLength gets the destination length.
 func (c *urlToAppendBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, c.cpkToApply)
+	prop, err := c.destAppendBlobClient.GetProperties(c.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &c.cpk})
+
 	if err != nil {
 		return -1, err
 	}
+	if prop.ContentLength == nil {
+		return -1, nil
+	}
 
-	return properties.ContentLength(), nil
+	return *prop.ContentLength, nil
 }

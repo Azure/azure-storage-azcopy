@@ -108,7 +108,7 @@ type symlinkSender interface {
 	SendSymlink(linkData string) error
 }
 
-type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)
+type senderFactory func(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // For copying folder properties, many of the ISender of the methods needed to copy one file from URL to a remote location
@@ -212,7 +212,7 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 }
 
 // newBlobUploader detects blob type and creates a uploader manually
-func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newBlobUploader(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	override := jptm.BlobTypeOverride()
 	intendedType := override.ToBlobType()
 
@@ -231,13 +231,13 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 
 	switch intendedType {
 	case blob.BlobTypeBlockBlob:
-		return newBlockBlobUploader(jptm, destination, p, pacer, sip)
+		return newBlockBlobUploader(jptm, destination, serviceClient, p, pacer, sip)
 	case blob.BlobTypePageBlob:
-		return newPageBlobUploader(jptm, destination, p, pacer, sip)
+		return newPageBlobUploader(jptm, destination, serviceClient, p, pacer, sip)
 	case blob.BlobTypeAppendBlob:
-		return newAppendBlobUploader(jptm, destination, p, pacer, sip)
+		return newAppendBlobUploader(jptm, destination, serviceClient, p, pacer, sip)
 	default:
-		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.
+		return newBlockBlobUploader(jptm, destination, serviceClient, p, pacer, sip) // If no blob type was inferred, assume block blob.
 	}
 }
 

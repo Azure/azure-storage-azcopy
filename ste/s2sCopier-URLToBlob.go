@@ -30,7 +30,7 @@ import (
 )
 
 // Creates the right kind of URL to blob copier, based on the blob type of the source
-func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
 	var targetBlobType blob.BlobType
@@ -84,11 +84,11 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 
 	switch targetBlobType {
 	case blob.BlobTypeBlockBlob:
-		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
+		return newURLToBlockBlobCopier(jptm, destination, serviceClient, p, pacer, srcInfoProvider)
 	case blob.BlobTypeAppendBlob:
-		return newURLToAppendBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
+		return newURLToAppendBlobCopier(jptm, destination, serviceClient, p, pacer, srcInfoProvider)
 	case blob.BlobTypePageBlob:
-		return newURLToPageBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
+		return newURLToPageBlobCopier(jptm, destination, serviceClient, p, pacer, srcInfoProvider)
 	default:
 		if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
@@ -97,6 +97,6 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 				destination,
 				fmt.Sprintf("BlobType %q is used for destination blob by default.", blob.BlobTypeBlockBlob))
 		}
-		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
+		return newURLToBlockBlobCopier(jptm, destination, serviceClient, p, pacer, srcInfoProvider)
 	}
 }

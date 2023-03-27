@@ -38,15 +38,12 @@ type blobSourceInfoProvider struct {
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
-	uri, err := p.PreSignedSourceURL()
-	if err != nil {
-		return "", err
-	}
+	blobURL := p.transferInfo.Source
 
 	serviceClient := p.jptm.SourceServiceClient().BlobServiceClient
 	ctx := p.jptm.Context()
 
-	blobURLParts, err := blob.ParseURL(uri.String())
+	blobURLParts, err := blob.ParseURL(blobURL)
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +62,7 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 
 	symlinkBuf, err := io.ReadAll(resp.NewRetryReader(ctx, &blob.RetryReaderOptions{
 		MaxRetries:   5,
-		OnFailedRead: common.NewReadLogFunc(p.jptm, uri),
+		OnFailedRead: common.NewReadLogFunc(p.jptm, blobURL),
 	}))
 	if err != nil {
 		return "", err

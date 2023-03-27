@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -216,6 +217,30 @@ func CreateBlobClient(blobURL string, credInfo *CredentialInfo, options azcore.C
 func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blob.Client, error) {
 	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
 	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
+	if blobURLParts.Snapshot != "" {
+		return blobClient.WithSnapshot(blobURLParts.Snapshot)
+	}
+	if blobURLParts.VersionID != "" {
+		return blobClient.WithVersionID(blobURLParts.VersionID)
+	}
+	return blobClient, nil
+}
+
+func CreateAppendBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*appendblob.Client, error) {
+	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
+	blobClient := containerClient.NewAppendBlobClient(blobURLParts.BlobName)
+	if blobURLParts.Snapshot != "" {
+		return blobClient.WithSnapshot(blobURLParts.Snapshot)
+	}
+	if blobURLParts.VersionID != "" {
+		return blobClient.WithVersionID(blobURLParts.VersionID)
+	}
+	return blobClient, nil
+}
+
+func CreateBlockBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blockblob.Client, error) {
+	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
+	blobClient := containerClient.NewBlockBlobClient(blobURLParts.BlobName)
 	if blobURLParts.Snapshot != "" {
 		return blobClient.WithSnapshot(blobURLParts.Snapshot)
 	}

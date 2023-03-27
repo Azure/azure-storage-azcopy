@@ -22,6 +22,7 @@ package ste
 
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -51,8 +52,8 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 	return u.appendBlobSenderBase.Prologue(ps)
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, sip)
+func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newAppendBlobSenderBase(jptm, destination, serviceClient, p, pacer, sip)
 	if err != nil {
 		return nil, err
 	}
@@ -98,11 +99,14 @@ func (u *appendBlobUploader) Epilogue() {
 }
 
 func (u *appendBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destAppendBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, u.cpkToApply)
+	prop, err := u.destAppendBlobClient.GetProperties(u.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &u.cpk})
 
 	if err != nil {
 		return -1, err
 	}
+	if prop.ContentLength == nil {
+		return -1, nil
+	}
 
-	return prop.ContentLength(), nil
+	return *prop.ContentLength, nil
 }

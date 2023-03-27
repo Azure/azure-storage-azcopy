@@ -39,7 +39,7 @@ type urlToPageBlobCopier struct {
 	sourcePageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	srcURL, err := srcInfoProvider.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 		}
 	}
 
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider, destBlobTier)
+	senderBase, err := newPageBlobSenderBase(jptm, destination, serviceClient, p, pacer, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}
@@ -133,12 +133,16 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 
 // GetDestinationLength gets the destination length.
 func (c *urlToPageBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destPageBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, c.cpkToApply)
+	prop, err := c.destPageBlobClient.GetProperties(c.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &c.cpk})
+
 	if err != nil {
 		return -1, err
 	}
+	if prop.ContentLength == nil {
+		return -1, nil
+	}
 
-	return properties.ContentLength(), nil
+	return *prop.ContentLength, nil
 }
 
 // isolate the logic to fetch page ranges for a page blob, and check whether a given range has data

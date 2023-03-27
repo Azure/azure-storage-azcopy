@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"net/url"
 	"regexp"
 	"strings"
@@ -37,12 +38,13 @@ import (
 )
 
 type pageBlobSenderBase struct {
-	jptm            IJobPartTransferMgr
-	destPageBlobURL azblob.PageBlobURL
-	srcSize         int64
-	chunkSize       int64
-	numChunks       uint32
-	pacer           pacer
+	jptm               IJobPartTransferMgr
+	destPageBlobClient *pageblob.Client
+	destPageBlobURL    azblob.PageBlobURL
+	srcSize            int64
+	chunkSize          int64
+	numChunks          uint32
+	pacer              pacer
 
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
@@ -52,6 +54,8 @@ type pageBlobSenderBase struct {
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
+	cpk             blob.CPKInfo
+	cpkScope        blob.CPKScopeInfo
 
 	destBlobTier blob.AccessTier
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
@@ -80,7 +84,7 @@ var (
 	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
 )
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -102,10 +106,19 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	destPageBlobURL := azblob.NewPageBlobURL(*destURL, p)
 
+	destURLParts, err := blob.ParseURL(destination)
+	if err != nil {
+		return nil, err
+	}
+	destPageBlobClient, err := common.CreatePageBlobClientFromServiceClient(destURLParts, serviceClient.BlobServiceClient)
+	if err != nil {
+		return nil, err
+	}
+
 	// This is only necessary if our destination is a managed disk impexp account.
 	// Read the in struct explanation if necessary.
 	var destRangeOptimizer *pageRangeOptimizer
-	if isInManagedDiskImportExportAccount(*destURL) {
+	if isInManagedDiskImportExportAccount(destination) {
 		destRangeOptimizer = newPageRangeOptimizer(destPageBlobURL, jptm.Context())
 	}
 
@@ -127,6 +140,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	s := &pageBlobSenderBase{
 		jptm:                   jptm,
+		destPageBlobClient:     destPageBlobClient,
 		destPageBlobURL:        destPageBlobURL,
 		srcSize:                srcSize,
 		chunkSize:              chunkSize,
@@ -138,6 +152,8 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		destBlobTier:           destBlobTier,
 		filePacer:              NewNullAutoPacer(), // defer creation of real one to Prologue
 		cpkToApply:             cpkToApply,
+		cpk:                    jptm.CpkInfo(),
+		cpkScope:               jptm.CpkScopeInfo(),
 		destPageRangeOptimizer: destRangeOptimizer,
 	}
 
@@ -149,12 +165,17 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 }
 
 // these accounts have special restrictions of which APIs operations they support
-func isInManagedDiskImportExportAccount(u url.URL) bool {
-	return strings.HasPrefix(u.Host, managedDiskImportExportAccountPrefix)
+func isInManagedDiskImportExportAccount(rawURL string) bool {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(parsedURL.Host, managedDiskImportExportAccountPrefix)
 }
 
 func (s *pageBlobSenderBase) isInManagedDiskImportExportAccount() bool {
-	return isInManagedDiskImportExportAccount(s.destPageBlobURL.URL())
+	destBlobURL := s.destPageBlobURL.URL()
+	return isInManagedDiskImportExportAccount(destBlobURL.String())
 }
 
 func (s *pageBlobSenderBase) SendableEntityType() common.EntityType {
@@ -170,7 +191,8 @@ func (s *pageBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
+	prop, err := s.destPageBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &s.cpk})
+	return remoteObjectExists(blobPropertiesAdapter{prop}, err)
 }
 
 var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
@@ -201,14 +223,15 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// FileSize                : 1073742336  (equals our s.srcSize, i.e. the size of the disk file)
 		// Size                    : 1073741824
 
-		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply)
+		p, err := s.destPageBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &s.cpk})
 		if err != nil {
 			s.jptm.FailActiveSend("Checking size of managed disk blob", err)
 			return
 		}
-		if s.srcSize != p.ContentLength() {
+		if p.ContentLength == nil || (p.ContentLength != nil && s.srcSize != *p.ContentLength) {
+			cl := common.Iffint64NotNil(p.ContentLength, 0)
 			sizeErr := fmt.Errorf("source file is not same size as the destination page blob. Source size is %d bytes but destination size is %d bytes. Re-create the destination with exactly the right size. E.g. see parameter UploadSizeInBytes in PowerShell's New-AzDiskConfig. Ensure the source is a fixed-size VHD",
-				s.srcSize, p.ContentLength())
+				s.srcSize, cl)
 			s.jptm.FailActiveSend("Checking size of managed disk blob", sizeErr)
 			return
 		}

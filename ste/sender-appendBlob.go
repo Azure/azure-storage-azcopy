@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"time"
@@ -34,11 +35,12 @@ import (
 )
 
 type appendBlobSenderBase struct {
-	jptm              IJobPartTransferMgr
-	destAppendBlobURL azblob.AppendBlobURL
-	chunkSize         int64
-	numChunks         uint32
-	pacer             pacer
+	jptm                 IJobPartTransferMgr
+	destAppendBlobClient *appendblob.Client
+	destAppendBlobURL    azblob.AppendBlobURL
+	chunkSize            int64
+	numChunks            uint32
+	pacer                pacer
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -47,6 +49,8 @@ type appendBlobSenderBase struct {
 	metadataToApply azblob.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
+	cpk             blob.CPKInfo
+	cpkScope        blob.CPKScopeInfo
 
 	sip ISourceInfoProvider
 
@@ -55,7 +59,7 @@ type appendBlobSenderBase struct {
 
 type appendBlockFunc = func()
 
-func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
+func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -77,6 +81,15 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 
 	destAppendBlobURL := azblob.NewAppendBlobURL(*destURL, p)
 
+	destURLParts, err := blob.ParseURL(destination)
+	if err != nil {
+		return nil, err
+	}
+	destAppendBlobClient, err := common.CreateAppendBlobClientFromServiceClient(destURLParts, serviceClient.BlobServiceClient)
+	if err != nil {
+		return nil, err
+	}
+
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
@@ -88,6 +101,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
 		destAppendBlobURL:      destAppendBlobURL,
+		destAppendBlobClient:   destAppendBlobClient,
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
@@ -96,6 +110,8 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		sip:                    srcInfoProvider,
 		cpkToApply:             cpkToApply,
+		cpk:                    jptm.CpkInfo(),
+		cpkScope:               jptm.CpkScopeInfo(),
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
@@ -112,7 +128,8 @@ func (s *appendBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *appendBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
+	prop, err := s.destAppendBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &s.cpk})
+	return remoteObjectExists(blobPropertiesAdapter{prop}, err)
 }
 
 // Returns a chunk-func for sending append blob to remote

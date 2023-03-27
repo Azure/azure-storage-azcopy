@@ -135,15 +135,14 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, service
 		}
 
 		// download blob from start Index till startIndex + adjustedChunkSize
-		info := jptm.Info()
-		u, _ := url.Parse(info.Source)
-		blobURLParts, _ := blob.ParseURL(info.Source)
+		blobURL := jptm.Info().Source
+		blobURLParts, _ := blob.ParseURL(blobURL)
 		blobClient, _ := common.CreateBlobClientFromServiceClient(blobURLParts, serviceClient.BlobServiceClient)
 
 		// set access conditions, to protect against inconsistencies from changes-while-being-read
 		lmt := jptm.LastModifiedTime().In(time.FixedZone("GMT", 0)) // TODO : This should be fixed by the Track 2 GO SDK.
 		accessConditions := &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfUnmodifiedSince: &lmt}}
-		if isInManagedDiskImportExportAccount(*u) {
+		if isInManagedDiskImportExportAccount(blobURL) {
 			// no access conditions (and therefore no if-modified checks) are supported on managed disk import/export (md-impexp)
 			// They are also unsupported on old "md-" style export URLs on the new (2019) large size disks.
 			// And if fact you can't have an md- URL in existence if the blob is mounted as a disk, so it won't be getting changed anyway, so we just treat all md-disks the same
@@ -174,7 +173,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, service
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.NewRetryReader(enrichedContext, &blob.RetryReaderOptions{
 			MaxRetries:   int32(destWriter.MaxRetryPerDownloadBody()),
-			OnFailedRead: common.NewReadLogFunc(jptm, u),
+			OnFailedRead: common.NewReadLogFunc(jptm, blobURL),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

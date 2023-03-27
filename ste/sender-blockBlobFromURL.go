@@ -38,7 +38,7 @@ type urlToBlockBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
 	var destBlobTier blob.AccessTier
 	// If the source is block blob, preserve source's blob tier.
@@ -48,7 +48,7 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 		}
 	}
 
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider, destBlobTier)
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, serviceClient, p, pacer, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}
@@ -196,10 +196,14 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 // GetDestinationLength gets the destination length.
 func (c *urlToBlockBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destBlockBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, c.cpkToApply)
+	prop, err := c.destBlockBlobClient.GetProperties(c.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &c.cpk})
+
 	if err != nil {
 		return -1, err
 	}
+	if prop.ContentLength == nil {
+		return -1, nil
+	}
 
-	return properties.ContentLength(), nil
+	return *prop.ContentLength, nil
 }

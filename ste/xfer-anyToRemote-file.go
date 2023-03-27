@@ -197,7 +197,7 @@ func anyToRemote(jptm IJobPartTransferMgr, client common.ClientInfo, p pipeline.
 }
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
-func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, client common.ClientInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())
@@ -225,7 +225,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, client common
 		panic("configuration error. Source Info Provider does not have File entity type")
 	}
 
-	s, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	s, err := senderFactory(jptm, info.Destination, serviceClient, p, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())

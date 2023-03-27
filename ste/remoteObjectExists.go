@@ -36,7 +36,7 @@ type lastModifiedTimerProvider interface {
 }
 
 type blobPropertiesAdapter struct {
-	BlobProperties *blob.GetPropertiesResponse
+	BlobProperties blob.GetPropertiesResponse
 }
 
 func (a blobPropertiesAdapter) LastModified() time.Time {

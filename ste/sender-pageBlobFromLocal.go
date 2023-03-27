@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -35,8 +36,8 @@ type pageBlobUploader struct {
 	sip        ISourceInfoProvider
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, "")
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newPageBlobSenderBase(jptm, destination, serviceClient, p, pacer, sip, "")
 	if err != nil {
 		return nil, err
 	}
@@ -137,11 +138,14 @@ func (u *pageBlobUploader) Epilogue() {
 }
 
 func (u *pageBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destPageBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, u.cpkToApply)
+	prop, err := u.destPageBlobClient.GetProperties(u.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &u.cpk})
 
 	if err != nil {
 		return -1, err
 	}
+	if prop.ContentLength == nil {
+		return -1, nil
+	}
 
-	return prop.ContentLength(), nil
+	return *prop.ContentLength, nil
 }

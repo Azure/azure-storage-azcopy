@@ -144,8 +144,8 @@ func (jl jobLogger) Panic(err error) {
 
 const TryEquals string = "Try=" // TODO: refactor so that this can be used by the retry policies too?  So that when you search the logs for Try= you are guaranteed to find both types of retry (i.e. request send retries, and body read retries)
 
-func NewReadLogFunc(logger ILogger, fullURL *url.URL) func(failureCount int32, lastError error, httpRange blob.HTTPRange, willRetry bool) {
-	redactedUrl := URLStringExtension(fullURL.String()).RedactSecretQueryParamForLogging()
+func NewReadLogFunc(logger ILogger, fullURL string) func(failureCount int32, lastError error, httpRange blob.HTTPRange, willRetry bool) {
+	redactedUrl := URLStringExtension(fullURL).RedactSecretQueryParamForLogging()
 	return func(failureCount int32, lastError error, httpRange blob.HTTPRange, willRetry bool) {
 		retryMessage := "Will retry"
 		if !willRetry {

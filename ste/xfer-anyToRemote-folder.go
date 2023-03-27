@@ -26,7 +26,7 @@ import (
 )
 
 // anyToRemote_folder handles all kinds of sender operations for FOLDERS - both uploads from local files, and S2S copies
-func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, client common.ClientInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	// step 1. perform initial checks
 	if jptm.WasCanceled() {
@@ -48,7 +48,7 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info TransferInfo, client comm
 		panic("configuration error. Source Info Provider does not have Folder entity type")
 	}
 
-	baseSender, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	baseSender, err := senderFactory(jptm, info.Destination, serviceClient, p, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())

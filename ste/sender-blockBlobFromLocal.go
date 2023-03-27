@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -36,8 +37,8 @@ type blockBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, sip, "")
+func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, serviceClient common.ClientInfo, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, serviceClient, p, pacer, sip, "")
 	if err != nil {
 		return nil, err
 	}
@@ -184,11 +185,14 @@ func (u *blockBlobUploader) Epilogue() {
 }
 
 func (u *blockBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destBlockBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, u.cpkToApply)
+	prop, err := u.destBlockBlobClient.GetProperties(u.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: &u.cpk})
 
 	if err != nil {
 		return -1, err
 	}
+	if prop.ContentLength == nil {
+		return -1, nil
+	}
 
-	return prop.ContentLength(), nil
+	return *prop.ContentLength, nil
 }
