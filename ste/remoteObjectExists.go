@@ -21,6 +21,8 @@
 package ste
 
 import (
+	"errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/http"
 	"time"
@@ -52,8 +54,11 @@ func (a blobPropertiesAdapter) LastModified() time.Time {
 // The initial, dummy, parameter, is to allow callers to conveniently call it with functions that return a tuple
 // - even though we only need the error.
 func remoteObjectExists(props lastModifiedTimerProvider, errWhenAccessingRemoteObject error) (bool, time.Time, error) {
-
-	if typedErr, ok := errWhenAccessingRemoteObject.(responseError); ok && typedErr.Response().StatusCode == http.StatusNotFound {
+	// Check if it is a Track 2 type error first
+	var respErr *azcore.ResponseError
+	if errors.As(errWhenAccessingRemoteObject, &respErr) && respErr.StatusCode == http.StatusNotFound {
+		return false, time.Time{}, nil // 404 error, so it does NOT exist
+	} else if typedErr, ok := errWhenAccessingRemoteObject.(responseError); ok && typedErr.Response().StatusCode == http.StatusNotFound { // Track 1.5 error
 		return false, time.Time{}, nil // 404 error, so it does NOT exist
 	} else if errWhenAccessingRemoteObject != nil {
 		return false, time.Time{}, errWhenAccessingRemoteObject // some other error happened, so we return it
