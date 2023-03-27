@@ -239,13 +239,12 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 // There will be only 1 instance of the jobsAdmin type.
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
-	atomicSuccessfulBytesInActiveFiles int64
-	atomicBytesTransferredWhileTuning  int64
-	atomicTuningEndSeconds             int64
-	atomicCurrentMainPoolSize          int32 // align 64 bit integers for 32 bit arch
-	concurrency                        ste.ConcurrencySettings
-	logger                             common.ILoggerCloser
-	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
+	atomicBytesTransferredWhileTuning int64
+	atomicTuningEndSeconds            int64
+	atomicCurrentMainPoolSize         int32 // align 64 bit integers for 32 bit arch
+	concurrency                       ste.ConcurrencySettings
+	logger                            common.ILoggerCloser
+	jobIDToJobMgr                     jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
 	logDir                  string // Where log files are stored
 	planDir                 string // Initialize to directory where Job Part Plans are stored
@@ -367,7 +366,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 	// are include in the result
 	files := func(prefix, ext string) []os.FileInfo {
 		var files []os.FileInfo
-		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
 			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
@@ -404,7 +403,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 	// Get all the Job part plan files in the plan directory
 	files := func(ext string) []os.FileInfo {
 		var files []os.FileInfo
-		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
 			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
@@ -431,7 +430,7 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 	ret := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
 	files := func(ext string) []os.FileInfo {
 		var files []os.FileInfo
-		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
 			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
@@ -466,7 +465,7 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 func (ja *jobsAdmin) SetConcurrencySettingsToAuto() {
 	// Setting initial pool size to 4 and max pool size to 3,000
 	ja.concurrency.InitialMainPoolSize = 4
-	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{3000, false, common.EEnvironmentVariable.ConcurrencyValue().Name, "auto-tuning limit"}
+	ja.concurrency.MaxMainPoolSize = &ste.ConfiguredInt{Value: 3000, IsUserSpecified: false, EnvVarName: common.EEnvironmentVariable.ConcurrencyValue().Name, DefaultSourceDesc: "auto-tuning limit"}
 
 	// recreate the concurrency tuner.
 	// Tuner isn't called until the first job part is scheduled for transfer, so it is safe to update it before that.
@@ -584,13 +583,6 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	return a.GetAdvice()
 }
 
-//Structs for messageHandler
-
-/* PerfAdjustment message. */
-type jaPerfAdjustmentMsg struct {
-	Throughput int64 `json:"cap-mbps,string"`
-}
-
 func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	toBitsPerSec := func(megaBitsPerSec int64) int64 {
 		return megaBitsPerSec * 1000 * 1000 / 8
@@ -603,7 +595,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 	for {
 		msg := <-inputChan
 		var msgType common.LCMMsgType
-		msgType.Parse(msg.Req.MsgType) // MsgType is already verified by LCM
+		_ = msgType.Parse(msg.Req.MsgType) // MsgType is already verified by LCM
 		switch msgType {
 		case common.ELCMMsgType.PerformanceAdjustment():
 			var resp common.PerfAdjustmentResp

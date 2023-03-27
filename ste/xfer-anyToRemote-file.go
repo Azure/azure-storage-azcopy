@@ -116,7 +116,7 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
-		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == azblob.AccessTierHot
+		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || destTier == azblob.AccessTierHot
 	}
 }
 
@@ -179,12 +179,19 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		}
 	}
 
-	if info.IsFolderPropertiesTransfer() {
+	switch info.EntityType {
+	case common.EEntityType.Folder():
 		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
-	} else if (jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() && info.EntityType == common.EEntityType.File()) {
+	case common.EEntityType.FileProperties():
 		anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
-	} else {
-		anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
+	case common.EEntityType.File():
+		if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
+			anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
+		} else {
+			anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
+		}
+	case common.EEntityType.Symlink():
+		anyToRemote_symlink(jptm, info, p, pacer, senderFactory, sipf)
 	}
 }
 
@@ -538,7 +545,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 			shouldCheckLength = false
 			checkLengthFailureOnReadOnlyDst.Do(func() {
 				var glcm = common.GetLifecycleMgr()
-				msg := fmt.Sprintf("Could not read destination length. If the destination is write-only, use --check-length=false on the command line.")
+				msg := "Could not read destination length. If the destination is write-only, use --check-length=false on the command line."
 				glcm.Info(msg)
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, msg)

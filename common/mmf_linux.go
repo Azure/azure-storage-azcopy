@@ -1,3 +1,4 @@
+//go:build linux || darwin
 // +build linux darwin
 
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
@@ -55,7 +56,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	}
 	addr, err := syscall.Mmap(int(file.Fd()), offset, int(length), prot, flags)
 	if !writable {
-		syscall.Madvise(addr, syscall.MADV_SEQUENTIAL|syscall.MADV_WILLNEED)
+		_ = syscall.Madvise(addr, syscall.MADV_SEQUENTIAL|syscall.MADV_WILLNEED)
 	}
 	return &MMF{slice: (addr), isMapped: true, lock: sync.RWMutex{}}, err
 }

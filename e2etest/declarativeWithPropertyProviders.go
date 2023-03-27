@@ -36,6 +36,10 @@ import (
 type with struct {
 	size string // uses our standard K, M, G suffix
 
+	symlinkTarget string
+
+	posixProperties objectUnixStatContainer
+
 	cacheControl       string
 	contentDisposition string
 	contentEncoding    string
@@ -83,6 +87,10 @@ func (w with) createObjectProperties() *objectProperties {
 	}
 
 	// content headers
+	if w.symlinkTarget != "" {
+		populated = true
+		result.symlinkTarget = &w.symlinkTarget
+	}
 	if w.cacheControl != "" {
 		populated = true
 		ensureContentPropsExist()
@@ -148,6 +156,10 @@ func (w with) createObjectProperties() *objectProperties {
 		populated = true
 		result.adlsPermissionsACL = &w.adlsPermissionsACL
 	}
+	if !w.posixProperties.Empty() {
+		populated = true
+		result.posixProperties = &w.posixProperties
+	}
 
 	if w.cpkByName != "" {
 		populated = true
@@ -173,12 +185,10 @@ func (w with) createObjectProperties() *objectProperties {
 // use createOnly if you want to define properties that should be used when creating an object, but not
 // used when verifying the state of the transferred object. Generally you'll have no use for this.
 // Just use "with", and the test framework will do the right thing.
-//nolint
 type createOnly struct {
 	with
 }
 
-//nolint
 func (createOnly) appliesToVerification() bool {
 	return false
 }
@@ -186,7 +196,7 @@ func (createOnly) appliesToVerification() bool {
 ////
 
 // Use verifyOnly if you need to specify some properties that should NOT be applied to the file when it is created,
-// but should be present on it afte) the transfer
+// but should be present on it after) the transfer
 type verifyOnly struct {
 	with
 }

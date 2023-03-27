@@ -46,7 +46,7 @@ func (f *attrFilter) AppliesOnlyToFiles() bool {
 
 func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	fileName := ""
-	if strings.Index(f.filePath, "*") == -1 {
+	if !strings.Contains(f.filePath, "*") {
 		fileName = common.GenerateFullPath(f.filePath, storedObject.relativePath)
 	} else {
 		basePath := getPathBeforeFirstWildcard(f.filePath)

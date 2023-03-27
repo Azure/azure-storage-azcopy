@@ -110,6 +110,13 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 		set("preserve-posix-properties", p.preservePOSIXProperties, "")
+
+		switch p.symlinkHandling {
+		case common.ESymlinkHandlingType.Follow():
+			set("follow-symlinks", true, nil)
+		case common.ESymlinkHandlingType.Preserve():
+			set("preserve-symlinks", true, nil)
+		}
 	} else if o == eOperation.Sync() {
 		set("preserve-posix-properties", p.preservePOSIXProperties, false)
 		set("compare-hash", p.compareHash.String(), "None")

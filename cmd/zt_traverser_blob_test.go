@@ -48,7 +48,7 @@ func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	c.Assert(isDir, chk.Equals, true)
@@ -69,7 +69,7 @@ func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	c.Assert(isDir, chk.Equals, true)
@@ -92,7 +92,7 @@ func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	c.Assert(isDir, chk.Equals, false)
@@ -113,7 +113,7 @@ func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	c.Assert(isDir, chk.Equals, false)

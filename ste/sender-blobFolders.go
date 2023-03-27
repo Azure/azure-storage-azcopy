@@ -46,9 +46,9 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
-		out = &dummyUploader{fsend}
+		out = &dummyFolderUploader{fsend}
 	} else {
-		out = &dummys2sCopier{fsend}
+		out = &dummyFolderS2SCopier{fsend}
 	}
 
 	return out, nil
@@ -76,11 +76,13 @@ func (b *blobFolderSender) setDatalakeACLs() {
 func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	b.jptm.Log(pipeline.LogWarning, "It is impossible to completely overwrite a folder with existing content under it on a hierarchical namespace storage account. A best-effort attempt will be made, but if CPK does not match the transfer will fail.")
 
-	b.metadataToApply["hdi_isfolder"] = "true" // Set folder metadata flag
 	err := b.getExtraProperties()
 	if err != nil {
 		return "Get Extra Properties", fmt.Errorf("when getting additional folder properties: %w", err)
 	}
+
+	// do not set folder flag as it's invalid to modify a folder with
+	delete(b.metadataToApply, "hdi_isfolder")
 
 	// SetMetadata can set CPK if it wasn't specified prior. This is not a "full" overwrite, but a best-effort overwrite.
 	_, err = b.destination.SetMetadata(b.jptm.Context(), b.metadataToApply, azblob.BlobAccessConditions{}, b.cpkToApply)
@@ -88,10 +90,11 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 		return "Set Metadata", fmt.Errorf("A best-effort overwrite was attempted; CPK errors cannot be handled when the blob cannot be deleted.\n%w", err)
 	}
 
-	_, err = b.destination.SetTags(b.jptm.Context(), nil, nil, nil, b.blobTagsToApply)
-	if err != nil {
-		return "Set Blob Tags", err
-	}
+	// blob API not yet supported for HNS account error; re-enable later.
+	//_, err = b.destination.SetTags(b.jptm.Context(), nil, nil, nil, b.blobTagsToApply)
+	//if err != nil {
+	//	return "Set Blob Tags", err
+	//}
 	_, err = b.destination.SetHTTPHeaders(b.jptm.Context(), b.headersToAppply, azblob.BlobAccessConditions{})
 	if err != nil {
 		return "Set HTTP Headers", err
@@ -105,8 +108,35 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	return "", nil
 }
 
+func (b *blobFolderSender) SetContainerACL() error {
+	bURLParts := azblob.NewBlobURLParts(b.destination.URL())
+	bURLParts.BlobName = "/" // Container-level ACLs NEED a /
+	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+	// todo: jank, and violates the principle of interfaces
+	fileURL := azbfs.NewFileSystemURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+
+	// We know for a fact our source is a "blob".
+	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
+	if err != nil {
+		b.jptm.FailActiveSend("Grabbing source ACLs", err)
+		return folderPropertiesSetInCreation{} // standard completion will detect failure
+	}
+	acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
+	_, err = fileURL.SetAccessControl(b.jptm.Context(), acl)
+	if err != nil {
+		b.jptm.FailActiveSend("Putting ACLs", err)
+		return folderPropertiesSetInCreation{} // standard completion will detect failure
+	}
+
+	return folderPropertiesSetInCreation{} // standard completion will handle the rest
+}
+
 func (b *blobFolderSender) EnsureFolderExists() error {
 	t := b.jptm.GetFolderCreationTracker()
+
+	if azblob.NewBlobURLParts(b.destination.URL()).BlobName == "" {
+		return b.SetContainerACL() // Can't do much with a container, but it is here.
+	}
 
 	_, err := b.destination.GetProperties(b.jptm.Context(), azblob.BlobAccessConditions{}, b.cpkToApply)
 	if err != nil {
@@ -177,12 +207,6 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 	}
 
 	return nil
-
-	if err != nil {
-		return err
-	}
-
-	return folderPropertiesSetInCreation{}
 }
 
 func (b *blobFolderSender) SetFolderProperties() error {
@@ -230,25 +254,25 @@ func (b *blobFolderSender) GetDestinationLength() (int64, error) {
 
 // implement uploader to handle commonSenderCompletion
 
-type dummyUploader struct {
+type dummyFolderUploader struct {
 	blobFolderSender
 }
 
-func (d dummyUploader) GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
+func (d dummyFolderUploader) GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 	panic("this sender only sends folders.")
 }
 
-func (d dummyUploader) Md5Channel() chan<- []byte {
+func (d dummyFolderUploader) Md5Channel() chan<- []byte {
 	panic("this sender only sends folders.")
 }
 
 // ditto for s2sCopier
 
-type dummys2sCopier struct {
+type dummyFolderS2SCopier struct {
 	blobFolderSender
 }
 
-func (d dummys2sCopier) GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
+func (d dummyFolderS2SCopier) GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
 	// TODO implement me
 	panic("implement me")
 }

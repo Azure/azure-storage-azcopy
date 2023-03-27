@@ -49,7 +49,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirThatExists(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
@@ -78,7 +78,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
@@ -108,7 +108,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileExists(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
@@ -131,7 +131,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
@@ -154,7 +154,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceWithWildCard(c *chk.C) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: true, Recursive: false}

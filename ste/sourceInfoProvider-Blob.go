@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"io"
 	"strings"
 	"time"
 
@@ -33,6 +34,38 @@ import (
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
+}
+
+func (p *blobSourceInfoProvider) ReadLink() (string, error) {
+	uri, err := p.PreSignedSourceURL()
+	if err != nil {
+		return "", err
+	}
+
+	pl := p.jptm.SourceProviderPipeline()
+	ctx := p.jptm.Context()
+
+	blobURL := azblob.NewBlockBlobURL(*uri, pl)
+
+	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
+	if p.jptm.IsSourceEncrypted() {
+		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
+	}
+
+	resp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+	if err != nil {
+		return "", err
+	}
+
+	symlinkBuf, err := io.ReadAll(resp.Body(azblob.RetryReaderOptions{
+		MaxRetryRequests: 5,
+		NotifyFailedRead: common.NewReadLogFunc(p.jptm, uri),
+	}))
+	if err != nil {
+		return "", err
+	}
+
+	return string(symlinkBuf), nil
 }
 
 func (p *blobSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, error) {
@@ -79,10 +112,14 @@ func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, err
 
 	bURLParts := azblob.NewBlobURLParts(*presignedURL)
 	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
-	bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
+	if bURLParts.BlobName != "" {
+		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
+	} else {
+		bURLParts.BlobName = "/" // container level perms MUST have a /
+	}
+
 	// todo: jank, and violates the principle of interfaces
 	fURL := azbfs.NewFileURL(bURLParts.URL(), p.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondarySourceProviderPipeline)
-
 	return fURL.GetAccessControl(p.jptm.Context())
 }
 

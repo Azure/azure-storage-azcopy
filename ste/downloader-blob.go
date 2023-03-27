@@ -22,6 +22,7 @@ package ste
 
 import (
 	"net/url"
+	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -38,12 +39,22 @@ type blobDownloader struct {
 	// used to avoid downloading zero ranges of page blobs
 	pageRangeOptimizer *pageRangeOptimizer
 
-	// used to avoid re-setting file mode
-	setMode bool
+	jptm   IJobPartTransferMgr
+	txInfo TransferInfo
+}
 
-	jptm     IJobPartTransferMgr
-	txInfo   TransferInfo
-	fileMode uint32
+func (bd *blobDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
+	sip, err := newBlobSourceInfoProvider(jptm)
+	if err != nil {
+		return err
+	}
+	symsip := sip.(ISymlinkBearingSourceInfoProvider) // blob always implements this
+	symlinkInfo, _ := symsip.ReadLink()
+
+	// create the link
+	err = os.Symlink(symlinkInfo, jptm.Info().Destination)
+
+	return err
 }
 
 func newBlobDownloader() downloader {
@@ -68,6 +79,27 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 }
 
 func (bd *blobDownloader) Epilogue() {
+	if bd.jptm != nil {
+		if bd.jptm.IsLive() && bd.jptm.Info().PreservePOSIXProperties {
+			bsip, err := newBlobSourceInfoProvider(bd.jptm)
+			if err != nil {
+				bd.jptm.FailActiveDownload("get blob source info provider", err)
+			}
+			unixstat, _ := bsip.(IUNIXPropertyBearingSourceInfoProvider)
+			if ubd, ok := (interface{})(bd).(unixPropertyAwareDownloader); ok && unixstat.HasUNIXProperties() {
+				adapter, err := unixstat.GetUNIXProperties()
+				if err != nil {
+					bd.jptm.FailActiveDownload("get unix properties", err)
+				}
+
+				stage, err := ubd.ApplyUnixProperties(adapter)
+				if err != nil {
+					bd.jptm.FailActiveDownload("set unix properties: "+stage, err)
+				}
+			}
+		}
+	}
+
 	_ = bd.filePacer.Close()
 }
 

@@ -44,7 +44,6 @@ type downloadContentOptions struct {
 	downloadFileContentOptions
 }
 
-// nolint
 type downloadBlobContentOptions struct {
 	containerURL azblob.ContainerURL
 	cpkInfo      common.CpkInfo
@@ -123,6 +122,7 @@ func (r *resourceLocal) createFiles(a asserter, s *scenario, isSource bool) {
 		generateFromListOptions: generateFromListOptions{
 			fs:          s.fs.allObjects(isSource),
 			defaultSize: s.fs.defaultSize,
+			preservePosixProperties: s.p.preservePOSIXProperties,
 		},
 	})
 }

@@ -105,11 +105,6 @@ type loginCmdArgs struct {
 	persistToken  bool
 }
 
-type argValidity struct {
-	Required string
-	Invalid  string
-}
-
 func (lca loginCmdArgs) validate() error {
 	// Only support one kind of oauth login at same time.
 	switch {

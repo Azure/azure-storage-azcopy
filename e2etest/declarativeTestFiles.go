@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,7 +87,9 @@ func (h *contentHeaders) String() string {
 // This is exposed to the declarativeResourceManagers, to create/check the objects.
 // All field are pointers or interfaces to make them nil-able. Nil means "unspecified".
 type objectProperties struct {
-	isFolder           bool // if false, the object is a file
+	entityType         common.EntityType
+	symlinkTarget      *string
+	posixProperties    *objectUnixStatContainer
 	size               *int64
 	contentHeaders     *contentHeaders
 	nameValueMetadata  map[string]string
@@ -99,6 +102,112 @@ type objectProperties struct {
 	adlsPermissionsACL *string // TODO: Test owner and group; needs a good target though.
 	cpkInfo            *common.CpkInfo
 	cpkScopeInfo       *common.CpkScopeInfo
+}
+
+type objectUnixStatContainer struct {
+	// mode can contain THE FOLLOWING file type specifier bits (common.S_IFSOCK, common.S_IFIFO)
+	// common.S_IFDIR and common.S_IFLNK are achievable using folder() and symlink().
+	// TODO/Spike: common.S_IFBLK and common.S_IFCHR may be difficult to replicate consistently in a test environment
+	mode       *uint32
+
+	accessTime *time.Time
+	modTime    *time.Time
+}
+
+func (o *objectUnixStatContainer) Empty() bool {
+	if o == nil {
+		return true
+	}
+
+	return o.mode == nil &&
+		o.accessTime == nil &&
+		o.modTime == nil
+}
+
+func (o *objectUnixStatContainer) DeepCopy() *objectUnixStatContainer {
+	if o == nil {
+		return nil
+	}
+	out := &objectUnixStatContainer{}
+
+	if o.mode != nil {
+		mode := *o.mode
+		out.mode = &mode
+	}
+
+	if o.accessTime != nil {
+		accessTime := *o.accessTime
+		out.accessTime = &accessTime
+	}
+
+	if o.modTime != nil {
+		modTime := *o.modTime
+		out.modTime = &modTime
+	}
+
+	return out
+}
+
+func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapter) string {
+	if o == nil {
+		return "" // no comparison to make
+	}
+
+	mismatched := make([]string, 0)
+	// only compare if we set it
+	if o.mode != nil {
+		if s.FileMode() != *o.mode {
+			mismatched = append(mismatched, "mode")
+		}
+	}
+
+	if o.accessTime != nil {
+		if o.accessTime.UnixNano() != s.ATime().UnixNano() {
+			mismatched = append(mismatched, "atime")
+		}
+	}
+
+	if o.modTime != nil {
+		if o.modTime.UnixNano() != s.MTime().UnixNano() {
+			mismatched = append(mismatched, "mtime")
+		}
+	}
+
+	return strings.Join(mismatched, ", ")
+}
+
+func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]string) {
+	if o == nil {
+		return
+	}
+
+	mask := uint32(0)
+
+	if o.mode != nil { // always overwrite; perhaps it got changed in one of the hooks.
+		mask |= common.STATX_MODE
+		metadata[common.POSIXModeMeta] = strconv.FormatUint(uint64(*o.mode), 10)
+
+		delete(metadata, common.POSIXFIFOMeta)
+		delete(metadata, common.POSIXSocketMeta)
+		switch {
+		case *o.mode & common.S_IFIFO == common.S_IFIFO:
+			metadata[common.POSIXFIFOMeta] = "true"
+		case *o.mode & common.S_IFSOCK == common.S_IFSOCK:
+			metadata[common.POSIXSocketMeta] = "true"
+		}
+	}
+
+	if o.accessTime != nil {
+		mask |= common.STATX_ATIME
+		metadata[common.POSIXATimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
+	}
+
+	if o.modTime != nil {
+		mask |= common.STATX_MTIME
+		metadata[common.POSIXModTimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
+	}
+
+	metadata[common.LINUXStatxMaskMeta] = strconv.FormatUint(uint64(mask), 10)
 }
 
 // returns op.size, if present, else defaultSize
@@ -122,7 +231,16 @@ func (op objectProperties) sizeBytes(a asserter, defaultSize string) int {
 
 func (op objectProperties) DeepCopy() objectProperties {
 	ret := objectProperties{}
-	ret.isFolder = op.isFolder
+	ret.entityType = op.entityType
+
+	if op.symlinkTarget != nil {
+		target := *op.symlinkTarget
+		ret.symlinkTarget = &target
+	}
+
+	if !op.posixProperties.Empty() {
+		ret.posixProperties = op.posixProperties.DeepCopy()
+	}
 
 	if op.size != nil {
 		val := op.size
@@ -214,11 +332,20 @@ func (t *testObject) DeepCopy() *testObject {
 	return &ret
 }
 
-func (t *testObject) isFolder() bool {
-	if t.verificationProperties != nil && t.creationProperties.isFolder != t.verificationProperties.isFolder {
-		panic("isFolder properties are misconfigured")
+func (t *testObject) hasContentToValidate() bool {
+	if t.verificationProperties != nil && t.creationProperties.entityType != t.verificationProperties.entityType {
+		panic("entityType property is misconfigured")
 	}
-	return t.creationProperties.isFolder
+
+	return t.creationProperties.entityType == common.EEntityType.File()
+}
+
+func (t *testObject) isFolder() bool {
+	if t.verificationProperties != nil && t.creationProperties.entityType != t.verificationProperties.entityType {
+		panic("entityType property is misconfigured")
+	}
+
+	return t.creationProperties.entityType == common.EEntityType.Folder()
 }
 
 func (t *testObject) isRootFolder() bool {
@@ -293,6 +420,21 @@ func f(n string, properties ...withPropertyProvider) *testObject {
 	return result
 }
 
+func symlink(new, target string) *testObject {
+	name := strings.TrimLeft(new, "/")
+	result := f(name)
+
+	// result.creationProperties
+	result.creationProperties.entityType = common.EEntityType.Symlink()
+	result.creationProperties.symlinkTarget = &target
+
+	result.verificationProperties = &objectProperties{}
+	result.verificationProperties.entityType = common.EEntityType.Symlink()
+	result.verificationProperties.symlinkTarget = &target
+
+	return result
+}
+
 // define a folder, in the expectations lists on a testFiles struct
 func folder(n string, properties ...withPropertyProvider) *testObject {
 	name := strings.TrimLeft(n, "/")
@@ -300,9 +442,9 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 
 	// isFolder is at properties level, not testObject level, because we need it at properties level when reading
 	// the properties back from the destination (where we don't read testObjects, we just read objectProperties)
-	result.creationProperties.isFolder = true
+	result.creationProperties.entityType = common.EEntityType.Folder()
 	if result.verificationProperties != nil {
-		result.verificationProperties.isFolder = true
+		result.verificationProperties.entityType = common.EEntityType.Folder()
 	}
 
 	return result
@@ -379,14 +521,15 @@ func (*testFiles) copyList(src []interface{}) []interface{} {
 //	or force them to use f() for every file?
 func (*testFiles) toTestObjects(rawList []interface{}, isFail bool) []*testObject {
 	result := make([]*testObject, 0, len(rawList))
-	for _, r := range rawList {
+	for k, r := range rawList {
 		if asTestObject, ok := r.(*testObject); ok {
 			if asTestObject.expectedFailureMessage != "" && !isFail {
 				panic("expected failures are only allowed in the shouldFail list. They are not allowed for other test files")
 			}
 			result = append(result, asTestObject)
 		} else if asString, ok := r.(string); ok {
-			result = append(result, &testObject{name: asString})
+			rawList[k] = &testObject{name: asString} // convert to a full deal so we can apply md5
+			result = append(result, rawList[k].(*testObject))
 		} else {
 			panic("testFiles lists may contain only strings and testObjects. Create your test objects with the f() and folder() functions")
 		}

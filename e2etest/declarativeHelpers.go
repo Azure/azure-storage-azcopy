@@ -52,7 +52,6 @@ func equals() comparison {
 	return comparison{true}
 }
 
-// nolint
 func notEquals() comparison {
 	return comparison{false}
 }
@@ -116,7 +115,7 @@ func (a *testingAsserter) AssertNoErr(err error, comment ...string) {
 		a.t.Helper() // exclude this method from the logged callstack
 		redactedErr := sanitizer.SanitizeLogMessage(err.Error())
 		a.t.Logf("Error %s%s", redactedErr, a.formatComments(comment))
-		a.t.FailNow()
+		a.t.Fail()
 	}
 }
 
@@ -172,6 +171,7 @@ type params struct {
 	accessTier                azblob.AccessTierType
 	checkMd5                  common.HashValidationOption
 	compareHash               common.SyncHashType
+	symlinkHandling           common.SymlinkHandlingType
 
 	destNull bool
 
