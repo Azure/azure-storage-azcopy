@@ -67,7 +67,7 @@ func main() {
 	}
 
 	if err := os.MkdirAll(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_PLAN_FILE_LOCATION env variable. %v", err)
+		log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
 	}
 
 	jobID := common.NewJobID()
