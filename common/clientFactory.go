@@ -28,19 +28,19 @@ import (
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 )
 
-// NewClientCallbacks is a Generic Type to allow client creation error handling to live in a single place (CreateClient)
+// newClientCallbacks is a Generic Type to allow client creation error handling to live in a single place (createClient)
 // T = Client type
 // U = SharedKeyCredential type
 // Note : Could also make azcore.ClientOptions generic here if one day different storage service clients have additional options. This would also make the callback definitions easier.
-type NewClientCallbacks[T, U any] struct {
+type newClientCallbacks[T, U any] struct {
 	TokenCredential        func(string, azcore.TokenCredential, azcore.ClientOptions) (*T, error)
 	NewSharedKeyCredential func(string, string) (*U, error)
 	SharedKeyCredential    func(string, *U, azcore.ClientOptions) (*T, error)
 	NoCredential           func(string, azcore.ClientOptions) (*T, error)
 }
 
-// CreateClient is a generic method to allow client creation error handling to live in a single place
-func CreateClient[T, U any](callbacks NewClientCallbacks[T, U], u string, credInfo CredentialInfo, credOpOptions CredentialOpOptions, options azcore.ClientOptions) (*T, error) {
+// createClient is a generic method to allow client creation error handling to live in a single place
+func createClient[T, U any](callbacks newClientCallbacks[T, U], u string, credInfo CredentialInfo, credOpOptions CredentialOpOptions, options azcore.ClientOptions) (*T, error) {
 	switch credInfo.CredentialType {
 	case ECredentialType.OAuthToken():
 		if credInfo.OAuthTokenInfo.IsEmpty() {
@@ -76,7 +76,7 @@ func CreateClient[T, U any](callbacks NewClientCallbacks[T, U], u string, credIn
 
 // CreateBlobServiceClient creates a blob service client with credentials specified by credInfo
 func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions CredentialOpOptions, options azcore.ClientOptions) (*blobservice.Client, error) {
-	callbacks := NewClientCallbacks[blobservice.Client, blob.SharedKeyCredential]{
+	callbacks := newClientCallbacks[blobservice.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blobservice.Client, error) {
 			return blobservice.NewClient(u, tc, &blobservice.ClientOptions{ClientOptions: options})
 		},
@@ -89,7 +89,7 @@ func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions Cr
 		},
 	}
 
-	return CreateClient(callbacks, u, credInfo, credOpOptions, options)
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
 // TODO : Can this be isolated to the blob_traverser logic
