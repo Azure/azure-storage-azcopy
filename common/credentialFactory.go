@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"math"
 	"strings"
 	"sync"
@@ -119,51 +118,6 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 	}
 
 	return credential
-}
-
-func CreateBlobServiceClient(blobURL string, credInfo *CredentialInfo, options *blobservice.ClientOptions, credOpOptions *CredentialOpOptions) (*blobservice.Client, error) {
-	switch credInfo.CredentialType {
-	case ECredentialType.OAuthToken():
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			credOpOptions.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
-		}
-		tc, err := credInfo.OAuthTokenInfo.GetTokenCredential()
-		if err != nil {
-			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
-		}
-		return blobservice.NewClient(blobURL, tc, options)
-	case ECredentialType.SharedKey():
-		// Get the Account Name and Key variables from environment
-		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
-		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-		if name == "" || key == "" {
-			credOpOptions.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blob SharedKey credential"))
-		}
-		// create the shared key credentials
-		sharedKey, err := blob.NewSharedKeyCredential(name, key)
-		if err != nil {
-			credOpOptions.panicError(errors.New("failed to create the blob SharedKey credential"))
-		}
-		return blobservice.NewClientWithSharedKeyCredential(blobURL, sharedKey, options)
-	case ECredentialType.Anonymous():
-		return blobservice.NewClientWithNoCredential(blobURL, options)
-	default:
-		credOpOptions.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
-		return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-	}
-}
-
-func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blob.Client, error) {
-	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
-	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
-	if blobURLParts.Snapshot != "" {
-		return blobClient.WithSnapshot(blobURLParts.Snapshot)
-	}
-	if blobURLParts.VersionID != "" {
-		return blobClient.WithVersionID(blobURLParts.VersionID)
-	}
-	return blobClient, nil
 }
 
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,

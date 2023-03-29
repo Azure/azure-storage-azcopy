@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"net/url"
 	"path/filepath"
 	"runtime"
@@ -447,9 +446,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		burl.BlobName = ""
 		burl.Snapshot = ""
 		burl.VersionID = ""
-		bsc, err := common.CreateBlobServiceClient(burl.String(), credential,
-			&blobservice.ClientOptions{ClientOptions: createClientOptions(logLevel)},
-			&common.CredentialOpOptions{LogError: glcm.Info})
+		bsc, err := common.CreateBlobServiceClient(burl.String(), *credential, common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
 		if err != nil {
 			return nil, err
 		}
