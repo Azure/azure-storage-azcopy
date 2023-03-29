@@ -270,7 +270,8 @@ type jobPartMgr struct {
 	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
-	credInfo common.CredentialInfo
+	credInfo          common.CredentialInfo
+	s2sSourceCredInfo common.CredentialInfo
 
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
@@ -423,6 +424,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 
 	jpm.priority = plan.Priority
 
+	jpm.validateCredInfo()
+
 	jpm.createPipelines(jobCtx, sourceBlobToken) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
@@ -525,6 +528,44 @@ func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
 func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
+
+func (jpm *jobPartMgr) validateCredInfo() {
+	jobState := jpm.jobMgr.getInMemoryTransitJobState()
+
+	if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
+		s2sSourceCredInfo := jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
+		if jobState.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+			s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
+		}
+		jpm.s2sSourceCredInfo = s2sSourceCredInfo
+	}
+}
+
+//func (jpm *jobPartMgr) initializeClientOptions() {
+//	fromTo := jpm.planMMF.Plan().FromTo
+//	credInfo := jpm.credInfo
+//	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
+//		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
+//	}
+//	var userAgent string
+//	if fromTo.From() == common.ELocation.S3() {
+//		userAgent = common.S3ImportUserAgent
+//	} else if fromTo.From() == common.ELocation.GCP() {
+//		userAgent = common.GCPImportUserAgent
+//	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+//		userAgent = common.BenchmarkUserAgent
+//	} else {
+//		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
+//	}
+//
+//	credOption := common.CredentialOpOptions{
+//		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+//		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+//		Panic:    jpm.Panic,
+//		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+//		Cancel:   jpm.jobMgr.Cancel,
+//	}
+//}
 
 func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azblob.Credential) {
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
