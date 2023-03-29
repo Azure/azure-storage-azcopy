@@ -1452,6 +1452,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
+	if err := common.VerifyIsURLResolvable(cca.Source.Value); cca.FromTo.From().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve source: %w", err)
+	}
+
+	if err := common.VerifyIsURLResolvable(cca.Destination.Value); cca.FromTo.To().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve destination: %w", err)
+	}
+
 	// Note: credential info here is only used by remove at the moment.
 	// TODO: Get the entirety of remove into the new copyEnumeratorInit script so we can remove this
 	//       and stop having two places in copy that we get credential info
