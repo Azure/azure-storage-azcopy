@@ -110,7 +110,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	case common.ELocation.Blob():
 		options := createClientOptions(pipeline2.LogNone)
 		// TODO : Ensure it is a container URL here and fail early?
-		containerClient, err := common.CreateContainerClient(cookedArgs.resourceURL.String(), &credentialInfo, options, nil)
+		containerClient, err := common.CreateContainerClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
 		if err != nil {
 			return err
 		}

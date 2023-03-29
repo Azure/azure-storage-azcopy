@@ -25,10 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"math"
 	"strings"
 	"sync"
@@ -121,71 +118,6 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 	}
 
 	return credential
-}
-
-func sanitizeURLForServiceClient(blobURL string) (string, error) {
-	burl, err := blob.ParseURL(blobURL)
-	if err != nil {
-		return "", err
-	}
-	// Strip any non-service related things away
-	burl.ContainerName = ""
-	burl.BlobName = ""
-	burl.Snapshot = ""
-	burl.VersionID = ""
-	return burl.String(), nil
-}
-
-func CreateContainerClient(blobURL string, credInfo *CredentialInfo, options azcore.ClientOptions, credOpOptions *CredentialOpOptions) (*container.Client, error) {
-	blobURLParts, err := blob.ParseURL(blobURL)
-	if err != nil {
-		return nil, err
-	}
-	serviceClient, err := CreateBlobServiceClient(blobURL, *credInfo, *credOpOptions, options)
-	if err != nil {
-		return nil, err
-	}
-	return serviceClient.NewContainerClient(blobURLParts.ContainerName), nil
-}
-
-func CreateBlobClient(blobURL string, credInfo *CredentialInfo, options azcore.ClientOptions, credOpOptions *CredentialOpOptions) (*blob.Client, error) {
-	blobURLParts, err := blob.ParseURL(blobURL)
-	if err != nil {
-		return nil, err
-	}
-	serviceClient, err := CreateBlobServiceClient(blobURL, *credInfo, *credOpOptions, options)
-	if err != nil {
-		return nil, err
-	}
-	containerClient := serviceClient.NewContainerClient(blobURLParts.ContainerName)
-	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
-	if blobURLParts.Snapshot != "" {
-		return blobClient.WithSnapshot(blobURLParts.Snapshot)
-	}
-	if blobURLParts.VersionID != "" {
-		return blobClient.WithVersionID(blobURLParts.VersionID)
-	}
-	return blobClient, nil
-}
-
-func CreateBlockBlobClient(blobURL string, credInfo *CredentialInfo, options azcore.ClientOptions, credOpOptions *CredentialOpOptions) (*blockblob.Client, error) {
-	blobURLParts, err := blob.ParseURL(blobURL)
-	if err != nil {
-		return nil, err
-	}
-	serviceClient, err := CreateBlobServiceClient(blobURL, *credInfo, *credOpOptions, options)
-	if err != nil {
-		return nil, err
-	}
-	containerClient := serviceClient.NewContainerClient(blobURLParts.ContainerName)
-	blobClient := containerClient.NewBlockBlobClient(blobURLParts.BlobName)
-	if blobURLParts.Snapshot != "" {
-		return blobClient.WithSnapshot(blobURLParts.Snapshot)
-	}
-	if blobURLParts.VersionID != "" {
-		return blobClient.WithVersionID(blobURLParts.VersionID)
-	}
-	return blobClient, nil
 }
 
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,

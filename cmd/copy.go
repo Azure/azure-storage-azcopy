@@ -957,8 +957,8 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
 	return runtime.GOOS == "linux" && (
-    fromTo == common.EFromTo.BlobLocal() ||
-	  fromTo == common.EFromTo.LocalBlob()) ||
+		fromTo == common.EFromTo.BlobLocal() ||
+			fromTo == common.EFromTo.LocalBlob()) ||
 		fromTo == common.EFromTo.BlobBlob()
 }
 
@@ -1317,7 +1317,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 3: start download
-	blobClient, err := common.CreateBlobClient(u.String(), &credInfo, options, nil)
+	blobClient, err := common.CreateBlobClient(u.String(), credInfo, nil, options)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
 	}
@@ -1369,7 +1369,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), &credInfo, options, nil)
+	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), credInfo, nil, options)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot create block blob client due to error: %s", err.Error())
 	}
