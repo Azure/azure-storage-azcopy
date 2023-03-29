@@ -254,7 +254,7 @@ func prepareRequestForServiceLogging(request pipeline.Request) *http.Request {
 	// contains header x-ms-copy-source which could contains secrets for authentication.
 	// Prepare the headers for logging, with redact secrets in x-ms-copy-source header.
 	if exist, key := doesHeaderExistCaseInsensitive(req.Header, xMsCopySourceHeader); exist {
-		req = request.Copy()
+		req = req.Copy()
 		url, err := url.Parse(req.Header.Get(key))
 		if err == nil {
 			rawQuery := url.RawQuery
@@ -267,10 +267,22 @@ func prepareRequestForServiceLogging(request pipeline.Request) *http.Request {
 			}
 		}
 	}
+	// Redact headers that have to do with CPK keys.
+	if exist, key := doesHeaderExistCaseInsensitive(req.Header, xMsEncryptionKey); exist {
+		req = req.Copy()
+		req.Header.Set(key, "REDACTED")
+	}
+	if exist, key := doesHeaderExistCaseInsensitive(req.Header, xMsEncryptionKeySha256); exist {
+		req = req.Copy()
+		req.Header.Set(key, "REDACTED")
+	}
+
 	return req.Request
 }
 
 const xMsCopySourceHeader = "x-ms-copy-source"
+const xMsEncryptionKey = "x-ms-encryption-key"
+const xMsEncryptionKeySha256 = "x-ms-encryption-key-sha256"
 
 func doesHeaderExistCaseInsensitive(header http.Header, key string) (bool, string) {
 	for keyInHeader := range header {

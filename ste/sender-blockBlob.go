@@ -22,10 +22,12 @@ package ste
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -63,6 +65,7 @@ type blockBlobSenderBase struct {
 	atomicPutListIndicator int32
 	muBlockIDs             *sync.Mutex
 	blockNamePrefix        string
+	completedBlockList     map[int]string
 }
 
 func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSize int64, numChunks uint32, err error) {
@@ -188,6 +191,9 @@ func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
+	if s.jptm.RestartedTransfer() {
+		s.buildCommittedBlockMap()
+	}
 	if s.jptm.ShouldInferContentType() {
 		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
@@ -290,7 +296,7 @@ func (s *blockBlobSenderBase) Cleanup() {
 	}
 }
 
-//Currently we've common Metadata Copier across all senders for block blob.
+// Currently we've common Metadata Copier across all senders for block blob.
 func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
 	return createChunkFunc(true, s.jptm, id, func() {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
@@ -323,4 +329,67 @@ func (s *blockBlobSenderBase) setBlockID(index int32, value string) {
 
 func (s *blockBlobSenderBase) generateEncodedBlockID(index int32) string {
 	return common.GenerateBlockBlobBlockID(s.blockNamePrefix, index)
+}
+
+func (s *blockBlobSenderBase) buildCommittedBlockMap() {
+	invalidAzCopyBlockNameMsg := "buildCommittedBlockMap: Found blocks which are not committed by AzCopy. Restarting whole file"
+	changedChunkSize := "buildCommittedBlockMap: Chunksize mismatch on uncommitted blocks"
+	list := make(map[int]string)
+
+	if common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DisableBlobTransferResume()) == "true" {
+		return
+	}
+
+	blockList, err := s.destBlockBlobURL.GetBlockList(s.jptm.Context(), azblob.BlockListUncommitted, azblob.LeaseAccessConditions{})
+	if err != nil {
+		s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogError, "Failed to get blocklist. Restarting whole file.")
+		return
+	}
+
+	if len(blockList.UncommittedBlocks) == 0 {
+		s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "No uncommitted chunks found.")
+		return
+	}
+
+	// We return empty list if
+	// 1. We find chunks by a different actor
+	// 2. Chunk size differs
+	for _, block := range blockList.UncommittedBlocks {
+		if len(block.Name) != common.AZCOPY_BLOCKNAME_LENGTH {
+			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			return
+		}
+
+		tmp, err := base64.StdEncoding.DecodeString(block.Name)
+		decodedBlockName := string(tmp)
+		if err != nil || !strings.HasPrefix(decodedBlockName, s.blockNamePrefix) {
+			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			return
+		}
+
+		index, err := strconv.Atoi(decodedBlockName[len(s.blockNamePrefix):])
+		if err != nil || index < 0 || index > int(s.numChunks) {
+			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			return
+		}
+
+		// Last chunk may have different blockSize
+		if block.Size != s.ChunkSize() && index != int(s.numChunks) {
+			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, changedChunkSize)
+			return
+		}
+
+		list[index] = decodedBlockName
+	}
+
+	// We are here only if all the uncommitted blocks are uploaded by this job with same blockSize
+	s.completedBlockList = list
+}
+
+func (s *blockBlobSenderBase) ChunkAlreadyTransferred(index int32) bool {
+	if s.completedBlockList != nil {
+		return false
+	}
+	_, ok := s.completedBlockList[int(index)]
+	return ok
 }
