@@ -77,6 +77,10 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return err
 	}
 
+	if err := common.VerifyIsURLResolvable(resourceStringParts.Value); cookedArgs.resourceLocation.IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve target: %w", err)
+	}
+
 	credentialInfo, _, err := GetCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false, common.CpkOptions{})
 	if err != nil {
 		return err

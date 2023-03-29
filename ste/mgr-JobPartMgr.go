@@ -436,7 +436,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
 		if ts == common.ETransferStatus.Failed() {
-			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+			jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
 		}
 
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
@@ -467,9 +467,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}
-		if jpm.ShouldLog(pipeline.LogInfo) {
-			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
-		}
+		jpm.Log(pipeline.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 
 		// ===== TEST KNOB
 		relSrc, relDst := plan.TransferSrcDstRelatives(t)
@@ -884,12 +882,6 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	jpm.updateJobPartProgress(status)
 
-	// Add a safety count-check
-
-	if jpm.ShouldLog(pipeline.LogInfo) {
-		plan := jpm.Plan()
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
-	}
 	if transfersDone == jpm.planMMF.Plan().NumTransfers {
 		jppi := jobPartProgressInfo{
 			transfersCompleted: int(atomic.LoadUint32(&jpm.atomicTransfersCompleted)),
@@ -900,6 +892,10 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
+		
+		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
+			jpm.planMMF.Plan().JobID, jpm.planMMF.Plan().PartNum, transfersDone,
+			jpm.planMMF.Plan().NumTransfers))
 	}
 	return transfersDone
 }

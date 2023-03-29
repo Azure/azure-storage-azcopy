@@ -1011,9 +1011,7 @@ func (jm *jobMgr) transferProcessor(workerID int) {
 			jptm.ReportTransferDone()
 		} else {
 			// TODO fix preceding space
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
-			}
+			jptm.Log(pipeline.LogDebug, fmt.Sprintf("has worker %d which is processing TRANSFER %d", workerID, jptm.(*jobPartTransferMgr).transferIndex))
 			jptm.StartJobXfer()
 		}
 	}

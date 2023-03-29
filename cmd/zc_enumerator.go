@@ -441,7 +441,12 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			return nil, err
 		}
 		containerName := burl.ContainerName
-		bsc, err := common.CreateBlobServiceClient(r, credential, createClientOptions(logLevel), nil)
+		// Strip any non-service related things away
+		burl.ContainerName = ""
+		burl.BlobName = ""
+		burl.Snapshot = ""
+		burl.VersionID = ""
+		bsc, err := common.CreateBlobServiceClient(burl.String(), *credential, common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
 		if err != nil {
 			return nil, err
 		}
