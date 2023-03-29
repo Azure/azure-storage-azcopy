@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"sync/atomic"
@@ -131,6 +132,12 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 
 		// step 2: save the block ID into the list of block IDs
 		c.setBlockID(blockIndex, encodedBlockID)
+
+		if c.ChunkAlreadyTransferred(blockIndex) {
+			c.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, fmt.Sprintf("Skipping chunk %d as it was already transferred.", blockIndex))
+			atomic.AddInt32(&c.atomicChunksWritten, 1)
+			return
+		}
 
 		// step 3: put block to remote
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
