@@ -1,3 +1,6 @@
+variables:
+  AZCOPY_GOLANG_VERSION: $(AZCOPY_GOLANG_VERSION)
+
 trigger:
   branches:
     include:
