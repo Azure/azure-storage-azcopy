@@ -25,11 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"math"
 	"strings"
 	"sync"
@@ -122,126 +118,6 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 	}
 
 	return credential
-}
-
-func sanitizeURLForServiceClient(blobURL string) (string, error) {
-	burl, err := blob.ParseURL(blobURL)
-	if err != nil {
-		return "", err
-	}
-	// Strip any non-service related things away
-	burl.ContainerName = ""
-	burl.BlobName = ""
-	burl.Snapshot = ""
-	burl.VersionID = ""
-	return burl.String(), nil
-}
-
-func CreateBlobServiceClient(blobURL string, credInfo *CredentialInfo, options azcore.ClientOptions, credOpOptions *CredentialOpOptions) (*blobservice.Client, error) {
-	serviceURL, err := sanitizeURLForServiceClient(blobURL)
-	if err != nil {
-		return nil, err
-	}
-	if credOpOptions == nil {
-		credOpOptions = &CredentialOpOptions{
-			LogError: GetLifecycleMgr().Info,
-		}
-	}
-	serviceOptions := blobservice.ClientOptions{ClientOptions: options}
-	switch credInfo.CredentialType {
-	case ECredentialType.OAuthToken():
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			credOpOptions.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
-		}
-		tc, err := credInfo.OAuthTokenInfo.GetTokenCredential()
-		if err != nil {
-			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
-		}
-		return blobservice.NewClient(serviceURL, tc, &serviceOptions)
-	case ECredentialType.SharedKey():
-		// Get the Account Name and Key variables from environment
-		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
-		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-		if name == "" || key == "" {
-			credOpOptions.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blob SharedKey credential"))
-		}
-		// create the shared key credentials
-		sharedKey, err := blob.NewSharedKeyCredential(name, key)
-		if err != nil {
-			credOpOptions.panicError(errors.New("failed to create the blob SharedKey credential"))
-		}
-		return blobservice.NewClientWithSharedKeyCredential(serviceURL, sharedKey, &serviceOptions)
-	case ECredentialType.Anonymous():
-		return blobservice.NewClientWithNoCredential(serviceURL, &serviceOptions)
-	default:
-		credOpOptions.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
-		return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-	}
-}
-
-func CreateContainerClient(blobURL string, credInfo *CredentialInfo, options azcore.ClientOptions, credOpOptions *CredentialOpOptions) (*container.Client, error) {
-	blobURLParts, err := blob.ParseURL(blobURL)
-	if err != nil {
-		return nil, err
-	}
-	serviceClient, err := CreateBlobServiceClient(blobURL, credInfo, options, credOpOptions)
-	if err != nil {
-		return nil, err
-	}
-	return serviceClient.NewContainerClient(blobURLParts.ContainerName), nil
-}
-
-func CreateBlobClient(blobURL string, credInfo *CredentialInfo, options azcore.ClientOptions, credOpOptions *CredentialOpOptions) (*blob.Client, error) {
-	blobURLParts, err := blob.ParseURL(blobURL)
-	if err != nil {
-		return nil, err
-	}
-	serviceClient, err := CreateBlobServiceClient(blobURL, credInfo, options, credOpOptions)
-	if err != nil {
-		return nil, err
-	}
-	containerClient := serviceClient.NewContainerClient(blobURLParts.ContainerName)
-	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
-	if blobURLParts.Snapshot != "" {
-		return blobClient.WithSnapshot(blobURLParts.Snapshot)
-	}
-	if blobURLParts.VersionID != "" {
-		return blobClient.WithVersionID(blobURLParts.VersionID)
-	}
-	return blobClient, nil
-}
-
-func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blob.Client, error) {
-	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
-	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
-	if blobURLParts.Snapshot != "" {
-		return blobClient.WithSnapshot(blobURLParts.Snapshot)
-	}
-	if blobURLParts.VersionID != "" {
-		return blobClient.WithVersionID(blobURLParts.VersionID)
-	}
-	return blobClient, nil
-}
-
-func CreateBlockBlobClient(blobURL string, credInfo *CredentialInfo, options azcore.ClientOptions, credOpOptions *CredentialOpOptions) (*blockblob.Client, error) {
-	blobURLParts, err := blob.ParseURL(blobURL)
-	if err != nil {
-		return nil, err
-	}
-	serviceClient, err := CreateBlobServiceClient(blobURL, credInfo, options, credOpOptions)
-	if err != nil {
-		return nil, err
-	}
-	containerClient := serviceClient.NewContainerClient(blobURLParts.ContainerName)
-	blobClient := containerClient.NewBlockBlobClient(blobURLParts.BlobName)
-	if blobURLParts.Snapshot != "" {
-		return blobClient.WithSnapshot(blobURLParts.Snapshot)
-	}
-	if blobURLParts.VersionID != "" {
-		return blobClient.WithVersionID(blobURLParts.VersionID)
-	}
-	return blobClient, nil
 }
 
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,

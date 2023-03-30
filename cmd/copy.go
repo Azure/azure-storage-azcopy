@@ -1317,7 +1317,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 3: start download
-	blobClient, err := common.CreateBlobClient(u.String(), &credInfo, options, nil)
+	blobClient, err := common.CreateBlobClient(u.String(), credInfo, nil, options)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
 	}
@@ -1369,7 +1369,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), &credInfo, options, nil)
+	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), credInfo, nil, options)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot create block blob client due to error: %s", err.Error())
 	}
@@ -1459,6 +1459,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
 	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
+	}
+
+	if err := common.VerifyIsURLResolvable(cca.Source.Value); cca.FromTo.From().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve source: %w", err)
+	}
+
+	if err := common.VerifyIsURLResolvable(cca.Destination.Value); cca.FromTo.To().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve destination: %w", err)
 	}
 
 	// Note: credential info here is only used by remove at the moment.

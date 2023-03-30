@@ -671,6 +671,14 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
+	if err := common.VerifyIsURLResolvable(cca.source.Value); cca.fromTo.From().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve source: %w", err)
+	}
+
+	if err := common.VerifyIsURLResolvable(cca.destination.Value); cca.fromTo.To().IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve destination: %w", err)
+	}
+
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
 	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)

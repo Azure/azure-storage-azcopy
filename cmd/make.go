@@ -77,6 +77,10 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return err
 	}
 
+	if err := common.VerifyIsURLResolvable(resourceStringParts.Value); cookedArgs.resourceLocation.IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve target: %w", err)
+	}
+
 	credentialInfo, _, err := GetCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false, common.CpkOptions{})
 	if err != nil {
 		return err
@@ -106,7 +110,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	case common.ELocation.Blob():
 		options := createClientOptions(pipeline2.LogNone)
 		// TODO : Ensure it is a container URL here and fail early?
-		containerClient, err := common.CreateContainerClient(cookedArgs.resourceURL.String(), &credentialInfo, options, nil)
+		containerClient, err := common.CreateContainerClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
 		if err != nil {
 			return err
 		}

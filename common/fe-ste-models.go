@@ -698,6 +698,8 @@ func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 // Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
 func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
 
+func (TransferStatus) Restarted() TransferStatus { return TransferStatus(4) }
+
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 
@@ -711,10 +713,6 @@ func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return Transfer
 func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return TransferStatus(-5) }
 
 func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
-
-func (ts TransferStatus) ShouldTransfer() bool {
-	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started() || ts == ETransferStatus.FolderCreated()
-}
 
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
 func (TransferStatus) All() TransferStatus { return TransferStatus(math.MaxInt8) }

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
@@ -135,6 +136,17 @@ func (lcm *lifecycleMgr) watchInputs() {
 			lcm.inputQueue <- userInput{timeReceived: timeReceived, content: msg}
 			continue
 		default:
+		}
+
+		allCharsAreWhiteSpace := true
+		for _, ch := range msg {
+			if !unicode.IsSpace(ch) {
+				allCharsAreWhiteSpace = false
+				break
+			}
+		}
+		if allCharsAreWhiteSpace {
+			continue
 		}
 
 		var req LCMMsgReq
