@@ -79,7 +79,7 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.Body(azbfs.RetryReaderOptions{
 			MaxRetryRequests: MaxRetryPerDownloadBody,
-			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+			NotifyFailedRead: common.NewV1ReadLogFunc(jptm, u),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

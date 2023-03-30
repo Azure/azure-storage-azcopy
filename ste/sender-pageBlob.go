@@ -148,6 +148,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	return s, nil
 }
 
+// TODO : Make this take in a string
 // these accounts have special restrictions of which APIs operations they support
 func isInManagedDiskImportExportAccount(u url.URL) bool {
 	return strings.HasPrefix(u.Host, managedDiskImportExportAccountPrefix)

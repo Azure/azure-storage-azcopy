@@ -38,29 +38,24 @@ type blobSourceInfoProvider struct {
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
-	uri, err := p.PreSignedSourceURL()
-	if err != nil {
-		return "", err
-	}
+	source := p.transferInfo.Source
+	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 
-	pl := p.jptm.SourceProviderPipeline()
 	ctx := p.jptm.Context()
+	cpk := p.jptm.CpkInfo()
+	cpkScope := p.jptm.CpkScopeInfo()
 
-	blobURL := azblob.NewBlockBlobURL(*uri, pl)
-
-	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-	if p.jptm.IsSourceEncrypted() {
-		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
-	}
-
-	resp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+	resp, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
+		CPKInfo:      &cpk,
+		CPKScopeInfo: &cpkScope,
+	})
 	if err != nil {
 		return "", err
 	}
 
-	symlinkBuf, err := io.ReadAll(resp.Body(azblob.RetryReaderOptions{
-		MaxRetryRequests: 5,
-		NotifyFailedRead: common.NewReadLogFunc(p.jptm, uri),
+	symlinkBuf, err := io.ReadAll(resp.NewRetryReader(ctx, &blob.RetryReaderOptions{
+		MaxRetries:   5,
+		OnFailedRead: common.NewReadLogFunc(p.jptm, source),
 	}))
 	if err != nil {
 		return "", err

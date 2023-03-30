@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -134,31 +135,39 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		}
 
 		// download blob from start Index till startIndex + adjustedChunkSize
-		info := jptm.Info()
-		u, _ := url.Parse(info.Source)
-		srcBlobURL := azblob.NewBlobURL(*u, srcPipeline)
+		source := jptm.Info().Source
+		srcBlobClient, err := common.CreateBlobClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		if err != nil {
+			jptm.FailActiveDownload("Creating blob client", err)
+		}
+
+		u, _ := url.Parse(source)
 
 		// set access conditions, to protect against inconsistencies from changes-while-being-read
-		accessConditions := azblob.BlobAccessConditions{ModifiedAccessConditions: azblob.ModifiedAccessConditions{IfUnmodifiedSince: jptm.LastModifiedTime()}}
+		lmt := jptm.LastModifiedTime().In(time.FixedZone("GMT", 0))
+		accessConditions := blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfUnmodifiedSince: &lmt}}
 		if isInManagedDiskImportExportAccount(*u) {
 			// no access conditions (and therefore no if-modified checks) are supported on managed disk import/export (md-impexp)
 			// They are also unsupported on old "md-" style export URLs on the new (2019) large size disks.
 			// And if fact you can't have an md- URL in existence if the blob is mounted as a disk, so it won't be getting changed anyway, so we just treat all md-disks the same
-			accessConditions = azblob.BlobAccessConditions{}
+			accessConditions = blob.AccessConditions{}
 		}
 
 		// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-		clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-		if jptm.IsSourceEncrypted() {
-			clientProvidedKey = common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
-		}
+		cpk := jptm.CpkInfo()
+		cpkScope := jptm.CpkScopeInfo()
 
 		// At this point we create an HTTP(S) request for the desired portion of the blob, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
 		enrichedContext := withRetryNotification(jptm.Context(), bd.filePacer)
-		get, err := srcBlobURL.Download(enrichedContext, id.OffsetInFile(), length, accessConditions, false, clientProvidedKey)
+		get, err := srcBlobClient.DownloadStream(enrichedContext, &blob.DownloadStreamOptions{
+			Range:            blob.HTTPRange{Offset: id.OffsetInFile(), Count: length},
+			AccessConditions: &accessConditions,
+			CPKInfo:          &cpk,
+			CPKScopeInfo:     &cpkScope,
+		})
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
@@ -167,10 +176,9 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		retryReader := get.Body(azblob.RetryReaderOptions{
-			MaxRetryRequests:         destWriter.MaxRetryPerDownloadBody(),
-			NotifyFailedRead:         common.NewReadLogFunc(jptm, u),
-			ClientProvidedKeyOptions: clientProvidedKey,
+		retryReader := get.NewRetryReader(enrichedContext, &blob.RetryReaderOptions{
+			MaxRetries:   int32(destWriter.MaxRetryPerDownloadBody()),
+			OnFailedRead: common.NewReadLogFunc(jptm, source),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
