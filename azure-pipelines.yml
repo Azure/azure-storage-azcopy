@@ -1,5 +1,5 @@
 variables:
-  AZCOPY_GOLANG_VERSION: $(AZCOPY_GOLANG_VERSION)
+  AZCOPY_GOLANG_VERSION: '1.19.2'
 
 trigger:
   branches:
