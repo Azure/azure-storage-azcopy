@@ -151,7 +151,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 
 	_, err = b.destClient.GetProperties(b.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: b.jptm.CpkInfo()})
 	if err != nil {
-		if bloberror.HasCode(err, bloberror.BlobNotFound) {
+		if !bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return fmt.Errorf("when checking if blob exists: %w", err)
 		}
 	} else {
