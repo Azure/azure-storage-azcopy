@@ -30,6 +30,7 @@ const IncludeBeforeFlagName = "include-before"
 const IncludeAfterFlagName = "include-after"
 const BackupModeFlagName = "backup" // original name, backup mode, matches the name used for the same thing in Robocopy
 const PreserveOwnerFlagName = "preserve-owner"
+const PreserveSymlinkFlagName = "preserve-symlinks"
 const PreserveOwnerDefault = true
 
 // The regex doesn't require a / on the ending, it just requires something similar to the following
@@ -41,15 +42,28 @@ const PreserveOwnerDefault = true
 var RootDriveRegex = regexp.MustCompile(`(?i)(^[A-Z]:\/?$)`)
 var RootShareRegex = regexp.MustCompile(`(^\/\/[^\/]*\/?$)`)
 
+func isRootPath(s string) bool {
+	shortParentDir := strings.ReplaceAll(ToShortPath(s), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING)
+	return  RootDriveRegex.MatchString(shortParentDir)  ||
+		RootShareRegex.MatchString(shortParentDir)  ||
+		strings.EqualFold(shortParentDir, "/")
+}
+
+
 func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreationTracker) error {
-	// find the parent directory
-	directory := destinationPath[:strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))]
+	// If we're pointing at the root of a drive, don't try because it won't work.
+	if isRootPath(destinationPath) {
+		return nil
+	}
+
+	lastIndex := strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))
+	directory := destinationPath[:lastIndex]
 	return CreateDirectoryIfNotExist(directory, tracker)
 }
 
 func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) error {
 	// If we're pointing at the root of a drive, don't try because it won't work.
-	if shortParentDir := strings.ReplaceAll(ToShortPath(directory), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING); RootDriveRegex.MatchString(shortParentDir) || RootShareRegex.MatchString(shortParentDir) || strings.EqualFold(shortParentDir, "/") {
+	if isRootPath(directory) {
 		return nil
 	}
 
@@ -59,7 +73,7 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 		// stat errors can be present in write-only scenarios, when the directory isn't present, etc.
 		// as a result, we care more about the mkdir error than the stat error, because that's the tell.
 		// first make sure the parent directory exists but we ignore any error that comes back
-		CreateParentDirectoryIfNotExist(directory, tracker)
+		_ = CreateParentDirectoryIfNotExist(directory, tracker)
 
 		// then create the directory
 		mkDirErr := tracker.CreateFolder(directory, func() error {

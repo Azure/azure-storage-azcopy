@@ -49,7 +49,7 @@ func NewCredCache(options CredCacheOptions) *CredCache {
 	}
 
 	runtime.SetFinalizer(c, func(CredCache *CredCache) {
-		if CredCache.isPermSet == false && CredCache.key != nil {
+		if !CredCache.isPermSet && CredCache.key != nil {
 			// Indicates Permission is by default ProcessAll, which is not safe and try to recycle the key.
 			// Note: there is no method to grant permission during adding key,
 			// this mechanism is added to ensure key exists only if its permission is set properly.

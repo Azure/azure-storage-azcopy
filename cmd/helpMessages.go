@@ -130,6 +130,10 @@ Download all the versions of a blob from Azure Storage to local directory. Ensur
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/another/path/to/dir/[versionidsFile]"
 
+Copy a subset of files within a flat container by using a wildcard symbol (*) in the container name without listing all files in the container.
+
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/*" "/path/to/dir" --include-pattern="1*"
+
 Copy a single blob to another blob by using a SAS token.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
@@ -254,7 +258,7 @@ const listCmdShortDescription = "List the entities in a given resource"
 const listCmdLongDescription = `List the entities in a given resource. Blob, Files, and ADLS Gen 2 containers, folders, and accounts are supported.`
 
 const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) separated list of attributes " +
-	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, LeaseState, LeaseDuration, LeaseStatus) " +
+	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, ContentMD5, LeaseState, LeaseDuration, LeaseStatus) " +
 	"enclosed in double quotes (\")]"
 
 // ===================================== LOGIN COMMAND ===================================== //
@@ -379,7 +383,7 @@ Remove a single directory from a Blob Storage account that has a hierarchical na
 const syncCmdShortDescription = "Replicate source to the destination location"
 
 const syncCmdLongDescription = `
-The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. The supported pairs are:
+The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. Alternatively, you can use the --compare-hash flag to transfer only files which differ in their MD5 hash. The supported pairs are:
   
   - Local <-> Azure Blob / Azure File (either SAS or OAuth authentication can be used)
   - Azure Blob <-> Azure Blob (Source must include a SAS or is publicly accessible; either SAS or OAuth authentication can be used for destination)
@@ -404,7 +408,7 @@ The built-in lookup table is small but on Unix it is augmented by the local syst
 
 On Windows, MIME types are extracted from the registry.
 
-Please also note that sync works off of the last modified times exclusively. So in the case of Azure File <-> Azure File,
+By default, sync works off of the last modified times unless you override that default behavior by using the --compare-hash flag. So in the case of Azure File <-> Azure File,
 the header field Last-Modified is used instead of x-ms-file-change-time, which means that metadata changes at the source can also trigger a full copy.
 `
 

@@ -3,11 +3,9 @@ package cmd
 import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"math/rand"
-	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var EnumerationParallelism = 1
@@ -15,9 +13,7 @@ var EnumerationParallelStatFiles = false
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *CookedCopyCmdArgs) error {
-	// Remove the source and destination roots from the path to save space in the plan files
-	transfer.Source = strings.TrimPrefix(transfer.Source, e.SourceRoot.Value)
-	transfer.Destination = strings.TrimPrefix(transfer.Destination, e.DestinationRoot.Value)
+	// Source and destination paths are and should be relative paths. 
 
 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
 	// we do this so that in the case of large transfer, the transfer engine can get started
@@ -42,13 +38,16 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	{
-		//Should this block be a function?
+		// Should this block be a function?
 		e.Transfers.List = append(e.Transfers.List, transfer)
 		e.Transfers.TotalSizeInBytes += uint64(transfer.SourceSize)
-		if transfer.EntityType == common.EEntityType.File() {
+		switch transfer.EntityType {
+		case common.EEntityType.File():
 			e.Transfers.FileTransferCount++
-		} else {
+		case common.EEntityType.Folder():
 			e.Transfers.FolderTransferCount++
+		case common.EEntityType.Symlink():
+			e.Transfers.SymlinkTransferCount++
 		}
 	}
 

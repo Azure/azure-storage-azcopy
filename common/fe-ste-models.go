@@ -697,6 +697,8 @@ func (TransferStatus) Success() TransferStatus { return TransferStatus(2) }
 // Folder was created, but properties have not been persisted yet. Equivalent to Started, but never intended to be set on anything BUT folders.
 func (TransferStatus) FolderCreated() TransferStatus { return TransferStatus(3) }
 
+func (TransferStatus) Restarted() TransferStatus { return TransferStatus(4) }
+
 // Transfer failed due to some error.
 func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 
@@ -710,10 +712,6 @@ func (TransferStatus) SkippedBlobHasSnapshots() TransferStatus { return Transfer
 func (TransferStatus) TierAvailabilityCheckFailure() TransferStatus { return TransferStatus(-5) }
 
 func (TransferStatus) Cancelled() TransferStatus { return TransferStatus(-6) }
-
-func (ts TransferStatus) ShouldTransfer() bool {
-	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started() || ts == ETransferStatus.FolderCreated()
-}
 
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
 func (TransferStatus) All() TransferStatus { return TransferStatus(math.MaxInt8) }
@@ -759,6 +757,7 @@ func (BlockBlobTier) None() BlockBlobTier    { return BlockBlobTier(0) }
 func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
 func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(2) }
 func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(3) }
+func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(4) }
 
 func (bbt BlockBlobTier) String() string {
 	return enum.StringInt(bbt, reflect.TypeOf(bbt))
@@ -1229,7 +1228,7 @@ func ToCommonBlobTagsMap(blobTagsString string) BlobTags {
 const metadataRenamedKeyPrefix = "rename_"
 const metadataKeyForRenamedOriginalKeyPrefix = "rename_key_"
 
-var metadataKeyInvalidCharRegex = regexp.MustCompile("\\W")
+var metadataKeyInvalidCharRegex = regexp.MustCompile(`\W`)
 var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 
 // ResolveInvalidKey resolves invalid metadata key with following steps:
@@ -1470,8 +1469,10 @@ var EEntityType = EntityType(0)
 
 type EntityType uint8
 
-func (EntityType) File() EntityType   { return EntityType(0) }
-func (EntityType) Folder() EntityType { return EntityType(1) }
+func (EntityType) File()           EntityType { return EntityType(0) }
+func (EntityType) Folder()         EntityType { return EntityType(1) }
+func (EntityType) Symlink()        EntityType { return EntityType(2) }
+func (EntityType) FileProperties() EntityType { return EntityType(3) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
@@ -1571,6 +1572,10 @@ type CpkInfo struct {
 	EncryptionKeySha256 *string
 }
 
+func (csi CpkInfo) Empty() bool {
+	return csi.EncryptionKey == nil || csi.EncryptionKeySha256 == nil
+}
+
 func (csi CpkInfo) Marshal() (string, error) {
 	result, err := json.Marshal(csi)
 	if err != nil {
@@ -1580,7 +1585,7 @@ func (csi CpkInfo) Marshal() (string, error) {
 }
 
 func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
-	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySha256 == nil) && cpkScopeInfo.EncryptionScope == nil {
+	if cpkInfo.Empty() && cpkScopeInfo.EncryptionScope == nil {
 		return azblob.ClientProvidedKeyOptions{}
 	}
 
@@ -1666,7 +1671,7 @@ func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePrior
 	}
 }
 
-// //////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 type SyncHashType uint8
 
 var ESyncHashType SyncHashType = 0
@@ -1689,4 +1694,34 @@ func (ht *SyncHashType) Parse(s string) error {
 
 func (ht SyncHashType) String() string {
 	return enum.StringInt(ht, reflect.TypeOf(ht))
+}
+
+////////////////////////////////////////////////////////////////////////////////
+type SymlinkHandlingType uint8 // SymlinkHandlingType is only utilized internally to avoid having to carry around two contradictory flags. Thus, it doesn't have a parse method.
+
+// for reviewers: This is different than we usually implement enums, but it's something I've found to be more pleasant in personal projects, especially for bitflags. Should we change the pattern to match this in the future?
+
+type eSymlinkHandlingType uint8
+
+var ESymlinkHandlingType = eSymlinkHandlingType(0)
+
+func (eSymlinkHandlingType) Skip() SymlinkHandlingType     { return SymlinkHandlingType(0) }
+func (eSymlinkHandlingType) Follow() SymlinkHandlingType   { return SymlinkHandlingType(1) } // Upload what's on the other hand of the symlink
+func (eSymlinkHandlingType) Preserve() SymlinkHandlingType { return SymlinkHandlingType(2) } // Copy the link
+
+func (sht SymlinkHandlingType) None() bool     { return sht == 0 }
+func (sht SymlinkHandlingType) Follow() bool   { return sht == 1 }
+func (sht SymlinkHandlingType) Preserve() bool { return sht == 2 }
+
+func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
+	switch {
+	case Follow && Preserve:
+		return errors.New("cannot both follow and preserve symlinks (--preserve-symlinks and --follow-symlinks contradict)")
+	case Preserve:
+		*sht = ESymlinkHandlingType.Preserve()
+	case Follow:
+		*sht = ESymlinkHandlingType.Follow()
+	}
+
+	return nil
 }

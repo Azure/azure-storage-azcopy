@@ -174,6 +174,17 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		// NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
+		// Bump the service version when using the Cold access tier.
+		pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
+			// TODO: Remove me when bumping the service version is no longer relevant.
+			return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+				if request.Header.Get("x-ms-access-tier") == common.EBlockBlobTier.Cold().String() {
+					request.Header.Set("x-ms-version", "2021-12-02")
+				}
+
+				return next.Do(ctx, request)
+			}
+		}),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
 			SyslogDisabled:               common.IsForceLoggingDisabled(),
@@ -423,7 +434,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
 		if ts == common.ETransferStatus.Failed() {
-			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+			jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
 		}
 
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
@@ -454,9 +465,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}
-		if jpm.ShouldLog(pipeline.LogInfo) {
-			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
-		}
+		jpm.Log(pipeline.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 
 		// ===== TEST KNOB
 		relSrc, relDst := plan.TransferSrcDstRelatives(t)
@@ -470,7 +479,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 		if plan.FromTo.To().IsRemote() {
 			relDst, err = url.PathUnescape(relDst)
 		}
-		relDst = strings.TrimPrefix(relSrc, common.AZCOPY_PATH_SEPARATOR_STRING)
+		relDst = strings.TrimPrefix(relDst, common.AZCOPY_PATH_SEPARATOR_STRING)
 		common.PanicIfErr(err)
 
 		_, srcOk := DebugSkipFiles[relSrc]
@@ -525,15 +534,16 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
 	}
-	userAgent := common.UserAgent
+	var userAgent string
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
 	} else if fromTo.From() == common.ELocation.GCP() {
 		userAgent = common.GCPImportUserAgent
 	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
+	} else {
+		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
 	}
-	userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
 
 	credOption := common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
@@ -552,8 +562,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 
 	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
-	// Create source info provider's pipeline for S2S copy.
-	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() {
+	// Create source info provider's pipeline for S2S copy or download (in some cases).
+	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
 		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
 		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
@@ -870,12 +880,6 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	jpm.updateJobPartProgress(status)
 
-	// Add a safety count-check
-
-	if jpm.ShouldLog(pipeline.LogInfo) {
-		plan := jpm.Plan()
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
-	}
 	if transfersDone == jpm.planMMF.Plan().NumTransfers {
 		jppi := jobPartProgressInfo{
 			transfersCompleted: int(atomic.LoadUint32(&jpm.atomicTransfersCompleted)),
@@ -886,6 +890,10 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
+		
+		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
+			jpm.planMMF.Plan().JobID, jpm.planMMF.Plan().PartNum, transfersDone,
+			jpm.planMMF.Plan().NumTransfers))
 	}
 	return transfersDone
 }

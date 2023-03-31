@@ -23,7 +23,6 @@ package common
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -133,7 +132,7 @@ func (c *CredCache) removeCachedTokenInternal() error {
 // loadTokenInternal restores a Token object from file cache.
 func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 	tokenFilePath := c.tokenFilePath()
-	b, err := ioutil.ReadFile(tokenFilePath)
+	b, err := os.ReadFile(tokenFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read token file %q during loading token: %v", tokenFilePath, err)
 	}
@@ -163,7 +162,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 		return fmt.Errorf("failed to create directory %q to store token in, %v", dir, err)
 	}
 
-	newFile, err := ioutil.TempFile(dir, "token")
+	newFile, err := os.CreateTemp(dir, "token")
 	if err != nil {
 		return fmt.Errorf("failed to create the temp file to write the token, %v", err)
 	}
@@ -250,7 +249,7 @@ func encrypt(data []byte, entropy *dataBlob) ([]byte, error) {
 	var outblob dataBlob
 	defer func() {
 		if outblob.pbData != nil {
-			mLocalFree.Call(uintptr(unsafe.Pointer(outblob.pbData)))
+			_, _, _ = mLocalFree.Call(uintptr(unsafe.Pointer(outblob.pbData)))
 		}
 	}()
 
@@ -277,7 +276,7 @@ func decrypt(data []byte, entropy *dataBlob) ([]byte, error) {
 	var outblob dataBlob
 	defer func() {
 		if outblob.pbData != nil {
-			mLocalFree.Call(uintptr(unsafe.Pointer(outblob.pbData)))
+			_, _, _ = mLocalFree.Call(uintptr(unsafe.Pointer(outblob.pbData)))
 		}
 	}()
 

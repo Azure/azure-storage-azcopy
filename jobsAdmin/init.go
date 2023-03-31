@@ -24,9 +24,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -64,7 +65,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 
 	// if we've a custom mime map
 	if path := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
-		data, err := ioutil.ReadFile(path)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -81,12 +82,12 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 	deserialize := func(request *http.Request, v interface{}) {
 		// TODO: Check the HTTP verb here?
 		// reading the entire request body and closing the request body
-		body, err := ioutil.ReadAll(request.Body)
+		body, err := io.ReadAll(request.Body)
 		request.Body.Close()
 		if err != nil {
 			JobsAdmin.Panic(fmt.Errorf("error deserializing HTTP request"))
 		}
-		json.Unmarshal(body, v)
+		_ = json.Unmarshal(body, v)
 	}
 	serialize := func(v interface{}, response http.ResponseWriter) {
 		payload, err := json.Marshal(response)
@@ -95,7 +96,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 		}
 		// sending successful response back to front end
 		response.WriteHeader(http.StatusAccepted)
-		response.Write(payload)
+		_, _ = response.Write(payload)
 	}
 	http.HandleFunc(common.ERpcCmd.CopyJobPartOrder().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -188,6 +189,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		IsFinalPart:          order.IsFinalPart,
 		TotalBytesEnumerated: order.Transfers.TotalSizeInBytes,
 		FileTransfers:        order.Transfers.FileTransferCount,
+		SymlinkTransfers:     order.Transfers.SymlinkTransferCount,
 		FolderTransfer:       order.Transfers.FolderTransferCount})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
@@ -422,7 +424,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 				// If the transfer status is less than -1, it means the transfer failed because of some reason.
 				// Transfer Status needs to reset.
 				if jppt.TransferStatus() <= common.ETransferStatus.Failed() {
-					jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+					jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
 					jppt.SetErrorCode(0, true)
 				}
 			}
@@ -563,10 +565,13 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			jppt := jpp.Transfer(t)
 			js.TotalBytesEnumerated += uint64(jppt.SourceSize)
 
-			if jppt.EntityType == common.EEntityType.File() {
+			switch jppt.EntityType {
+			case common.EEntityType.File():
 				js.FileTransfers++
-			} else {
+			case common.EEntityType.Folder():
 				js.FolderPropertyTransfers++
+			case common.EEntityType.Symlink():
+				js.SymlinkTransfers++
 			}
 
 			// check for all completed transfer to calculate the progress percentage at the end
@@ -574,6 +579,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.ETransferStatus.NotStarted(),
 				common.ETransferStatus.FolderCreated(),
 				common.ETransferStatus.Started(),
+				common.ETransferStatus.Restarted(),
 				common.ETransferStatus.Cancelled():
 				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():

@@ -23,6 +23,7 @@ package ste
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"io"
 )
 
 // Abstraction of the methods needed to download files/blobs from a remote location
@@ -40,10 +41,31 @@ type downloader interface {
 	Epilogue()
 }
 
+// creationTimeDownloader is a downloader that has custom functionality for creating files
+// This is currently only utilized on Linux for persisting file type and reference device (folder, symlink, FIFO, etc.)
+type creationTimeDownloader interface {
+	downloader
+	// CreateFile is expected to handle
+	// in some cases (e.g. symlinks) the file may be > 0 bytes, but not need any chunks written.
+	CreateFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool, t FolderCreationTracker) (file io.WriteCloser, needWriteChunks bool, err error)
+}
+
+type unixPropertyAwareDownloader interface {
+	downloader
+
+	ApplyUnixProperties(adapter common.UnixStatAdapter) (stage string, err error)
+}
+
 // folderDownloader is a downloader that can also process folder properties
 type folderDownloader interface {
 	downloader
 	SetFolderProperties(jptm IJobPartTransferMgr) error
+}
+
+// symlinkDownloader is a downloader that can also handle symbolic links.
+type symlinkDownloader interface {
+	downloader
+	CreateSymlink(jptm IJobPartTransferMgr) error
 }
 
 // smbPropertyAwareDownloader is a windows-triggered interface.

@@ -76,9 +76,9 @@ func NewRequestLogPolicyFactory_Deprecated(o RequestLogOptions) pipeline.Factory
 				sc := response.Response().StatusCode
 				if ((sc >= 400 && sc <= 499) && sc != http.StatusNotFound && sc != http.StatusConflict && sc != http.StatusPreconditionFailed && sc != http.StatusRequestedRangeNotSatisfiable) || (sc >= 500 && sc <= 599) {
 					logLevel, forceLog = pipeline.LogError, !o.SyslogDisabled // Promote to Error any 4xx (except those listed is an error) or any 5xx
-				} else {
-					// For other status codes, we leave the level as is.
 				}
+				// For other status codes, we leave the level as is.
+
 			} else { // This error did not get an HTTP response from the service; upgrade the severity to Error
 				logLevel, forceLog = pipeline.LogError, !o.SyslogDisabled
 			}

@@ -100,6 +100,13 @@ func (f folderPropertiesNotOverwroteInCreation) Error() string {
 	panic("Not a real error")
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// symlinkSender is a sender that also knows how to send symlink properties
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type symlinkSender interface {
+	SendSymlink(linkData string) error
+}
+
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -116,9 +123,6 @@ type s2sCopier interface {
 	GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc
 }
 
-type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSourceInfoProvider, destination string, p pipeline.Pipeline, pacer pacer) (s2sCopier, error)
-
-// ///////////////////////////////////////////////////////////////////////////////////////////////
 // Abstraction of the methods needed to upload one file to a remote location
 // ///////////////////////////////////////////////////////////////////////////////////////////////
 type uploader interface {
@@ -220,6 +224,8 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 
 	if jptm.Info().IsFolderPropertiesTransfer() {
 		return newBlobFolderSender(jptm, destination, p, pacer, sip)
+	} else if jptm.Info().EntityType == common.EEntityType.Symlink() {
+		return newBlobSymlinkSender(jptm, destination, p, pacer, sip)
 	}
 
 	switch intendedType {

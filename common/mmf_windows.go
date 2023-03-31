@@ -60,8 +60,8 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	if hMMF == 0 {
 		return nil, os.NewSyscallError("CreateFileMapping", errno)
 	}
-	defer syscall.CloseHandle(hMMF)
-	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
+	defer syscall.CloseHandle(hMMF) //nolint:errcheck
+	addr, _ := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
 
 	if !writable {
 		// pre-fetch the memory mapped file so that performance is better when it is read
@@ -92,7 +92,7 @@ func (m *MMF) Unmap() {
 	// "lazily" to disk; that is, modifications may be cached in memory and written to disk
 	// at a later time. To avoid modifications to be cached in memory,explicitly flushing
 	// modified pages using the FlushViewOfFile function.
-	syscall.FlushViewOfFile(addr, uintptr(m.length))
+	_ = syscall.FlushViewOfFile(addr, uintptr(m.length))
 	err := syscall.UnmapViewOfFile(addr)
 	PanicIfErr(err)
 	m.isMapped = false

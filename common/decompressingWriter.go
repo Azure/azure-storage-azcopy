@@ -91,8 +91,6 @@ func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, 
 	b := decompressingWriterBufferPool.RentSlice(decompressingWriterCopyBufferSize)
 	_, err = io.CopyBuffer(destination, dec, b) // returns err==nil if hits EOF, as per docs
 	decompressingWriterBufferPool.ReturnSlice(b)
-
-	return
 }
 
 // Write, conceptually, takes a slice of compressed data, decompresses it, and writes it into the final destination.

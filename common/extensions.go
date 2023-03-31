@@ -2,6 +2,8 @@ package common
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -12,7 +14,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type URLStringExtension string
 
 func (s URLStringExtension) RedactSecretQueryParamForLogging() string {
@@ -25,7 +27,7 @@ func (s URLStringExtension) RedactSecretQueryParamForLogging() string {
 	return URLExtension{*u}.RedactSecretQueryParamForLogging()
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type URLExtension struct {
 	url.URL
 }
@@ -82,7 +84,7 @@ func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) 
 	return sigFound, values.Encode()
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type FileURLPartsExtension struct {
 	azfile.FileURLParts
 }
@@ -98,7 +100,7 @@ func (parts FileURLPartsExtension) GetServiceURL() url.URL {
 	return parts.URL()
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type HTTPResponseExtension struct {
 	*http.Response
 }
@@ -116,7 +118,7 @@ func (r HTTPResponseExtension) IsSuccessStatusCode(successStatusCodes ...int) bo
 	return false
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type ByteSlice []byte
 type ByteSliceExtension struct {
 	ByteSlice
@@ -177,4 +179,15 @@ func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
 	} else {
 		return p + "?" + extraQuery
 	}
+}
+
+// Current size of block names in AzCopy is 48B. To be consistent with this,
+// we have to generate a 36B string and then base64-encode this to retain the
+// same size.
+// Block Names of blobs are of format noted below.
+// <5B empty placeholder> <16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum>
+const AZCOPY_BLOCKNAME_LENGTH = 48
+func GenerateBlockBlobBlockID(blockNamePrefix string, index int32) string {
+	blockID := []byte(fmt.Sprintf("%s%05d", blockNamePrefix, index))
+	return base64.StdEncoding.EncodeToString(blockID)
 }
