@@ -391,7 +391,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 	for _, b := range options.fs {
 		switch b.creationProperties.entityType {
 		case common.EEntityType.Folder(): // it's fine to create folders even when we're not explicitly testing them, UNLESS we're testing CPK-- AzCopy can't properly pick that up!
-			if !(options.cpkInfo.EncryptionKey == nil || options.cpkInfo.EncryptionKeySHA256 == nil) || b.name == "" {
+			if options.cpkInfo != nil || b.name == "" {
 				continue // can't write root, and can't handle dirs with CPK
 			}
 
