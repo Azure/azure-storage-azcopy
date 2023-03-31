@@ -260,7 +260,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 			jpp0.SetJobStatus(desiredJobStatus)
 			msg := fmt.Sprintf("JobID=%v %s", jobID,
-				common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
+				common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
 			if jm.ShouldLog(pipeline.LogInfo) {
 				jm.Log(pipeline.LogInfo, msg)

@@ -372,7 +372,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		if location.IsLocal() {
 			// First, ignore all escaped stars. Stars can be valid characters on many platforms (out of the 3 we support though, Windows is the only that cannot support it).
 			// In the future, should we end up supporting another OS that does not treat * as a valid character, we should turn these checks into a map-check against runtime.GOOS.
-			tmpResource := common.IffString(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
+			tmpResource := common.Iff(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
 			// check for remaining stars. We can't combine list traversers, and wildcarded list traversal occurs below.
 			if strings.Contains(tmpResource, "*") {
 				return nil, errors.New("cannot combine local wildcards with include-path or list-of-files")

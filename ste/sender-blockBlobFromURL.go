@@ -200,13 +200,3 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		}
 	})
 }
-
-// GetDestinationLength gets the destination length.
-func (c *urlToBlockBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destBlockBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, c.cpkToApply)
-	if err != nil {
-		return -1, err
-	}
-
-	return properties.ContentLength(), nil
-}

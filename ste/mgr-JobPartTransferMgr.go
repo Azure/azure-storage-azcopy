@@ -98,8 +98,8 @@ type IJobPartTransferMgr interface {
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
 	ShouldInferContentType() bool
-	CpkInfo() blob.CPKInfo
-	CpkScopeInfo() blob.CPKScopeInfo
+	CpkInfo() *blob.CPKInfo
+	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
 	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
@@ -371,7 +371,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			}
 		}
 	}
-	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	var srcBlobTags common.BlobTags
 	if blobTags != nil {
@@ -545,11 +545,11 @@ func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier,
 	return jptm.jobPartMgr.BlobTiers()
 }
 
-func (jptm *jobPartTransferMgr) CpkInfo() blob.CPKInfo {
+func (jptm *jobPartTransferMgr) CpkInfo() *blob.CPKInfo {
 	return jptm.jobPartMgr.CpkInfo()
 }
 
-func (jptm *jobPartTransferMgr) CpkScopeInfo() blob.CPKScopeInfo {
+func (jptm *jobPartTransferMgr) CpkScopeInfo() *blob.CPKScopeInfo {
 	return jptm.jobPartMgr.CpkScopeInfo()
 }
 

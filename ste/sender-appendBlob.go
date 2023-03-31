@@ -22,6 +22,8 @@ package ste
 
 import (
 	"context"
+	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"time"
@@ -34,11 +36,12 @@ import (
 )
 
 type appendBlobSenderBase struct {
-	jptm              IJobPartTransferMgr
-	destAppendBlobURL azblob.AppendBlobURL
-	chunkSize         int64
-	numChunks         uint32
-	pacer             pacer
+	jptm                 IJobPartTransferMgr
+	destAppendBlobClient *appendblob.Client
+	destAppendBlobURL    azblob.AppendBlobURL
+	chunkSize            int64
+	numChunks            uint32
+	pacer                pacer
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -62,7 +65,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is greater than maximum append blob block size i.e 4 MB,
 	// then set chunkSize as 4 MB.
-	chunkSize = common.Iffint64(
+	chunkSize = common.Iff(
 		chunkSize > common.MaxAppendBlobBlockSize,
 		common.MaxAppendBlobBlockSize,
 		chunkSize)
@@ -76,6 +79,10 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	}
 
 	destAppendBlobURL := azblob.NewAppendBlobURL(*destURL, p)
+	destAppendBlobClient, err := common.CreateAppendBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	if err != nil {
+		return nil, err
+	}
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
@@ -88,6 +95,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
 		destAppendBlobURL:      destAppendBlobURL,
+		destAppendBlobClient:   destAppendBlobClient,
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
@@ -112,7 +120,8 @@ func (s *appendBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *appendBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
+	properties, err := s.destAppendBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+	return remoteObjectExists(blobPropertiesResponseAdapter{properties}, err)
 }
 
 // Returns a chunk-func for sending append blob to remote
@@ -190,4 +199,18 @@ func (s *appendBlobSenderBase) Cleanup() {
 			jptm.LogError(s.destAppendBlobURL.String(), "Delete (incomplete) Append Blob ", err)
 		}
 	}
+}
+
+// GetDestinationLength gets the destination length.
+func (s *appendBlobSenderBase) GetDestinationLength() (int64, error) {
+	prop, err := s.destAppendBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+
+	if err != nil {
+		return -1, err
+	}
+
+	if prop.ContentLength == nil {
+		return -1, fmt.Errorf("destination content length not returned")
+	}
+	return *prop.ContentLength, nil
 }

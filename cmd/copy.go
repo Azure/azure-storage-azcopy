@@ -967,7 +967,7 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, ov
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile() ||
 		fromTo == common.EFromTo.BlobBlob()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.IffString(flagName == PreservePermissionsFlag, "permission", "SMB"))
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
@@ -1322,11 +1322,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
 	}
 
-	cpk := cca.CpkOptions.GetCPKInfo()
-	cpkScope := cca.CpkOptions.GetCPKScopeInfo()
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
-		CPKInfo:      &cpk,
-		CPKScopeInfo: &cpkScope,
+		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
@@ -1386,8 +1384,6 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	if cca.blockBlobTier != common.EBlockBlobTier.None() {
 		bbAccessTier = blob.AccessTier(cca.blockBlobTier.String())
 	}
-	cpk := cca.CpkOptions.GetCPKInfo()
-	cpkScope := cca.CpkOptions.GetCPKScopeInfo()
 	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
 		BlockSize:   blockSize,
 		Concurrency: pipingUploadParallelism,
@@ -1401,8 +1397,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 			BlobCacheControl:       &cca.cacheControl,
 		},
 		AccessTier:   &bbAccessTier,
-		CPKInfo:      &cpk,
-		CPKScopeInfo: &cpkScope,
+		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 
 	return err
@@ -1728,7 +1724,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		cca.intervalStartTime = time.Now()
 		cca.intervalBytesTransferred = summary.BytesOverWire
 
-		return common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 	glcm.Progress(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {

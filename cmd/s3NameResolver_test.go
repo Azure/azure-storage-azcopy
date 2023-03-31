@@ -122,8 +122,8 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverMultipl
 	resolvedNameCollision2, err := r.ResolveName("a-b---c")
 	c.Assert(err, chk.IsNil)
 
-	c.Assert(common.Iffint8(resolvedNameCollision1 == "a-b-3-c", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c", 1, 0), chk.Equals, int8(1))
-	c.Assert(common.Iffint8(resolvedNameCollision1 == "a-b-3-c-2", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c-2", 1, 0), chk.Equals, int8(1))
+	c.Assert(int8(common.Iff(resolvedNameCollision1 == "a-b-3-c", 1, 0))^int8(common.Iff(resolvedNameCollision2 == "a-b-3-c", 1, 0)), chk.Equals, int8(1))
+	c.Assert(int8(common.Iff(resolvedNameCollision1 == "a-b-3-c-2", 1, 0))^int8(common.Iff(resolvedNameCollision2 == "a-b-3-c-2", 1, 0)), chk.Equals, int8(1))
 }
 
 func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverNegative(c *chk.C) {

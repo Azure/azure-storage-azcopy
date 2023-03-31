@@ -620,8 +620,8 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 	}
 
-	if common.IffString(source, object.ContainerName, object.DstContainerName) != "" {
-		relativePath = `/` + common.IffString(source, object.ContainerName, object.DstContainerName) + relativePath
+	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
+		relativePath = `/` + common.Iff(source, object.ContainerName, object.DstContainerName) + relativePath
 	} else if !source && !cca.StripTopDir && cca.asSubdir { // Avoid doing this where the root is shared or renamed.
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
@@ -658,7 +658,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, preservePosixProperties, isDfsDfs, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
-		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
+		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
 
 		template := ". For the same reason, %s defined on folders %s"
 		switch {

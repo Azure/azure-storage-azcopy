@@ -100,23 +100,23 @@ type blobPropertiesResponseAdapter struct {
 }
 
 func (a blobPropertiesResponseAdapter) CacheControl() string {
-	return common.IffStringNotNil(a.GetPropertiesResponse.CacheControl, "")
+	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentDisposition() string {
-	return common.IffStringNotNil(a.GetPropertiesResponse.ContentDisposition, "")
+	return common.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentEncoding() string {
-	return common.IffStringNotNil(a.GetPropertiesResponse.ContentEncoding, "")
+	return common.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentLanguage() string {
-	return common.IffStringNotNil(a.GetPropertiesResponse.ContentLanguage, "")
+	return common.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentType() string {
-	return common.IffStringNotNil(a.GetPropertiesResponse.ContentType, "")
+	return common.IffNotNil(a.GetPropertiesResponse.ContentType, "")
 }
 
 func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
@@ -175,23 +175,23 @@ type blobPropertiesAdapter struct {
 }
 
 func (a blobPropertiesAdapter) CacheControl() string {
-	return common.IffStringNotNil(a.BlobProperties.CacheControl, "")
+	return common.IffNotNil(a.BlobProperties.CacheControl, "")
 }
 
 func (a blobPropertiesAdapter) ContentDisposition() string {
-	return common.IffStringNotNil(a.BlobProperties.ContentDisposition, "")
+	return common.IffNotNil(a.BlobProperties.ContentDisposition, "")
 }
 
 func (a blobPropertiesAdapter) ContentEncoding() string {
-	return common.IffStringNotNil(a.BlobProperties.ContentEncoding, "")
+	return common.IffNotNil(a.BlobProperties.ContentEncoding, "")
 }
 
 func (a blobPropertiesAdapter) ContentLanguage() string {
-	return common.IffStringNotNil(a.BlobProperties.ContentLanguage, "")
+	return common.IffNotNil(a.BlobProperties.ContentLanguage, "")
 }
 
 func (a blobPropertiesAdapter) ContentType() string {
-	return common.IffStringNotNil(a.BlobProperties.ContentType, "")
+	return common.IffNotNil(a.BlobProperties.ContentType, "")
 }
 
 func (a blobPropertiesAdapter) ContentMD5() []byte {

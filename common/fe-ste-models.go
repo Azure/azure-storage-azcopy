@@ -1586,7 +1586,7 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 }
 
 ////////////////////////////////////////////////////////////////
-func ToClientProvidedKeyOptions(cpkInfo blob.CPKInfo, cpkScopeInfo blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
+func ToClientProvidedKeyOptions(cpkInfo *blob.CPKInfo, cpkScopeInfo *blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
 	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySHA256 == nil) && cpkScopeInfo.EncryptionScope == nil {
 
 		return azblob.ClientProvidedKeyOptions{}
@@ -1614,17 +1614,17 @@ type CpkOptions struct {
 	IsSourceEncrypted bool
 }
 
-func (options CpkOptions) GetCPKInfo() blob.CPKInfo {
+func (options CpkOptions) GetCPKInfo() *blob.CPKInfo {
 	if options.IsSourceEncrypted {
-		return blob.CPKInfo{}
+		return nil
 	} else {
 		return GetCpkInfo(options.CpkInfo)
 	}
 }
 
-func (options CpkOptions) GetCPKScopeInfo() blob.CPKScopeInfo {
+func (options CpkOptions) GetCPKScopeInfo() *blob.CPKScopeInfo {
 	if options.IsSourceEncrypted {
-		return blob.CPKScopeInfo{}
+		return nil
 	} else {
 		return GetCpkScopeInfo(options.CpkScopeInfo)
 	}

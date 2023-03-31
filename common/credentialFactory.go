@@ -57,7 +57,7 @@ type CredentialOpOptions struct {
 
 // callerMessage formats caller message prefix.
 func (o CredentialOpOptions) callerMessage() string {
-	return IffString(o.CallerID == "", o.CallerID, o.CallerID+" ")
+	return Iff(o.CallerID == "", o.CallerID, o.CallerID+" ")
 }
 
 // logInfo logs info, if LogInfo is specified in CredentialOpOptions.
@@ -344,9 +344,9 @@ func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo Credential
 	}
 }
 
-func GetCpkInfo(cpkInfo bool) blob.CPKInfo {
+func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
 	if !cpkInfo {
-		return blob.CPKInfo{}
+		return nil
 	}
 
 	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
@@ -360,18 +360,18 @@ func GetCpkInfo(cpkInfo bool) blob.CPKInfo {
 			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
 	}
 
-	return blob.CPKInfo{
+	return &blob.CPKInfo{
 		EncryptionKey:       &encryptionKey,
 		EncryptionKeySHA256: &encryptionKeySHA256,
 		EncryptionAlgorithm: &encryptionAlgorithmAES256,
 	}
 }
 
-func GetCpkScopeInfo(cpkScopeInfo string) blob.CPKScopeInfo {
+func GetCpkScopeInfo(cpkScopeInfo string) *blob.CPKScopeInfo {
 	if cpkScopeInfo == "" {
-		return blob.CPKScopeInfo{}
+		return nil
 	} else {
-		return blob.CPKScopeInfo{
+		return &blob.CPKScopeInfo{
 			EncryptionScope: &cpkScopeInfo,
 		}
 	}

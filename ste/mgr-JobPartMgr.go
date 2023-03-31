@@ -69,8 +69,8 @@ type IJobPartMgr interface {
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
-	CpkInfo() blob.CPKInfo
-	CpkScopeInfo() blob.CPKScopeInfo
+	CpkInfo() *blob.CPKInfo
+	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
@@ -879,11 +879,11 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 	return jpm.blockBlobTier, jpm.pageBlobTier
 }
 
-func (jpm *jobPartMgr) CpkInfo() blob.CPKInfo {
+func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
 	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
 }
 
-func (jpm *jobPartMgr) CpkScopeInfo() blob.CPKScopeInfo {
+func (jpm *jobPartMgr) CpkScopeInfo() *blob.CPKScopeInfo {
 	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
 }
 

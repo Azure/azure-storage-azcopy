@@ -131,16 +131,6 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 	})
 }
 
-// GetDestinationLength gets the destination length.
-func (c *urlToPageBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destPageBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}, c.cpkToApply)
-	if err != nil {
-		return -1, err
-	}
-
-	return properties.ContentLength(), nil
-}
-
 // isolate the logic to fetch page ranges for a page blob, and check whether a given range has data
 // for two purposes:
 //	1. capture the necessary info to do so, so that fetchPages can be invoked anywhere

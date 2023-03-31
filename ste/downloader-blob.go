@@ -141,21 +141,15 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 			jptm.FailActiveDownload("Creating blob client", err)
 		}
 
-		u, _ := url.Parse(source)
-
 		// set access conditions, to protect against inconsistencies from changes-while-being-read
 		lmt := jptm.LastModifiedTime().In(time.FixedZone("GMT", 0))
 		accessConditions := blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfUnmodifiedSince: &lmt}}
-		if isInManagedDiskImportExportAccount(*u) {
+		if isInManagedDiskImportExportAccount(source) {
 			// no access conditions (and therefore no if-modified checks) are supported on managed disk import/export (md-impexp)
 			// They are also unsupported on old "md-" style export URLs on the new (2019) large size disks.
 			// And if fact you can't have an md- URL in existence if the blob is mounted as a disk, so it won't be getting changed anyway, so we just treat all md-disks the same
 			accessConditions = blob.AccessConditions{}
 		}
-
-		// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-		cpk := jptm.CpkInfo()
-		cpkScope := jptm.CpkScopeInfo()
 
 		// At this point we create an HTTP(S) request for the desired portion of the blob, and
 		// wait until we get the headers back... but we have not yet read its whole body.
@@ -165,8 +159,8 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		get, err := srcBlobClient.DownloadStream(enrichedContext, &blob.DownloadStreamOptions{
 			Range:            blob.HTTPRange{Offset: id.OffsetInFile(), Count: length},
 			AccessConditions: &accessConditions,
-			CPKInfo:          &cpk,
-			CPKScopeInfo:     &cpkScope,
+			CPKInfo:          jptm.CpkInfo(),
+			CPKScopeInfo:     jptm.CpkScopeInfo(),
 		})
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed

@@ -931,7 +931,7 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 	// Use AzCopy's 1st party applicationID for refresh by default.
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
-		IffString(credInfo.ClientID != "", credInfo.ClientID, ApplicationID),
+		Iff(credInfo.ClientID != "", credInfo.ClientID, ApplicationID),
 		targetResource,
 		credInfo.Token)
 	if err != nil {

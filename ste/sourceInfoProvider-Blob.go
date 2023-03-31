@@ -42,12 +42,10 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 
 	ctx := p.jptm.Context()
-	cpk := p.jptm.CpkInfo()
-	cpkScope := p.jptm.CpkScopeInfo()
 
 	resp, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
-		CPKInfo:      &cpk,
-		CPKScopeInfo: &cpkScope,
+		CPKInfo:      p.jptm.CpkInfo(),
+		CPKScopeInfo: p.jptm.CpkScopeInfo(),
 	})
 	if err != nil {
 		return "", err
@@ -128,21 +126,16 @@ func (p *blobSourceInfoProvider) BlobType() blob.BlobType {
 }
 
 func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	presignedURL, err := p.PreSignedSourceURL()
+	source := p.transferInfo.Source
+
+	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	blobURL := azblob.NewBlobURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-	if p.jptm.IsSourceEncrypted() {
-		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
-	}
-
-	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{}, clientProvidedKey)
+	properties, err := blobClient.GetProperties(p.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: p.jptm.CpkInfo()})
 	if err != nil {
 		return time.Time{}, err
 	}
-
-	return properties.LastModified(), nil
+	return common.IffNotNil(properties.LastModified, time.Time{}), nil
 }

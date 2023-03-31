@@ -196,7 +196,7 @@ func (s *scenario) assignSourceAndDest() {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
+			return &resourceLocal{common.Iff(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: s.srcAccountType}
 		case common.ELocation.Blob():
@@ -258,7 +258,7 @@ func (s *scenario) runAzCopy(logDirectory string) {
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
-		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.Iff(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		afterStart, s.chToStdin, logDirectory)
 
@@ -554,12 +554,12 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 		case common.EFromTo.LocalBlob():
 			source := s.state.source.(*resourceLocal)
 
-			return strings.TrimPrefix(oldName, source.dirPath + common.OS_PATH_SEPARATOR)
+			return strings.TrimPrefix(oldName, source.dirPath+common.OS_PATH_SEPARATOR)
 		case common.EFromTo.BlobLocal():
 			dest := s.state.dest.(*resourceLocal)
 			_, _, _, _, addedDirAtDest := s.getTransferInfo()
 
-			return strings.TrimPrefix(oldName, path.Join(dest.dirPath, addedDirAtDest) + common.OS_PATH_SEPARATOR)
+			return strings.TrimPrefix(oldName, path.Join(dest.dirPath, addedDirAtDest)+common.OS_PATH_SEPARATOR)
 		case common.EFromTo.BlobBlob():
 			return oldName // no adjustment necessary
 		default:
@@ -578,7 +578,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 			symlinkDest := path.Join(dest.(*resourceLocal).dirPath, addedDirAtDest, f.name)
 			stat, err := os.Lstat(symlinkDest)
 			c.AssertNoErr(err)
-			c.Assert(stat.Mode() & os.ModeSymlink, equals(), os.ModeSymlink, "the file is not a symlink")
+			c.Assert(stat.Mode()&os.ModeSymlink, equals(), os.ModeSymlink, "the file is not a symlink")
 
 			oldName, err := os.Readlink(symlinkDest)
 			c.AssertNoErr(err)
@@ -605,7 +605,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 
 // // Individual property validation routines
 func (s *scenario) validateMetadata(expected, actual map[string]string) {
-	for _,v := range common.AllLinuxProperties { // properties are evaluated elsewhere
+	for _, v := range common.AllLinuxProperties { // properties are evaluated elsewhere
 		delete(expected, v)
 		delete(actual, v)
 	}
