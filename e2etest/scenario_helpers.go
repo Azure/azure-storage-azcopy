@@ -380,8 +380,8 @@ type generateFromListOptions struct {
 type generateBlobFromListOptions struct {
 	rawSASURL    url.URL
 	containerURL azblob.ContainerURL
-	cpkInfo      blob.CPKInfo
-	cpkScopeInfo blob.CPKScopeInfo
+	cpkInfo      *blob.CPKInfo
+	cpkScopeInfo *blob.CPKScopeInfo
 	accessTier   azblob.AccessTierType
 	generateFromListOptions
 }
