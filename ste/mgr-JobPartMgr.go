@@ -434,9 +434,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 
 	jpm.priority = plan.Priority
 
-	jpm.createPipelines(jobCtx, sourceBlobToken) // pipeline is created per job part manager
-
 	jpm.clientInfo()
+	jpm.createPipelines(jobCtx, sourceBlobToken) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -545,7 +544,12 @@ func (jpm *jobPartMgr) clientInfo() {
 	}
 
 	if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
-		s2sSourceCredInfo := jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
+		var s2sSourceCredInfo common.CredentialInfo
+		if jobState.S2SSourceCredentialType == common.ECredentialType.Unknown() {
+			s2sSourceCredInfo = jobState.CredentialInfo.WithType(common.ECredentialType.Anonymous())
+		} else {
+			s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
+		}
 		if jobState.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
 			s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
 		}
