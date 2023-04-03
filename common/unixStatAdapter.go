@@ -343,18 +343,18 @@ func ClearStatFromBlobMetadata(metadata azblob.Metadata) {
 	}
 }
 
-func AddStatToBlobMetadata(s UnixStatAdapter, metadata azblob.Metadata) {
+func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
 	applyMode := func(mode os.FileMode) {
-		modes := map[uint32]string {
-			S_IFCHR: POSIXCharDeviceMeta,
-			S_IFBLK: POSIXBlockDeviceMeta,
+		modes := map[uint32]string{
+			S_IFCHR:  POSIXCharDeviceMeta,
+			S_IFBLK:  POSIXBlockDeviceMeta,
 			S_IFSOCK: POSIXSocketMeta,
-			S_IFIFO: POSIXFIFOMeta,
-			S_IFDIR: POSIXFolderMeta,
+			S_IFIFO:  POSIXFIFOMeta,
+			S_IFDIR:  POSIXFolderMeta,
 		}
 
 		for modeToTest, metaToApply := range modes {
-			if mode & os.FileMode(modeToTest) == os.FileMode(modeToTest) {
+			if mode&os.FileMode(modeToTest) == os.FileMode(modeToTest) {
 				tryAddMetadata(metadata, metaToApply, "true")
 			}
 		}
@@ -435,10 +435,11 @@ func StatXReturned(mask uint32, want uint32) bool {
 	return (mask & want) == want
 }
 
-func tryAddMetadata(metadata azblob.Metadata, key, value string) {
+func tryAddMetadata(metadata Metadata, key, value string) {
 	if _, ok := metadata[key]; ok {
 		return // Don't overwrite the user's metadata
 	}
 
-	metadata[key] = value
+	v := value
+	metadata[key] = &v
 }

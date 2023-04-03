@@ -37,7 +37,7 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 	if u.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			u.metadataToApply = common.FromAzBlobMetadataToCommonMetadata(u.metadataToApply).Clone().ToAzBlobMetadata()
+			u.metadataToApply = u.metadataToApply.Clone()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -89,7 +89,7 @@ func (u *appendBlobUploader) Epilogue() {
 		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
 			epilogueHeaders := u.headersToApply
 			epilogueHeaders.BlobContentMD5 = md5Hash
-			_, err := u.destAppendBlobURL.SetHTTPHeaders(jptm.Context(), common.ToAzBlobHTTPHeaders(epilogueHeaders), azblob.BlobAccessConditions{})
+			_, err := u.destAppendBlobClient.SetHTTPHeaders(jptm.Context(), epilogueHeaders, nil)
 			return err
 		})
 	}

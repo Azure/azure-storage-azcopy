@@ -59,7 +59,7 @@ type blockBlobSenderBase struct {
 	// 1. For S2S, these come from the source service.
 	// 2. When sending local data, they are computed based on the properties of the local file
 	headersToApply  blob.HTTPHeaders
-	metadataToApply azblob.Metadata
+	metadataToApply common.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
 
@@ -173,7 +173,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		pacer:               pacer,
 		blockIDs:            make([]string, numChunks),
 		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:     props.SrcMetadata.ToAzBlobMetadata(),
+		metadataToApply:     props.SrcMetadata,
 		blobTagsToApply:     props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:        destBlobTier,
 		cpkToApply:          cpkToApply,
@@ -243,13 +243,13 @@ func (s *blockBlobSenderBase) Epilogue() {
 			destBlobTier = ""
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
 
 		if separateSetTagsRequired {
-			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
+			if _, err := s.destBlockBlobClient.SetTags(jptm.Context(), s.blobTagsToApply, nil); err != nil {
 				s.jptm.Log(pipeline.LogWarning, err.Error())
 			}
 		}
@@ -310,7 +310,7 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 	return createChunkFunc(true, s.jptm, id, func() {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = common.FromAzBlobMetadataToCommonMetadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+			s.metadataToApply = s.metadataToApply.Clone()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -319,7 +319,11 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 
 			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply)
 		}
-		_, err := s.destBlockBlobURL.SetMetadata(s.jptm.Context(), s.metadataToApply, azblob.BlobAccessConditions{}, s.cpkToApply)
+		_, err := s.destBlockBlobClient.SetMetadata(s.jptm.Context(), s.metadataToApply,
+			&blob.SetMetadataOptions{
+				CPKInfo:      s.jptm.CpkInfo(),
+				CPKScopeInfo: s.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			s.jptm.FailActiveSend("Setting Metadata", err)
 			return

@@ -23,13 +23,12 @@ package ste
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // Source info provider for Azure blob
@@ -99,21 +98,24 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 // AccessControl should ONLY get called when we know for a fact it is a blobFS->blobFS tranfser.
 // It *assumes* that the source is actually a HNS account.
 func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, error) {
-	presignedURL, err := p.PreSignedSourceURL()
+	parsedURL, err := blob.ParseURL(p.transferInfo.Source)
+	if err != nil {
+		return azbfs.BlobFSAccessControl{}, err
+	}
+	parsedURL.Host = strings.ReplaceAll(parsedURL.Host, ".blob", ".dfs")
+	if parsedURL.BlobName != "" {
+		parsedURL.BlobName = strings.TrimSuffix(parsedURL.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
+	} else {
+		parsedURL.BlobName = "/" // container level perms MUST have a /
+	}
+
+	u, err := url.Parse(parsedURL.String())
 	if err != nil {
 		return azbfs.BlobFSAccessControl{}, err
 	}
 
-	bURLParts := azblob.NewBlobURLParts(*presignedURL)
-	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
-	if bURLParts.BlobName != "" {
-		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
-	} else {
-		bURLParts.BlobName = "/" // container level perms MUST have a /
-	}
-
 	// todo: jank, and violates the principle of interfaces
-	fURL := azbfs.NewFileURL(bURLParts.URL(), p.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondarySourceProviderPipeline)
+	fURL := azbfs.NewFileURL(*u, p.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondarySourceProviderPipeline)
 	return fURL.GetAccessControl(p.jptm.Context())
 }
 
