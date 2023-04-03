@@ -25,11 +25,9 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"net/url"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -38,7 +36,6 @@ import (
 type appendBlobSenderBase struct {
 	jptm                 IJobPartTransferMgr
 	destAppendBlobClient *appendblob.Client
-	destAppendBlobURL    azblob.AppendBlobURL
 	chunkSize            int64
 	numChunks            uint32
 	pacer                pacer
@@ -48,8 +45,7 @@ type appendBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  blob.HTTPHeaders
 	metadataToApply common.Metadata
-	blobTagsToApply azblob.BlobTagsMap
-	cpkToApply      azblob.ClientProvidedKeyOptions
+	blobTagsToApply map[string]string
 
 	sip ISourceInfoProvider
 
@@ -58,7 +54,7 @@ type appendBlobSenderBase struct {
 
 type appendBlockFunc = func()
 
-func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
+func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -73,12 +69,6 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	destURL, err := url.Parse(destination)
-	if err != nil {
-		return nil, err
-	}
-
-	destAppendBlobURL := azblob.NewAppendBlobURL(*destURL, p)
 	destAppendBlobClient, err := common.CreateAppendBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	if err != nil {
 		return nil, err
@@ -89,12 +79,8 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
-	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
-
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
-		destAppendBlobURL:      destAppendBlobURL,
 		destAppendBlobClient:   destAppendBlobClient,
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
@@ -103,7 +89,6 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		metadataToApply:        props.SrcMetadata,
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		sip:                    srcInfoProvider,
-		cpkToApply:             cpkToApply,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
@@ -161,17 +146,22 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	}
 
 	blobTags := s.blobTagsToApply
-	separateSetTagsRequired := separateSetTagsRequired(blobTags)
-	if separateSetTagsRequired || len(blobTags) == 0 {
+	setTags := separateSetTagsRequired(blobTags)
+	if setTags || len(blobTags) == 0 {
 		blobTags = nil
 	}
-	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+	if _, err := s.destAppendBlobClient.Create(s.jptm.Context(),
+		&appendblob.CreateOptions{
+			HTTPHeaders: &s.headersToApply,
+			Metadata:    s.metadataToApply,
+			Tags:        blobTags,
+		}); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 	destinationModified = true
 
-	if separateSetTagsRequired {
+	if setTags {
 		if _, err := s.destAppendBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil); err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
@@ -194,9 +184,9 @@ func (s *appendBlobSenderBase) Cleanup() {
 		//   to be consistent with other
 		deletionContext, cancelFunc := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 30*time.Second)
 		defer cancelFunc()
-		_, err := s.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		_, err := s.destAppendBlobClient.Delete(deletionContext, nil)
 		if err != nil {
-			jptm.LogError(s.destAppendBlobURL.String(), "Delete (incomplete) Append Blob ", err)
+			jptm.LogError(s.destAppendBlobClient.URL(), "Delete (incomplete) Append Blob ", err)
 		}
 	}
 }
