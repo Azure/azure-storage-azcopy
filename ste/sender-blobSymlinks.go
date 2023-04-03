@@ -16,7 +16,7 @@ type blobSymlinkSender struct {
 	jptm             IJobPartTransferMgr
 	sip              ISourceInfoProvider
 	headersToApply   blob.HTTPHeaders
-	metadataToApply  azblob.Metadata
+	metadataToApply  common.Metadata
 	destBlobTier     blob.AccessTier
 	blobTagsToApply  azblob.BlobTagsMap
 	cpkToApply       azblob.ClientProvidedKeyOptions
@@ -46,7 +46,7 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, p pipeli
 		jptm:             jptm,
 		sip:              sip,
 		destBlockBlobURL: destBlockBlobURL,
-		metadataToApply:  props.SrcMetadata.Clone().ToAzBlobMetadata(), // We're going to modify it, so we should clone it.
+		metadataToApply:  props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
 		headersToApply:   props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
 		cpkToApply:       common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
@@ -67,9 +67,10 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 	if err != nil {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
 	}
-	s.metadataToApply["is_symlink"] = "true"
+	trueStr := "true"
+	s.metadataToApply["is_symlink"] = &trueStr
 
-	_, err = s.destBlockBlobURL.Upload(s.jptm.Context(), strings.NewReader(linkData), common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(s.destBlobTier), s.blobTagsToApply, s.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+	_, err = s.destBlockBlobURL.Upload(s.jptm.Context(), strings.NewReader(linkData), common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(s.destBlobTier), s.blobTagsToApply, s.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 	return err
 }
 
