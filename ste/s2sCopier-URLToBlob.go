@@ -86,7 +86,7 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 	case blob.BlobTypeBlockBlob:
 		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	case blob.BlobTypeAppendBlob:
-		return newURLToAppendBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
+		return newURLToAppendBlobCopier(jptm, destination, pacer, srcInfoProvider)
 	case blob.BlobTypePageBlob:
 		return newURLToPageBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	default:

@@ -21,8 +21,8 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type appendBlobUploader struct {
@@ -67,10 +67,13 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	appendBlockFromLocal := func() {
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
-		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body,
-			azblob.AppendBlobAccessConditions{
-				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
-			}, nil, u.cpkToApply)
+		offset := id.OffsetInFile()
+		_, err := u.destAppendBlobClient.AppendBlock(u.jptm.Context(), body,
+			&appendblob.AppendBlockOptions{
+				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
+				CPKInfo:                        u.jptm.CpkInfo(),
+				CPKScopeInfo:                   u.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			u.jptm.FailActiveUpload("Appending block", err)
 			return
