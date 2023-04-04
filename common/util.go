@@ -15,6 +15,6 @@ func VerifyIsURLResolvable(url_string string) (error) {
 		return err
 	}
 
-	_, err = net.LookupIP(url.Host)
+	_, err = net.LookupIP(url.Hostname())
 	return err
 }
