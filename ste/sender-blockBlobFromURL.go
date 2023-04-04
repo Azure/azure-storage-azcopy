@@ -23,8 +23,9 @@ package ste
 import (
 	"bytes"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -36,7 +37,7 @@ import (
 type urlToBlockBlobCopier struct {
 	blockBlobSenderBase
 
-	srcURL url.URL
+	srcURL string
 }
 
 func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
@@ -58,14 +59,11 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 	if err != nil {
 		return nil, err
 	}
-	sourceURL, err := url.Parse(srcURL)
-	if err != nil {
-		return nil, err
-	}
 
 	return &urlToBlockBlobCopier{
 		blockBlobSenderBase: *senderBase,
-		srcURL:              *sourceURL}, nil
+		srcURL:              srcURL,
+	}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -109,11 +107,21 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := c.destBlobTier
+		tier := &destBlobTier
 		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = ""
+			tier = nil
 		}
 
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(c.headersToApply), c.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags.ToAzBlobTagsMap(), c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		_, err := c.destBlockBlobClient.Upload(jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
+			&blockblob.UploadOptions{
+				HTTPHeaders:  &c.headersToApply,
+				Metadata:     c.metadataToApply,
+				Tier:         tier,
+				Tags:         blobTags,
+				CPKInfo:      c.jptm.CpkInfo(),
+				CPKScopeInfo: c.jptm.CpkScopeInfo(),
+			})
+		if err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
@@ -149,8 +157,18 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destBlockBlobURL.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
-			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
+		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
+			return
+		}
+		_, err = c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
+			&blockblob.StageBlockFromURLOptions{
+				CopySourceAuthorization: token,
+				Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
+				CPKInfo:                 c.jptm.CpkInfo(),
+				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
