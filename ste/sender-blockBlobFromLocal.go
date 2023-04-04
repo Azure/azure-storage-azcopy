@@ -121,13 +121,13 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		// Upload the blob
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
-		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobURL.BlobURL, u.jptm.Context(), false) {
+		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobClient, u.jptm.Context(), false) {
 			u.destBlobTier = ""
 		}
 
 		blobTags := u.blobTagsToApply
-		separateSetTagsRequired := separateSetTagsRequired(blobTags)
-		if separateSetTagsRequired || len(blobTags) == 0 {
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
@@ -138,7 +138,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		}
 
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags.ToAzBlobTagsMap(), u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		} else {
 			// File with content
 
@@ -153,7 +153,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply.ToAzBlobMetadata(),
-				azblob.BlobAccessConditions{}, azblob.AccessTierType(u.destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+				azblob.BlobAccessConditions{}, azblob.AccessTierType(u.destBlobTier), blobTags.ToAzBlobTagsMap(), u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		}
 
 		// if the put blob is a failure, update the transfer status to failed
@@ -164,7 +164,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 		atomic.AddInt32(&u.atomicChunksWritten, 1)
 
-		if separateSetTagsRequired {
+		if setTags {
 			if _, err := u.destBlockBlobClient.SetTags(jptm.Context(), u.blobTagsToApply, nil); err != nil {
 				u.jptm.Log(pipeline.LogWarning, err.Error())
 			}

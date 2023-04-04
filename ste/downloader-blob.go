@@ -22,8 +22,7 @@ package ste
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"os"
 	"time"
 
@@ -74,8 +73,11 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
 		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
 
-		u, _ := url.Parse(jptm.Info().Source)
-		bd.pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*u, srcPipeline), jptm.Context())
+		srcPagBlobClient, err := common.CreatePageBlobClient(jptm.Info().Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		if err != nil {
+			bd.jptm.FailActiveDownload("Creating blob client", err)
+		}
+		bd.pageRangeOptimizer = newPageRangeOptimizer(srcPagBlobClient, jptm.Context())
 		bd.pageRangeOptimizer.fetchPages()
 	}
 }
@@ -110,8 +112,8 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// If the range does not contain any data, write out empty data to disk without performing download
-		if bd.pageRangeOptimizer != nil && !bd.pageRangeOptimizer.doesRangeContainData(
-			azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + length - 1}) {
+		pageRange := pageblob.PageRange{Start: AsInt64Ptr(id.OffsetInFile()), End: AsInt64Ptr(id.OffsetInFile() + length - 1)}
+		if bd.pageRangeOptimizer != nil && !bd.pageRangeOptimizer.doesRangeContainData(pageRange) {
 
 			// queue an empty chunk
 			err := destWriter.EnqueueChunk(jptm.Context(), id, length, dummyReader{}, false)

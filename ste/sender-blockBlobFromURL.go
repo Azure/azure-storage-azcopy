@@ -97,13 +97,13 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		// Create blob and finish.
-		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
+		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobClient, c.jptm.Context(), false) {
 			c.destBlobTier = ""
 		}
 
 		blobTags := c.blobTagsToApply
-		separateSetTagsRequired := separateSetTagsRequired(blobTags)
-		if separateSetTagsRequired || len(blobTags) == 0 {
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
@@ -113,14 +113,14 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 			destBlobTier = ""
 		}
 
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(c.headersToApply), c.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(c.headersToApply), c.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags.ToAzBlobTagsMap(), c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
 
 		atomic.AddInt32(&c.atomicChunksWritten, 1)
 
-		if separateSetTagsRequired {
+		if setTags {
 			if _, err := c.destBlockBlobClient.SetTags(jptm.Context(), c.blobTagsToApply, nil); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}
@@ -166,13 +166,13 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
 		// Create blob and finish.
-		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
+		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobClient, c.jptm.Context(), false) {
 			c.destBlobTier = ""
 		}
 
 		blobTags := c.blobTagsToApply
-		separateSetTagsRequired := separateSetTagsRequired(blobTags)
-		if separateSetTagsRequired || len(blobTags) == 0 {
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
@@ -187,7 +187,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		}
 
 		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), common.ToAzBlobHTTPHeaders(c.headersToApply), c.srcURL, c.metadataToApply.ToAzBlobMetadata(),
-			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.AccessTierType(destBlobTier), blobTags,
+			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.AccessTierType(destBlobTier), blobTags.ToAzBlobTagsMap(),
 			c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 
 		if err != nil {
@@ -197,7 +197,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		atomic.AddInt32(&c.atomicChunksWritten, 1)
 
-		if separateSetTagsRequired {
+		if setTags {
 			if _, err := c.destBlockBlobClient.SetTags(c.jptm.Context(), c.blobTagsToApply, nil); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}

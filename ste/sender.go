@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -244,7 +242,7 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 const TagsHeaderMaxLength = 2000
 
 // If length of tags <= 2kb, pass it in the header x-ms-tags. Else do a separate SetTags call
-func separateSetTagsRequired(tagsMap azblob.BlobTagsMap) bool {
+func separateSetTagsRequired(tagsMap common.BlobTags) bool {
 	tagsLength := 0
 	for k, v := range tagsMap {
 		tagsLength += len(k) + len(v) + 2

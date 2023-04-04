@@ -22,10 +22,11 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type pageBlobUploader struct {
@@ -36,7 +37,7 @@ type pageBlobUploader struct {
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, "")
+	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, sip, "")
 	if err != nil {
 		return nil, err
 	}
@@ -82,12 +83,9 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			var destContainsData bool
 			// We check if we should actually skip this page,
 			// in the event the page blob uploader is sending to a managed disk.
+			pageRange := pageblob.PageRange{Start: AsInt64Ptr(id.OffsetInFile()), End: AsInt64Ptr(id.OffsetInFile() + reader.Length() - 1)}
 			if u.destPageRangeOptimizer != nil {
-				destContainsData = u.destPageRangeOptimizer.doesRangeContainData(
-					azblob.PageRange{
-						Start: id.OffsetInFile(),
-						End:   id.OffsetInFile() + reader.Length() - 1,
-					})
+				destContainsData = u.destPageRangeOptimizer.doesRangeContainData(pageRange)
 			}
 
 			// If neither the source nor destination contain data, it's safe to skip.
@@ -95,7 +93,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 				// for this destination type, there is no need to upload ranges than consist entirely of zeros
 				jptm.Log(pipeline.LogDebug,
 					fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
-						id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
+						*pageRange.Start, (*pageRange.End)+1))
 				return
 			}
 		}
@@ -112,7 +110,11 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
-		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile(), body, azblob.PageBlobAccessConditions{}, nil, u.cpkToApply)
+		_, err := u.destPageBlobClient.UploadPages(enrichedContext, body, blob.HTTPRange{Offset: id.OffsetInFile()},
+			&pageblob.UploadPagesOptions{
+				CPKInfo:      u.jptm.CpkInfo(),
+				CPKScopeInfo: u.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			jptm.FailActiveUpload("Uploading page", err)
 			return
