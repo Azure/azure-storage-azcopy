@@ -412,6 +412,9 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s%c%s", dstRoot, os.PathSeparator, addedDirAtDest)
+	} else if s.state.source.isContainerLike() && s.state.dest.isContainerLike() && s.p.preserveSMBPermissions {
+		// Preserving permissions includes the root folder, but for container-container, we don't expect any added folder name.
+		expectRootFolder = true
 	} else {
 		if tf.objectTarget == "" && tf.destTarget == "" {
 			addedDirAtDest = srcBase
