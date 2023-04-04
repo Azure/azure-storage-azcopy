@@ -152,7 +152,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		// Upload implies transferring from a local disk to a remote resource.
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
 		// Then the destination is scanned and filtered based on what the destination contains
-		destinationCleaner, err := newSyncDeleteProcessor(cca)
+		destinationCleaner, err := newSyncDeleteProcessor(cca, fpo)
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 		}
@@ -201,7 +201,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				}
 				deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
 			default:
-				deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca).removeImmediately)
+				deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
 			}
 
 			err = indexer.traverse(deleteScheduler, nil)

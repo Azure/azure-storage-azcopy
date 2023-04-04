@@ -235,10 +235,8 @@ func (s *scenario) runHook(h hookFunc) bool {
 
 func (s *scenario) assignSourceAndDest() {
 	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
-		var accType AccountType
-		if isSourceAcc {
-			accType = s.srcAccountType
-		} else {
+		accType := s.srcAccountType
+		if !isSourceAcc {
 			accType = s.destAccountType
 		}
 
@@ -247,7 +245,7 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Local():
 			return &resourceLocal{common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: s.srcAccountType}
+			return &resourceAzureFileShare{accountType: accType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
@@ -257,11 +255,7 @@ func (s *scenario) assignSourceAndDest() {
 				return &resourceManagedDisk{config: *mdCfg}
 			}
 
-			if isSourceAcc {
-				return &resourceBlobContainer{accountType: s.srcAccountType}
-			} else {
-				return &resourceBlobContainer{accountType: s.destAccountType}
-			}
+			return &resourceBlobContainer{accountType: accType}
 		case common.ELocation.BlobFS():
 			s.a.Error("Not implemented yet for blob FS")
 			return &resourceDummy{}
@@ -386,11 +380,6 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 		return
 	}
 
-	if s.p.deleteDestination != common.EDeleteDestination.False() {
-		// TODO: implement deleteDestinationValidation
-		panic("validation of deleteDestination behaviour is not yet implemented in the declarative test runner")
-	}
-
 	isSrcEncoded := s.fromTo.From().IsRemote() // TODO: is this right, reviewers?
 	isDstEncoded := s.fromTo.To().IsRemote()   // TODO: is this right, reviewers?
 	srcRoot, dstRoot, expectFolders, expectRootFolder, _ := s.getTransferInfo()
@@ -416,7 +405,13 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 
 func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool, addedDirAtDest string) {
 	srcRoot = s.state.source.getParam(false, false, "")
+	if s.srcAccountType == EAccountType.HierarchicalNamespaceEnabled() && s.fromTo.From() == common.ELocation.Blob() {
+		srcRoot = strings.Replace(srcRoot, "dfs", "blob", 1) // only replace first, translate like AzCopy
+	}
 	dstRoot = s.state.dest.getParam(false, false, "")
+	if s.destAccountType == EAccountType.HierarchicalNamespaceEnabled() && s.fromTo.To() == common.ELocation.Blob() {
+		dstRoot = strings.Replace(dstRoot, "dfs", "blob", 1) // ditto
+	}
 
 	srcBase := filepath.Base(srcRoot)
 	srcRootURL, err := url.Parse(srcRoot)
