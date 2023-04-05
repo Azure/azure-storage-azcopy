@@ -29,7 +29,7 @@ require (
 )
 
 // TODO : Undo this once latest azblob is released.
-replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 => github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.1-0.20230404170832-f3ef14e1a761
+replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 => ../azure-sdk-for-go/sdk/storage/azblob
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.4.0

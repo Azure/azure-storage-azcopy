@@ -196,17 +196,30 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := c.destBlobTier
+		tier := &destBlobTier
 		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = ""
+			tier = nil
 		}
 
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), common.ToAzBlobHTTPHeaders(c.headersToApply), c.srcURL, c.metadataToApply.ToAzBlobMetadata(),
-			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.AccessTierType(destBlobTier), blobTags.ToAzBlobTagsMap(),
-			c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
+		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
+			return
+		}
+		_, err = c.destBlockBlobClient.UploadBlobFromURL(c.jptm.Context(), c.srcURL,
+			&blockblob.UploadBlobFromURLOptions{
+				HTTPHeaders:             &c.headersToApply,
+				Metadata:                c.metadataToApply,
+				Tier:                    tier,
+				Tags:                    blobTags,
+				CPKInfo:                 c.jptm.CpkInfo(),
+				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+				CopySourceAuthorization: token,
+			})
 
 		if err != nil {
 			c.jptm.FailActiveSend("Put Blob from URL", err)
