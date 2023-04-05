@@ -618,6 +618,23 @@ func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) 
 	return containerURLWithSAS.URL()
 }
 
+func (scenarioHelper) getRawContainerURLWithDirSAS(c *chk.C, containerName string) url.URL {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+	containerURLWithSAS := getContainerURLWithDirSAS(c, *credential, containerName)
+	return containerURLWithSAS.URL()
+}
+
+func (scenarioHelper) getRawBlobURLWithDirSAS(c *chk.C, containerName string, blobName string) url.URL {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+	containerURLWithSAS := getContainerURLWithDirSAS(c, *credential, containerName)
+	blobURLWithSAS := containerURLWithSAS.NewBlockBlobURL(blobName)
+	return blobURLWithSAS.URL()
+}
+
 func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string) url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)

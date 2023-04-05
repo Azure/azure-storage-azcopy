@@ -394,6 +394,36 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
 	})
 }
 
+func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectoryWithDirSAS(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "vdir"
+
+	// set up the source with numerous files
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirPath)
+	_ = scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+
+	// set up an empty container
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithDirSAS(c, containerName, vdirName)
+	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
+	raw.recursive = true
+
+	// Operations with Dir SAS fail due to incorrect handling of sdd in FE
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
+
 // files(from pattern)->container upload
 func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C) {
 	bsu := getBSU()

@@ -400,7 +400,8 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
 
 // blobs(from pattern)->directory download
 // TODO the current pattern matching behavior is inconsistent with the posix filesystem
-//   update test after re-writing copy enumerators
+//
+//	update test after re-writing copy enumerators
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 	bsu := getBSU()
 
@@ -927,5 +928,108 @@ func (s *cmdIntegrationSuite) TestDryrunCopyGCPtoBlob(c *chk.C) {
 		c.Check(strings.Contains(msg[0], dstPath[0]), chk.Equals, true)
 
 		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyWithDirSAS(c *chk.C) {
+	// TODO: Remove skip when FE bug is resolved
+	c.Skip("Operations with Dir SAS currently fails due to incorrect handling of sdd in FE")
+
+	bsu := getBSU()
+	vdirName := "vdir1"
+
+	// set up src container
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, srcContainerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	// set up the destination
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithDirSAS(c, srcContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithDirSAS(c, dstContainerName)
+	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), rawDstContainerURLWithSAS.String())
+	raw.recursive = true
+
+	// Operations with Dir SAS currently fails due to incorrect handling of sdd in FE
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+vdirName+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time nothing should be transferred
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectoryDirSAS(c *chk.C) {
+	// TODO: Remove skip when FE bug is resolved
+	c.Skip("Operations with Dir SAS currently fails due to incorrect handling of sdd in FE")
+
+	bsu := getBSU()
+	vdirName := "vdir1"
+
+	// set up the container with numerous blobs
+	containerURL, containerName := createNewContainer(c, bsu)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up the destination with an empty folder
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithDirSAS(c, containerName, vdirName)
+	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw.recursive = true
+
+	// Operations with Dir SAS currently fails due to incorrect handling of sdd in FE
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateDownloadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+vdirName+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time nothing should be transferred
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 	})
 }
