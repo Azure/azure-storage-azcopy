@@ -222,9 +222,9 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 	}
 
 	if jptm.Info().IsFolderPropertiesTransfer() {
-		return newBlobFolderSender(jptm, destination, p, pacer, sip)
+		return newBlobFolderSender(jptm, destination, sip)
 	} else if jptm.Info().EntityType == common.EEntityType.Symlink() {
-		return newBlobSymlinkSender(jptm, destination, p, pacer, sip)
+		return newBlobSymlinkSender(jptm, destination, sip)
 	}
 
 	switch intendedType {
