@@ -424,6 +424,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		output = ben
 
 	case common.ELocation.Blob():
+		// TODO (last service migration) : Remove dependency on URLs.
 		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
@@ -436,17 +437,17 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		}
 		r := resourceURL.String()
 
-		burl, err := blob.ParseURL(r)
+		blobURLParts, err := blob.ParseURL(r)
 		if err != nil {
 			return nil, err
 		}
-		containerName := burl.ContainerName
+		containerName := blobURLParts.ContainerName
 		// Strip any non-service related things away
-		burl.ContainerName = ""
-		burl.BlobName = ""
-		burl.Snapshot = ""
-		burl.VersionID = ""
-		bsc, err := common.CreateBlobServiceClient(burl.String(), *credential, common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
+		blobURLParts.ContainerName = ""
+		blobURLParts.BlobName = ""
+		blobURLParts.Snapshot = ""
+		blobURLParts.VersionID = ""
+		bsc, err := common.CreateBlobServiceClient(blobURLParts.String(), *credential, common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
 		if err != nil {
 			return nil, err
 		}
