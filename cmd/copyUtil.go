@@ -50,11 +50,11 @@ func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(rawURL string) bool
 	if err != nil {
 		return false
 	}
-	parts, err := blob.ParseURL(rawURL)
+	blobURLParts, err := blob.ParseURL(rawURL)
 	if err != nil {
 		return false
 	}
-	if parts.IPEndpointStyleInfo.AccountName == "" {
+	if blobURLParts.IPEndpointStyleInfo.AccountName == "" {
 		// Typical endpoint style
 		// If there's no slashes after the first, it's a container.
 		// If there's a slash on the end, it's a virtual directory/container.

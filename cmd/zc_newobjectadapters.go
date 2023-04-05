@@ -123,6 +123,7 @@ func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
 	return a.GetPropertiesResponse.ContentMD5
 }
 
+// TODO (gapra) : In a future PR use iffNotNil
 func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
 	if a.GetPropertiesResponse.BlobType == nil {
 		return ""
