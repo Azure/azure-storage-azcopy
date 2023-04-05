@@ -138,7 +138,7 @@ func CreateBlobClient(u string, credInfo CredentialInfo, credOpOptions *Credenti
 }
 
 func CreateAppendBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*appendblob.Client, error) {
-	callbacks := NewClientCallbacks[appendblob.Client, blob.SharedKeyCredential]{
+	callbacks := newClientCallbacks[appendblob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*appendblob.Client, error) {
 			return appendblob.NewClient(u, tc, &appendblob.ClientOptions{ClientOptions: options})
 		},
@@ -151,7 +151,7 @@ func CreateAppendBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cr
 		},
 	}
 
-	return CreateClient(callbacks, u, credInfo, credOpOptions, options)
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
 func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*blockblob.Client, error) {
@@ -172,7 +172,7 @@ func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 }
 
 func CreatePageBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*pageblob.Client, error) {
-	callbacks := NewClientCallbacks[pageblob.Client, blob.SharedKeyCredential]{
+	callbacks := newClientCallbacks[pageblob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*pageblob.Client, error) {
 			return pageblob.NewClient(u, tc, &pageblob.ClientOptions{ClientOptions: options})
 		},
@@ -185,7 +185,7 @@ func CreatePageBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cred
 		},
 	}
 
-	return CreateClient(callbacks, u, credInfo, credOpOptions, options)
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
 // TODO : Can this be isolated to the blob_traverser logic
