@@ -60,11 +60,11 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 	return &p, nil
 }
 
-func (p *gcpSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+func (p *gcpSourceInfoProvider) PreSignedSourceURL() (string, error) {
 
 	conf, err := google.JWTConfigFromJSON(jsonKey)
 	if err != nil {
-		return nil, fmt.Errorf("Could not get config from json key. Error: %v", err)
+		return "", fmt.Errorf("Could not get config from json key. Error: %v", err)
 	}
 	opts := &gcpUtils.SignedURLOptions{
 		Scheme:         gcpUtils.SigningSchemeV4,
@@ -76,15 +76,10 @@ func (p *gcpSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	u, err := gcpUtils.SignedURL(p.gcpURLParts.BucketName, p.gcpURLParts.ObjectKey, opts)
 
 	if err != nil {
-		return nil, fmt.Errorf("Unable to Generate Signed URL for given GCP Object: %v", err)
+		return "", fmt.Errorf("Unable to Generate Signed URL for given GCP Object: %v", err)
 	}
 
-	parsedURL, err := url.Parse(u)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to parse signed URL: %v", err)
-	}
-
-	return parsedURL, nil
+	return u, nil
 }
 
 func (p *gcpSourceInfoProvider) Properties() (*SrcProperties, error) {

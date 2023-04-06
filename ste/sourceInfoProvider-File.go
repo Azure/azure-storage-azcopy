@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"net/url"
 	"sync"
 	"time"
 
@@ -72,13 +73,17 @@ func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, er
 	if err != nil {
 		return nil, err
 	}
+	sourceURL, err := url.Parse(presigned)
+	if err != nil {
+		return nil, err
+	}
 
 	switch p.EntityType() {
 	case common.EEntityType.File():
-		fileURL := azfile.NewFileURL(*presigned, p.jptm.SourceProviderPipeline())
+		fileURL := azfile.NewFileURL(*sourceURL, p.jptm.SourceProviderPipeline())
 		return fileURL.GetProperties(p.ctx)
 	case common.EEntityType.Folder():
-		dirURL := azfile.NewDirectoryURL(*presigned, p.jptm.SourceProviderPipeline())
+		dirURL := azfile.NewDirectoryURL(*sourceURL, p.jptm.SourceProviderPipeline())
 		return dirURL.GetProperties(p.ctx)
 	default:
 		panic("unexpected case")
@@ -120,7 +125,11 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fURLParts := azfile.NewFileURLParts(*presigned)
+	sourceURL, err := url.Parse(presigned)
+	if err != nil {
+		return "", err
+	}
+	fURLParts := azfile.NewFileURLParts(*sourceURL)
 	fURLParts.DirectoryOrFilePath = ""
 	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.URL(), p.jptm.SourceProviderPipeline())
 

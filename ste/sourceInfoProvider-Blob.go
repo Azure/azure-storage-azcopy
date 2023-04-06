@@ -23,6 +23,7 @@ package ste
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,7 +39,10 @@ type blobSourceInfoProvider struct {
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
-	source := p.transferInfo.Source
+	source, err := p.PreSignedSourceURL()
+	if err != nil {
+		return "", err
+	}
 	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 
 	ctx := p.jptm.Context()
@@ -103,8 +107,12 @@ func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, err
 	if err != nil {
 		return azbfs.BlobFSAccessControl{}, err
 	}
+	sourceURL, err := url.Parse(presignedURL)
+	if err != nil {
+		return azbfs.BlobFSAccessControl{}, err
+	}
 
-	bURLParts := azblob.NewBlobURLParts(*presignedURL)
+	bURLParts := azblob.NewBlobURLParts(*sourceURL)
 	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
 	if bURLParts.BlobName != "" {
 		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
@@ -126,7 +134,10 @@ func (p *blobSourceInfoProvider) BlobType() blob.BlobType {
 }
 
 func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	source := p.transferInfo.Source
+	source, err := p.PreSignedSourceURL()
+	if err != nil {
+		return time.Time{}, err
+	}
 
 	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 	if err != nil {

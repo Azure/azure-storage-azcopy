@@ -44,10 +44,14 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pi
 	if err != nil {
 		return nil, err
 	}
+	sourceURL, err := url.Parse(srcURL)
+	if err != nil {
+		return nil, err
+	}
 
 	return &urlToAppendBlobCopier{
 		appendBlobSenderBase: *senderBase,
-		srcURL:               *srcURL}, nil
+		srcURL:               *sourceURL}, nil
 }
 
 // Returns a chunk-func for blob copies
