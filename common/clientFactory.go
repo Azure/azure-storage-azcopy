@@ -72,16 +72,3 @@ func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions Cr
 
 	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
-
-// TODO : Can this be isolated to the blob_traverser logic
-func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blob.Client, error) {
-	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
-	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
-	if blobURLParts.Snapshot != "" {
-		return blobClient.WithSnapshot(blobURLParts.Snapshot)
-	}
-	if blobURLParts.VersionID != "" {
-		return blobClient.WithVersionID(blobURLParts.VersionID)
-	}
-	return blobClient, nil
-}
