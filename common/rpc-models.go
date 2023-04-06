@@ -77,7 +77,11 @@ func (r ResourceString) FullURL() (*url.URL, error) {
 
 func (r ResourceString) String() (string, error) {
 	u, err := r.FullURL()
-	return u.String(), err
+	if err != nil {
+		return "", err
+	} else {
+		return u.String(), nil
+	}
 }
 
 // to be used when the value is assumed to be a local path
