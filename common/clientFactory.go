@@ -34,8 +34,6 @@ import (
 // Note : Could also make azcore.ClientOptions generic here if one day different storage service clients have additional options. This would also make the callback definitions easier.
 type newClientCallbacks[T, U any] struct {
 	TokenCredential        func(string, azcore.TokenCredential, azcore.ClientOptions) (*T, error)
-	NewSharedKeyCredential func(string, string) (*U, error)
-	SharedKeyCredential    func(string, *U, azcore.ClientOptions) (*T, error)
 	NoCredential           func(string, azcore.ClientOptions) (*T, error)
 }
 
@@ -51,19 +49,6 @@ func createClient[T, U any](callbacks newClientCallbacks[T, U], u string, credIn
 			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
 		}
 		return callbacks.TokenCredential(u, tc, options)
-	case ECredentialType.SharedKey():
-		// Get the Account Name and Key variables from environment
-		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
-		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-		if name == "" || key == "" {
-			credOpOptions.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blob SharedKey credential"))
-		} // create the shared key credentials
-		sharedKey, err := callbacks.NewSharedKeyCredential(name, key)
-		if err != nil {
-			credOpOptions.panicError(errors.New("failed to create the SharedKey credential"))
-		}
-		return callbacks.SharedKeyCredential(u, sharedKey, options)
 	case ECredentialType.Anonymous():
 		return callbacks.NoCredential(u, options)
 	default:
@@ -79,10 +64,6 @@ func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions Cr
 	callbacks := newClientCallbacks[blobservice.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blobservice.Client, error) {
 			return blobservice.NewClient(u, tc, &blobservice.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: blob.NewSharedKeyCredential,
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*blobservice.Client, error) {
-			return blobservice.NewClientWithSharedKeyCredential(u, sharedKey, &blobservice.ClientOptions{ClientOptions: options})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*blobservice.Client, error) {
 			return blobservice.NewClientWithNoCredential(u, &blobservice.ClientOptions{ClientOptions: options})
