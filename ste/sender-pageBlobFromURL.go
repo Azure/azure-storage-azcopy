@@ -44,6 +44,10 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 	if err != nil {
 		return nil, err
 	}
+	sourceURL, err := url.Parse(srcURL)
+	if err != nil {
+		return nil, err
+	}
 
 	var destBlobTier blob.AccessTier
 	var pageRangeOptimizer *pageRangeOptimizer
@@ -53,7 +57,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
 			// capture the necessary info so that we can perform optimizations later
-			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*srcURL, jptm.SourceProviderPipeline()), jptm.Context())
+			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*sourceURL, jptm.SourceProviderPipeline()), jptm.Context())
 		}
 	}
 
@@ -64,7 +68,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase:       *senderBase,
-		srcURL:                   *srcURL,
+		srcURL:                   *sourceURL,
 		sourcePageRangeOptimizer: pageRangeOptimizer}, nil
 }
 

@@ -40,8 +40,6 @@ var glcm = GetLifecycleMgr()
 // Note : Could also make azcore.ClientOptions generic here if one day different storage service clients have additional options. This would also make the callback definitions easier.
 type newClientCallbacks[T, U any] struct {
 	TokenCredential        func(string, azcore.TokenCredential, azcore.ClientOptions) (*T, error)
-	NewSharedKeyCredential func(string, string) (*U, error)
-	SharedKeyCredential    func(string, *U, azcore.ClientOptions) (*T, error)
 	NoCredential           func(string, azcore.ClientOptions) (*T, error)
 }
 
@@ -62,19 +60,6 @@ func createClient[T, U any](callbacks newClientCallbacks[T, U], u string, credIn
 			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
 		}
 		return callbacks.TokenCredential(u, tc, options)
-	case ECredentialType.SharedKey():
-		// Get the Account Name and Key variables from environment
-		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
-		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-		if name == "" || key == "" {
-			credOpOptions.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blob SharedKey credential"))
-		} // create the shared key credentials
-		sharedKey, err := callbacks.NewSharedKeyCredential(name, key)
-		if err != nil {
-			credOpOptions.panicError(errors.New("failed to create the SharedKey credential"))
-		}
-		return callbacks.SharedKeyCredential(u, sharedKey, options)
 	case ECredentialType.Anonymous():
 		return callbacks.NoCredential(u, options)
 	default:
@@ -91,10 +76,6 @@ func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions *C
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blobservice.Client, error) {
 			return blobservice.NewClient(u, tc, &blobservice.ClientOptions{ClientOptions: options})
 		},
-		NewSharedKeyCredential: blob.NewSharedKeyCredential,
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*blobservice.Client, error) {
-			return blobservice.NewClientWithSharedKeyCredential(u, sharedKey, &blobservice.ClientOptions{ClientOptions: options})
-		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*blobservice.Client, error) {
 			return blobservice.NewClientWithNoCredential(u, &blobservice.ClientOptions{ClientOptions: options})
 		},
@@ -107,10 +88,6 @@ func CreateContainerClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 	callbacks := newClientCallbacks[container.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*container.Client, error) {
 			return container.NewClient(u, tc, &container.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: blob.NewSharedKeyCredential,
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*container.Client, error) {
-			return container.NewClientWithSharedKeyCredential(u, sharedKey, &container.ClientOptions{ClientOptions: options})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*container.Client, error) {
 			return container.NewClientWithNoCredential(u, &container.ClientOptions{ClientOptions: options})
@@ -125,10 +102,6 @@ func CreateBlobClient(u string, credInfo CredentialInfo, credOpOptions *Credenti
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blob.Client, error) {
 			return blob.NewClient(u, tc, &blob.ClientOptions{ClientOptions: options})
 		},
-		NewSharedKeyCredential: blob.NewSharedKeyCredential,
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*blob.Client, error) {
-			return blob.NewClientWithSharedKeyCredential(u, sharedKey, &blob.ClientOptions{ClientOptions: options})
-		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*blob.Client, error) {
 			return blob.NewClientWithNoCredential(u, &blob.ClientOptions{ClientOptions: options})
 		},
@@ -138,30 +111,22 @@ func CreateBlobClient(u string, credInfo CredentialInfo, credOpOptions *Credenti
 }
 
 func CreateAppendBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*appendblob.Client, error) {
-	callbacks := NewClientCallbacks[appendblob.Client, blob.SharedKeyCredential]{
+	callbacks := newClientCallbacks[appendblob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*appendblob.Client, error) {
 			return appendblob.NewClient(u, tc, &appendblob.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: blob.NewSharedKeyCredential,
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*appendblob.Client, error) {
-			return appendblob.NewClientWithSharedKeyCredential(u, sharedKey, &appendblob.ClientOptions{ClientOptions: options})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*appendblob.Client, error) {
 			return appendblob.NewClientWithNoCredential(u, &appendblob.ClientOptions{ClientOptions: options})
 		},
 	}
 
-	return CreateClient(callbacks, u, credInfo, credOpOptions, options)
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
 func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*blockblob.Client, error) {
 	callbacks := newClientCallbacks[blockblob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blockblob.Client, error) {
 			return blockblob.NewClient(u, tc, &blockblob.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: blob.NewSharedKeyCredential,
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*blockblob.Client, error) {
-			return blockblob.NewClientWithSharedKeyCredential(u, sharedKey, &blockblob.ClientOptions{ClientOptions: options})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*blockblob.Client, error) {
 			return blockblob.NewClientWithNoCredential(u, &blockblob.ClientOptions{ClientOptions: options})
@@ -172,31 +137,14 @@ func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 }
 
 func CreatePageBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*pageblob.Client, error) {
-	callbacks := NewClientCallbacks[pageblob.Client, blob.SharedKeyCredential]{
+	callbacks := newClientCallbacks[pageblob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*pageblob.Client, error) {
 			return pageblob.NewClient(u, tc, &pageblob.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: blob.NewSharedKeyCredential,
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*pageblob.Client, error) {
-			return pageblob.NewClientWithSharedKeyCredential(u, sharedKey, &pageblob.ClientOptions{ClientOptions: options})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*pageblob.Client, error) {
 			return pageblob.NewClientWithNoCredential(u, &pageblob.ClientOptions{ClientOptions: options})
 		},
 	}
 
-	return CreateClient(callbacks, u, credInfo, credOpOptions, options)
-}
-
-// TODO : Can this be isolated to the blob_traverser logic
-func CreateBlobClientFromServiceClient(blobURLParts blob.URLParts, client *blobservice.Client) (*blob.Client, error) {
-	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
-	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
-	if blobURLParts.Snapshot != "" {
-		return blobClient.WithSnapshot(blobURLParts.Snapshot)
-	}
-	if blobURLParts.VersionID != "" {
-		return blobClient.WithVersionID(blobURLParts.VersionID)
-	}
-	return blobClient, nil
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }

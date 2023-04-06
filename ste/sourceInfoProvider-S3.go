@@ -86,11 +86,15 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	return &p, nil
 }
 
-func (p *s3SourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+func (p *s3SourceInfoProvider) PreSignedSourceURL() (string, error) {
 	if p.credType == common.ECredentialType.S3PublicBucket() {
-		return p.rawSourceURL, nil
+		return p.rawSourceURL.String(), nil
 	}
-	return p.s3Client.PresignedGetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
+	source, err := p.s3Client.PresignedGetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
+	if err != nil {
+		return "", err
+	}
+	return source.String(), nil
 }
 
 func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {

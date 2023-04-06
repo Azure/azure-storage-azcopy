@@ -136,19 +136,20 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 
 		// download blob from start Index till startIndex + adjustedChunkSize
 		source := jptm.Info().Source
-		srcBlobClient, err := common.CreateBlobClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		blobClient, err := common.CreateBlobClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 		if err != nil {
 			jptm.FailActiveDownload("Creating blob client", err)
 		}
 
+		// TODO (gapra) : This can be removed after Access Conditions fix is released.
 		// set access conditions, to protect against inconsistencies from changes-while-being-read
 		lmt := jptm.LastModifiedTime().In(time.FixedZone("GMT", 0))
-		accessConditions := blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfUnmodifiedSince: &lmt}}
+		accessConditions := &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfUnmodifiedSince: &lmt}}
 		if isInManagedDiskImportExportAccount(source) {
 			// no access conditions (and therefore no if-modified checks) are supported on managed disk import/export (md-impexp)
 			// They are also unsupported on old "md-" style export URLs on the new (2019) large size disks.
 			// And if fact you can't have an md- URL in existence if the blob is mounted as a disk, so it won't be getting changed anyway, so we just treat all md-disks the same
-			accessConditions = blob.AccessConditions{}
+			accessConditions = nil
 		}
 
 		// At this point we create an HTTP(S) request for the desired portion of the blob, and
@@ -156,9 +157,9 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
 		enrichedContext := withRetryNotification(jptm.Context(), bd.filePacer)
-		get, err := srcBlobClient.DownloadStream(enrichedContext, &blob.DownloadStreamOptions{
+		get, err := blobClient.DownloadStream(enrichedContext, &blob.DownloadStreamOptions{
 			Range:            blob.HTTPRange{Offset: id.OffsetInFile(), Count: length},
-			AccessConditions: &accessConditions,
+			AccessConditions: accessConditions,
 			CPKInfo:          jptm.CpkInfo(),
 			CPKScopeInfo:     jptm.CpkScopeInfo(),
 		})
