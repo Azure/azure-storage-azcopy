@@ -424,6 +424,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		output = ben
 
 	case common.ELocation.Blob():
+		// TODO (last service migration) : Remove dependency on URLs.
 		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
@@ -434,23 +435,32 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		if ctx == nil || p == nil {
 			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
 		}
+		r := resourceURL.String()
 
-		burl, err := blob.ParseURL(resourceURL.String())
+		blobURLParts, err := blob.ParseURL(r)
+		if err != nil {
+			return nil, err
+		}
+		containerName := blobURLParts.ContainerName
+		// Strip any non-service related things away
+		blobURLParts.ContainerName = ""
+		blobURLParts.BlobName = ""
+		blobURLParts.Snapshot = ""
+		blobURLParts.VersionID = ""
+		bsc, err := common.CreateBlobServiceClient(blobURLParts.String(), *credential, common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
 		if err != nil {
 			return nil, err
 		}
 
-		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
-
+		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-
-			output = newBlobAccountTraverser(resourceURL, *p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions)
+			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions)
 		} else if listOfVersionIds != nil {
-			output = newBlobVersionsTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
+			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(resourceURL, *p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions)
+			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()

@@ -32,7 +32,6 @@ import (
 
 	gcpUtils "cloud.google.com/go/storage"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/minio/minio-go"
 	chk "gopkg.in/check.v1"
@@ -64,10 +63,10 @@ func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
 	}
 
 	/*
-	Wildcard support is not actually a part of the local traverser, believe it or not.
-	It's instead implemented in InitResourceTraverser as a short-circuit to a list traverser
-	utilizing the filepath.Glob function, which then initializes local traversers to achieve the same effect.
-	 */
+		Wildcard support is not actually a part of the local traverser, believe it or not.
+		It's instead implemented in InitResourceTraverser as a short-circuit to a list traverser
+		utilizing the filepath.Glob function, which then initializes local traversers to achieve the same effect.
+	*/
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	defer func(path string) { _ = os.RemoveAll(path) }(tmpDir)
 
@@ -100,7 +99,7 @@ func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
 		common.CpkOptions{},
 		nil,
 		true,
-		)
+	)
 	c.Assert(err, chk.IsNil)
 
 	seenFiles := make(map[string]bool)
@@ -112,7 +111,7 @@ func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	c.Assert(seenFiles, chk.DeepEquals, map[string]bool{
-		"test.txt": true,
+		"test.txt":  true,
 		"tes*t.txt": true,
 	})
 }
@@ -555,9 +554,9 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, blobList[0]).URL()
+		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+		blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, false, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -715,9 +714,9 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		rawContainerURLWithSAS := scenarioHelper{}.getContainerClientWithSAS(c, containerName).URL()
+		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawContainerURLWithSAS)
+		blobTraverser := newBlobTraverser(rawContainerURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -876,9 +875,9 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
-		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		rawVirDirURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, virDirName).URL()
+		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawVirDirURLWithSAS)
+		blobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -984,12 +983,12 @@ func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a parallel blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
-		parallelBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		rawVirDirURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, virDirName).URL()
+		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawVirDirURLWithSAS)
+		parallelBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// construct a serial blob traverser
-		serialBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		serialBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 		serialBlobTraverser.parallelListing = false
 
 		// invoke the parallel traversal with a dummy processor

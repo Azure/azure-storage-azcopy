@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"os"
 	"path"
 	"path/filepath"
@@ -38,6 +37,7 @@ import (
 func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	bsu := getBSU()
 	cURL, cName := createNewContainer(c, bsu)
+	defer deleteContainer(c, cURL)
 
 	blobNames := []string{
 		"*", // File name that we want to retain compatibility with
@@ -164,24 +164,23 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 // Test downloading the entire account.
 func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 	bsu := getBSU()
-	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	p, err := InitPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
-	c.Assert(err, chk.IsNil)
+	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
 
 	// Just in case there are no existing containers...
-	curl, _ := createNewContainer(c, bsu)
+	curl, name := createNewContainer(c, bsu)
+	defer deleteContainer(c, curl)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobAccountTraverser(rawBSU, name, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
 		relPaths = append(relPaths, relPath)
 		return nil
 	}
-	err = blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
+	err := blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
 	c.Assert(err, chk.IsNil)
 
 	// set up a destination
@@ -193,7 +192,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	raw := getDefaultCopyRawInput(rawBSU.String(), dstDirName)
+	raw := getDefaultCopyRawInput(rawBSU.URL(), dstDirName)
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -206,23 +205,23 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 // Test downloading the entire account.
 func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	bsu := getBSU()
-	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	p, err := InitPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
-	c.Assert(err, chk.IsNil)
+	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
 
 	// Create a unique container to be targeted.
 	cname := generateName("blah-unique-blah", 63)
 	curl := bsu.NewContainerURL(cname)
-	_, err = curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+	_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 	c.Assert(err, chk.IsNil)
+	defer deleteContainer(c, curl)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
 
 	// update the raw BSU to match the unique container name
-	rawBSU.Path = "/blah-unique-blah*"
+	container := "blah-unique-blah*"
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
@@ -241,7 +240,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	raw := getDefaultCopyRawInput(rawBSU.String(), dstDirName)
+	raw := getDefaultCopyRawInput(rawBSU.URL(), dstDirName)
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {

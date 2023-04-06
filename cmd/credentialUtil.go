@@ -26,6 +26,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
@@ -226,7 +228,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 				},
 			})
 
-		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(resourceURL)
+		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(resourceURL.String())
 		isPublicResource = false
 
 		// Scenario 1: When resourceURL points to a container
@@ -646,6 +648,29 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
+func createClientOptions(logLevel pipeline.LogLevel) azcore.ClientOptions {
+	logOptions := ste.LogOptions{}
+	if azcopyScanningLogger != nil {
+		logOptions.LogOptions = pipeline.LogOptions{
+			Log:       azcopyScanningLogger.Log,
+			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
+		}
+	}
+	return ste.NewClientOptions(policy.RetryOptions{
+		MaxRetries:    ste.UploadMaxTries,
+		TryTimeout:    ste.UploadTryTimeout,
+		RetryDelay:    ste.UploadRetryDelay,
+		MaxRetryDelay: ste.UploadMaxRetryDelay,
+	},
+		policy.TelemetryOptions{
+			ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+		},
+		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
+		nil, // we don't gather network stats on the credential pipeline
+		logOptions,
+	)
+}
+
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
 	// are we getting dest token?
 	credential := credInfo.SourceBlobToken

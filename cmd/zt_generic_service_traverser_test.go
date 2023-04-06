@@ -182,9 +182,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// construct a blob account traverser
-	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -366,10 +365,9 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// construct a blob account traverser
-	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	rawBSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
+	container := "objectmatch*" // set the container name to contain a wildcard
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}

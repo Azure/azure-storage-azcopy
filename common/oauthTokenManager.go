@@ -29,9 +29,13 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -953,6 +957,60 @@ func (credInfo OAuthTokenInfo) IsEmpty() bool {
 // toJSON converts OAuthTokenInfo to json format.
 func (credInfo OAuthTokenInfo) toJSON() ([]byte, error) {
 	return json.Marshal(credInfo)
+}
+
+func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error) {
+	u, err := url.Parse(activeDirectoryEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	return u.Parse(tenantID)
+}
+
+func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, error) {
+	if credInfo.TokenRefreshSource == TokenRefreshSourceTokenStore {
+		return nil, fmt.Errorf("TODO : Implement TokenRefreshSourceTokenStore for Storage Explorer")
+	}
+
+	if credInfo.Identity {
+		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ClientOptions: azcore.ClientOptions{
+				Transport: newAzcopyHTTPClient(),
+			},
+		})
+	}
+
+	if credInfo.ServicePrincipalName {
+		authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+		if err != nil {
+			return nil, err
+		}
+		if credInfo.SPNInfo.CertPath != "" {
+			certData, err := os.ReadFile(credInfo.SPNInfo.CertPath)
+			if err != nil {
+				return nil, err
+			}
+			certs, key, err := azidentity.ParseCertificates(certData, []byte(credInfo.SPNInfo.Secret))
+			if err != nil {
+				return nil, err
+			}
+			return azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
+				ClientOptions: azcore.ClientOptions{
+					Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+					Transport: newAzcopyHTTPClient(),
+				},
+			})
+		} else {
+			return azidentity.NewClientSecretCredential(credInfo.Tenant, credInfo.ApplicationID, credInfo.SPNInfo.Secret, &azidentity.ClientSecretCredentialOptions{
+				ClientOptions: azcore.ClientOptions{
+					Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+					Transport: newAzcopyHTTPClient(),
+				},
+			})
+		}
+	}
+
+	return nil, fmt.Errorf("TODO : Implement DeviceCodeCredential")
 }
 
 // jsonToTokenInfo converts bytes to OAuthTokenInfo

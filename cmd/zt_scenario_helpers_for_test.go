@@ -23,6 +23,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"io"
 	"net/url"
 	"os"
@@ -618,6 +621,14 @@ func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) 
 	return containerURLWithSAS.URL()
 }
 
+func (scenarioHelper) getContainerClientWithSAS(c *chk.C, containerName string) *container.Client {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+	containerURLWithSAS := getContainerClientWithSAS(c, credential, containerName)
+	return containerURLWithSAS
+}
+
 func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string) url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -627,12 +638,43 @@ func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobN
 	return blobURLWithSAS.URL()
 }
 
+func (scenarioHelper) getBlobClientWithSAS(c *chk.C, containerName string, blobName string) *blob.Client {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+	containerURLWithSAS := getContainerClientWithSAS(c, credential, containerName)
+	blobURLWithSAS := containerURLWithSAS.NewBlobClient(blobName)
+	return blobURLWithSAS
+}
+
 func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 
 	return getBlobServiceURLWithSAS(c, *credential).URL()
+}
+
+func (scenarioHelper) getBlobServiceClientWithSAS(c *chk.C) *service.Client {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+
+	return getBlobServiceClientWithSAS(c, credential)
+}
+
+func (scenarioHelper) getBlobServiceClientWithSASFromURL(c *chk.C, rawURL string) *service.Client {
+	blobURLParts, err := blob.ParseURL(rawURL)
+	c.Assert(err, chk.IsNil)
+	blobURLParts.ContainerName = ""
+	blobURLParts.BlobName = ""
+	blobURLParts.VersionID = ""
+	blobURLParts.Snapshot = ""
+
+	client, err := service.NewClientWithNoCredential(blobURLParts.String(), nil)
+	c.Assert(err, chk.IsNil)
+
+	return client
 }
 
 func (scenarioHelper) getRawFileServiceURLWithSAS(c *chk.C) url.URL {

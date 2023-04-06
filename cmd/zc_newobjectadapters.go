@@ -22,9 +22,9 @@ package cmd
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var noContentProps = emptyPropertiesAdapter{}
@@ -96,40 +96,83 @@ func (m md5OnlyAdapter) ContentMD5() []byte {
 
 // blobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to the blobPropsProvider interface
 type blobPropertiesResponseAdapter struct {
-	*azblob.BlobGetPropertiesResponse
+	*blob.GetPropertiesResponse
 }
 
+func (a blobPropertiesResponseAdapter) CacheControl() string {
+	return common.IffStringNotNil(a.GetPropertiesResponse.CacheControl, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentDisposition() string {
+	return common.IffStringNotNil(a.GetPropertiesResponse.ContentDisposition, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentEncoding() string {
+	return common.IffStringNotNil(a.GetPropertiesResponse.ContentEncoding, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentLanguage() string {
+	return common.IffStringNotNil(a.GetPropertiesResponse.ContentLanguage, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentType() string {
+	return common.IffStringNotNil(a.GetPropertiesResponse.ContentType, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
+	return a.GetPropertiesResponse.ContentMD5
+}
+
+// TODO (gapra) : In a future PR use iffNotNil
 func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
-	return blob.BlobType(a.BlobGetPropertiesResponse.BlobType())
+	if a.GetPropertiesResponse.BlobType == nil {
+		return ""
+	}
+	return *a.GetPropertiesResponse.BlobType
 }
 
 func (a blobPropertiesResponseAdapter) AccessTier() blob.AccessTier {
-	return blob.AccessTier(a.BlobGetPropertiesResponse.AccessTier())
+	if a.GetPropertiesResponse.AccessTier == nil {
+		return ""
+	}
+	return blob.AccessTier(*a.GetPropertiesResponse.AccessTier)
 }
 
 func (a blobPropertiesResponseAdapter) ArchiveStatus() blob.ArchiveStatus {
-	return blob.ArchiveStatus(a.BlobGetPropertiesResponse.ArchiveStatus())
+	if a.GetPropertiesResponse.ArchiveStatus == nil {
+		return ""
+	}
+	return blob.ArchiveStatus(*a.GetPropertiesResponse.ArchiveStatus)
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesResponseAdapter) LeaseDuration() lease.DurationType {
-	return lease.DurationType(a.BlobGetPropertiesResponse.LeaseDuration())
+	if a.GetPropertiesResponse.LeaseDuration == nil {
+		return ""
+	}
+	return *a.GetPropertiesResponse.LeaseDuration
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesResponseAdapter) LeaseState() lease.StateType {
-	return lease.StateType(a.BlobGetPropertiesResponse.LeaseState())
+	if a.GetPropertiesResponse.LeaseState == nil {
+		return ""
+	}
+	return *a.GetPropertiesResponse.LeaseState
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
-	return lease.StatusType(a.BlobGetPropertiesResponse.LeaseStatus())
+	if a.GetPropertiesResponse.LeaseStatus == nil {
+		return ""
+	}
+	return *a.GetPropertiesResponse.LeaseStatus
 }
 
 // blobPropertiesAdapter adapts a BlobProperties object to both the
 // contentPropsProvider and blobPropsProvider interfaces
 type blobPropertiesAdapter struct {
-	BlobProperties azblob.BlobPropertiesInternal
+	BlobProperties *container.BlobProperties
 }
 
 func (a blobPropertiesAdapter) CacheControl() string {
@@ -157,28 +200,46 @@ func (a blobPropertiesAdapter) ContentMD5() []byte {
 }
 
 func (a blobPropertiesAdapter) BlobType() blob.BlobType {
-	return blob.BlobType(a.BlobProperties.BlobType)
+	if a.BlobProperties.BlobType == nil {
+		return ""
+	}
+	return *a.BlobProperties.BlobType
 }
 
 func (a blobPropertiesAdapter) AccessTier() blob.AccessTier {
-	return blob.AccessTier(a.BlobProperties.AccessTier)
+	if a.BlobProperties.AccessTier == nil {
+		return ""
+	}
+	return *a.BlobProperties.AccessTier
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
 func (a blobPropertiesAdapter) LeaseDuration() lease.DurationType {
-	return lease.DurationType(a.BlobProperties.LeaseDuration)
+	if a.BlobProperties.LeaseDuration == nil {
+		return ""
+	}
+	return *a.BlobProperties.LeaseDuration
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
 func (a blobPropertiesAdapter) LeaseState() lease.StateType {
-	return lease.StateType(a.BlobProperties.LeaseState)
+	if a.BlobProperties.LeaseState == nil {
+		return ""
+	}
+	return *a.BlobProperties.LeaseState
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
 func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
-	return lease.StatusType(a.BlobProperties.LeaseStatus)
+	if a.BlobProperties.LeaseStatus == nil {
+		return ""
+	}
+	return *a.BlobProperties.LeaseStatus
 }
 
 func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
-	return blob.ArchiveStatus(a.BlobProperties.ArchiveStatus)
+	if a.BlobProperties.ArchiveStatus == nil {
+		return ""
+	}
+	return *a.BlobProperties.ArchiveStatus
 }

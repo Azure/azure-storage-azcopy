@@ -81,7 +81,8 @@ func (s *cmdIntegrationSuite) TestRemoveDirectory(c *chk.C) {
 	// get service SAS for raw input
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
-	serviceURLWithSAS, _, fsName, dirName, dirURL := createFileSystem(c)
+	serviceURLWithSAS, fsURL, fsName, dirName, dirURL := createFileSystem(c)
+	defer deleteFilesystem(c, fsURL)
 
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
 	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
@@ -112,7 +113,8 @@ func (s *cmdIntegrationSuite) TestRemoveFile(c *chk.C) {
 	mockedRPC.init()
 	ctx := context.Background()
 
-	serviceURLWithSAS, _, fsName, parentDirName, parentDirURL := createFileSystem(c)
+	serviceURLWithSAS, fsURL, fsName, parentDirName, parentDirURL := createFileSystem(c)
+	defer deleteFilesystem(c, fsURL)
 
 	// set up the file to be deleted
 	fileName := generateName("file", 0)
@@ -142,6 +144,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectories(c *chk.C) 
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
 	serviceURLWithSAS, fsURL, fsName, parentDirName, parentDirURL := createFileSystem(c)
+	defer deleteFilesystem(c, fsURL)
 
 	fileName1 := generateName("file1", 0)
 	fileURL1 := parentDirURL.NewFileURL(fileName1)
@@ -256,7 +259,8 @@ func (s *cmdIntegrationSuite) TestRemoveDirectoryWithFromTo(c *chk.C) {
 	// get service SAS for raw input
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
-	serviceURLWithSAS, _, fsName, dirName, dirURL := createFileSystem(c)
+	serviceURLWithSAS, fsURL, fsName, dirName, dirURL := createFileSystem(c)
+	defer deleteFilesystem(c, fsURL)
 
 	fileURL := dirURL.NewFileURL(generateName("file", 0))
 	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
@@ -291,7 +295,8 @@ func (s *cmdIntegrationSuite) TestRemoveFileWithFromTo(c *chk.C) {
 	// get service SAS for raw input
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
-	serviceURLWithSAS, _, fsName, parentDirName, parentDirURL := createFileSystem(c)
+	serviceURLWithSAS, fsURL, fsName, parentDirName, parentDirURL := createFileSystem(c)
+	defer deleteFilesystem(c, fsURL)
 
 	// set up the file to be deleted
 	fileName := generateName("file", 0)
@@ -322,6 +327,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectoriesWithFromTo(
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
 	serviceURLWithSAS, fsURL, fsName, parentDirName, parentDirURL := createFileSystem(c)
+	defer deleteFilesystem(c, fsURL)
 
 	fileName1 := generateName("file1", 0)
 	fileURL1 := parentDirURL.NewFileURL(fileName1)

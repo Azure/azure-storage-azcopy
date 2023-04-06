@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -292,3 +294,246 @@ func doesHeaderExistCaseInsensitive(header http.Header, key string) (bool, strin
 	}
 	return false, ""
 }
+
+// logPolicyOpValues is the struct containing the per-operation values
+type logPolicyOpValues struct {
+	try   int32
+	start time.Time
+}
+
+type LogOptions struct {
+	RequestLogOptions  RequestLogOptions
+	LogOptions         pipeline.LogOptions
+	AllowedHeaders     []string
+	AllowedQueryParams []string
+}
+
+type logPolicy struct {
+	LogOptions         LogOptions
+	allowedHeaders     map[string]struct{}
+	allowedQueryParams map[string]struct{}
+}
+
+func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
+	// Get the per-operation values. These are saved in the Message's map so that they persist across each retry calling into this policy object.
+	var opValues logPolicyOpValues
+	if req.OperationValue(&opValues); opValues.start.IsZero() {
+		opValues.start = time.Now() // If this is the 1st try, record this operation's start time
+	}
+	opValues.try++ // The first try is #1 (not #0)
+	req.SetOperationValue(opValues)
+
+	if p.LogOptions.LogOptions.ShouldLog(pipeline.LogDebug) {
+		b := &bytes.Buffer{}
+		fmt.Fprintf(b, "==> OUTGOING REQUEST (Try=%d)\n", opValues.try)
+		p.writeRequestWithResponse(b, req, nil, nil)
+		p.LogOptions.LogOptions.Log(pipeline.LogInfo, b.String())
+	}
+
+	// Set the time for this particular retry operation and then Do the operation.
+	// The time we gather here is a measure of service responsiveness, and as such it shouldn't
+	// include the time taken to transfer the body. For downloads, that's easy,
+	// since Do returns before the body is processed.  For uploads, its trickier, because
+	// the body transferring is inside Do. So we use an http trace, so we can time
+	// from the time we finished sending the request (including any body).
+	var endRequestWrite time.Time
+	haveEndWrite := false
+	tracedContext := httptrace.WithClientTrace(req.Raw().Context(), &httptrace.ClientTrace{
+		WroteRequest: func(w httptrace.WroteRequestInfo) {
+			endRequestWrite = time.Now()
+			haveEndWrite = true
+		},
+	})
+	tryBeginAwaitResponse := time.Now()
+	response, err := req.Clone(tracedContext).Next()
+	tryEnd := time.Now()
+	if haveEndWrite {
+		tryBeginAwaitResponse = endRequestWrite // adjust to the time we really started waiting for the response
+	}
+	tryDuration := tryEnd.Sub(tryBeginAwaitResponse)
+	opDuration := tryEnd.Sub(opValues.start)
+
+	logLevel, forceLog, httpError := pipeline.LogInfo, false, false // Default logging information
+
+	// If the response took too long, we'll upgrade to warning.
+	if p.LogOptions.RequestLogOptions.LogWarningIfTryOverThreshold > 0 && tryDuration > p.LogOptions.RequestLogOptions.LogWarningIfTryOverThreshold {
+		// Log a warning if the try duration exceeded the specified threshold
+		logLevel, forceLog = pipeline.LogWarning, !p.LogOptions.RequestLogOptions.SyslogDisabled
+	}
+
+	if err == nil { // We got a response from the service
+		sc := response.StatusCode
+		if ((sc >= 400 && sc <= 499) && sc != http.StatusNotFound && sc != http.StatusConflict && sc != http.StatusPreconditionFailed && sc != http.StatusRequestedRangeNotSatisfiable) || (sc >= 500 && sc <= 599) {
+			logLevel, forceLog, httpError = pipeline.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled, true // Promote to Error any 4xx (except those listed is an error) or any 5xx
+		} else if sc == http.StatusNotFound || sc == http.StatusConflict || sc == http.StatusPreconditionFailed || sc == http.StatusRequestedRangeNotSatisfiable {
+			httpError = true
+		}
+	} else if isContextCancelledError(err) {
+		// No point force-logging these, and probably, for clarity of the log, no point in even logging unless at debug level
+		// Otherwise, when lots of go-routines are running, and one fails with a real error, the rest obscure the log with their
+		// context canceled logging. If there's no real error, just user-requested cancellation,
+		// that's is visible by cancelled status shown in end-of-log summary.
+		logLevel, forceLog = pipeline.LogDebug, false
+	} else {
+		// This error did not get an HTTP response from the service; upgrade the severity to Error
+		logLevel, forceLog = pipeline.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled
+	}
+
+	logBody := false
+	if shouldLog := p.LogOptions.LogOptions.ShouldLog(logLevel); forceLog || shouldLog {
+		// We're going to log this; build the string to log
+		b := &bytes.Buffer{}
+		slow := ""
+		if p.LogOptions.RequestLogOptions.LogWarningIfTryOverThreshold > 0 && tryDuration > p.LogOptions.RequestLogOptions.LogWarningIfTryOverThreshold {
+			slow = fmt.Sprintf("[SLOW >%v]", p.LogOptions.RequestLogOptions.LogWarningIfTryOverThreshold)
+		}
+		fmt.Fprintf(b, "==> REQUEST/RESPONSE (Try=%d/%v%s, OpTime=%v) -- ", opValues.try, tryDuration, slow, opDuration)
+		if err != nil { // This HTTP request did not get a response from the service
+			fmt.Fprint(b, "REQUEST ERROR\n")
+		} else {
+			if logLevel == pipeline.LogError {
+				fmt.Fprint(b, "RESPONSE STATUS CODE ERROR\n")
+				logBody = true
+			} else {
+				fmt.Fprint(b, "RESPONSE SUCCESSFULLY RECEIVED\n")
+			}
+		}
+		if forceLog || err != nil || p.LogOptions.LogOptions.ShouldLog(pipeline.LogDebug) {
+			p.writeRequestWithResponse(b, req, response, err)
+		} else {
+			p.writeRequestAsOneLine(b, req)
+			writeActivityId(b, response)
+		}
+
+		if logBody {
+			body := transparentlyReadBody(response)
+			fmt.Fprint(b, "Response Details: ", formatBody(body), "\n") // simple logging of response body, as raw XML (better than not logging it at all!)
+		}
+
+		//Dropping HTTP errors as grabbing the stack is an expensive operation & fills the log too much
+		//for a set of harmless errors. HTTP requests ultimately will be retried.
+		if logLevel <= pipeline.LogError && !httpError {
+			b.Write(stack())
+		}
+		msg := b.String()
+
+		if forceLog {
+			pipeline.ForceLog(logLevel, msg)
+		}
+		if shouldLog {
+			p.LogOptions.LogOptions.Log(logLevel, msg)
+		}
+
+	}
+
+	return response, err
+}
+
+func newLogPolicy(options LogOptions) policy.Policy {
+	options.RequestLogOptions = options.RequestLogOptions.defaults()
+	// TODO : Possibly add to default set?
+	// construct default hash set of allowed headers
+	allowedHeaders := map[string]struct{}{
+		"accept":                        {},
+		"cache-control":                 {},
+		"connection":                    {},
+		"content-length":                {},
+		"content-type":                  {},
+		"date":                          {},
+		"etag":                          {},
+		"expires":                       {},
+		"if-match":                      {},
+		"if-modified-since":             {},
+		"if-none-match":                 {},
+		"if-unmodified-since":           {},
+		"last-modified":                 {},
+		"ms-cv":                         {},
+		"pragma":                        {},
+		"request-id":                    {},
+		"retry-after":                   {},
+		"server":                        {},
+		"traceparent":                   {},
+		"transfer-encoding":             {},
+		"user-agent":                    {},
+		"www-authenticate":              {},
+		"x-ms-request-id":               {},
+		"x-ms-client-request-id":        {},
+		"x-ms-return-client-request-id": {},
+	}
+	// add any caller-specified allowed headers to the set
+	for _, ah := range options.AllowedHeaders {
+		allowedHeaders[strings.ToLower(ah)] = struct{}{}
+	}
+	// now do the same thing for query params
+	allowedQP := map[string]struct{}{
+		"api-version": {},
+	}
+	for _, qp := range options.AllowedQueryParams {
+		allowedQP[strings.ToLower(qp)] = struct{}{}
+	}
+	return logPolicy{LogOptions: options, allowedHeaders: allowedHeaders, allowedQueryParams: allowedQP}
+}
+
+const redactedValue = "REDACTED"
+
+func (p *logPolicy) writeRequestAsOneLine(b *bytes.Buffer, req *policy.Request) {
+	cpURL := *req.Raw().URL
+	qp := cpURL.Query()
+	for k := range qp {
+		if _, ok := p.allowedQueryParams[strings.ToLower(k)]; !ok {
+			qp.Set(k, redactedValue)
+		}
+	}
+	cpURL.RawQuery = qp.Encode()
+	fmt.Fprint(b, "   "+req.Raw().Method+" "+cpURL.String()+"\n")
+}
+
+// writeRequestWithResponse appends a formatted HTTP request into a Buffer. If request and/or err are
+// not nil, then these are also written into the Buffer.
+func (p *logPolicy) writeRequestWithResponse(b *bytes.Buffer, req *policy.Request, resp *http.Response, err error) {
+	// redact applicable query params
+	cpURL := *req.Raw().URL
+	qp := cpURL.Query()
+	for k := range qp {
+		if _, ok := p.allowedQueryParams[strings.ToLower(k)]; !ok {
+			qp.Set(k, redactedValue)
+		}
+	}
+	cpURL.RawQuery = qp.Encode()
+	// Write the request into the buffer.
+	fmt.Fprint(b, "   "+req.Raw().Method+" "+cpURL.String()+"\n")
+	p.writeHeader(b, req.Raw().Header)
+	if resp != nil {
+		fmt.Fprintln(b, "   --------------------------------------------------------------------------------")
+		fmt.Fprint(b, "   RESPONSE Status: "+resp.Status+"\n")
+		p.writeHeader(b, resp.Header)
+	}
+	if err != nil {
+		fmt.Fprintln(b, "   --------------------------------------------------------------------------------")
+		fmt.Fprint(b, "   ERROR:\n"+err.Error()+"\n")
+	}
+}
+
+// formatHeaders appends an HTTP request's or response's header into a Buffer.
+func (p *logPolicy) writeHeader(b *bytes.Buffer, header http.Header) {
+	if len(header) == 0 {
+		b.WriteString("   (no headers)\n")
+		return
+	}
+	keys := make([]string, 0, len(header))
+	// Alphabetize the headers
+	for k := range header {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		value := header.Get(k)
+		// redact all header values not in the allow-list
+		if _, ok := p.allowedHeaders[strings.ToLower(k)]; !ok {
+			value = redactedValue
+		}
+		fmt.Fprintf(b, "   %s: %+v\n", k, value)
+	}
+}
+
+
