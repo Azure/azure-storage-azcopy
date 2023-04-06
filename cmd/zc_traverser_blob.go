@@ -133,11 +133,12 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (response *blob.GetPropertie
 		return nil, false, false, nil
 	}
 
-	blobClient, err := common.CreateBlobClientFromServiceClient(blobURLParts, t.serviceClient)
+	blobClient, err := createBlobClientFromServiceClient(blobURLParts, t.serviceClient)
 	if err != nil {
 		return nil, false, false, err
 	}
 	cpk := t.cpkOptions.GetCPKInfo()
+
 	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: &cpk})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
@@ -160,7 +161,7 @@ func (t *blobTraverser) getBlobTags() (common.BlobTags, error) {
 	blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	// perform the check
-	blobClient, err := common.CreateBlobClientFromServiceClient(blobURLParts, t.serviceClient)
+	blobClient, err := createBlobClientFromServiceClient(blobURLParts, t.serviceClient)
 	if err != nil {
 		return nil, err
 	}
@@ -564,4 +565,16 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		t.parallelListing = false
 	}
 	return
+}
+
+func createBlobClientFromServiceClient(blobURLParts blob.URLParts, client *service.Client) (*blob.Client, error) {
+	containerClient := client.NewContainerClient(blobURLParts.ContainerName)
+	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
+	if blobURLParts.Snapshot != "" {
+		return blobClient.WithSnapshot(blobURLParts.Snapshot)
+	}
+	if blobURLParts.VersionID != "" {
+		return blobClient.WithVersionID(blobURLParts.VersionID)
+	}
+	return blobClient, nil
 }

@@ -62,12 +62,12 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (*blob.GetPr
 		blobURLParts.VersionID = versionID
 	}
 
-	blobClient, err := common.CreateBlobClientFromServiceClient(blobURLParts, t.serviceClient)
+	blobClient, err := createBlobClientFromServiceClient(blobURLParts, t.serviceClient)
 	if err != nil {
 		return nil, err
 	}
-
 	cpk := t.cpkOptions.GetCPKInfo()
+
 	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: &cpk})
 	return &props, err
 }
