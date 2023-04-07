@@ -539,10 +539,12 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 func (jpm *jobPartMgr) clientInfo() {
 	jobState := jpm.jobMgr.getInMemoryTransitJobState()
 
+	// Destination credential
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		jpm.credInfo = jobState.CredentialInfo
 	}
 
+	// S2S source credential
 	if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
 		var s2sSourceCredInfo common.CredentialInfo
 		if jobState.S2SSourceCredentialType == common.ECredentialType.Unknown() {
