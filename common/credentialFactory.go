@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"math"
 	"strings"
@@ -90,6 +91,21 @@ func (o CredentialOpOptions) cancel() {
 	} else {
 		o.panicError(errors.New("cancel the operations"))
 	}
+}
+
+// GetSourceBlobCredential gets the TokenCredential based on the cred info
+func GetSourceBlobCredential(credInfo CredentialInfo, options CredentialOpOptions) (azcore.TokenCredential, error) {
+	if credInfo.CredentialType.IsAzureOAuth() {
+		if credInfo.OAuthTokenInfo.IsEmpty() {
+			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
+		}
+		if credInfo.S2SSourceTokenCredential != nil {
+			return credInfo.S2SSourceTokenCredential, nil
+		} else {
+			return credInfo.OAuthTokenInfo.GetTokenCredential()
+		}
+	}
+	return nil, nil
 }
 
 // CreateBlobCredential creates Blob credential according to credential info.
