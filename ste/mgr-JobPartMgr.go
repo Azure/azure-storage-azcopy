@@ -962,7 +962,6 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
-
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
 			jpm.planMMF.Plan().JobID, jpm.planMMF.Plan().PartNum, transfersDone,
 			jpm.planMMF.Plan().NumTransfers))

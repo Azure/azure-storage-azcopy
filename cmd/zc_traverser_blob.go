@@ -434,6 +434,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 	return nil
 }
+
 func getEntityType(blobInfo map[string]*string) common.EntityType {
 	// Note: We are just checking keys here, not their corresponding values. Is that safe?
 	if _, isfolder := blobInfo["hdi_isfolder"]; isfolder {
