@@ -302,6 +302,7 @@ type logPolicyOpValues struct {
 }
 
 type LogOptions struct {
+	// TODO : Unravel LogOptions and RequestLogOptions
 	RequestLogOptions  RequestLogOptions
 	LogOptions         pipeline.LogOptions
 	AllowedHeaders     []string
@@ -431,6 +432,12 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 
 func newLogPolicy(options LogOptions) policy.Policy {
 	options.RequestLogOptions = options.RequestLogOptions.defaults()
+	if options.LogOptions.ShouldLog == nil {
+		options.LogOptions.ShouldLog = func(pipeline.LogLevel) bool { return false } // No-op logger
+	}
+	if options.LogOptions.Log == nil {
+		options.LogOptions.Log = func(pipeline.LogLevel, string) {} // No-op logger
+	}
 	// TODO : Possibly add to default set?
 	// construct default hash set of allowed headers
 	allowedHeaders := map[string]struct{}{
@@ -535,5 +542,3 @@ func (p *logPolicy) writeHeader(b *bytes.Buffer, header http.Header) {
 		fmt.Fprintf(b, "   %s: %+v\n", k, value)
 	}
 }
-
-

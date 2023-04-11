@@ -1614,6 +1614,22 @@ type CpkOptions struct {
 	IsSourceEncrypted bool
 }
 
+func (options CpkOptions) GetCPKInfo() blob.CPKInfo {
+	if options.IsSourceEncrypted {
+		return blob.CPKInfo{}
+	} else {
+		return GetCpkInfo(options.CpkInfo)
+	}
+}
+
+func (options CpkOptions) GetCPKScopeInfo() blob.CPKScopeInfo {
+	if options.IsSourceEncrypted {
+		return blob.CPKScopeInfo{}
+	} else {
+		return GetCpkScopeInfo(options.CpkScopeInfo)
+	}
+}
+
 func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
 	_cpkInfo := GetCpkInfo(options.CpkInfo)
 	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)

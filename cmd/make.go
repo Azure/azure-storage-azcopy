@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"net/url"
 	"strings"
 
@@ -32,7 +33,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
@@ -108,21 +108,19 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.Blob():
-		p, err := createBlobPipeline(ctx, credentialInfo, pipeline2.LogNone)
+		options := createClientOptions(pipeline2.LogNone)
+		// TODO : Ensure it is a container URL here and fail early?
+		containerClient, err := common.CreateContainerClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
 		if err != nil {
 			return err
 		}
-		containerURL := azblob.NewContainerURL(cookedArgs.resourceURL, p)
-		if _, err = containerURL.Create(ctx, nil, azblob.PublicAccessNone); err != nil {
+		if _, err = containerClient.Create(ctx, nil); err != nil {
 			// print a nicer error message if container already exists
-			if storageErr, ok := err.(azblob.StorageError); ok {
-				if storageErr.ServiceCode() == azblob.ServiceCodeContainerAlreadyExists {
-					return fmt.Errorf("the container already exists")
-				} else if storageErr.ServiceCode() == azblob.ServiceCodeResourceNotFound {
-					return fmt.Errorf("please specify a valid container URL with account SAS")
-				}
+			if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
+				return fmt.Errorf("the container already exists")
+			} else if bloberror.HasCode(err, bloberror.ResourceNotFound) {
+				return fmt.Errorf("please specify a valid container URL with account SAS")
 			}
-
 			// print the ugly error if unexpected
 			return err
 		}

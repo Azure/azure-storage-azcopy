@@ -75,6 +75,15 @@ func (r ResourceString) FullURL() (*url.URL, error) {
 	return u, err
 }
 
+func (r ResourceString) String() (string, error) {
+	u, err := r.FullURL()
+	if err != nil {
+		return "", err
+	} else {
+		return u.String(), nil
+	}
+}
+
 // to be used when the value is assumed to be a local path
 // Using this signals "Yes, I really am ignoring the SAS and ExtraQuery on purpose",
 // and will result in a panic in the case of programmer error of calling this method
