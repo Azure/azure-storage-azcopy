@@ -90,10 +90,11 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	if err != nil {
 		return "Set Metadata", fmt.Errorf("A best-effort overwrite was attempted; CPK errors cannot be handled when the blob cannot be deleted.\n%w", err)
 	}
-	_, err = b.destination.SetTags(b.jptm.Context(), nil, nil, nil, b.blobTagsToApply)
-	if err != nil {
-		return "Set Blob Tags", err
-	}
+	//// blob API not yet supported for HNS account error; re-enable later.
+	//_, err = b.destination.SetTags(b.jptm.Context(), nil, nil, nil, b.blobTagsToApply)
+	//if err != nil {
+	//	return "Set Blob Tags", err
+	//}
 	_, err = b.destination.SetHTTPHeaders(b.jptm.Context(), common.ToAzBlobHTTPHeaders(b.headersToAppply), azblob.BlobAccessConditions{})
 	if err != nil {
 		return "Set HTTP Headers", err
