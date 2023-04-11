@@ -44,6 +44,9 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 		return "", err
 	}
 	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+	if err != nil {
+		return "", err
+	}
 
 	ctx := p.jptm.Context()
 
