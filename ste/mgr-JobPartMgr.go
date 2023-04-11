@@ -91,6 +91,19 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
+func newTrailingDotPolicyFactory(trailingDot bool) pipeline.Factory {
+	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
+		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+			if trailingDot {
+				request.Header.Set("x-ms-allow-trailing-dot", "true")
+				request.Header.Set("x-ms-source-allow-trailing-dot", "true")
+				request.Header.Set("x-ms-version", "2022-11-02")
+			}
+			return next.Do(ctx, request)
+		}
+	})
+}
+
 // NewAzcopyHTTPClient creates a new HTTP client.
 // We must minimize use of this, and instead maximize re-use of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
@@ -235,6 +248,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
+		newTrailingDotPolicyFactory(true),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
 			SyslogDisabled:               common.IsForceLoggingDisabled(),
