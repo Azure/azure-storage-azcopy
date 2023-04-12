@@ -67,9 +67,9 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType, trailingDo
 		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
 		azfile.NewUniqueRequestIDPolicyFactory(),
 		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
+		ste.NewTrailingDotPolicyFactory(trailingDot),
 		credential,
 		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
-		ste.NewTrailingDotPolicyFactory(trailingDot),
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 	}
 	p := pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: pipeline.LogOptions{}})
@@ -164,8 +164,8 @@ func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType Account
 		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
 		azfile.NewUniqueRequestIDPolicyFactory(),
 		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
-		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
 		ste.NewTrailingDotPolicyFactory(trailingDot),
+		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 	}
 	p := pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: pipeline.LogOptions{}})
@@ -198,7 +198,7 @@ func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountTyp
 	cResp, err := fileShare.Create(context.Background(), nil, defaultShareQuotaGB)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
-	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name, false).URL()
+	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name, trailingDot).URL()
 }
 
 func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare azfile.ShareURL) (snapshotID string) {
