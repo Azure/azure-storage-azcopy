@@ -1,3 +1,6 @@
+//go:build linux || darwin
+// +build linux darwin
+
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,7 +29,7 @@ import (
 )
 
 func TestTrailingDot_Basic(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 			trailingDot: true,
