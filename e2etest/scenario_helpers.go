@@ -565,7 +565,6 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 	result := make(map[string]*objectProperties)
 
 	for marker := (azblob.Marker{}); marker.NotDone(); {
-
 		listBlob, err := containerURL.ListBlobsFlatSegment(context.TODO(), marker, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true, Tags: true}})
 		a.AssertNoErr(err)
 
@@ -895,6 +894,22 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 	result := make(map[string]*objectProperties)
 
 	root := shareURL.NewRootDirectoryURL()
+	rootProps, err := root.GetProperties(ctx)
+	a.AssertNoErr(err)
+	rootAttr := uint32(azfile.ParseFileAttributeFlagsString(rootProps.FileAttributes()))
+	var rootPerm *string
+	if permKey := rootProps.FilePermissionKey(); permKey != "" {
+		sharePerm, err := shareURL.GetPermission(ctx, permKey)
+		a.AssertNoErr(err, "Failed to get permissions from key")
+
+		rootPerm = &sharePerm.Permission
+	}
+	result[""] = &objectProperties{
+		entityType:         common.EEntityType.Folder(),
+		smbPermissionsSddl: rootPerm,
+		smbAttributes:      &rootAttr,
+	}
+
 	dirQ = append(dirQ, root)
 	for i := 0; i < len(dirQ); i++ {
 		currentDirURL := dirQ[i]
