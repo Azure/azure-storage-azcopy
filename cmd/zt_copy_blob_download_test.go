@@ -165,7 +165,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 	bsu := getBSU()
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	p, err := InitPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
+	p, err := InitPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone, false)
 	c.Assert(err, chk.IsNil)
 
 	// Just in case there are no existing containers...
@@ -207,7 +207,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	bsu := getBSU()
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	p, err := InitPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
+	p, err := InitPipeline(ctx, common.ELocation.Blob(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone, false)
 	c.Assert(err, chk.IsNil)
 
 	// Create a unique container to be targeted.

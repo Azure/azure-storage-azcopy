@@ -179,6 +179,7 @@ type rawCopyCmdArgs struct {
 	// Optional. Indicates the priority with which to rehydrate an archived blob. Valid values are High/Standard.
 	rehydratePriority string
 	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
+	trailingDot bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -573,6 +574,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.disableAutoDecoding = raw.disableAutoDecoding
+	cooked.trailingDot = raw.trailingDot
 
 	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && raw.blobTags != "" {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
@@ -742,6 +744,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
+		if cooked.trailingDot {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
+		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
@@ -757,6 +762,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
+		}
+		if cooked.trailingDot {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -809,6 +817,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
+		if cooked.FromTo.From() != common.ELocation.File() && cooked.trailingDot {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
+		}
 	case common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
@@ -836,6 +847,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
 			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while copying from service to service")
+		}
+		if cooked.FromTo.To() != common.ELocation.File() && cooked.trailingDot {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	}
 	if err = validatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
@@ -1243,6 +1257,8 @@ type CookedCopyCmdArgs struct {
 
 	// Bitmasked uint checking which properties to transfer
 	propertiesToTransfer common.SetPropertiesFlags
+
+	trailingDot bool
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1522,6 +1538,9 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
+		FileAttributes: common.FileTransferAttributes{
+			TrailingDot: cca.trailingDot,
+		},
 	}
 
 	from := cca.FromTo.From()
@@ -2058,6 +2077,7 @@ func init() {
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
+	cpCmd.PersistentFlags().BoolVar(&raw.trailingDot, "trailing-dot", false, "False by default. Adds support for trailing dot in file share.")
 
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.

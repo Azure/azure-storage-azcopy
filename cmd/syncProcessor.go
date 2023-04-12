@@ -68,6 +68,9 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
 
 		S2SSourceCredentialType: cca.s2sSourceCredentialType,
+		FileAttributes: common.FileTransferAttributes{
+			TrailingDot: cca.trailingDot,
+		},
 	}
 
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
@@ -268,7 +271,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
+	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel(), cca.trailingDot)
 	if err != nil {
 		return nil, err
 	}

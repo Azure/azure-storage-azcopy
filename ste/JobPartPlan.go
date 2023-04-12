@@ -62,6 +62,7 @@ type JobPartPlanHeader struct {
 	LogLevel               common.LogLevel     // This Job Part's minimal log level
 	DstBlobData            JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData           JobPartPlanDstLocal // Additional data for local destinations
+	DstFileData			   JobPartPlanDstFile  // Additional data for file destinations
 
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveSMBInfo         bool
@@ -329,6 +330,11 @@ type JobPartPlanDstBlob struct {
 	BlockSize int64
 
 	SetPropertiesFlags common.SetPropertiesFlags
+}
+
+// JobPartPlanDstFile holds additional settings required when the destination is a file
+type JobPartPlanDstFile struct {
+	TrailingDot bool
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

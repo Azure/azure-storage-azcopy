@@ -107,6 +107,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("is-object-dir", p.isObjectDir, false)
 	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
 	set("check-md5", p.checkMd5.String(), "FailIfDifferent")
+	set("trailing-dot", p.trailingDot, false)
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 		set("preserve-posix-properties", p.preservePOSIXProperties, "")

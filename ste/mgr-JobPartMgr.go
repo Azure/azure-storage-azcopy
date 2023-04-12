@@ -235,7 +235,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot bool) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -248,7 +248,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
-		newTrailingDotPolicyFactory(true),
+		newTrailingDotPolicyFactory(trailingDot),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
 			SyslogDisabled:               common.IsForceLoggingDisabled(),
@@ -626,24 +626,18 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	}
 	// Consider the file-local SDDL transfer case.
 	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
-		jpm.sourceProviderPipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{
-					Value: userAgent,
-				},
+		jpm.sourceProviderPipeline = NewFilePipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{
+			Log: jpm.jobMgr.PipelineLogInfo(),
+			Telemetry: azfile.TelemetryOptions{
+				Value: userAgent,
 			},
-			azfile.RetryOptions{
-				Policy:        azfile.RetryPolicyExponential,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay,
-			},
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			statsAccForSip)
+		}, azfile.RetryOptions{
+			Policy:        azfile.RetryPolicyExponential,
+			MaxTries:      UploadMaxTries,
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay,
+		}, jpm.pacer, jpm.jobMgr.HttpClient(), statsAccForSip, jpm.planMMF.Plan().DstFileData.TrailingDot)
 	}
 
 	// Create pipeline for data transfer.
@@ -701,24 +695,18 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	// Create pipeline for Azure File.
 	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
 		common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileNone():
-		jpm.pipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{
-					Value: userAgent,
-				},
+		jpm.pipeline = NewFilePipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{
+			Log: jpm.jobMgr.PipelineLogInfo(),
+			Telemetry: azfile.TelemetryOptions{
+				Value: userAgent,
 			},
-			azfile.RetryOptions{
-				Policy:        azfile.RetryPolicyExponential,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay,
-			},
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats())
+		}, azfile.RetryOptions{
+			Policy:        azfile.RetryPolicyExponential,
+			MaxTries:      UploadMaxTries,
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay,
+		}, jpm.pacer, jpm.jobMgr.HttpClient(), jpm.jobMgr.PipelineNetworkStats(), jpm.planMMF.Plan().DstFileData.TrailingDot)
 	default:
 		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}

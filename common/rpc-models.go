@@ -157,6 +157,7 @@ type CopyJobPartOrderRequest struct {
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
+	FileAttributes FileTransferAttributes
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -224,6 +225,11 @@ type BlobTransferAttributes struct {
 	BlobTagsString           string                // when user explicitly provides blob tags
 	PermanentDeleteOption    PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
 	RehydratePriority        RehydratePriorityType // rehydrate priority of blob
+}
+
+// This struct represents the optional attribute for file request header
+type FileTransferAttributes struct {
+	TrailingDot bool
 }
 
 type JobIDDetails struct {

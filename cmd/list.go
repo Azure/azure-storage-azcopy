@@ -22,11 +22,11 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"encoding/base64"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -44,6 +44,7 @@ type rawListCmdArgs struct {
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
+	trailingDot bool
 }
 
 type validProperty string
@@ -97,6 +98,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked.RunningTally = raw.RunningTally
 	cooked.MegaUnits = raw.MegaUnits
 	cooked.location = location
+	cooked.trailingDot = raw.trailingDot
 
 	if raw.Properties != "" {
 		cooked.properties = raw.parseProperties(raw.Properties)
@@ -113,6 +115,7 @@ type cookedListCmdArgs struct {
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
+	trailingDot bool
 }
 
 var raw rawListCmdArgs
@@ -158,6 +161,7 @@ func init() {
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
 	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "delimiter (;) separated values of properties required in list output.")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.trailingDot, "trailing-dot", false, "False by default. Adds support for trailing dot in file share.")
 
 	rootCmd.AddCommand(listContainerCmd)
 }
@@ -230,10 +234,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil,
-		true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {},
-		nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), 
-        pipeline.LogNone, common.CpkOptions{}, nil /* errorChannel */, false)
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
