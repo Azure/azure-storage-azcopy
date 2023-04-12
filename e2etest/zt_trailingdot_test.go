@@ -34,6 +34,7 @@ func TestTrailingDot_Basic(t *testing.T) {
 		testFiles{
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
+				folder(""),
 				f("file"),
 				f("file."),
 				folder("directory."),
