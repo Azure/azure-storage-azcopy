@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"math/rand"
 	"mime"
 	"net/url"
@@ -237,11 +238,11 @@ func createNewAzureShare(c asserter, fsu azfile.ServiceURL) (share azfile.ShareU
 	return share, name
 }
 
-func createNewAzureFile(c asserter, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
+func createNewAzureFile(c asserter, share azfile.ShareURL, prefix string, trailingDot bool) (file azfile.FileURL, name string) {
 	file, name = getAzureFileURL(c, share, prefix)
 
 	// generate parents first
-	generateParentsForAzureFile(c, file)
+	generateParentsForAzureFile(c, file, trailingDot)
 
 	cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
 	c.AssertNoErr(err)
@@ -254,10 +255,21 @@ func newNullFolderCreationTracker() ste.FolderCreationTracker {
 	return ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 }
 
-func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
+func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL, trailingDot bool) {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), newNullFolderCreationTracker())
+	// Closest to API goes first; closest to the wire goes last
+	f := []pipeline.Factory{
+		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
+		azfile.NewUniqueRequestIDPolicyFactory(),
+		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
+		ste.NewTrailingDotPolicyFactory(trailingDot),
+		credential,
+		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
+		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
+	}
+	p := pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: pipeline.LogOptions{}})
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, p, newNullFolderCreationTracker())
 	c.AssertNoErr(err)
 }
 

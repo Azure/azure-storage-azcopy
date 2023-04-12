@@ -330,6 +330,7 @@ func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource b
 		shareURL:    *r.shareURL,
 		fileList:    s.fs.allObjects(isSource),
 		defaultSize: s.fs.defaultSize,
+		trailingDot: s.p.trailingDot,
 	})
 }
 
@@ -338,6 +339,7 @@ func (r *resourceAzureFileShare) createFile(a asserter, o *testObject, s *scenar
 		shareURL:    *r.shareURL,
 		fileList:    []*testObject{o},
 		defaultSize: s.fs.defaultSize,
+		trailingDot: s.p.trailingDot,
 	})
 }
 
