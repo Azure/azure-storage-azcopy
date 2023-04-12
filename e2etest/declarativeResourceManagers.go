@@ -313,10 +313,11 @@ type resourceAzureFileShare struct {
 	shareURL    *azfile.ShareURL // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
 	rawSasURL   *url.URL
 	snapshotID  string // optional, use a snapshot as the location instead
+	trailingDot bool
 }
 
 func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
-	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
+	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard(), s.p.trailingDot)
 	r.shareURL = &su
 	r.rawSasURL = &rawSasURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {

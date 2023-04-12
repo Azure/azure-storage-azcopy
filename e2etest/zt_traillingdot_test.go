@@ -1,6 +1,3 @@
-//go:build linux
-// +build linux
-
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -28,24 +25,25 @@ import (
 	"testing"
 )
 
-func TestTrailingDotBasic(t *testing.T) {
+func TestTrailingDot_Basic(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 			trailingDot: true,
-		}, nil, testFiles{
-		defaultSize: "1K",
-		shouldTransfer: []interface{}{
-			f("file"),
-			f("file."),
-			folder("directory."),
-			f("directory./file."),
-			f("directory./file"),
-			folder("directory"),
-			f("directory/file."),
-			f("directory/file"),
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				f("file"),
+				f("file."),
+				folder("directory."),
+				f("directory./file."),
+				f("directory./file"),
+				folder("directory"),
+				f("directory/file."),
+				f("directory/file"),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
 
 }
 

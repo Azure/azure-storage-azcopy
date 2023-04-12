@@ -91,7 +91,7 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
-func newTrailingDotPolicyFactory(trailingDot bool) pipeline.Factory {
+func NewTrailingDotPolicyFactory(trailingDot bool) pipeline.Factory {
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
 			if trailingDot {
@@ -248,7 +248,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
-		newTrailingDotPolicyFactory(trailingDot),
+		NewTrailingDotPolicyFactory(trailingDot),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
 			SyslogDisabled:               common.IsForceLoggingDisabled(),

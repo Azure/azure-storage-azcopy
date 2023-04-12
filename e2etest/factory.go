@@ -23,6 +23,7 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"net/url"
 	"os"
 	"path"
@@ -31,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -52,7 +54,7 @@ func (TestResourceFactory) GetBlobServiceURL(accountType AccountType) azblob.Ser
 	return azblob.NewServiceURL(*u, pipeline)
 }
 
-func (TestResourceFactory) GetFileServiceURL(accountType AccountType) azfile.ServiceURL {
+func (TestResourceFactory) GetFileServiceURL(accountType AccountType, trailingDot bool) azfile.ServiceURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	u, _ := url.Parse(fmt.Sprintf("https://%s.file.core.windows.net/", accountName))
 
@@ -60,8 +62,19 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) azfile.Ser
 	if err != nil {
 		panic(err)
 	}
-	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{})
-	return azfile.NewServiceURL(*u, pipeline)
+	// Closest to API goes first; closest to the wire goes last
+	f := []pipeline.Factory{
+		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
+		azfile.NewUniqueRequestIDPolicyFactory(),
+		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
+		credential,
+		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
+		ste.NewTrailingDotPolicyFactory(trailingDot),
+		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
+	}
+	p := pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: pipeline.LogOptions{}})
+
+	return azfile.NewServiceURL(*u, p)
 }
 
 func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.ServiceURL {
@@ -124,7 +137,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
-func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType AccountType, containerName string) azfile.ShareURL {
+func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType AccountType, containerName string, trailingDot bool) azfile.ShareURL {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
 	c.AssertNoErr(err)
@@ -146,7 +159,18 @@ func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType Account
 	fullURL, err := url.Parse(rawURL)
 	c.AssertNoErr(err)
 
-	return azfile.NewShareURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+	// Closest to API goes first; closest to the wire goes last
+	f := []pipeline.Factory{
+		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
+		azfile.NewUniqueRequestIDPolicyFactory(),
+		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
+		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
+		ste.NewTrailingDotPolicyFactory(trailingDot),
+		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
+	}
+	p := pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: pipeline.LogOptions{}})
+
+	return azfile.NewShareURL(*fullURL, p)
 }
 
 func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType, containerName string, blobName string) azblob.BlobURL {
@@ -167,14 +191,14 @@ func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess azblob.Pu
 
 const defaultShareQuotaGB = 512
 
-func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountType) (fileShare azfile.ShareURL, name string, rawSasURL url.URL) {
+func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountType, trailingDot bool) (fileShare azfile.ShareURL, name string, rawSasURL url.URL) {
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
-	fileShare = TestResourceFactory{}.GetFileServiceURL(accountType).NewShareURL(name)
+	fileShare = TestResourceFactory{}.GetFileServiceURL(accountType, trailingDot).NewShareURL(name)
 
 	cResp, err := fileShare.Create(context.Background(), nil, defaultShareQuotaGB)
 	c.AssertNoErr(err)
 	c.Assert(cResp.StatusCode(), equals(), 201)
-	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name).URL()
+	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name, false).URL()
 }
 
 func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare azfile.ShareURL) (snapshotID string) {
