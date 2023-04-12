@@ -23,6 +23,8 @@ package e2etest
 import (
 	"crypto/md5"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path"
@@ -169,7 +171,55 @@ func (s *scenario) uploadLogs(logDir string) {
 	if s.state.result == nil || os.Getenv("AZCOPY_E2E_LOG_OUTPUT") == "" {
 		return // nothing to upload
 	}
-	s.a.Assert(os.Rename(logDir, filepath.Join(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), s.state.result.jobID.String())), equals(), nil)
+	// sometimes, the log dir cannot be copied because the destination is on another drive. So, we'll copy the files instead by hand.
+	files, err := os.ReadDir(logDir)
+	s.a.AssertNoErr(err, "Failed to read log dir")
+	jobId := ""
+	for _, file := range files { // first, find the job ID
+		if strings.HasSuffix(file.Name(), ".log") {
+			jobId = strings.TrimSuffix(strings.TrimSuffix(file.Name(), "-scanning"), ".log")
+			break
+		}
+	}
+
+	// Create the destination log directory
+	destLogDir := filepath.Join(os.Getenv("AZCOPY_E2E_LOG_OUTPUT"), jobId)
+	err = os.MkdirAll(destLogDir, os.ModePerm|os.ModeDir)
+	s.a.AssertNoErr(err, "Failed to create log dir")
+
+	// Copy the files by hand
+	err = filepath.WalkDir(logDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath := strings.TrimPrefix(path, logDir)
+		if d.IsDir() {
+			err = os.MkdirAll(filepath.Join(destLogDir, relPath), os.ModePerm|os.ModeDir)
+			return err
+		}
+
+		// copy the file
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+
+		destFile, err := os.Create(filepath.Join(destLogDir, relPath))
+		if err != nil {
+			return err
+		}
+
+		defer srcFile.Close()
+		defer destFile.Close()
+
+		_, err = io.Copy(destFile, srcFile)
+		if err != nil {
+			return err
+		}
+
+		return err
+	})
+	s.a.AssertNoErr(err, "Failed to copy log files")
 }
 
 func (s *scenario) runHook(h hookFunc) bool {
