@@ -1,3 +1,6 @@
+variables:
+  AZCOPY_GOLANG_VERSION: $(AZCOPY_GO_VER)
+
 trigger:
   branches:
     include:
@@ -31,7 +34,7 @@ jobs:
         env:
           GO111MODULE: 'on'
         inputs:
-          version: '1.19.2'
+          version: $(AZCOPY_GOLANG_VERSION)
 
       - script: |
           echo 'Running GO Vet'
@@ -114,7 +117,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: '1.19.2'
+          version: $(AZCOPY_GOLANG_VERSION)
 
       # Running E2E Tests on Linux - AMD64
       - script: |
@@ -212,7 +215,7 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: '1.19.2'
+          version: $(AZCOPY_GOLANG_VERSION)
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'

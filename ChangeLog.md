@@ -1,6 +1,32 @@
 
 # Change Log
 
+## Version 10.18.0
+
+### New features
+
+1. Added support for `Content-MD5` in `list` command. User can now list the MD5 hash of the blobs in the target container.
+2. Added support to resume incomplete blobs. User can now resume the upload of a blob which was interrupted in the middle.
+3. Added support for download of POSIX properties.
+4. Added support for persisting symlink data.
+
+### Bug fixes
+
+1. Fixed [Issue 2120](https://github.com/Azure/azure-storage-azcopy/pull/2120)
+2. Fixed [Issue 2062](https://github.com/Azure/azure-storage-azcopy/pull/2062)
+3. Fixed [Issue 2046](https://github.com/Azure/azure-storage-azcopy/pull/2048)
+4. Fixed [Issue 1762](https://github.com/Azure/azure-storage-azcopy/pull/2125)
+
+### Documentation
+
+1. Added example for `--include-pattern`.
+2. Added documentation for `--compare-hash`.
+
+### Security fixes
+
+1. CPK-related headers are now sanitized from the logs.
+2. Updated dependencies to address security vulnerabilities.
+
 ## Version 10.17.0
 
 ### New features
