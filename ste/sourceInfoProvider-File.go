@@ -78,11 +78,6 @@ func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, er
 		return nil, err
 	}
 
-	sourceURL, err := url.Parse(presigned)
-	if err != nil {
-		return nil, err
-	}
-
 	switch p.EntityType() {
 	case common.EEntityType.File():
 		fileURL := azfile.NewFileURL(*sourceURL, p.jptm.SourceProviderPipeline())

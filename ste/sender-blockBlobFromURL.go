@@ -63,11 +63,6 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
-	sourceURL, err := url.Parse(srcURL)
-	if err != nil {
-		return nil, err
-	}
-
 	return &urlToBlockBlobCopier{
 		blockBlobSenderBase: *senderBase,
 		srcURL:              *sourceURL}, nil
