@@ -957,8 +957,8 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
 	return runtime.GOOS == "linux" && (
-		fromTo == common.EFromTo.BlobLocal() ||
-			fromTo == common.EFromTo.LocalBlob()) ||
+    fromTo == common.EFromTo.BlobLocal() ||
+	  fromTo == common.EFromTo.LocalBlob()) ||
 		fromTo == common.EFromTo.BlobBlob()
 }
 
@@ -1433,8 +1433,10 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 				jpo.CredentialInfo.OAuthTokenInfo = *tokenInfo
 			}
-			// TODO : Create SourceTokenCredential correctly here.
-			jpo.CredentialInfo.S2SSourceTokenCredential = srcCredInfo.S2SSourceTokenCredential
+			jpo.CredentialInfo.S2SSourceTokenCredential, err = common.GetSourceBlobCredential(srcCredInfo, common.CredentialOpOptions{LogError: glcm.Info})
+			if err != nil {
+				return srcCredInfo, err
+			}
 			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
 			jpo.CredentialInfo.SourceBlobToken = common.CreateBlobCredential(ctx, srcCredInfo, common.CredentialOpOptions{
 				// LogInfo:  glcm.Info, //Comment out for debugging
@@ -1442,7 +1444,6 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 			})
 			cca.credentialInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
 			srcCredInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
-			// TODO : Set S2SSourceTokenCredential
 			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
 		}
 	}

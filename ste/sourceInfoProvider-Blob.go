@@ -37,8 +37,14 @@ type blobSourceInfoProvider struct {
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
-	source := p.transferInfo.Source
+	source, err := p.PreSignedSourceURL()
+	if err != nil {
+		return "", err
+	}
 	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+	if err != nil {
+		return "", err
+	}
 
 	ctx := p.jptm.Context()
 
@@ -98,7 +104,11 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 // AccessControl should ONLY get called when we know for a fact it is a blobFS->blobFS tranfser.
 // It *assumes* that the source is actually a HNS account.
 func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, error) {
-	parsedURL, err := blob.ParseURL(p.transferInfo.Source)
+	presignedURL, err := p.PreSignedSourceURL()
+	if err != nil {
+		return azbfs.BlobFSAccessControl{}, err
+	}
+	parsedURL, err := blob.ParseURL(presignedURL)
 	if err != nil {
 		return azbfs.BlobFSAccessControl{}, err
 	}
@@ -108,12 +118,10 @@ func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, err
 	} else {
 		parsedURL.BlobName = "/" // container level perms MUST have a /
 	}
-
 	u, err := url.Parse(parsedURL.String())
 	if err != nil {
 		return azbfs.BlobFSAccessControl{}, err
 	}
-
 	// todo: jank, and violates the principle of interfaces
 	fURL := azbfs.NewFileURL(*u, p.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondarySourceProviderPipeline)
 	return fURL.GetAccessControl(p.jptm.Context())
@@ -128,7 +136,10 @@ func (p *blobSourceInfoProvider) BlobType() blob.BlobType {
 }
 
 func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	source := p.transferInfo.Source
+	source, err := p.PreSignedSourceURL()
+	if err != nil {
+		return time.Time{}, err
+	}
 
 	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 	if err != nil {

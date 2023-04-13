@@ -73,6 +73,10 @@ func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, er
 	if err != nil {
 		return nil, err
 	}
+	sourceURL, err := url.Parse(presigned)
+	if err != nil {
+		return nil, err
+	}
 
 	sourceURL, err := url.Parse(presigned)
 	if err != nil {

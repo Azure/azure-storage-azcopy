@@ -539,10 +539,12 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 func (jpm *jobPartMgr) clientInfo() {
 	jobState := jpm.jobMgr.getInMemoryTransitJobState()
 
+	// Destination credential
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		jpm.credInfo = jobState.CredentialInfo
 	}
 
+	// S2S source credential
 	if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
 		var s2sSourceCredInfo common.CredentialInfo
 		if jobState.S2SSourceCredentialType == common.ECredentialType.Unknown() {
@@ -960,7 +962,6 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
-
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
 			jpm.planMMF.Plan().JobID, jpm.planMMF.Plan().PartNum, transfersDone,
 			jpm.planMMF.Plan().NumTransfers))
