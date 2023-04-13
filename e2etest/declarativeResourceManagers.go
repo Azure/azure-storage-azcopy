@@ -313,11 +313,10 @@ type resourceAzureFileShare struct {
 	shareURL    *azfile.ShareURL // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
 	rawSasURL   *url.URL
 	snapshotID  string // optional, use a snapshot as the location instead
-	trailingDot bool
 }
 
 func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
-	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard(), s.p.trailingDot)
+	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
 	r.shareURL = &su
 	r.rawSasURL = &rawSasURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
@@ -330,7 +329,6 @@ func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource b
 		shareURL:    *r.shareURL,
 		fileList:    s.fs.allObjects(isSource),
 		defaultSize: s.fs.defaultSize,
-		trailingDot: s.p.trailingDot,
 	})
 }
 
@@ -339,7 +337,6 @@ func (r *resourceAzureFileShare) createFile(a asserter, o *testObject, s *scenar
 		shareURL:    *r.shareURL,
 		fileList:    []*testObject{o},
 		defaultSize: s.fs.defaultSize,
-		trailingDot: s.p.trailingDot,
 	})
 }
 

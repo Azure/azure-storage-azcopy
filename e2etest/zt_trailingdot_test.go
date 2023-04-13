@@ -1,6 +1,3 @@
-//go:build linux || darwin
-// +build linux darwin
-
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,11 +22,16 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"runtime"
 	"testing"
 )
 
-func TestTrailingDot_Basic(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+func TestTrailingDot_Local(t *testing.T) {
+	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
+	if runtime.GOOS == "windows" {
+		return
+	}
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 			trailingDot: true,
@@ -48,6 +50,134 @@ func TestTrailingDot_Basic(t *testing.T) {
 				f("directory/file"),
 			},
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
-
 }
 
+func TestTrailingDot_LocalNegative(t *testing.T) {
+	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
+	if runtime.GOOS == "windows" {
+		return
+	}
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file"),
+				folder("directory"),
+				f("directory/file"),
+			},
+			shouldIgnore: []interface{}{
+				f("file."),
+				folder("directory."),
+				f("directory./file."),
+				f("directory./file"),
+				f("directory/file."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_MinNegative(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldSkip: []interface{}{
+				f("file."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_S2S(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+			trailingDot: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file"),
+				f("file."),
+				folder("directory."),
+				f("directory./file."),
+				f("directory./file"),
+				folder("directory"),
+				f("directory/file."),
+				f("directory/file"),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_S2SNegative(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file"),
+				folder("directory"),
+				f("directory/file"),
+			},
+			shouldIgnore: []interface{}{
+				f("file."),
+				folder("directory."),
+				f("directory./file."),
+				f("directory./file"),
+				f("directory/file."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_Remove(t *testing.T) {
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:          true,
+		trailingDot: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file"),
+			f("file."),
+			folder("directory."),
+			f("directory./file."),
+			f("directory./file"),
+			folder("directory"),
+			f("directory/file."),
+			f("directory/file"),
+
+
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_RemoveNegative(t *testing.T) {
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file"),
+				folder("directory"),
+				f("directory/file"),
+			},
+			shouldIgnore: []interface{}{
+				f("file."),
+				folder("directory."),
+				f("directory./file."),
+				f("directory./file"),
+				f("directory/file."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}

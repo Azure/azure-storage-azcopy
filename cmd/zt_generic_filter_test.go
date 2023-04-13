@@ -79,6 +79,30 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 	}
 }
 
+func (s *genericFilterSuite) TestTrailingDotFilter(c *chk.C) {
+	raw := rawSyncCmdArgs{}
+	excludePatternList := raw.parsePatterns("*.;*./*")
+	excludeFilterList := buildExcludeFilters(excludePatternList, false)
+
+	// test the positive cases
+	filesToPass := []string{"file", "directory", "directory/file"}
+	for _, file := range filesToPass {
+		dummyProcessor := &dummyProcessor{}
+		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(dummyProcessor.record), chk.Equals, 1)
+	}
+
+	// test the negative cases
+	filesToNotPass := []string{"file.", "directory.", "directory./file.", "directory./file", "directory/file."}
+	for _, file := range filesToNotPass {
+		dummyProcessor := &dummyProcessor{}
+		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
+		c.Assert(err, chk.Equals, ignoredError)
+		c.Assert(len(dummyProcessor.record), chk.Equals, 0)
+	}
+}
+
 func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 	examples := []struct {
 		input                 string // ISO 8601

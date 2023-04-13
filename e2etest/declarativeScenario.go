@@ -197,7 +197,7 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Local():
 			return &resourceLocal{common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: s.srcAccountType, trailingDot: s.p.trailingDot}
+			return &resourceAzureFileShare{accountType: s.srcAccountType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types

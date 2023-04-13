@@ -465,9 +465,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newFileAccountTraverser(resourceURL, *p, *ctx, getProperties, incrementEnumerationCounter)
+			output = newFileAccountTraverser(resourceURL, *p, *ctx, getProperties, incrementEnumerationCounter, trailingDot)
 		} else {
-			output = newFileTraverser(resourceURL, *p, *ctx, recursive, getProperties, incrementEnumerationCounter)
+			output = newFileTraverser(resourceURL, *p, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()

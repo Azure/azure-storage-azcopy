@@ -34,6 +34,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+const trailingDotErrMsg = "File share contains file/directory %s with a trailing dot but the trailing dot flag was not set to true. AzCopy will automatically filter this file/directory out to prevent data corruption."
+
 // allow us to iterate through a path pointing to the file endpoint
 type fileTraverser struct {
 	rawURL        *url.URL
@@ -44,6 +46,7 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+	trailingDot bool
 }
 
 func (t *fileTraverser) IsDirectory(bool) (bool, error) {
@@ -94,8 +97,13 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
 
-			err := processIfPassedFilters(filters, storedObject, processor)
-			_, err = getProcessingError(err)
+			if !t.trailingDot && strings.HasSuffix(storedObject.name, ".") {
+				azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, storedObject.name))
+			} else {
+				err := processIfPassedFilters(filters, storedObject, processor)
+				_, err = getProcessingError(err)
+			}
+
 			return err
 		}
 	}
@@ -162,8 +170,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(s.entityType)
 		}
-		err := processIfPassedFilters(filters, s, processor)
-		_, err = getProcessingError(err)
+		if !t.trailingDot && strings.HasSuffix(s.name, ".") {
+			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, s.name))
+		} else {
+			err := processIfPassedFilters(filters, s, processor)
+			_, err = getProcessingError(err)
+		}
 		return err
 	}
 
@@ -194,13 +206,21 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			for _, fileInfo := range lResp.FileItems {
-				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
+				if !t.trailingDot && strings.HasSuffix(fileInfo.Name, ".") {
+					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, fileInfo.Name))
+				} else {
+					enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
+				}
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
-				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
-				if t.recursive {
-					// If recursive is turned on, add sub directories to be processed
-					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
+				if !t.trailingDot && strings.HasSuffix(dirInfo.Name, ".") {
+					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, dirInfo.Name))
+				} else {
+					enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
+					if t.recursive {
+						// If recursive is turned on, add sub directories to be processed
+						enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
+					}
 				}
 			}
 
@@ -266,8 +286,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileTraverser) {
-	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
+func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot bool) (t *fileTraverser) {
+	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter, trailingDot: trailingDot}
 	return
 }
 

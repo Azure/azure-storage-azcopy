@@ -303,11 +303,11 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, share
 	fileList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, fileName1 := createNewAzureFile(c, shareURL, prefix+"top", false)
-		_, fileName2 := createNewAzureFile(c, shareURL, prefix+"sub1/", false)
-		_, fileName3 := createNewAzureFile(c, shareURL, prefix+"sub2/", false)
-		_, fileName4 := createNewAzureFile(c, shareURL, prefix+"sub1/sub3/sub5/", false)
-		_, fileName5 := createNewAzureFile(c, shareURL, prefix+specialNames[i], false)
+		_, fileName1 := createNewAzureFile(c, shareURL, prefix+"top")
+		_, fileName2 := createNewAzureFile(c, shareURL, prefix+"sub1/")
+		_, fileName3 := createNewAzureFile(c, shareURL, prefix+"sub2/")
+		_, fileName4 := createNewAzureFile(c, shareURL, prefix+"sub1/sub3/sub5/")
+		_, fileName5 := createNewAzureFile(c, shareURL, prefix+specialNames[i])
 
 		fileList[5*i] = fileName1
 		fileList[5*i+1] = fileName2
@@ -346,7 +346,6 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceU
 			shareURL:    sURL,
 			fileList:    fileList,
 			defaultSize: defaultStringFileSize,
-			//TODO : trailingDot
 		})
 	}
 }
@@ -768,7 +767,6 @@ type generateAzureFilesFromListOptions struct {
 	shareURL    azfile.ShareURL
 	fileList    []*testObject
 	defaultSize string
-	trailingDot bool
 }
 
 // create the demanded azure files
@@ -778,7 +776,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 		if f.isFolder() {
 			// make sure the dir exists
 			file := options.shareURL.NewRootDirectoryURL().NewFileURL(path.Join(f.name, "dummyChild"))
-			generateParentsForAzureFile(c, file, options.trailingDot)
+			generateParentsForAzureFile(c, file)
 
 			dir := options.shareURL.NewRootDirectoryURL().NewDirectoryURL(f.name)
 
@@ -819,7 +817,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			file := options.shareURL.NewRootDirectoryURL().NewFileURL(f.name)
 
 			// create parents first
-			generateParentsForAzureFile(c, file, options.trailingDot)
+			generateParentsForAzureFile(c, file)
 
 			// create the file itself
 			fileSize := int64(f.creationProperties.sizeBytes(c, options.defaultSize))

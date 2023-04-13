@@ -238,11 +238,11 @@ func createNewAzureShare(c asserter, fsu azfile.ServiceURL) (share azfile.ShareU
 	return share, name
 }
 
-func createNewAzureFile(c asserter, share azfile.ShareURL, prefix string, trailingDot bool) (file azfile.FileURL, name string) {
+func createNewAzureFile(c asserter, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
 	file, name = getAzureFileURL(c, share, prefix)
 
 	// generate parents first
-	generateParentsForAzureFile(c, file, trailingDot)
+	generateParentsForAzureFile(c, file)
 
 	cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
 	c.AssertNoErr(err)
@@ -255,7 +255,7 @@ func newNullFolderCreationTracker() ste.FolderCreationTracker {
 	return ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 }
 
-func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL, trailingDot bool) {
+func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
 	// Closest to API goes first; closest to the wire goes last
@@ -263,7 +263,7 @@ func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL, trailingDot
 		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
 		azfile.NewUniqueRequestIDPolicyFactory(),
 		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
-		ste.NewTrailingDotPolicyFactory(trailingDot),
+		ste.NewTrailingDotPolicyFactory(true),
 		credential,
 		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
