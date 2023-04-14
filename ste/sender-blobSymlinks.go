@@ -7,7 +7,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"strings"
 	"time"
 )
@@ -19,8 +18,7 @@ type blobSymlinkSender struct {
 	headersToApply    blob.HTTPHeaders
 	metadataToApply   common.Metadata
 	destBlobTier      blob.AccessTier
-	blobTagsToApply   azblob.BlobTagsMap
-	cpkToApply        azblob.ClientProvidedKeyOptions
+	blobTagsToApply   common.BlobTags
 }
 
 func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
@@ -47,8 +45,7 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISou
 		destinationClient: destinationClient,
 		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
 		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		blobTagsToApply:   props.SrcBlobTags.ToAzBlobTagsMap(),
-		cpkToApply:        common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
+		blobTagsToApply:   props.SrcBlobTags,
 		destBlobTier:      destBlobTier,
 	}
 	fromTo := jptm.FromTo()
