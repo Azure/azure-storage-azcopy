@@ -57,7 +57,6 @@ func setPropertiesBlob(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	// Get the source blob url of blob to set properties on
 	srcBlobClient, err := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	if err != nil {
 		errorHandlerForXferSetProperties(err, jptm, transferDone)
@@ -125,7 +124,6 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	// Get the source blob url of blob to set properties on
 	srcBlobClient, err := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	if err != nil {
 		errorHandlerForXferSetProperties(err, jptm, transferDone)
