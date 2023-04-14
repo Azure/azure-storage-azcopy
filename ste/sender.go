@@ -229,13 +229,13 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 
 	switch intendedType {
 	case blob.BlobTypeBlockBlob:
-		return newBlockBlobUploader(jptm, destination, p, pacer, sip)
+		return newBlockBlobUploader(jptm, destination, pacer, sip)
 	case blob.BlobTypePageBlob:
-		return newPageBlobUploader(jptm, destination, p, pacer, sip)
+		return newPageBlobUploader(jptm, destination, pacer, sip)
 	case blob.BlobTypeAppendBlob:
 		return newAppendBlobUploader(jptm, destination, pacer, sip)
 	default:
-		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.
+		return newBlockBlobUploader(jptm, destination, pacer, sip) // If no blob type was inferred, assume block blob.
 	}
 }
 

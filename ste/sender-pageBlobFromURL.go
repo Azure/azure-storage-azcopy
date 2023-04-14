@@ -26,7 +26,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"strings"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -37,7 +36,7 @@ type urlToPageBlobCopier struct {
 	sourcePageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	srcURL, err := srcInfoProvider.PreSignedSourceURL()
 	if err != nil {
 		return nil, err

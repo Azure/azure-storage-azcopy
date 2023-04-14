@@ -40,7 +40,7 @@ type urlToBlockBlobCopier struct {
 	srcURL string
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
 	var destBlobTier blob.AccessTier
 	// If the source is block blob, preserve source's blob tier.
@@ -50,7 +50,7 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 		}
 	}
 
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider, destBlobTier)
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, pacer, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}
