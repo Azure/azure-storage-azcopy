@@ -52,6 +52,7 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 		headersToAppply:   props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:   props.SrcBlobTags,
 		cpkToApply:        common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
+
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
