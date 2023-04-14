@@ -66,9 +66,7 @@ func (t *blobVersionsTraverser) getBlobProperties(versionID string) (*blob.GetPr
 	if err != nil {
 		return nil, err
 	}
-	cpk := t.cpkOptions.GetCPKInfo()
-
-	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: &cpk})
+	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: t.cpkOptions.GetCPKInfo()})
 	return &props, err
 }
 

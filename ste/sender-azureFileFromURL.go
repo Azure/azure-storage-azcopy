@@ -44,8 +44,12 @@ func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pip
 	if err != nil {
 		return nil, err
 	}
+	sourceURL, err := url.Parse(srcURL)
+	if err != nil {
+		return nil, err
+	}
 
-	return &urlToAzureFileCopier{azureFileSenderBase: *senderBase, srcURL: *srcURL}, nil
+	return &urlToAzureFileCopier{azureFileSenderBase: *senderBase, srcURL: *sourceURL}, nil
 }
 
 func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {

@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"net/url"
 	"regexp"
 	"strings"
@@ -37,12 +38,13 @@ import (
 )
 
 type pageBlobSenderBase struct {
-	jptm            IJobPartTransferMgr
-	destPageBlobURL azblob.PageBlobURL
-	srcSize         int64
-	chunkSize       int64
-	numChunks       uint32
-	pacer           pacer
+	jptm               IJobPartTransferMgr
+	destPageBlobClient *pageblob.Client
+	destPageBlobURL    azblob.PageBlobURL
+	srcSize            int64
+	chunkSize          int64
+	numChunks          uint32
+	pacer              pacer
 
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
@@ -87,7 +89,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
-	chunkSize = common.Iffint64(
+	chunkSize = common.Iff(
 		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
 		common.DefaultPageBlobChunkSize,
 		chunkSize)
@@ -102,10 +104,15 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	destPageBlobURL := azblob.NewPageBlobURL(*destURL, p)
 
+	destPageBlobClient, err := common.CreatePageBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	if err != nil {
+		return nil, err
+	}
+
 	// This is only necessary if our destination is a managed disk impexp account.
 	// Read the in struct explanation if necessary.
 	var destRangeOptimizer *pageRangeOptimizer
-	if isInManagedDiskImportExportAccount(*destURL) {
+	if isInManagedDiskImportExportAccount(destination) {
 		destRangeOptimizer = newPageRangeOptimizer(destPageBlobURL, jptm.Context())
 	}
 
@@ -127,6 +134,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	s := &pageBlobSenderBase{
 		jptm:                   jptm,
+		destPageBlobClient:     destPageBlobClient,
 		destPageBlobURL:        destPageBlobURL,
 		srcSize:                srcSize,
 		chunkSize:              chunkSize,
@@ -149,12 +157,16 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 }
 
 // these accounts have special restrictions of which APIs operations they support
-func isInManagedDiskImportExportAccount(u url.URL) bool {
+func isInManagedDiskImportExportAccount(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
 	return strings.HasPrefix(u.Host, managedDiskImportExportAccountPrefix)
 }
 
 func (s *pageBlobSenderBase) isInManagedDiskImportExportAccount() bool {
-	return isInManagedDiskImportExportAccount(s.destPageBlobURL.URL())
+	return isInManagedDiskImportExportAccount(s.destPageBlobClient.URL())
 }
 
 func (s *pageBlobSenderBase) SendableEntityType() common.EntityType {
@@ -170,7 +182,8 @@ func (s *pageBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *pageBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
+	properties, err := s.destPageBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+	return remoteObjectExists(blobPropertiesResponseAdapter{properties}, err)
 }
 
 var premiumPageBlobTierRegex = regexp.MustCompile(`P\d+`)
@@ -201,14 +214,18 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// FileSize                : 1073742336  (equals our s.srcSize, i.e. the size of the disk file)
 		// Size                    : 1073741824
 
-		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply)
+		p, err := s.destPageBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
 		if err != nil {
 			s.jptm.FailActiveSend("Checking size of managed disk blob", err)
 			return
 		}
-		if s.srcSize != p.ContentLength() {
+		if p.ContentLength == nil {
+			sizeErr := fmt.Errorf("destination content length not returned")
+			s.jptm.FailActiveSend("Checking size of managed disk blob", sizeErr)
+		}
+		if s.srcSize != *p.ContentLength {
 			sizeErr := fmt.Errorf("source file is not same size as the destination page blob. Source size is %d bytes but destination size is %d bytes. Re-create the destination with exactly the right size. E.g. see parameter UploadSizeInBytes in PowerShell's New-AzDiskConfig. Ensure the source is a fixed-size VHD",
-				s.srcSize, p.ContentLength())
+				s.srcSize, *p.ContentLength)
 			s.jptm.FailActiveSend("Checking size of managed disk blob", sizeErr)
 			return
 		}
@@ -288,4 +305,18 @@ func (s *pageBlobSenderBase) Cleanup() {
 			}
 		}
 	}
+}
+
+// GetDestinationLength gets the destination length.
+func (s *pageBlobSenderBase) GetDestinationLength() (int64, error) {
+	prop, err := s.destPageBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+
+	if err != nil {
+		return -1, err
+	}
+
+	if prop.ContentLength == nil {
+		return -1, fmt.Errorf("destination content length not returned")
+	}
+	return *prop.ContentLength, nil
 }

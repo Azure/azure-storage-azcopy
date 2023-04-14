@@ -104,7 +104,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 		cca.intervalStartTime = time.Now()
 		cca.intervalBytesTransferred = summary.BytesOverWire
 
-		return common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 
 	glcm.Progress(func(format common.OutputFormat) string {

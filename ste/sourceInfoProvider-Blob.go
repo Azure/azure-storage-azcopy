@@ -23,6 +23,7 @@ package ste
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,29 +39,28 @@ type blobSourceInfoProvider struct {
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
-	uri, err := p.PreSignedSourceURL()
+	source, err := p.PreSignedSourceURL()
+	if err != nil {
+		return "", err
+	}
+	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 	if err != nil {
 		return "", err
 	}
 
-	pl := p.jptm.SourceProviderPipeline()
 	ctx := p.jptm.Context()
 
-	blobURL := azblob.NewBlockBlobURL(*uri, pl)
-
-	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-	if p.jptm.IsSourceEncrypted() {
-		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
-	}
-
-	resp, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+	resp, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
+		CPKInfo:      p.jptm.CpkInfo(),
+		CPKScopeInfo: p.jptm.CpkScopeInfo(),
+	})
 	if err != nil {
 		return "", err
 	}
 
-	symlinkBuf, err := io.ReadAll(resp.Body(azblob.RetryReaderOptions{
-		MaxRetryRequests: 5,
-		NotifyFailedRead: common.NewReadLogFunc(p.jptm, uri),
+	symlinkBuf, err := io.ReadAll(resp.NewRetryReader(ctx, &blob.RetryReaderOptions{
+		MaxRetries:   5,
+		OnFailedRead: common.NewReadLogFunc(p.jptm, source),
 	}))
 	if err != nil {
 		return "", err
@@ -110,8 +110,12 @@ func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, err
 	if err != nil {
 		return azbfs.BlobFSAccessControl{}, err
 	}
+	sourceURL, err := url.Parse(presignedURL)
+	if err != nil {
+		return azbfs.BlobFSAccessControl{}, err
+	}
 
-	bURLParts := azblob.NewBlobURLParts(*presignedURL)
+	bURLParts := azblob.NewBlobURLParts(*sourceURL)
 	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
 	if bURLParts.BlobName != "" {
 		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
@@ -133,21 +137,19 @@ func (p *blobSourceInfoProvider) BlobType() blob.BlobType {
 }
 
 func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	presignedURL, err := p.PreSignedSourceURL()
+	source, err := p.PreSignedSourceURL()
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	blobURL := azblob.NewBlobURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-	if p.jptm.IsSourceEncrypted() {
-		clientProvidedKey = common.ToClientProvidedKeyOptions(p.jptm.CpkInfo(), p.jptm.CpkScopeInfo())
-	}
-
-	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{}, clientProvidedKey)
+	blobClient, err := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	return properties.LastModified(), nil
+	properties, err := blobClient.GetProperties(p.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: p.jptm.CpkInfo()})
+	if err != nil {
+		return time.Time{}, err
+	}
+	return common.IffNotNil(properties.LastModified, time.Time{}), nil
 }

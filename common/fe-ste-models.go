@@ -1586,17 +1586,20 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 }
 
 ////////////////////////////////////////////////////////////////
-func ToClientProvidedKeyOptions(cpkInfo blob.CPKInfo, cpkScopeInfo blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
-	if (cpkInfo.EncryptionKey == nil || cpkInfo.EncryptionKeySHA256 == nil) && cpkScopeInfo.EncryptionScope == nil {
-		return azblob.ClientProvidedKeyOptions{}
+func ToClientProvidedKeyOptions(cpkInfo *blob.CPKInfo, cpkScopeInfo *blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
+	if cpkInfo != nil {
+		return azblob.ClientProvidedKeyOptions{
+			EncryptionKey:       cpkInfo.EncryptionKey,
+			EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
+			EncryptionKeySha256: cpkInfo.EncryptionKeySHA256,
+		}
 	}
-
-	return azblob.ClientProvidedKeyOptions{
-		EncryptionKey:       cpkInfo.EncryptionKey,
-		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
-		EncryptionKeySha256: cpkInfo.EncryptionKeySHA256,
-		EncryptionScope:     cpkScopeInfo.EncryptionScope,
+	if cpkScopeInfo != nil {
+		return azblob.ClientProvidedKeyOptions{
+			EncryptionScope: cpkScopeInfo.EncryptionScope,
+		}
 	}
+	return azblob.ClientProvidedKeyOptions{}
 }
 
 type CpkOptions struct {
@@ -1613,17 +1616,17 @@ type CpkOptions struct {
 	IsSourceEncrypted bool
 }
 
-func (options CpkOptions) GetCPKInfo() blob.CPKInfo {
+func (options CpkOptions) GetCPKInfo() *blob.CPKInfo {
 	if options.IsSourceEncrypted {
-		return blob.CPKInfo{}
+		return nil
 	} else {
 		return GetCpkInfo(options.CpkInfo)
 	}
 }
 
-func (options CpkOptions) GetCPKScopeInfo() blob.CPKScopeInfo {
+func (options CpkOptions) GetCPKScopeInfo() *blob.CPKScopeInfo {
 	if options.IsSourceEncrypted {
-		return blob.CPKScopeInfo{}
+		return nil
 	} else {
 		return GetCpkScopeInfo(options.CpkScopeInfo)
 	}

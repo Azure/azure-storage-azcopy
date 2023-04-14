@@ -22,6 +22,7 @@ package common
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"log"
 	"net/url"
 	"os"
@@ -143,7 +144,7 @@ func (jl jobLogger) Panic(err error) {
 
 const TryEquals string = "Try=" // TODO: refactor so that this can be used by the retry policies too?  So that when you search the logs for Try= you are guaranteed to find both types of retry (i.e. request send retries, and body read retries)
 
-func NewReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, int64, bool) {
+func NewV1ReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, int64, bool) {
 	redactedUrl := URLStringExtension(fullUrl.String()).RedactSecretQueryParamForLogging()
 
 	return func(failureCount int, err error, offset int64, count int64, willRetry bool) {
@@ -165,6 +166,32 @@ func NewReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, in
 			err,
 			offset,
 			count,
+			redactedUrl))
+	}
+}
+
+func NewReadLogFunc(logger ILogger, fullUrl string) func(int32, error, blob.HTTPRange, bool) {
+	redactedUrl := URLStringExtension(fullUrl).RedactSecretQueryParamForLogging()
+
+	return func(failureCount int32, err error, r blob.HTTPRange, willRetry bool) {
+		retryMessage := "Will retry"
+		if !willRetry {
+			retryMessage = "Will NOT retry"
+		}
+		logger.Log(pipeline.LogInfo, fmt.Sprintf(
+			"Error reading body of reply. Next try (if any) will be %s%d. %s. Error: %s. Offset: %d  Count: %d URL: %s",
+			TryEquals, // so that retry wording for body-read retries is similar to that for URL-hitting retries
+
+			// We log the number of the NEXT try, not the failure just done, so that users searching the log for "Try=2"
+			// will find ALL retries, both the request send retries (which are logged as try 2 when they are made) and
+			// body read retries (for which only the failure is logged - so if we did the actual failure number, there would be
+			// not Try=2 in the logs if the retries work).
+			failureCount+1,
+
+			retryMessage,
+			err,
+			r.Offset,
+			r.Count,
 			redactedUrl))
 	}
 }

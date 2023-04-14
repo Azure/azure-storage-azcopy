@@ -623,6 +623,7 @@ const TokenRefreshSourceTokenStore = "tokenstore"
 
 // OAuthTokenInfo contains info necessary for refresh OAuth credentials.
 type OAuthTokenInfo struct {
+	azcore.TokenCredential
 	adal.Token
 	Tenant                  string `json:"_tenant"`
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
@@ -930,7 +931,7 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 	// Use AzCopy's 1st party applicationID for refresh by default.
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
-		IffString(credInfo.ClientID != "", credInfo.ClientID, ApplicationID),
+		Iff(credInfo.ClientID != "", credInfo.ClientID, ApplicationID),
 		targetResource,
 		credInfo.Token)
 	if err != nil {
@@ -968,16 +969,25 @@ func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error)
 }
 
 func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, error) {
+	if credInfo.TokenCredential != nil {
+		return credInfo.TokenCredential, nil
+	}
+
 	if credInfo.TokenRefreshSource == TokenRefreshSourceTokenStore {
 		return nil, fmt.Errorf("TODO : Implement TokenRefreshSourceTokenStore for Storage Explorer")
 	}
 
 	if credInfo.Identity {
-		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+		tc, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
 			ClientOptions: azcore.ClientOptions{
 				Transport: newAzcopyHTTPClient(),
 			},
 		})
+		if err != nil {
+			return nil, err
+		}
+		credInfo.TokenCredential = tc
+		return tc, nil
 	}
 
 	if credInfo.ServicePrincipalName {
@@ -994,19 +1004,29 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 			if err != nil {
 				return nil, err
 			}
-			return azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
+			tc, err := azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
 				ClientOptions: azcore.ClientOptions{
 					Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
 					Transport: newAzcopyHTTPClient(),
 				},
 			})
+			if err != nil {
+				return nil, err
+			}
+			credInfo.TokenCredential = tc
+			return tc, nil
 		} else {
-			return azidentity.NewClientSecretCredential(credInfo.Tenant, credInfo.ApplicationID, credInfo.SPNInfo.Secret, &azidentity.ClientSecretCredentialOptions{
+			tc, err := azidentity.NewClientSecretCredential(credInfo.Tenant, credInfo.ApplicationID, credInfo.SPNInfo.Secret, &azidentity.ClientSecretCredentialOptions{
 				ClientOptions: azcore.ClientOptions{
 					Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
 					Transport: newAzcopyHTTPClient(),
 				},
 			})
+			if err != nil {
+				return nil, err
+			}
+			credInfo.TokenCredential = tc
+			return tc, nil
 		}
 	}
 

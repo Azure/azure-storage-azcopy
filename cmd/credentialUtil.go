@@ -677,44 +677,6 @@ func createClientOptions(logLevel pipeline.LogLevel) azcore.ClientOptions {
 	)
 }
 
-func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
-	// are we getting dest token?
-	credential := credInfo.SourceBlobToken
-	if credential == nil {
-		credential = common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-			// LogInfo:  glcm.Info, //Comment out for debugging
-			LogError: glcm.Info,
-		})
-	}
-	logOption := pipeline.LogOptions{}
-	if azcopyScanningLogger != nil {
-		logOption = pipeline.LogOptions{
-			Log:       azcopyScanningLogger.Log,
-			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
-		}
-	}
-
-	return ste.NewBlobPipeline(
-		credential,
-		azblob.PipelineOptions{
-			Telemetry: azblob.TelemetryOptions{
-				Value: glcm.AddUserAgentPrefix(common.UserAgent),
-			},
-			Log: logOption,
-		},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		},
-		nil,
-		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
-		nil, // we don't gather network stats on the credential pipeline
-	), nil
-}
-
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
 
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {

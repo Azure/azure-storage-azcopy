@@ -56,14 +56,21 @@ type IJobPartMgr interface {
 	ExclusiveDestinationMap() *common.ExclusiveStringMap
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
+
+	CredentialInfo() common.CredentialInfo
+	ClientOptions() azcore.ClientOptions
+	S2SSourceCredentialInfo() common.CredentialInfo
+	S2SSourceClientOptions() azcore.ClientOptions
+	CredentialOpOptions() *common.CredentialOpOptions
+
 	SourceProviderPipeline() pipeline.Pipeline
 	SourceCredential() pipeline.Factory
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
-	CpkInfo() blob.CPKInfo
-	CpkScopeInfo() blob.CPKScopeInfo
+	CpkInfo() *blob.CPKInfo
+	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
@@ -270,7 +277,11 @@ type jobPartMgr struct {
 	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
-	credInfo common.CredentialInfo
+	credInfo               common.CredentialInfo
+	clientOptions          azcore.ClientOptions
+	s2sSourceCredInfo      common.CredentialInfo
+	s2sSourceClientOptions azcore.ClientOptions
+	credOption             *common.CredentialOpOptions
 
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
@@ -423,6 +434,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 
 	jpm.priority = plan.Priority
 
+	jpm.clientInfo()
 	jpm.createPipelines(jobCtx, sourceBlobToken) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
@@ -522,6 +534,64 @@ func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
 
 func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
+}
+
+func (jpm *jobPartMgr) clientInfo() {
+	jobState := jpm.jobMgr.getInMemoryTransitJobState()
+
+	// Destination credential
+	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
+		jpm.credInfo = jobState.CredentialInfo
+	}
+
+	// S2S source credential
+	if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
+		var s2sSourceCredInfo common.CredentialInfo
+		if jobState.S2SSourceCredentialType == common.ECredentialType.Unknown() {
+			s2sSourceCredInfo = jobState.CredentialInfo.WithType(common.ECredentialType.Anonymous())
+		} else {
+			s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
+		}
+		if jobState.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+			s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
+		}
+		jpm.s2sSourceCredInfo = s2sSourceCredInfo
+	}
+
+	jpm.credOption = &common.CredentialOpOptions{
+		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		Panic:    jpm.Panic,
+		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+		Cancel:   jpm.jobMgr.Cancel,
+	}
+
+	retryOptions := policy.RetryOptions{
+		MaxRetries:    UploadMaxTries,
+		TryTimeout:    UploadTryTimeout,
+		RetryDelay:    UploadRetryDelay,
+		MaxRetryDelay: UploadMaxRetryDelay,
+	}
+
+	fromTo := jpm.planMMF.Plan().FromTo
+	var userAgent string
+	if fromTo.From() == common.ELocation.S3() {
+		userAgent = common.S3ImportUserAgent
+	} else if fromTo.From() == common.ELocation.GCP() {
+		userAgent = common.GCPImportUserAgent
+	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+		userAgent = common.BenchmarkUserAgent
+	} else {
+		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
+	}
+	telemetryOptions := policy.TelemetryOptions{ApplicationID: userAgent}
+
+	httpClient := jpm.jobMgr.HttpClient()
+	networkStats := jpm.jobMgr.PipelineNetworkStats()
+	logOptions := LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()}
+
+	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions)
+	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions)
 }
 
 func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azblob.Credential) {
@@ -811,11 +881,11 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 	return jpm.blockBlobTier, jpm.pageBlobTier
 }
 
-func (jpm *jobPartMgr) CpkInfo() blob.CPKInfo {
+func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
 	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
 }
 
-func (jpm *jobPartMgr) CpkScopeInfo() blob.CPKScopeInfo {
+func (jpm *jobPartMgr) CpkScopeInfo() *blob.CPKScopeInfo {
 	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
 }
 
@@ -941,6 +1011,26 @@ func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log
 func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
 func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jpm.jobMgr.ChunkStatusLogger()
+}
+
+func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
+	return jpm.credInfo
+}
+
+func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {
+	return jpm.s2sSourceCredInfo
+}
+
+func (jpm *jobPartMgr) ClientOptions() azcore.ClientOptions {
+	return jpm.clientOptions
+}
+
+func (jpm *jobPartMgr) S2SSourceClientOptions() azcore.ClientOptions {
+	return jpm.s2sSourceClientOptions
+}
+
+func (jpm *jobPartMgr) CredentialOpOptions() *common.CredentialOpOptions {
+	return jpm.credOption
 }
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {

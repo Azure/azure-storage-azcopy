@@ -135,13 +135,3 @@ func (u *pageBlobUploader) Epilogue() {
 
 	u.pageBlobSenderBase.Epilogue()
 }
-
-func (u *pageBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destPageBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, u.cpkToApply)
-
-	if err != nil {
-		return -1, err
-	}
-
-	return prop.ContentLength(), nil
-}

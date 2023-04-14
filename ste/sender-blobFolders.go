@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -13,7 +15,8 @@ import (
 )
 
 type blobFolderSender struct {
-	destination     azblob.BlockBlobURL // We'll treat all folders as block blobs
+	destClient      *blockblob.Client // We'll treat all folders as block blobs
+	destination     azblob.BlockBlobURL
 	jptm            IJobPartTransferMgr
 	sip             ISourceInfoProvider
 	metadataToApply azblob.Metadata
@@ -29,6 +32,10 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 
 	destBlockBlobURL := azblob.NewBlockBlobURL(*destURL, p)
+	destClient, err := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	if err != nil {
+		return nil, err
+	}
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -39,6 +46,7 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 	fsend := blobFolderSender{
 		jptm:            jptm,
 		sip:             sip,
+		destClient:      destClient,
 		destination:     destBlockBlobURL,
 		metadataToApply: props.SrcMetadata.Clone().ToAzBlobMetadata(), // We're going to modify it, so we should clone it.
 		headersToAppply: props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
@@ -134,13 +142,17 @@ func (b *blobFolderSender) SetContainerACL() error {
 func (b *blobFolderSender) EnsureFolderExists() error {
 	t := b.jptm.GetFolderCreationTracker()
 
-	if azblob.NewBlobURLParts(b.destination.URL()).BlobName == "" {
+	parsedURL, err := blob.ParseURL(b.destination.String())
+	if err != nil {
+		return err
+	}
+	if parsedURL.BlobName == "" {
 		return b.SetContainerACL() // Can't do much with a container, but it is here.
 	}
 
-	_, err := b.destination.GetProperties(b.jptm.Context(), azblob.BlobAccessConditions{}, b.cpkToApply)
+	_, err = b.destClient.GetProperties(b.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: b.jptm.CpkInfo()})
 	if err != nil {
-		if stgErr, ok := err.(azblob.StorageError); !(ok && stgErr.ServiceCode() == azblob.ServiceCodeBlobNotFound) {
+		if !bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return fmt.Errorf("when checking if blob exists: %w", err)
 		}
 	} else {

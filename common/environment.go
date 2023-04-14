@@ -78,7 +78,7 @@ var EEnvironmentVariable = EnvironmentVariable{}
 func (EnvironmentVariable) UserDir() EnvironmentVariable {
 	// Only used internally, not listed in the environment variables.
 	return EnvironmentVariable{
-		Name: IffString(runtime.GOOS == "windows", "USERPROFILE", "HOME"),
+		Name: Iff(runtime.GOOS == "windows", "USERPROFILE", "HOME"),
 	}
 }
 
@@ -372,9 +372,9 @@ func (EnvironmentVariable) DownloadToTempPath() EnvironmentVariable {
 }
 
 func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
-	return EnvironmentVariable {
-		Name: "AZCOPY_DISABLE_INCOMPLETE_BLOB_TRANSFER",
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DISABLE_INCOMPLETE_BLOB_TRANSFER",
 		DefaultValue: "false",
-		Description: "An incomplete transfer to blob endpoint will be resumed from start if set to true",
+		Description:  "An incomplete transfer to blob endpoint will be resumed from start if set to true",
 	}
 }

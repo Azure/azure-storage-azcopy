@@ -467,16 +467,22 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, order.JobID.String(), 0, DataSchemaVersion))
 	jppfn.Create(order) // Convert the order to a plan file
 
+	s2sSourceCredInfo := order.CredentialInfo.WithType(order.S2SSourceCredentialType)
+	if order.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
+	}
+
 	jpm := &jobPartMgr{
-		jobMgr:           jm,
-		filename:         jppfn,
-		sourceSAS:        order.SourceRoot.SAS,
-		destinationSAS:   order.DestinationRoot.SAS,
-		pacer:            jm.pacer,
-		slicePool:        jm.slicePool,
-		cacheLimiter:     jm.cacheLimiter,
-		fileCountLimiter: jm.fileCountLimiter,
-		credInfo:         order.CredentialInfo,
+		jobMgr:            jm,
+		filename:          jppfn,
+		sourceSAS:         order.SourceRoot.SAS,
+		destinationSAS:    order.DestinationRoot.SAS,
+		pacer:             jm.pacer,
+		slicePool:         jm.slicePool,
+		cacheLimiter:      jm.cacheLimiter,
+		fileCountLimiter:  jm.fileCountLimiter,
+		credInfo:          order.CredentialInfo,
+		s2sSourceCredInfo: s2sSourceCredInfo,
 	}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
@@ -503,7 +509,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 }
 
 func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
-	newVal := common.Iffint32(isFinalPart, 1, 0)
+	newVal := int32(common.Iff(isFinalPart, 1, 0))
 	oldVal := atomic.SwapInt32(&jm.atomicFinalPartOrderedIndicator, newVal)
 	if newVal == 0 && oldVal == 1 {
 		// we just cleared the flag. Sanity check that.
@@ -1058,7 +1064,7 @@ func (jm *jobMgr) SuccessfulBytesInActiveFiles() uint64 {
 }
 
 func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse {
-	verb := common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
+	verb := common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
 	jobID := jm.jobID
 
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
@@ -1102,7 +1108,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
-			common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
+			common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, msg)

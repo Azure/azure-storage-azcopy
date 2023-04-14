@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"net/url"
 	"strconv"
 	"strings"
@@ -44,14 +45,15 @@ import (
 var lowMemoryLimitAdvice sync.Once
 
 type blockBlobSenderBase struct {
-	jptm             IJobPartTransferMgr
-	sip              ISourceInfoProvider
-	destBlockBlobURL azblob.BlockBlobURL
-	chunkSize        int64
-	numChunks        uint32
-	pacer            pacer
-	blockIDs         []string
-	destBlobTier     blob.AccessTier
+	jptm                IJobPartTransferMgr
+	sip                 ISourceInfoProvider
+	destBlockBlobClient *blockblob.Client
+	destBlockBlobURL    azblob.BlockBlobURL
+	chunkSize           int64
+	numChunks           uint32
+	pacer               pacer
+	blockIDs            []string
+	destBlobTier        blob.AccessTier
 
 	// Headers and other info that we will apply to the destination object.
 	// 1. For S2S, these come from the source service.
@@ -134,6 +136,11 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 
 	destBlockBlobURL := azblob.NewBlockBlobURL(*destURL, p)
 
+	destBlockBlobClient, err := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	if err != nil {
+		return nil, err
+	}
+
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
@@ -157,20 +164,21 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 	partNum, transferIndex := jptm.TransferIndex()
 
 	return &blockBlobSenderBase{
-		jptm:             jptm,
-		sip:              srcInfoProvider,
-		destBlockBlobURL: destBlockBlobURL,
-		chunkSize:        chunkSize,
-		numChunks:        numChunks,
-		pacer:            pacer,
-		blockIDs:         make([]string, numChunks),
-		headersToApply:   props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
-		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
-		destBlobTier:     destBlobTier,
-		cpkToApply:       cpkToApply,
-		muBlockIDs:       &sync.Mutex{},
-		blockNamePrefix:  getBlockNamePrefix(jptm.Info().JobID, partNum, transferIndex),
+		jptm:                jptm,
+		sip:                 srcInfoProvider,
+		destBlockBlobURL:    destBlockBlobURL,
+		destBlockBlobClient: destBlockBlobClient,
+		chunkSize:           chunkSize,
+		numChunks:           numChunks,
+		pacer:               pacer,
+		blockIDs:            make([]string, numChunks),
+		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		metadataToApply:     props.SrcMetadata.ToAzBlobMetadata(),
+		blobTagsToApply:     props.SrcBlobTags.ToAzBlobTagsMap(),
+		destBlobTier:        destBlobTier,
+		cpkToApply:          cpkToApply,
+		muBlockIDs:          &sync.Mutex{},
+		blockNamePrefix:     getBlockNamePrefix(jptm.Info().JobID, partNum, transferIndex),
 	}, nil
 }
 
@@ -187,7 +195,8 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
+	properties, err := s.destBlockBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+	return remoteObjectExists(blobPropertiesResponseAdapter{properties}, err)
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
@@ -392,4 +401,18 @@ func (s *blockBlobSenderBase) ChunkAlreadyTransferred(index int32) bool {
 	}
 	_, ok := s.completedBlockList[int(index)]
 	return ok
+}
+
+// GetDestinationLength gets the destination length.
+func (s *blockBlobSenderBase) GetDestinationLength() (int64, error) {
+	prop, err := s.destBlockBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+
+	if err != nil {
+		return -1, err
+	}
+
+	if prop.ContentLength == nil {
+		return -1, fmt.Errorf("destination content length not returned")
+	}
+	return *prop.ContentLength, nil
 }

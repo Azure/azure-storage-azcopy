@@ -137,9 +137,7 @@ func (t *blobTraverser) getPropertiesIfSingleBlob() (response *blob.GetPropertie
 	if err != nil {
 		return nil, false, false, err
 	}
-	cpk := t.cpkOptions.GetCPKInfo()
-
-	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: &cpk})
+	props, err := blobClient.GetProperties(t.ctx, &blob.GetPropertiesOptions{CPKInfo: t.cpkOptions.GetCPKInfo()})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if err == nil {
@@ -468,11 +466,11 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		containerName,
 	)
 
-	object.blobDeleted = common.IffBoolNotNil(blobInfo.Deleted, false)
+	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)
 	if t.includeDeleted && t.includeSnapshot {
-		object.blobSnapshotID = common.IffStringNotNil(blobInfo.Snapshot, "")
+		object.blobSnapshotID = common.IffNotNil(blobInfo.Snapshot, "")
 	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
-		object.blobVersionID = common.IffStringNotNil(blobInfo.VersionID, "")
+		object.blobVersionID = common.IffNotNil(blobInfo.VersionID, "")
 	}
 	return object
 }

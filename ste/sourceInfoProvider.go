@@ -22,7 +22,6 @@ package ste
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"net/url"
 	"os"
 	"time"
 
@@ -55,7 +54,7 @@ type IRemoteSourceInfoProvider interface {
 	ISourceInfoProvider
 
 	// SourceURL returns source's URL.
-	PreSignedSourceURL() (*url.URL, error)
+	PreSignedSourceURL() (string, error)
 
 	// SourceSize returns size of source
 	SourceSize() int64
@@ -124,13 +123,8 @@ func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (*defaultRemot
 	return &defaultRemoteSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
 }
 
-func (p *defaultRemoteSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
-	srcURL, err := url.Parse(p.transferInfo.Source)
-	if err != nil {
-		return nil, err
-	}
-
-	return srcURL, nil
+func (p *defaultRemoteSourceInfoProvider) PreSignedSourceURL() (string, error) {
+	return p.transferInfo.Source, nil
 }
 
 func (p *defaultRemoteSourceInfoProvider) Properties() (*SrcProperties, error) {

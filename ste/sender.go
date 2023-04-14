@@ -166,7 +166,7 @@ func getNumChunks(fileSize int64, chunkSize int64) uint32 {
 	numChunks := uint32(1) // we always map zero-size source files to ONE (empty) chunk
 	if fileSize > 0 {
 		chunkSizeI := chunkSize
-		numChunks = common.Iffuint32(
+		numChunks = common.Iff(
 			fileSize%chunkSizeI == 0,
 			uint32(fileSize/chunkSizeI),
 			uint32(fileSize/chunkSizeI)+1)

@@ -557,9 +557,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		if shouldCheckLength {
 			if err != nil {
 				wrapped := fmt.Errorf("Could not read destination length. %w", err)
-				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+				jptm.FailActiveSend(common.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
 			} else if destLength != jptm.Info().SourceSize {
-				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+				jptm.FailActiveSend(common.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
 			}
 		}
 	}

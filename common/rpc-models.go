@@ -1,6 +1,7 @@
 package common
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"reflect"
@@ -172,11 +173,12 @@ type CopyJobPartOrderRequest struct {
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType    CredentialType
-	OAuthTokenInfo    OAuthTokenInfo
-	S3CredentialInfo  S3CredentialInfo
-	GCPCredentialInfo GCPCredentialInfo
-	SourceBlobToken   azblob.Credential
+	CredentialType           CredentialType
+	OAuthTokenInfo           OAuthTokenInfo
+	S3CredentialInfo         S3CredentialInfo
+	GCPCredentialInfo        GCPCredentialInfo
+	SourceBlobToken          azblob.Credential
+	S2SSourceTokenCredential azcore.TokenCredential
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {

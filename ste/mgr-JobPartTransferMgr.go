@@ -3,6 +3,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/http"
 	"strings"
@@ -60,6 +61,13 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+
+	CredentialInfo() common.CredentialInfo
+	ClientOptions() azcore.ClientOptions
+	S2SSourceCredentialInfo() common.CredentialInfo
+	S2SSourceClientOptions() azcore.ClientOptions
+	CredentialOpOptions() *common.CredentialOpOptions
+
 	SourceProviderPipeline() pipeline.Pipeline
 	SourceCredential() pipeline.Factory
 	FailActiveUpload(where string, err error)
@@ -90,8 +98,8 @@ type IJobPartTransferMgr interface {
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
 	ShouldInferContentType() bool
-	CpkInfo() blob.CPKInfo
-	CpkScopeInfo() blob.CPKScopeInfo
+	CpkInfo() *blob.CPKInfo
+	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
 	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
@@ -125,7 +133,6 @@ type TransferInfo struct {
 
 	RehydratePriority blob.RehydratePriority
 }
-
 
 func (i TransferInfo) IsFilePropertiesTransfer() bool {
 	return i.EntityType == common.EEntityType.FileProperties()
@@ -364,7 +371,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			}
 		}
 	}
-	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	var srcBlobTags common.BlobTags
 	if blobTags != nil {
@@ -538,11 +545,11 @@ func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier,
 	return jptm.jobPartMgr.BlobTiers()
 }
 
-func (jptm *jobPartTransferMgr) CpkInfo() blob.CPKInfo {
+func (jptm *jobPartTransferMgr) CpkInfo() *blob.CPKInfo {
 	return jptm.jobPartMgr.CpkInfo()
 }
 
-func (jptm *jobPartTransferMgr) CpkScopeInfo() blob.CPKScopeInfo {
+func (jptm *jobPartTransferMgr) CpkScopeInfo() *blob.CPKScopeInfo {
 	return jptm.jobPartMgr.CpkScopeInfo()
 }
 
@@ -962,6 +969,26 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	})
 
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
+}
+
+func (jptm *jobPartTransferMgr) CredentialInfo() common.CredentialInfo {
+	return jptm.jobPartMgr.CredentialInfo()
+}
+
+func (jptm *jobPartTransferMgr) ClientOptions() azcore.ClientOptions {
+	return jptm.jobPartMgr.ClientOptions()
+}
+
+func (jptm *jobPartTransferMgr) S2SSourceCredentialInfo() common.CredentialInfo {
+	return jptm.jobPartMgr.S2SSourceCredentialInfo()
+}
+
+func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
+	return jptm.jobPartMgr.S2SSourceClientOptions()
+}
+
+func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
+	return jptm.jobPartMgr.CredentialOpOptions()
 }
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {

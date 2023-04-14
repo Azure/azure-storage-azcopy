@@ -713,7 +713,7 @@ func (s scenarioHelper) getContainerURL(c *chk.C, containerName string) azblob.C
 }
 
 func (scenarioHelper) getRawS3AccountURL(c *chk.C, region string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.IffString(region == "", "", "-"+region))
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.Iff(region == "", "", "-"+region))
 
 	fullURL, err := url.Parse(rawURL)
 	c.Assert(err, chk.IsNil)
@@ -730,7 +730,7 @@ func (scenarioHelper) getRawGCPAccountURL(c *chk.C) url.URL {
 
 // TODO: Possibly add virtual-hosted-style and dual stack support. Currently use path style for testing.
 func (scenarioHelper) getRawS3BucketURL(c *chk.C, region string, bucketName string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.IffString(region == "", "", "-"+region), bucketName)
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.Iff(region == "", "", "-"+region), bucketName)
 
 	fullURL, err := url.Parse(rawURL)
 	c.Assert(err, chk.IsNil)
@@ -747,7 +747,7 @@ func (scenarioHelper) getRawGCPBucketURL(c *chk.C, bucketName string) url.URL {
 }
 
 func (scenarioHelper) getRawS3ObjectURL(c *chk.C, region string, bucketName string, objectName string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.IffString(region == "", "", "-"+region), bucketName, objectName)
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.Iff(region == "", "", "-"+region), bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
 	c.Assert(err, chk.IsNil)
