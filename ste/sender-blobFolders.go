@@ -92,6 +92,7 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 
 	// do not set folder flag as it's invalid to modify a folder with
 	delete(b.metadataToApply, "hdi_isfolder")
+	delete(b.metadataToApply, "Hdi_isfolder")
 
 	// SetMetadata can set CPK if it wasn't specified prior. This is not a "full" overwrite, but a best-effort overwrite.
 	_, err = b.destinationClient.SetMetadata(b.jptm.Context(), b.metadataToApply,
@@ -197,6 +198,10 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		}
 	}
 
+	// TODO (gapra): figure out better way to deal with hdi_isfolder metadata key capitalization
+	if b.metadataToApply["Hdi_isfolder"] != nil {
+		delete(b.metadataToApply, "Hdi_isfolder")
+	}
 	b.metadataToApply["hdi_isfolder"] = to.Ptr("true") // Set folder metadata flag
 	err = b.getExtraProperties()
 	if err != nil {

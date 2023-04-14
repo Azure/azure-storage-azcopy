@@ -439,6 +439,8 @@ func getEntityType(blobInfo map[string]*string) common.EntityType {
 	// Note: We are just checking keys here, not their corresponding values. Is that safe?
 	if _, isfolder := blobInfo["hdi_isfolder"]; isfolder {
 		return common.EEntityType.Folder()
+	} else if  _, isfolder := blobInfo["Hdi_isfolder"]; isfolder {
+		return common.EEntityType.Folder()
 	} else if _, isSymlink := blobInfo["is_symlink"]; isSymlink {
 		return common.EEntityType.Symlink()
 	}
