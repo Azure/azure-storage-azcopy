@@ -144,7 +144,8 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
 	}
 
-	if props.SrcMetadata["hdi_isfolder"] != nil && *props.SrcMetadata["hdi_isfolder"] == "true" {
+	if (props.SrcMetadata["hdi_isfolder"] != nil && *props.SrcMetadata["hdi_isfolder"] == "true") ||
+		(props.SrcMetadata["Hdi_isfolder"] != nil && *props.SrcMetadata["Hdi_isfolder"] == "true") {
 		destBlobTier = ""
 	}
 
