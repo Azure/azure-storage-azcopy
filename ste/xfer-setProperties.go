@@ -41,6 +41,7 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	info := jptm.Info()
 	// Get the source blob url of blob to set properties on
+	// TODO : Migrate this when GetAccountInfo is added to blob client level in Track 2.
 	u, _ := url.Parse(info.Source)
 	srcBlobURL := azblob.NewBlobURL(*u, p)
 
@@ -59,6 +60,11 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
+	srcBlobClient, err := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	if err != nil {
+		errorHandlerForXferSetProperties(err, jptm, transferDone)
+		return
+	}
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 	_, metadata, blobTags, _ := jptm.ResourceDstData(nil)
 
@@ -68,11 +74,13 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 		var err error = nil
 		if jptm.Info().SrcBlobType == blob.BlobTypeBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), azblob.AccessTierType(blockBlobTier.ToAccessTierType()), azblob.LeaseAccessConditions{}, azblob.RehydratePriorityType(rehydratePriority))
+			_, err = srcBlobClient.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(),
+				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
 		// cannot return true for >1, therefore only one of these will run
 		if jptm.Info().SrcBlobType == blob.BlobTypePageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), azblob.AccessTierType(pageBlobTier.ToAccessTierType()), azblob.LeaseAccessConditions{}, azblob.RehydratePriorityType(rehydratePriority))
+			_, err = srcBlobClient.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(),
+				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
 
 		if err != nil {
@@ -83,15 +91,15 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		_, err := srcBlobURL.SetMetadata(jptm.Context(), metadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-		//TODO the canonical thingi in this is changing key value to upper case. How to go around it?
+		_, err := srcBlobClient.SetMetadata(jptm.Context(), metadata, nil)
+		//TODO the canonical thing in this is changing key value to upper case. How to go around it?
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 			return
 		}
 	}
 	if PropertiesToTransfer.ShouldTransferBlobTags() {
-		_, err := srcBlobURL.SetTags(jptm.Context(), nil, nil, nil, blobTags.ToAzBlobTagsMap())
+		_, err := srcBlobClient.SetTags(jptm.Context(), blobTags, nil)
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 			return
@@ -122,6 +130,12 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
+	srcBlobClient, err := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	if err != nil {
+		errorHandlerForXferSetProperties(err, jptm, transferDone)
+		return
+	}
+
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 	_, metadata, blobTags, _ := jptm.ResourceDstData(nil)
 
@@ -130,7 +144,8 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		_, pageBlobTier := jptm.BlobTiers()
 		var err error = nil
 		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), false) {
-			_, err = srcBlobURL.SetTier(jptm.Context(), azblob.AccessTierType(pageBlobTier.ToAccessTierType()), azblob.LeaseAccessConditions{}, azblob.RehydratePriorityType(rehydratePriority))
+			_, err = srcBlobClient.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(),
+				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
 
 		if err != nil {
@@ -141,14 +156,14 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		_, err := srcBlobURL.SetMetadata(jptm.Context(), metadata.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		_, err := srcBlobClient.SetMetadata(jptm.Context(), metadata, nil)
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 			return
 		}
 	}
 	if PropertiesToTransfer.ShouldTransferBlobTags() {
-		_, err := srcBlobURL.SetTags(jptm.Context(), nil, nil, nil, blobTags.ToAzBlobTagsMap())
+		_, err := srcBlobClient.SetTags(jptm.Context(), blobTags, nil)
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 			return

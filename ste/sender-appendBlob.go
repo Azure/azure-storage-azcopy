@@ -47,7 +47,7 @@ type appendBlobSenderBase struct {
 	// When sending local data, they are computed based on
 	// the properties of the local file
 	headersToApply  blob.HTTPHeaders
-	metadataToApply azblob.Metadata
+	metadataToApply common.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
 
@@ -100,7 +100,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 		numChunks:              numChunks,
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		metadataToApply:        props.SrcMetadata,
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		sip:                    srcInfoProvider,
 		cpkToApply:             cpkToApply,
@@ -165,14 +165,14 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if separateSetTagsRequired || len(blobTags) == 0 {
 		blobTags = nil
 	}
-	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 	destinationModified = true
 
 	if separateSetTagsRequired {
-		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
+		if _, err := s.destAppendBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil); err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
 	}

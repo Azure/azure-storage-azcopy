@@ -51,7 +51,7 @@ type pageBlobSenderBase struct {
 	// When sending local data, they are computed based on
 	// the properties of the local file
 	headersToApply  blob.HTTPHeaders
-	metadataToApply azblob.Metadata
+	metadataToApply common.Metadata
 	blobTagsToApply azblob.BlobTagsMap
 	cpkToApply      azblob.ClientProvidedKeyOptions
 
@@ -141,7 +141,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		numChunks:              numChunks,
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
+		metadataToApply:        props.SrcMetadata,
 		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
 		destBlobTier:           destBlobTier,
 		filePacer:              NewNullAutoPacer(), // defer creation of real one to Prologue
@@ -263,7 +263,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.srcSize,
 		0,
 		common.ToAzBlobHTTPHeaders(s.headersToApply),
-		s.metadataToApply,
+		s.metadataToApply.ToAzBlobMetadata(),
 		azblob.BlobAccessConditions{},
 		destBlobTier,
 		blobTags,
@@ -277,7 +277,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	destinationModified = true
 
 	if separateSetTagsRequired {
-		if _, err := s.destPageBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
+		if _, err := s.destPageBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil); err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
 	}

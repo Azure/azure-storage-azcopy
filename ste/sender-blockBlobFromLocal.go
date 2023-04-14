@@ -51,7 +51,7 @@ func (s *blockBlobUploader) Prologue(ps common.PrologueState) (destinationModifi
 
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = common.FromAzBlobMetadataToCommonMetadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+			s.metadataToApply = s.metadataToApply.Clone()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -138,7 +138,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		}
 
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		} else {
 			// File with content
 
@@ -152,7 +152,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply,
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply.ToAzBlobMetadata(),
 				azblob.BlobAccessConditions{}, azblob.AccessTierType(u.destBlobTier), blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
 		}
 
@@ -165,7 +165,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		atomic.AddInt32(&u.atomicChunksWritten, 1)
 
 		if separateSetTagsRequired {
-			if _, err := u.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, u.blobTagsToApply); err != nil {
+			if _, err := u.destBlockBlobClient.SetTags(jptm.Context(), u.blobTagsToApply, nil); err != nil {
 				u.jptm.Log(pipeline.LogWarning, err.Error())
 			}
 		}

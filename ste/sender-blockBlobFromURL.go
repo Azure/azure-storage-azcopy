@@ -114,7 +114,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 			destBlobTier = ""
 		}
 
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(c.headersToApply), c.metadataToApply, azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(c.headersToApply), c.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
@@ -122,7 +122,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		atomic.AddInt32(&c.atomicChunksWritten, 1)
 
 		if separateSetTagsRequired {
-			if _, err := c.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
+			if _, err := c.destBlockBlobClient.SetTags(jptm.Context(), c.blobTagsToApply, nil); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}
 		}
@@ -187,7 +187,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
-		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), common.ToAzBlobHTTPHeaders(c.headersToApply), c.srcURL, c.metadataToApply,
+		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), common.ToAzBlobHTTPHeaders(c.headersToApply), c.srcURL, c.metadataToApply.ToAzBlobMetadata(),
 			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.AccessTierType(destBlobTier), blobTags,
 			c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
 
@@ -199,7 +199,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		atomic.AddInt32(&c.atomicChunksWritten, 1)
 
 		if separateSetTagsRequired {
-			if _, err := c.destBlockBlobURL.SetTags(c.jptm.Context(), nil, nil, nil, c.blobTagsToApply); err != nil {
+			if _, err := c.destBlockBlobClient.SetTags(c.jptm.Context(), c.blobTagsToApply, nil); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}
 		}

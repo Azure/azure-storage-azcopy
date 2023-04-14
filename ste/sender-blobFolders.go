@@ -15,14 +15,14 @@ import (
 )
 
 type blobFolderSender struct {
-	destClient      *blockblob.Client // We'll treat all folders as block blobs
-	destination     azblob.BlockBlobURL
-	jptm            IJobPartTransferMgr
-	sip             ISourceInfoProvider
-	metadataToApply azblob.Metadata
-	headersToAppply blob.HTTPHeaders
-	blobTagsToApply azblob.BlobTagsMap
-	cpkToApply      azblob.ClientProvidedKeyOptions
+	destinationClient *blockblob.Client // We'll treat all folders as block blobs
+	destination       azblob.BlockBlobURL
+	jptm              IJobPartTransferMgr
+	sip               ISourceInfoProvider
+	metadataToApply   common.Metadata
+	headersToAppply   blob.HTTPHeaders
+	blobTagsToApply   map[string]string
+	cpkToApply        azblob.ClientProvidedKeyOptions
 }
 
 func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
@@ -44,14 +44,15 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 
 	var out sender
 	fsend := blobFolderSender{
-		jptm:            jptm,
-		sip:             sip,
-		destClient:      destClient,
-		destination:     destBlockBlobURL,
-		metadataToApply: props.SrcMetadata.Clone().ToAzBlobMetadata(), // We're going to modify it, so we should clone it.
-		headersToAppply: props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		blobTagsToApply: props.SrcBlobTags.ToAzBlobTagsMap(),
-		cpkToApply:      common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
+		jptm:              jptm,
+		sip:               sip,
+		destinationClient: destClient,
+		destination:       destBlockBlobURL,
+		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
+		headersToAppply:   props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		blobTagsToApply:   props.SrcBlobTags,
+		cpkToApply:        common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
+
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
@@ -94,16 +95,20 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	delete(b.metadataToApply, "hdi_isfolder")
 
 	// SetMetadata can set CPK if it wasn't specified prior. This is not a "full" overwrite, but a best-effort overwrite.
-	_, err = b.destination.SetMetadata(b.jptm.Context(), b.metadataToApply, azblob.BlobAccessConditions{}, b.cpkToApply)
+	_, err = b.destinationClient.SetMetadata(b.jptm.Context(), b.metadataToApply,
+		&blob.SetMetadataOptions{
+			CPKInfo:      b.jptm.CpkInfo(),
+			CPKScopeInfo: b.jptm.CpkScopeInfo(),
+		})
 	if err != nil {
 		return "Set Metadata", fmt.Errorf("A best-effort overwrite was attempted; CPK errors cannot be handled when the blob cannot be deleted.\n%w", err)
 	}
 	//// blob API not yet supported for HNS account error; re-enable later.
-	//_, err = b.destination.SetTags(b.jptm.Context(), nil, nil, nil, b.blobTagsToApply)
+	//_, err = b.destinationClient.SetTags(b.jptm.Context(), b.blobTagsToApply, nil)
 	//if err != nil {
 	//	return "Set Blob Tags", err
 	//}
-	_, err = b.destination.SetHTTPHeaders(b.jptm.Context(), common.ToAzBlobHTTPHeaders(b.headersToAppply), azblob.BlobAccessConditions{})
+	_, err = b.destinationClient.SetHTTPHeaders(b.jptm.Context(), b.headersToAppply, nil)
 	if err != nil {
 		return "Set HTTP Headers", err
 	}
@@ -150,7 +155,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		return b.SetContainerACL() // Can't do much with a container, but it is here.
 	}
 
-	_, err = b.destClient.GetProperties(b.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: b.jptm.CpkInfo()})
+	_, err = b.destinationClient.GetProperties(b.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: b.jptm.CpkInfo()})
 	if err != nil {
 		if !bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return fmt.Errorf("when checking if blob exists: %w", err)
@@ -189,7 +194,8 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		}
 	}
 
-	b.metadataToApply["hdi_isfolder"] = "true" // Set folder metadata flag
+	trueStr := "true"
+	b.metadataToApply["hdi_isfolder"] = &trueStr // Set folder metadata flag
 	err = b.getExtraProperties()
 	if err != nil {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
@@ -199,7 +205,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		_, err := b.destination.Upload(b.jptm.Context(),
 			strings.NewReader(""),
 			common.ToAzBlobHTTPHeaders(b.headersToAppply),
-			b.metadataToApply,
+			b.metadataToApply.ToAzBlobMetadata(),
 			azblob.BlobAccessConditions{},
 			azblob.DefaultAccessTier, // It doesn't make sense to use a special access tier, the blob will be 0 bytes.
 			b.blobTagsToApply,
