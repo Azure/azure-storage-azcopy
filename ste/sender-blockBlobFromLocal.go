@@ -23,11 +23,11 @@ package ste
 import (
 	"bytes"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -102,7 +102,11 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		// step 3: put block to remote
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
-		_, err := u.destBlockBlobURL.StageBlock(u.jptm.Context(), encodedBlockID, body, azblob.LeaseAccessConditions{}, nil, u.cpkToApply)
+		_, err := u.destBlockBlobClient.StageBlock(u.jptm.Context(), encodedBlockID, body,
+			&blockblob.StageBlockOptions{
+				CPKInfo:      u.jptm.CpkInfo(),
+				CPKScopeInfo: u.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			u.jptm.FailActiveUpload("Staging block", err)
 			return
@@ -133,12 +137,21 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := u.destBlobTier
+		tier := &destBlobTier
 		if u.cpkToApply.EncryptionScope != nil || (u.cpkToApply.EncryptionKey != nil && u.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = ""
+			tier = nil
 		}
 
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags.ToAzBlobTagsMap(), u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+			_, err = u.destBlockBlobClient.Upload(jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
+				&blockblob.UploadOptions{
+					HTTPHeaders:  &u.headersToApply,
+					Metadata:     u.metadataToApply,
+					Tier:         tier,
+					Tags:         blobTags,
+					CPKInfo:      u.jptm.CpkInfo(),
+					CPKScopeInfo: u.jptm.CpkScopeInfo(),
+				})
 		} else {
 			// File with content
 
@@ -152,8 +165,15 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, common.ToAzBlobHTTPHeaders(u.headersToApply), u.metadataToApply.ToAzBlobMetadata(),
-				azblob.BlobAccessConditions{}, azblob.AccessTierType(u.destBlobTier), blobTags.ToAzBlobTagsMap(), u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+			_, err = u.destBlockBlobClient.Upload(jptm.Context(), body,
+				&blockblob.UploadOptions{
+					HTTPHeaders:  &u.headersToApply,
+					Metadata:     u.metadataToApply,
+					Tier:         tier,
+					Tags:         blobTags,
+					CPKInfo:      u.jptm.CpkInfo(),
+					CPKScopeInfo: u.jptm.CpkScopeInfo(),
+				})
 		}
 
 		// if the put blob is a failure, update the transfer status to failed
