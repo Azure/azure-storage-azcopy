@@ -37,7 +37,6 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -60,7 +59,6 @@ type blockBlobSenderBase struct {
 	headersToApply  blob.HTTPHeaders
 	metadataToApply common.Metadata
 	blobTagsToApply common.BlobTags
-	cpkToApply      azblob.ClientProvidedKeyOptions
 
 	atomicChunksWritten    int32
 	atomicPutListIndicator int32
@@ -150,9 +148,6 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		destBlobTier = ""
 	}
 
-	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
-
 	partNum, transferIndex := jptm.TransferIndex()
 
 	return &blockBlobSenderBase{
@@ -167,7 +162,6 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		metadataToApply:     props.SrcMetadata,
 		blobTagsToApply:     props.SrcBlobTags,
 		destBlobTier:        destBlobTier,
-		cpkToApply:          cpkToApply,
 		muBlockIDs:          &sync.Mutex{},
 		blockNamePrefix:     getBlockNamePrefix(jptm.Info().JobID, partNum, transferIndex),
 	}, nil
@@ -231,7 +225,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := s.destBlobTier
 		tier := &destBlobTier
-		if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
+		if s.jptm.IsSourceEncrypted() {
 			tier = nil
 		}
 

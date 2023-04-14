@@ -108,7 +108,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := c.destBlobTier
 		tier := &destBlobTier
-		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
+		if c.jptm.IsSourceEncrypted() {
 			tier = nil
 		}
 
@@ -197,7 +197,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := c.destBlobTier
 		tier := &destBlobTier
-		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
+		if c.jptm.IsSourceEncrypted() {
 			tier = nil
 		}
 

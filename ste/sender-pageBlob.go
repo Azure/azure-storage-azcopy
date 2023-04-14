@@ -52,7 +52,6 @@ type pageBlobSenderBase struct {
 	headersToApply  blob.HTTPHeaders
 	metadataToApply common.Metadata
 	blobTagsToApply common.BlobTags
-	cpkToApply      azblob.ClientProvidedKeyOptions
 
 	destBlobTier blob.AccessTier
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
@@ -121,9 +120,6 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 		destBlobTier = pageBlobTierOverride.ToAccessTierType()
 	}
 
-	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
-
 	s := &pageBlobSenderBase{
 		jptm:                   jptm,
 		destPageBlobClient:     destPageBlobClient,
@@ -136,7 +132,6 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 		blobTagsToApply:        props.SrcBlobTags,
 		destBlobTier:           destBlobTier,
 		filePacer:              NewNullAutoPacer(), // defer creation of real one to Prologue
-		cpkToApply:             cpkToApply,
 		destPageRangeOptimizer: destRangeOptimizer,
 	}
 
@@ -247,7 +242,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	}
 
 	// TODO: Remove this snippet once service starts supporting CPK with blob tier
-	if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
+	if s.jptm.IsSourceEncrypted() {
 		tier = nil
 	}
 

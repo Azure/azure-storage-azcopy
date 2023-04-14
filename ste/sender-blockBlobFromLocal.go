@@ -138,7 +138,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := u.destBlobTier
 		tier := &destBlobTier
-		if u.cpkToApply.EncryptionScope != nil || (u.cpkToApply.EncryptionKey != nil && u.cpkToApply.EncryptionKeySha256 != nil) {
+		if u.jptm.IsSourceEncrypted() {
 			tier = nil
 		}
 
