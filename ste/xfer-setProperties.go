@@ -26,9 +26,9 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 		to := jptm.FromTo()
 		switch to.From() {
 		case common.ELocation.Blob():
-			setPropertiesBlob(jptm, p)
+			setPropertiesBlob(jptm)
 		case common.ELocation.BlobFS():
-			setPropertiesBlobFS(jptm, p)
+			setPropertiesBlobFS(jptm)
 		case common.ELocation.File():
 			setPropertiesFile(jptm, p)
 		default:
@@ -38,12 +38,8 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	jptm.ScheduleChunks(cf)
 }
 
-func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func setPropertiesBlob(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
-	// Get the source blob url of blob to set properties on
-	// TODO : Migrate this when GetAccountInfo is added to blob client level in Track 2.
-	u, _ := url.Parse(info.Source)
-	srcBlobURL := azblob.NewBlobURL(*u, p)
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Reports Transfer as Done.
@@ -60,6 +56,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
+	// Get the source blob url of blob to set properties on
 	srcBlobClient, err := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	if err != nil {
 		errorHandlerForXferSetProperties(err, jptm, transferDone)
@@ -73,12 +70,12 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		blockBlobTier, pageBlobTier := jptm.BlobTiers()
 
 		var err error = nil
-		if jptm.Info().SrcBlobType == blob.BlobTypeBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
+		if jptm.Info().SrcBlobType == blob.BlobTypeBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), true) {
 			_, err = srcBlobClient.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
 		// cannot return true for >1, therefore only one of these will run
-		if jptm.Info().SrcBlobType == blob.BlobTypePageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
+		if jptm.Info().SrcBlobType == blob.BlobTypePageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), true) {
 			_, err = srcBlobClient.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
@@ -109,11 +106,8 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	transferDone(common.ETransferStatus.Success(), nil)
 }
 
-func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
-	// Get the source blob url of blob to delete
-	u, _ := url.Parse(info.Source)
-	srcBlobURL := azblob.NewBlobURL(*u, p)
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
@@ -130,6 +124,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		jptm.ReportTransferDone()
 	}
 
+	// Get the source blob url of blob to set properties on
 	srcBlobClient, err := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	if err != nil {
 		errorHandlerForXferSetProperties(err, jptm, transferDone)
@@ -143,7 +138,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		rehydratePriority := info.RehydratePriority
 		_, pageBlobTier := jptm.BlobTiers()
 		var err error = nil
-		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), false) {
+		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), false) {
 			_, err = srcBlobClient.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}

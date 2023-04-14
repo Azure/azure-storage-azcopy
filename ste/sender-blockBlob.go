@@ -60,7 +60,7 @@ type blockBlobSenderBase struct {
 	// 2. When sending local data, they are computed based on the properties of the local file
 	headersToApply  blob.HTTPHeaders
 	metadataToApply common.Metadata
-	blobTagsToApply azblob.BlobTagsMap
+	blobTagsToApply common.BlobTags
 	cpkToApply      azblob.ClientProvidedKeyOptions
 
 	atomicChunksWritten    int32
@@ -174,7 +174,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		blockIDs:            make([]string, numChunks),
 		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		metadataToApply:     props.SrcMetadata,
-		blobTagsToApply:     props.SrcBlobTags.ToAzBlobTagsMap(),
+		blobTagsToApply:     props.SrcBlobTags,
 		destBlobTier:        destBlobTier,
 		cpkToApply:          cpkToApply,
 		muBlockIDs:          &sync.Mutex{},
@@ -227,13 +227,13 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
-		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context(), false) {
+		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient, s.jptm.Context(), false) {
 			s.destBlobTier = ""
 		}
 
 		blobTags := s.blobTagsToApply
-		separateSetTagsRequired := separateSetTagsRequired(blobTags)
-		if separateSetTagsRequired || len(blobTags) == 0 {
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
@@ -243,12 +243,12 @@ func (s *blockBlobSenderBase) Epilogue() {
 			destBlobTier = ""
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags.ToAzBlobTagsMap(), s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
 
-		if separateSetTagsRequired {
+		if setTags {
 			if _, err := s.destBlockBlobClient.SetTags(jptm.Context(), s.blobTagsToApply, nil); err != nil {
 				s.jptm.Log(pipeline.LogWarning, err.Error())
 			}
