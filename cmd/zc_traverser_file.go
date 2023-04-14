@@ -70,6 +70,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
+		if !t.trailingDot && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
+			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
+			return nil
+		}
 		// check if the url points to a single file
 		fileProperties, isFile := t.getPropertiesIfSingleFile()
 		if isFile {
@@ -96,13 +100,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
-
-			if !t.trailingDot && strings.HasSuffix(storedObject.name, ".") {
-				azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, storedObject.name))
-			} else {
-				err := processIfPassedFilters(filters, storedObject, processor)
-				_, err = getProcessingError(err)
-			}
+			err := processIfPassedFilters(filters, storedObject, processor)
+			_, err = getProcessingError(err)
 
 			return err
 		}
@@ -170,12 +169,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(s.entityType)
 		}
-		if !t.trailingDot && strings.HasSuffix(s.name, ".") {
-			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, s.name))
-		} else {
-			err := processIfPassedFilters(filters, s, processor)
-			_, err = getProcessingError(err)
-		}
+		err := processIfPassedFilters(filters, s, processor)
+		_, err = getProcessingError(err)
 		return err
 	}
 
@@ -206,6 +201,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			for _, fileInfo := range lResp.FileItems {
+				// These conditions are to prevent a GetProperties from returning a 404 when trailing dot is turned off.
 				if !t.trailingDot && strings.HasSuffix(fileInfo.Name, ".") {
 					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, fileInfo.Name))
 				} else {
@@ -213,6 +209,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				}
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
+				// These conditions are to prevent a GetProperties from returning a 404 when trailing dot is turned off.
 				if !t.trailingDot && strings.HasSuffix(dirInfo.Name, ".") {
 					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, dirInfo.Name))
 				} else {

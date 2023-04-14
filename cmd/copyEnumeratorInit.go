@@ -403,6 +403,10 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 		filters = append(filters, buildAttrFilters(cca.ExcludeFileAttributes, cca.Source.ValueLocal(), false)...)
 	}
 
+	if !cca.trailingDot && (cca.FromTo.To() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.File()) {
+		filters = append(filters, &TrailingDotFilter{})
+	}
+
 	// finally, log any search prefix computed from these
 	if jobsAdmin.JobsAdmin != nil {
 		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.Recursive); prefixFilter != "" {

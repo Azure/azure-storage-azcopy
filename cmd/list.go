@@ -273,7 +273,11 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		return nil
 	}
 
-	err = traverser.Traverse(nil, processor, nil)
+	var filter []ObjectFilter = nil
+	if !cooked.trailingDot && cooked.location == common.ELocation.File() {
+		filter = []ObjectFilter{&TrailingDotFilter{}}
+	}
+	err = traverser.Traverse(nil, processor, filter)
 
 	if err != nil {
 		return fmt.Errorf("failed to traverse container: %s", err.Error())

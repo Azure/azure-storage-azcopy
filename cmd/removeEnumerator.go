@@ -71,6 +71,9 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	if cca.IncludeAfter != nil {
 		filters = append(filters, &IncludeAfterDateFilter{Threshold: *cca.IncludeAfter})
 	}
+	if !cca.trailingDot && (cca.FromTo.To() == common.ELocation.File() || cca.FromTo.From() == common.ELocation.File()) {
+		filters = append(filters, &TrailingDotFilter{})
+	}
 
 	// decide our folder transfer strategy
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file

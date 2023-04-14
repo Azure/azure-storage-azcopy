@@ -112,6 +112,32 @@ func buildExcludeFilters(Patterns []string, targetPath bool) []ObjectFilter {
 	return filters
 }
 
+type TrailingDotFilter struct {
+}
+
+func (f *TrailingDotFilter) DoesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
+}
+
+func (f *TrailingDotFilter) AppliesOnlyToFiles() bool {
+	return false
+}
+
+func (f *TrailingDotFilter) DoesPass(storedObject StoredObject) bool {
+	if strings.HasSuffix(storedObject.name, ".") {
+		return false
+	}
+	parts := strings.Split(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+	for _, p := range parts {
+		if strings.HasSuffix(p, ".") {
+			return false
+		}
+	}
+	return true
+}
+
 // design explanation:
 // include filters are different from the exclude ones, which work together in the "AND" manner
 // meaning and if an StoredObject is rejected by any of the exclude filters, then it is rejected by all of them
