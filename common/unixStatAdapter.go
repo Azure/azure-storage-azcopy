@@ -1,7 +1,6 @@
 package common
 
 import (
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"os"
 	"strconv"
 	"time"
@@ -163,11 +162,11 @@ func (u UnixStatContainer) CTime() time.Time {
 // ReadStatFromMetadata is not fault-tolerant. If any given article does not parse,
 // it will throw an error instead of continuing on, as it may be considered incorrect to attempt to persist the rest of the data.
 // despite this function being used only in Downloads at the current moment, it still attempts to re-create as complete of a UnixStatAdapter as possible.
-func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixStatAdapter, error) {
+func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapter, error) {
 	s := UnixStatContainer{size: uint64(contentLength)}
 
 	if mask, ok := metadata[LINUXStatxMaskMeta]; ok {
-		m, err := strconv.ParseUint(mask, 10, 32)
+		m, err := strconv.ParseUint(*mask, 10, 32)
 		if err != nil {
 			return s, err
 		}
@@ -177,7 +176,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 
 	// cover additional statx properties here
 	if attr, ok := metadata[LINUXAttributeMeta]; ok {
-		a, err := strconv.ParseUint(attr, 10, 64)
+		a, err := strconv.ParseUint(*attr, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -185,7 +184,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if attr, ok := metadata[LINUXAttributeMaskMeta]; ok {
-		a, err := strconv.ParseUint(attr, 10, 64)
+		a, err := strconv.ParseUint(*attr, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -193,7 +192,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if btime, ok := metadata[LINUXBTimeMeta]; ok {
-		b, err := strconv.ParseInt(btime, 10, 64)
+		b, err := strconv.ParseInt(*btime, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -202,7 +201,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 
 	// base stat properties
 	if nlink, ok := metadata[POSIXNlinkMeta]; ok {
-		n, err := strconv.ParseUint(nlink, 10, 64)
+		n, err := strconv.ParseUint(*nlink, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -210,7 +209,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if owner, ok := metadata[POSIXOwnerMeta]; ok {
-		o, err := strconv.ParseUint(owner, 10, 32)
+		o, err := strconv.ParseUint(*owner, 10, 32)
 		if err != nil {
 			return s, err
 		}
@@ -218,7 +217,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if group, ok := metadata[POSIXGroupMeta]; ok {
-		g, err := strconv.ParseUint(group, 10, 32)
+		g, err := strconv.ParseUint(*group, 10, 32)
 		if err != nil {
 			return s, err
 		}
@@ -226,7 +225,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if mode, ok := metadata[POSIXModeMeta]; ok {
-		m, err := strconv.ParseUint(mode, 10, 32)
+		m, err := strconv.ParseUint(*mode, 10, 32)
 		if err != nil {
 			return s, err
 		}
@@ -235,7 +234,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if inode, ok := metadata[POSIXINodeMeta]; ok {
-		ino, err := strconv.ParseUint(inode, 10, 64)
+		ino, err := strconv.ParseUint(*inode, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -244,7 +243,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if dev, ok := metadata[POSIXDevMeta]; ok {
-		d, err := strconv.ParseUint(dev, 10, 64)
+		d, err := strconv.ParseUint(*dev, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -253,7 +252,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if rdev, ok := metadata[POSIXRDevMeta]; ok {
-		rd, err := strconv.ParseUint(rdev, 10, 64)
+		rd, err := strconv.ParseUint(*rdev, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -262,7 +261,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if atime, ok := metadata[POSIXATimeMeta]; ok {
-		at, err := strconv.ParseInt(atime, 10, 64)
+		at, err := strconv.ParseInt(*atime, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -271,7 +270,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if mtime, ok := metadata[POSIXModTimeMeta]; ok {
-		mt, err := strconv.ParseInt(mtime, 10, 64)
+		mt, err := strconv.ParseInt(*mtime, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -280,7 +279,7 @@ func ReadStatFromMetadata(metadata azblob.Metadata, contentLength int64) (UnixSt
 	}
 
 	if ctime, ok := metadata[POSIXCTimeMeta]; ok {
-		ct, err := strconv.ParseInt(ctime, 10, 64)
+		ct, err := strconv.ParseInt(*ctime, 10, 64)
 		if err != nil {
 			return s, err
 		}
@@ -337,7 +336,7 @@ const ( // Values cloned from x/sys/unix to avoid dependency
 	S_ALLPERM = 0x777
 )
 
-func ClearStatFromBlobMetadata(metadata azblob.Metadata) {
+func ClearStatFromBlobMetadata(metadata Metadata) {
 	for _, v := range AllLinuxProperties {
 		delete(metadata, v)
 	}
