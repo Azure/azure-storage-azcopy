@@ -11,7 +11,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
 	"strings"
 	"time"
@@ -24,7 +23,6 @@ type blobFolderSender struct {
 	metadataToApply   common.Metadata
 	headersToApply    blob.HTTPHeaders
 	blobTagsToApply   map[string]string
-	cpkToApply        azblob.ClientProvidedKeyOptions
 }
 
 func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
@@ -46,7 +44,6 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
 		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:   props.SrcBlobTags,
-		cpkToApply:        common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
@@ -180,17 +177,14 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		if t.ShouldSetProperties(b.DirUrlToString(), b.jptm.GetOverwriteOption(), b.jptm.GetOverwritePrompter()) {
 			_, err := b.destinationClient.Delete(b.jptm.Context(), nil)
 			if err != nil {
-				if stgErr, ok := err.(azblob.StorageError); ok {
-					if stgErr.ServiceCode() == "DirectoryIsNotEmpty" { // this is DFS, and we cannot do a standard replacement on it. Opt to simply overwrite the properties.
-						where, err := b.overwriteDFSProperties()
-						if err != nil {
-							return fmt.Errorf("%w. When %s", err, where)
-						}
-
-						return nil
+				if bloberror.HasCode(err, bloberror.Code("DirectoryIsNotEmpty")) {
+					where, err := b.overwriteDFSProperties()
+					if err != nil {
+						return fmt.Errorf("%w. When %s", err, where)
 					}
-				}
 
+					return nil
+				}
 				return fmt.Errorf("when deleting existing blob: %w", err)
 			}
 		} else {
