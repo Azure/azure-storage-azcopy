@@ -1,11 +1,12 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/http"
 	"net/url"
@@ -209,8 +210,15 @@ func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 }
 
 func errorHandlerForXferSetProperties(err error, jptm IJobPartTransferMgr, transferDone func(status common.TransferStatus, err error)) {
-	if strErr, ok := err.(azblob.StorageError); ok {
-
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) && respErr.StatusCode == http.StatusForbidden {
+		// If the status code was 403, it means there was an authentication error, and we exit.
+		// User can resume the job if completely ordered with a new sas.
+		errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
+		jptm.Log(pipeline.LogError, errMsg)
+		common.GetLifecycleMgr().Error(errMsg)
+		// TODO : Migrate on azfile
+	} else if strErr, ok := err.(azfile.StorageError); ok {
 		// If the status code was 403, it means there was an authentication error, and we exit.
 		// User can resume the job if completely ordered with a new sas.
 		if strErr.Response().StatusCode == http.StatusForbidden {

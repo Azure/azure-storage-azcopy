@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"strings"
@@ -85,7 +86,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 
 		// if there's no data at the source (and the destination for managed disks), skip this chunk
-		pageRange := pageblob.PageRange{Start: AsInt64Ptr(id.OffsetInFile()), End: AsInt64Ptr(id.OffsetInFile() + adjustedChunkSize - 1)}
+		pageRange := pageblob.PageRange{Start: to.Ptr(id.OffsetInFile()), End: to.Ptr(id.OffsetInFile() + adjustedChunkSize - 1)}
 		if c.sourcePageRangeOptimizer != nil && !c.sourcePageRangeOptimizer.doesRangeContainData(pageRange) {
 			var destContainsData bool
 
@@ -211,9 +212,4 @@ func (p *pageRangeOptimizer) doesRangeContainData(givenRange pageblob.PageRange)
 
 	// went through all srcRanges, but nothing overlapped
 	return false
-}
-
-func AsInt64Ptr(src int64) *int64 {
-	tmp := src
-	return &tmp
 }

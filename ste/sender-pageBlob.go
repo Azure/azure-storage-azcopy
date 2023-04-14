@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -88,7 +87,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
 	chunkSize = common.Iff(
-		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
+		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%pageblob.PageBytes != 0),
 		common.DefaultPageBlobChunkSize,
 		chunkSize)
 

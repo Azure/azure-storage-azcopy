@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -74,7 +73,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	}
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl with the exception of files
 	fromTo := c.blockBlobSenderBase.jptm.FromTo()
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) && fromTo.From() != common.ELocation.File() {
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(blockblob.MaxUploadBlobBytes) && fromTo.From() != common.ELocation.File() {
 		/*
 		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
 		 * invalid error from service due to PutBlockFromUrl.

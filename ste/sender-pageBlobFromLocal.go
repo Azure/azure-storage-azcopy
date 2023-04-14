@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
@@ -83,7 +84,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			var destContainsData bool
 			// We check if we should actually skip this page,
 			// in the event the page blob uploader is sending to a managed disk.
-			pageRange := pageblob.PageRange{Start: AsInt64Ptr(id.OffsetInFile()), End: AsInt64Ptr(id.OffsetInFile() + reader.Length() - 1)}
+			pageRange := pageblob.PageRange{Start: to.Ptr(id.OffsetInFile()), End: to.Ptr(id.OffsetInFile() + reader.Length() - 1)}
 			if u.destPageRangeOptimizer != nil {
 				destContainsData = u.destPageRangeOptimizer.doesRangeContainData(pageRange)
 			}

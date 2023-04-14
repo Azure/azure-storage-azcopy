@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"os"
@@ -112,7 +113,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// If the range does not contain any data, write out empty data to disk without performing download
-		pageRange := pageblob.PageRange{Start: AsInt64Ptr(id.OffsetInFile()), End: AsInt64Ptr(id.OffsetInFile() + length - 1)}
+		pageRange := pageblob.PageRange{Start: to.Ptr(id.OffsetInFile()), End: to.Ptr(id.OffsetInFile() + length - 1)}
 		if bd.pageRangeOptimizer != nil && !bd.pageRangeOptimizer.doesRangeContainData(pageRange) {
 
 			// queue an empty chunk

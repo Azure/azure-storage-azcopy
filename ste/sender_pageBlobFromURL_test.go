@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	chk "gopkg.in/check.v1"
 )
@@ -34,19 +35,19 @@ func (s *pageBlobFromURLSuite) TestRangeWorthTransferring(c *chk.C) {
 	copier := pageRangeOptimizer{}
 	copier.srcPageList = &pageblob.PageList{
 		PageRange: []*pageblob.PageRange{
-			{Start: AsInt64Ptr(512), End: AsInt64Ptr(1023)},
-			{Start: AsInt64Ptr(2560), End: AsInt64Ptr(4095)},
-			{Start: AsInt64Ptr(7168), End: AsInt64Ptr(8191)},
+			{Start: to.Ptr(int64(512)), End: to.Ptr(int64(1023))},
+			{Start: to.Ptr(int64(2560)), End: to.Ptr(int64(4095))},
+			{Start: to.Ptr(int64(7168)), End: to.Ptr(int64(8191))},
 		},
 	}
 
 	testCases := map[pageblob.PageRange]bool{
-		{Start: AsInt64Ptr(512), End: AsInt64Ptr(1023)}:    true,  // fully included
-		{Start: AsInt64Ptr(2048), End: AsInt64Ptr(3071)}:   true,  // overlapping
-		{Start: AsInt64Ptr(3071), End: AsInt64Ptr(4606)}:   true,  // overlapping
-		{Start: AsInt64Ptr(0), End: AsInt64Ptr(511)}:       false, // before all ranges
-		{Start: AsInt64Ptr(1536), End: AsInt64Ptr(2559)}:   false, // in between ranges
-		{Start: AsInt64Ptr(15360), End: AsInt64Ptr(15871)}: false, // all the way out
+		{Start: to.Ptr(int64(512)), End: to.Ptr(int64(1023))}:    true,  // fully included
+		{Start: to.Ptr(int64(2048)), End: to.Ptr(int64(3071))}:   true,  // overlapping
+		{Start: to.Ptr(int64(3071)), End: to.Ptr(int64(4606))}:   true,  // overlapping
+		{Start: to.Ptr(int64(0)), End: to.Ptr(int64(511))}:       false, // before all ranges
+		{Start: to.Ptr(int64(1536)), End: to.Ptr(int64(2559))}:   false, // in between ranges
+		{Start: to.Ptr(int64(15360)), End: to.Ptr(int64(15871))}: false, // all the way out
 	}
 
 	// Action & Assert
