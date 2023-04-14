@@ -7,6 +7,7 @@ type utilityFunctionsSuite struct{}
 var _ = chk.Suite(&utilityFunctionsSuite{})
 
 func (*utilityFunctionsSuite) Test_VerifyIsURLResolvable(c *chk.C) {
+	c.Skip("Disabled the check in mainline code")
 	valid_url := "https://github.com/"
 	invalidUrl := "someString"
 	invalidUrl2 := "https://$invalidAccount.blob.core.windows.net/"
