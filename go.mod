@@ -28,9 +28,6 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
 
-// TODO : Undo this once latest azblob is released.
-replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 => ../azure-sdk-for-go/sdk/storage/azblob
-
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.4.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
