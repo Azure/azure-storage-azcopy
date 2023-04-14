@@ -7,6 +7,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"mime"
 	"net"
 	"net/http"
@@ -20,7 +21,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sync/semaphore"
 )
@@ -32,7 +32,7 @@ var DebugSkipFiles = make(map[string]bool)
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context, sourceBlobToken azblob.Credential)
+	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
@@ -168,6 +168,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	}
 }
 
+// TODO : Delete once tests are migrated
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
 func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
@@ -364,7 +365,7 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken azblob.Credential) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
@@ -435,7 +436,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 	jpm.priority = plan.Priority
 
 	jpm.clientInfo()
-	jpm.createPipelines(jobCtx, sourceBlobToken) // pipeline is created per job part manager
+	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -594,12 +595,9 @@ func (jpm *jobPartMgr) clientInfo() {
 	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions)
 }
 
-func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azblob.Credential) {
+func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
 		panic("init client and pipelines for same jobPartMgr twice")
-	}
-	if jpm.sourceCredential == nil {
-		jpm.sourceCredential = sourceBlobToken
 	}
 	fromTo := jpm.planMMF.Plan().FromTo
 	credInfo := jpm.credInfo
@@ -636,35 +634,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 
 	// Create source info provider's pipeline for S2S copy or download (in some cases).
 	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
-		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
-		jobState := jpm.jobMgr.getInMemoryTransitJobState()
-		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			credOption := common.CredentialOpOptions{
-				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-				Panic:    jpm.Panic,
-				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-				Cancel:   jpm.jobMgr.Cancel,
-			}
-			if jpm.sourceCredential == nil {
-				sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
-				jpm.sourceCredential = sourceCred
-			}
-		}
-
-		jpm.sourceProviderPipeline = NewBlobPipeline(
-			sourceCred,
-			azblob.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azblob.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			xferRetryOption,
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			statsAccForSip)
-
 		// Consider the ADLSG2->ADLSG2 ACLs case
 		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
 			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
@@ -708,20 +677,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	switch fromTo {
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
-		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
-		jpm.pipeline = NewBlobPipeline(
-			credential,
-			azblob.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azblob.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			xferRetryOption,
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats())
 
 		// Consider the ADLSG2->ADLSG2 ACLs case
 		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {

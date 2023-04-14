@@ -141,12 +141,13 @@ func (d *DeleteSnapshotsOption) Parse(s string) error {
 	return err
 }
 
-func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() blob.DeleteSnapshotsOptionType {
+func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() *blob.DeleteSnapshotsOptionType {
 	if d == EDeleteSnapshotsOption.None() {
-		return ""
+		return nil
 	}
 
-	return blob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+	ds := blob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+	return &ds
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -179,11 +180,12 @@ func (p PermanentDeleteOption) String() string {
 	return enum.StringInt(p, reflect.TypeOf(p))
 }
 
-func (p PermanentDeleteOption) ToPermanentDeleteOptionType() blob.DeleteType {
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() *blob.DeleteType {
 	if p == EPermanentDeleteOption.None() {
-		return ""
+		return nil
 	}
-	return blob.DeleteTypePermanent
+	dt := blob.DeleteTypePermanent
+	return &dt
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

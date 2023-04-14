@@ -1,16 +1,17 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var explainedSkippedRemoveOnce sync.Once
@@ -34,9 +35,10 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 	info := jptm.Info()
 	// Get the source blob url of blob to delete
-	u, _ := url.Parse(info.Source)
-
-	srcBlobURL := azblob.NewBlobURL(*u, p)
+	blobClient, err := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	if err != nil {
+		jptm.LogError(info.Source, "DELETE ERROR (creating blob client): ", err)
+	}
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
@@ -61,29 +63,27 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob
 	// we still count this delete operation as successful since we accomplished the desired outcome
-	err := error(nil)
-	if jptm.PermanentDeleteOption().ToPermanentDeleteOptionType() == blob.DeleteTypePermanent {
-		_, err = srcBlobURL.PermanentDelete(jptm.Context(), azblob.DeleteSnapshotsOptionType(jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType()), azblob.BlobAccessConditions{})
-	} else {
-		_, err = srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionType(jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType()), azblob.BlobAccessConditions{})
-	}
+	_, err = blobClient.Delete(jptm.Context(), &blob.DeleteOptions{
+		DeleteSnapshots: jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(),
+		BlobDeleteType: jptm.PermanentDeleteOption().ToPermanentDeleteOptionType(),
+	})
+
 	if err != nil {
-		if strErr, ok := err.(azblob.StorageError); ok {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
 			// if the delete failed with err 404, i.e resource not found, then mark the transfer as success.
-			if strErr.Response().StatusCode == http.StatusNotFound {
+			if respErr.StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
 				return
 			}
-
 			// if the delete failed because the blob has snapshots, then skip it
-			if strErr.Response().StatusCode == http.StatusConflict && strErr.ServiceCode() == azblob.ServiceCodeSnapshotsPresent {
+			if respErr.StatusCode == http.StatusConflict && respErr.ErrorCode == string(bloberror.SnapshotsPresent) {
 				transferDone(common.ETransferStatus.SkippedBlobHasSnapshots(), nil)
 				return
 			}
-
 			// If the status code was 403, it means there was an authentication error and we exit.
 			// User can resume the job if completely ordered with a new sas.
-			if strErr.Response().StatusCode == http.StatusForbidden {
+			if respErr.StatusCode == http.StatusForbidden {
 				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
 				jptm.Log(pipeline.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)

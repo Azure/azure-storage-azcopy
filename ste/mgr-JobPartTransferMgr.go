@@ -2,6 +2,7 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -16,7 +17,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
@@ -103,7 +103,6 @@ type IJobPartTransferMgr interface {
 	CpkInfo() *blob.CPKInfo
 	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
-	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 	SuccessfulBytesTransferred() int64
@@ -221,20 +220,6 @@ type jobPartTransferMgr struct {
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
 		chunkChannel chan<- ChunkMsg*/
-}
-
-func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
-	cred := jptm.SourceCredential()
-
-	if cred == nil {
-		return nil
-	} else {
-		if tc, ok := cred.(azblob.TokenCredential); ok {
-			return tc
-		} else {
-			return nil
-		}
-	}
 }
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
@@ -856,9 +841,11 @@ func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 }
 
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		return respErr.StatusCode, respErr.RawResponse.Status
+	}
 	switch e := err.(type) {
-	case azblob.StorageError:
-		return e.Response().StatusCode, e.Response().Status
 	case azfile.StorageError:
 		return e.Response().StatusCode, e.Response().Status
 	case azbfs.StorageError:
