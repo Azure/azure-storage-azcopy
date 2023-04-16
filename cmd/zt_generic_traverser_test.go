@@ -79,7 +79,7 @@ func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
 	resource, err := SplitResourceString(filepath.Join(tmpDir, "tes*t.txt"), common.ELocation.Local())
 	c.Assert(err, chk.IsNil)
 
-	traverser, err := InitResourceTraverser(resource, common.ELocation.Local(), nil, nil, common.ESymlinkHandlingType.Follow(), nil, true, false, false, common.EPermanentDeleteOption.None(), nil, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogInfo, common.CpkOptions{}, nil, true, common.ETrailingDotOption.Enable())
+	traverser, err := InitResourceTraverser(resource, common.ELocation.Local(), nil, nil, common.ESymlinkHandlingType.Follow(), nil, true, false, false, common.EPermanentDeleteOption.None(), nil, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogInfo, common.CpkOptions{}, nil, true, common.ETrailingDotOption.Enable(), nil)
 	c.Assert(err, chk.IsNil)
 
 	seenFiles := make(map[string]bool)

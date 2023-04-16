@@ -139,7 +139,6 @@ func (s *StoredObject) isCompatibleWithEntitySettings(fpo common.FolderPropertyO
 	}
 }
 
-
 // ErrorNoHashPresent , ErrorHashNoLongerValid, and ErrorHashNotCompatible indicate a hash is not present, not obtainable, and/or not usable.
 // For the sake of best-effort, when these errors are emitted, depending on the sync hash policy
 var ErrorNoHashPresent = errors.New("no hash present on file")
@@ -328,9 +327,8 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 // If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
 // To avoid slowdowns, use a buffered channel of enough capacity.
-func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption) (ResourceTraverser, error) {
+func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, p *pipeline.Pipeline) (ResourceTraverser, error) {
 	var output ResourceTraverser
-	var p *pipeline.Pipeline
 
 	var includeDeleted bool
 	var includeSnapshot bool
@@ -354,7 +352,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 	}
 
 	// Initialize the pipeline if creds and ctx is provided
-	if ctx != nil && credential != nil {
+	if p == nil && ctx != nil && credential != nil {
 		tmppipe, err := InitPipeline(*ctx, location, *credential, logLevel, trailingDot)
 		if err != nil {
 			return nil, err
