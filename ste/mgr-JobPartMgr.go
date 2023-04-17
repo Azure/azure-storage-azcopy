@@ -156,7 +156,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), /*newVersionPolicy(), */ newLogPolicy(log), newStatsPolicy(statsAcc)}
 
 	return azcore.ClientOptions{
-		//APIVersion: ,
+		APIVersion: "2019-02-02",
 		//Cloud: ,
 		//Logging: ,
 		Retry:     retry,
