@@ -58,9 +58,9 @@ type versionPolicy struct {
 
 func (s versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// get the service api version value using the ServiceAPIVersionOverride set in the context.
-	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
-		req.Raw().Header.Set("x-ms-version", value.(string))
-	}
+	//if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
+		req.Raw().Header.Set("x-ms-version", "2019-02-02")
+	//}
 	return req.Next()
 }
 
