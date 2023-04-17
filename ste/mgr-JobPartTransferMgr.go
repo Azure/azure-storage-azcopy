@@ -2,8 +2,10 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/http"
 	"strings"
@@ -65,6 +67,7 @@ type IJobPartTransferMgr interface {
 	CredentialInfo() common.CredentialInfo
 	ClientOptions() azcore.ClientOptions
 	S2SSourceCredentialInfo() common.CredentialInfo
+	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
@@ -101,7 +104,6 @@ type IJobPartTransferMgr interface {
 	CpkInfo() *blob.CPKInfo
 	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
-	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 	SuccessfulBytesTransferred() int64
@@ -219,20 +221,6 @@ type jobPartTransferMgr struct {
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
 		chunkChannel chan<- ChunkMsg*/
-}
-
-func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
-	cred := jptm.SourceCredential()
-
-	if cred == nil {
-		return nil
-	} else {
-		if tc, ok := cred.(azblob.TokenCredential); ok {
-			return tc
-		} else {
-			return nil
-		}
-	}
 }
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
@@ -854,6 +842,10 @@ func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 }
 
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		return respErr.StatusCode, respErr.RawResponse.Status
+	}
 	switch e := err.(type) {
 	case azblob.StorageError:
 		return e.Response().StatusCode, e.Response().Status
@@ -981,6 +973,25 @@ func (jptm *jobPartTransferMgr) ClientOptions() azcore.ClientOptions {
 
 func (jptm *jobPartTransferMgr) S2SSourceCredentialInfo() common.CredentialInfo {
 	return jptm.jobPartMgr.S2SSourceCredentialInfo()
+}
+
+func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {
+	if jptm.S2SSourceCredentialInfo().CredentialType.IsAzureOAuth() {
+		tokenInfo := jptm.S2SSourceCredentialInfo().OAuthTokenInfo
+		tc, err := tokenInfo.GetTokenCredential()
+		if err != nil {
+			return nil, err
+		}
+		scope := []string{"https://storage.azure.com/.default"}
+		if jptm.S2SSourceCredentialInfo().CredentialType == common.ECredentialType.MDOAuthToken() {
+			scope = []string{"https://disk.azure.com//.default"}
+		}
+
+		token, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scope})
+		t := "Bearer " + token.Token
+		return &t, err
+	}
+	return nil, nil
 }
 
 func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {

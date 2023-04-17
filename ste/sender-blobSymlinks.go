@@ -2,33 +2,27 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"net/url"
 	"strings"
 	"time"
 )
 
 type blobSymlinkSender struct {
-	destBlockBlobURL azblob.BlockBlobURL
+	destinationClient *blockblob.Client
 	jptm             IJobPartTransferMgr
 	sip              ISourceInfoProvider
 	headersToApply   blob.HTTPHeaders
 	metadataToApply  common.Metadata
 	destBlobTier     blob.AccessTier
-	blobTagsToApply  azblob.BlobTagsMap
-	cpkToApply       azblob.ClientProvidedKeyOptions
+	blobTagsToApply common.BlobTags
 }
 
-func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	destURL, err := url.Parse(destination)
-	if err != nil {
-		return nil, err
-	}
-
-	destBlockBlobURL := azblob.NewBlockBlobURL(*destURL, p)
+func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
+	destinationClient, err := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -45,11 +39,10 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, p pipeli
 	ssend := blobSymlinkSender{
 		jptm:             jptm,
 		sip:              sip,
-		destBlockBlobURL: destBlockBlobURL,
+		destinationClient: destinationClient,
 		metadataToApply:  props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
 		headersToApply:   props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
-		cpkToApply:       common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
+		blobTagsToApply:  props.SrcBlobTags,
 		destBlobTier:     destBlobTier,
 	}
 	fromTo := jptm.FromTo()
@@ -67,10 +60,17 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 	if err != nil {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
 	}
-	trueStr := "true"
-	s.metadataToApply["is_symlink"] = &trueStr
+	s.metadataToApply["is_symlink"] = to.Ptr("true")
 
-	_, err = s.destBlockBlobURL.Upload(s.jptm.Context(), strings.NewReader(linkData), common.ToAzBlobHTTPHeaders(s.headersToApply), s.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(s.destBlobTier), s.blobTagsToApply, s.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+	_, err = s.destinationClient.Upload(s.jptm.Context(), streaming.NopCloser(strings.NewReader(linkData)),
+		&blockblob.UploadOptions{
+			HTTPHeaders: &s.headersToApply,
+			Metadata: s.metadataToApply,
+			Tier: &s.destBlobTier,
+			Tags: s.blobTagsToApply,
+			CPKInfo: s.jptm.CpkInfo(),
+			CPKScopeInfo: s.jptm.CpkScopeInfo(),
+		})
 	return err
 }
 

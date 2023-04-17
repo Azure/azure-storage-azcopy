@@ -168,6 +168,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	}
 }
 
+// TODO : Delete once tests are migrated
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
 func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {

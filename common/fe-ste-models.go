@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"math"
@@ -141,12 +142,12 @@ func (d *DeleteSnapshotsOption) Parse(s string) error {
 	return err
 }
 
-func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() blob.DeleteSnapshotsOptionType {
+func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() *blob.DeleteSnapshotsOptionType {
 	if d == EDeleteSnapshotsOption.None() {
-		return ""
+		return nil
 	}
 
-	return blob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+	return to.Ptr(blob.DeleteSnapshotsOptionType(strings.ToLower(d.String())))
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -179,11 +180,11 @@ func (p PermanentDeleteOption) String() string {
 	return enum.StringInt(p, reflect.TypeOf(p))
 }
 
-func (p PermanentDeleteOption) ToPermanentDeleteOptionType() blob.DeleteType {
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() *blob.DeleteType {
 	if p == EPermanentDeleteOption.None() {
-		return ""
+		return nil
 	}
-	return blob.DeleteTypePermanent
+	return to.Ptr(blob.DeleteTypePermanent)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

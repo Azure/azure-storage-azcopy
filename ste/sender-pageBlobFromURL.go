@@ -22,12 +22,10 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"strings"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -35,19 +33,16 @@ import (
 type urlToPageBlobCopier struct {
 	pageBlobSenderBase
 
-	srcURL                   url.URL
+	srcURL                   string
 	sourcePageRangeOptimizer *pageRangeOptimizer // nil if src is not a page blob
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	srcURL, err := srcInfoProvider.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
 	}
-	sourceURL, err := url.Parse(srcURL)
-	if err != nil {
-		return nil, err
-	}
+	srcPageBlobClient, err := common.CreatePageBlobClient(srcURL, jptm.S2SSourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	var destBlobTier blob.AccessTier
 	var pageRangeOptimizer *pageRangeOptimizer
@@ -57,18 +52,18 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
 			// capture the necessary info so that we can perform optimizations later
-			pageRangeOptimizer = newPageRangeOptimizer(azblob.NewPageBlobURL(*sourceURL, jptm.SourceProviderPipeline()), jptm.Context())
+			pageRangeOptimizer = newPageRangeOptimizer(srcPageBlobClient, jptm.Context())
 		}
 	}
 
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider, destBlobTier)
+	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}
 
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase:       *senderBase,
-		srcURL:                   *sourceURL,
+		srcURL:                   srcURL,
 		sourcePageRangeOptimizer: pageRangeOptimizer}, nil
 }
 
@@ -92,7 +87,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 
 		// if there's no data at the source (and the destination for managed disks), skip this chunk
-		pageRange := azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + adjustedChunkSize - 1}
+		pageRange := pageblob.PageRange{Start: to.Ptr(id.OffsetInFile()), End: to.Ptr(id.OffsetInFile() + adjustedChunkSize - 1)}
 		if c.sourcePageRangeOptimizer != nil && !c.sourcePageRangeOptimizer.doesRangeContainData(pageRange) {
 			var destContainsData bool
 
@@ -125,9 +120,17 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		_, err := c.destPageBlobURL.UploadPagesFromURL(
-			enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
-			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
+		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
+			return
+		}
+		_, err = c.destPageBlobClient.UploadPagesFromURL(enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize,
+			&pageblob.UploadPagesFromURLOptions{
+				CPKInfo: c.jptm.CpkInfo(),
+				CPKScopeInfo: c.jptm.CpkScopeInfo(),
+				CopySourceAuthorization: token,
+			})
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
@@ -140,13 +143,13 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 //	1. capture the necessary info to do so, so that fetchPages can be invoked anywhere
 //  2. open to extending the logic, which could be re-used for both download and s2s scenarios
 type pageRangeOptimizer struct {
-	srcPageBlobURL azblob.PageBlobURL
+	srcPageBlobClient *pageblob.Client
 	ctx            context.Context
-	srcPageList    *azblob.PageList // nil if src is not a page blob, or it was not possible to get a response
+	srcPageList    *pageblob.PageList // nil if src is not a page blob, or it was not possible to get a response
 }
 
-func newPageRangeOptimizer(srcPageBlobURL azblob.PageBlobURL, ctx context.Context) *pageRangeOptimizer {
-	return &pageRangeOptimizer{srcPageBlobURL: srcPageBlobURL, ctx: ctx}
+func newPageRangeOptimizer(srcPageBlobClient *pageblob.Client, ctx context.Context) *pageRangeOptimizer {
+	return &pageRangeOptimizer{srcPageBlobClient: srcPageBlobClient, ctx: ctx}
 }
 
 func (p *pageRangeOptimizer) fetchPages() {
@@ -164,14 +167,24 @@ func (p *pageRangeOptimizer) fetchPages() {
 	// TODO follow up with the service folks to confirm the scale at which the timeouts occur
 	// TODO perhaps we need to add more logic here to optimize for more cases
 	limitedContext := withNoRetryForBlob(p.ctx) // we don't want retries here. If it doesn't work the first time, we don't want to chew up (lots) time retrying
-	pageList, err := p.srcPageBlobURL.GetPageRanges(limitedContext, 0, 0, azblob.BlobAccessConditions{})
-	if err == nil {
-		p.srcPageList = pageList
+	pager := p.srcPageBlobClient.NewGetPageRangesPager(nil)
+
+	for pager.More() {
+		pageList, err := pager.NextPage(limitedContext)
+		if err == nil {
+			if p.srcPageList == nil {
+				p.srcPageList = &pageList.PageList
+			} else {
+				p.srcPageList.PageRange = append(p.srcPageList.PageRange, pageList.PageRange...)
+				p.srcPageList.ClearRange = append(p.srcPageList.ClearRange, pageList.ClearRange...)
+				p.srcPageList.NextMarker = pageList.NextMarker
+			}
+		}
 	}
 }
 
 // check whether a particular given range is worth transferring, i.e. whether there's data at the source
-func (p *pageRangeOptimizer) doesRangeContainData(givenRange azblob.PageRange) bool {
+func (p *pageRangeOptimizer) doesRangeContainData(givenRange pageblob.PageRange) bool {
 	// if we have no page list stored, then assume there's data everywhere
 	// (this is particularly important when we are using this code not just for performance, but also
 	// for correctness - as we do when using on the destination of a managed disk upload)
@@ -181,13 +194,13 @@ func (p *pageRangeOptimizer) doesRangeContainData(givenRange azblob.PageRange) b
 
 	// note that the page list is ordered in increasing order (in terms of position)
 	for _, srcRange := range p.srcPageList.PageRange {
-		if givenRange.End < srcRange.Start {
+		if *givenRange.End < *srcRange.Start {
 			// case 1: due to the nature of the list (it's sorted), if we've reached such a srcRange
 			// we've checked all the appropriate srcRange already and haven't found any overlapping srcRange
 			// given range:		|   |
 			// source range:			|   |
 			return false
-		} else if srcRange.End < givenRange.Start {
+		} else if *srcRange.End < *givenRange.Start {
 			// case 2: the givenRange comes after srcRange, continue checking
 			// given range:				|   |
 			// source range:	|   |

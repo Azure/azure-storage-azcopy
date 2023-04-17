@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"net/url"
@@ -32,7 +33,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -40,7 +40,6 @@ import (
 type pageBlobSenderBase struct {
 	jptm               IJobPartTransferMgr
 	destPageBlobClient *pageblob.Client
-	destPageBlobURL    azblob.PageBlobURL
 	srcSize            int64
 	chunkSize          int64
 	numChunks          uint32
@@ -52,8 +51,7 @@ type pageBlobSenderBase struct {
 	// the properties of the local file
 	headersToApply  blob.HTTPHeaders
 	metadataToApply common.Metadata
-	blobTagsToApply azblob.BlobTagsMap
-	cpkToApply      azblob.ClientProvidedKeyOptions
+	blobTagsToApply common.BlobTags
 
 	destBlobTier blob.AccessTier
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
@@ -82,7 +80,7 @@ var (
 	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
 )
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -90,19 +88,12 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	// If the given chunk Size for the Job is invalid for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
 	chunkSize = common.Iff(
-		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
+		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%pageblob.PageBytes != 0),
 		common.DefaultPageBlobChunkSize,
 		chunkSize)
 
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
-
-	destURL, err := url.Parse(destination)
-	if err != nil {
-		return nil, err
-	}
-
-	destPageBlobURL := azblob.NewPageBlobURL(*destURL, p)
 
 	destPageBlobClient, err := common.CreatePageBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	if err != nil {
@@ -113,7 +104,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 	// Read the in struct explanation if necessary.
 	var destRangeOptimizer *pageRangeOptimizer
 	if isInManagedDiskImportExportAccount(destination) {
-		destRangeOptimizer = newPageRangeOptimizer(destPageBlobURL, jptm.Context())
+		destRangeOptimizer = newPageRangeOptimizer(destPageBlobClient, jptm.Context())
 	}
 
 	props, err := srcInfoProvider.Properties()
@@ -129,23 +120,18 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		destBlobTier = pageBlobTierOverride.ToAccessTierType()
 	}
 
-	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
-
 	s := &pageBlobSenderBase{
 		jptm:                   jptm,
 		destPageBlobClient:     destPageBlobClient,
-		destPageBlobURL:        destPageBlobURL,
 		srcSize:                srcSize,
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		metadataToApply:        props.SrcMetadata,
-		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
+		blobTagsToApply:        props.SrcBlobTags,
 		destBlobTier:           destBlobTier,
 		filePacer:              NewNullAutoPacer(), // defer creation of real one to Prologue
-		cpkToApply:             cpkToApply,
 		destPageRangeOptimizer: destRangeOptimizer,
 	}
 
@@ -243,40 +229,40 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
 
-	destBlobTier := azblob.PremiumPageBlobAccessTierType(s.destBlobTier)
-	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobURL.BlobURL, s.jptm.Context(), false) {
-		destBlobTier = azblob.DefaultPremiumBlobAccessTier
+	t := pageblob.PremiumPageBlobAccessTier(s.destBlobTier)
+	destBlobTier := &t
+	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobClient, s.jptm.Context(), false) {
+		destBlobTier = nil
+	}
+	// TODO: Remove this snippet once service starts supporting CPK with blob tier
+	if s.jptm.IsSourceEncrypted() {
+		destBlobTier = nil
 	}
 
 	blobTags := s.blobTagsToApply
-	separateSetTagsRequired := separateSetTagsRequired(blobTags)
-	if separateSetTagsRequired || len(blobTags) == 0 {
+	setTags := separateSetTagsRequired(blobTags)
+	if setTags || len(blobTags) == 0 {
 		blobTags = nil
 	}
 
-	// TODO: Remove this snippet once service starts supporting CPK with blob tier
-	if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
-		destBlobTier = azblob.PremiumPageBlobAccessTierNone
-	}
-
-	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
-		s.srcSize,
-		0,
-		common.ToAzBlobHTTPHeaders(s.headersToApply),
-		s.metadataToApply.ToAzBlobMetadata(),
-		azblob.BlobAccessConditions{},
-		destBlobTier,
-		blobTags,
-		s.cpkToApply,
-		azblob.ImmutabilityPolicyOptions{},
-	); err != nil {
+	_, err := s.destPageBlobClient.Create(s.jptm.Context(), s.srcSize,
+		&pageblob.CreateOptions{
+			SequenceNumber: to.Ptr(int64(0)),
+			HTTPHeaders: &s.headersToApply,
+			Metadata: s.metadataToApply,
+			Tier: destBlobTier,
+			Tags: blobTags,
+			CPKInfo: s.jptm.CpkInfo(),
+			CPKScopeInfo: s.jptm.CpkScopeInfo(),
+		})
+	if err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 
 	destinationModified = true
 
-	if separateSetTagsRequired {
+	if setTags {
 		if _, err := s.destPageBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil); err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
@@ -299,9 +285,9 @@ func (s *pageBlobSenderBase) Cleanup() {
 		} else {
 			deletionContext, cancelFunc := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 30*time.Second)
 			defer cancelFunc()
-			_, err := s.destPageBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			_, err := s.destPageBlobClient.Delete(deletionContext, nil)
 			if err != nil {
-				jptm.LogError(s.destPageBlobURL.String(), "Delete (incomplete) Page Blob ", err)
+				jptm.LogError(s.destPageBlobClient.URL(), "Delete (incomplete) Page Blob ", err)
 			}
 		}
 	}

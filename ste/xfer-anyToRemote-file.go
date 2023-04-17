@@ -26,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"hash"
 	"net/http"
 	"net/url"
@@ -37,6 +36,12 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+// IBlobClient is an interface to allow ValidateTier to accept any type of client
+type IBlobClient interface {
+	URL() string
+	GetAccountInfo(ctx context.Context, o *blob.GetAccountInfoOptions) (blob.GetAccountInfoResponse, error)
+}
 
 // This code for blob tier safety is _not_ safe for multiple jobs at once.
 // That's alright, but it's good to know on the off chance.
@@ -54,9 +59,9 @@ var tierSetPossibleFail bool
 var getDestAccountInfo sync.Once
 var getDestAccountInfoError error
 
-func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
+func prepareDestAccountInfo(client IBlobClient, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
 	getDestAccountInfo.Do(func() {
-		infoResp, err := bURL.GetAccountInfo(ctx)
+		infoResp, err := client.GetAccountInfo(ctx, nil)
 		if err != nil {
 			// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
 			// UNLESS the user is using OAuth. In which case, the account owner can still get the info.
@@ -72,8 +77,10 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 				destAccountKind = "failget"
 			}
 		} else {
-			destAccountSKU = string(infoResp.SkuName())
-			destAccountKind = string(infoResp.AccountKind())
+			sku := infoResp.SKUName
+			kind := infoResp.AccountKind
+			destAccountSKU = string(*sku)
+			destAccountKind = string(*kind)
 		}
 	})
 
@@ -121,7 +128,7 @@ func BlobTierAllowed(destTier blob.AccessTier) bool {
 	}
 }
 
-func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, blobURL azblob.BlobURL, ctx context.Context, performQuietly bool) (isValid bool) {
+func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, client IBlobClient, ctx context.Context, performQuietly bool) (isValid bool) {
 
 	if jptm.IsLive() && blobTier != "" {
 
@@ -129,10 +136,13 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, blobURL az
 		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
 		// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
 		// User delegation SAS is the same as OAuth
-		destParts := azblob.NewBlobURLParts(blobURL.URL())
-		mustGet := destParts.SAS.Encode() != "" && destParts.SAS.SignedTid() == ""
+		destParts, err := blob.ParseURL(client.URL())
+		if err != nil {
+			return false
+		}
+		mustGet := destParts.SAS.Encode() != "" && destParts.SAS.SignedTID() == ""
 
-		prepareDestAccountInfo(blobURL, jptm, ctx, mustGet)
+		prepareDestAccountInfo(client, jptm, ctx, mustGet)
 		tierAvailable := BlobTierAllowed(blobTier)
 
 		if tierAvailable {
