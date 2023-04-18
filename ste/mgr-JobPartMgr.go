@@ -158,7 +158,9 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	return azcore.ClientOptions{
 		//APIVersion: ,
 		//Cloud: ,
-		//Logging: ,
+		Logging: policy.LogOptions{
+			AllowedHeaders: []string{"x-ms-tags", "x-ms-access-tier",},
+		},
 		Retry:     retry,
 		Telemetry: telemetry,
 		//TracingProvider: ,
