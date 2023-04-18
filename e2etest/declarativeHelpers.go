@@ -185,7 +185,6 @@ type params struct {
 	/*
 		INFO: source:  dest: /New Text Document.txt
 	*/
-	logLevel  string
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level

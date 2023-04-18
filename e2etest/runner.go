@@ -79,11 +79,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 		t.flags[key] = fmt.Sprintf(format, value)
 	}
 
-	if p.logLevel != "" {
-		set("log-level", p.logLevel, "DEBUG")
-	} else {
-		set("log-level", "debug", "debug")
-	}
+	set("log-level", "debug", "debug")
 
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
@@ -137,6 +133,7 @@ func (t *TestRunner) computeArgs() []string {
 	for key, value := range t.flags {
 		args = append(args, fmt.Sprintf("--%s=%s", key, value))
 	}
+	args = append(args, "--log-level=DEBUG")
 
 	return append(args, "--output-type=json")
 }
