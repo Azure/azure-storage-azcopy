@@ -22,7 +22,9 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/JeffreyRichter/enum/enum"
 	"net/url"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -51,9 +53,36 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	return userFromTo, nil
 }
 
-const fromToHelpText = "Valid values are two-word phases of the form BlobLocal, LocalBlob etc.  Use the word 'Blob' for Blob Storage, " +
-	"'Local' for the local file system, 'File' for Azure Files, and 'BlobFS' for ADLS Gen2. " +
-	"If you need a combination that is not supported yet, please log an issue on the AzCopy GitHub issues list."
+const fromToHelpFormat = "Valid FromTo are pairs of Source-Destination words (e.g. BlobLocal, BlobBlob) that specify the source and destination resource types. All valid FromTos are: %s"
+
+var fromToHelp = func() string {
+	validFromTos := ""
+
+	isSafeToOutput := func(loc common.Location) bool {
+		switch loc {
+		case common.ELocation.Benchmark(),
+			common.ELocation.None(),
+			common.ELocation.Unknown():
+			return false
+		default:
+			return true
+		}
+	}
+
+	enum.GetSymbols(reflect.TypeOf(common.EFromTo), func(enumSymbolName string, enumSymbolValue interface{}) (stop bool) {
+		fromTo := enumSymbolValue.(common.FromTo)
+
+		if isSafeToOutput(fromTo.From()) && isSafeToOutput(fromTo.To()) {
+			validFromTos += fromTo.String() + ", "
+		}
+
+		return false
+	})
+
+	return fmt.Sprintf(fromToHelpFormat, strings.TrimSuffix(validFromTos, ", "))
+}()
+
+var fromToHelpText = fromToHelp
 
 func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
