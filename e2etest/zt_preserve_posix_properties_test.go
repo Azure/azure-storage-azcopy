@@ -25,6 +25,7 @@ func TestPOSIX_SpecialFilesToBlob(t *testing.T) {
 			recursive: true,
 			preservePOSIXProperties: true,
 			symlinkHandling: common.ESymlinkHandlingType.Preserve(),
+			logLevel: "DEBUG"
 		},
 		nil,
 		testFiles{
