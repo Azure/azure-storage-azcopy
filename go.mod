@@ -33,6 +33,8 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 )
 
+replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob => github.com/gapra-msft/azure-sdk-for-go/sdk/storage/azblob v0.0.0-20230418204600-40dc24ef9985
+
 require (
 	cloud.google.com/go v0.107.0 // indirect
 	cloud.google.com/go/compute v1.14.0 // indirect

@@ -17,7 +17,7 @@ type blobSymlinkSender struct {
 	sip              ISourceInfoProvider
 	headersToApply   blob.HTTPHeaders
 	metadataToApply  common.Metadata
-	destBlobTier     blob.AccessTier
+	destBlobTier     *blob.AccessTier
 	blobTagsToApply common.BlobTags
 }
 
@@ -29,10 +29,12 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISou
 		return nil, err
 	}
 
-	var destBlobTier blob.AccessTier
+	var destBlobTier *blob.AccessTier
 	blockBlobTierOverride, _ := jptm.BlobTiers()
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
-		destBlobTier = blockBlobTierOverride.ToAccessTierType()
+		destBlobTier = to.Ptr(blockBlobTierOverride.ToAccessTierType())
+	} else {
+		destBlobTier = nil
 	}
 
 	var out sender
@@ -66,7 +68,7 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 		&blockblob.UploadOptions{
 			HTTPHeaders: &s.headersToApply,
 			Metadata: s.metadataToApply,
-			Tier: &s.destBlobTier,
+			Tier: s.destBlobTier,
 			Tags: s.blobTagsToApply,
 			CPKInfo: s.jptm.CpkInfo(),
 			CPKScopeInfo: s.jptm.CpkScopeInfo(),
