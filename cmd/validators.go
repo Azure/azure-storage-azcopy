@@ -53,7 +53,7 @@ func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	return userFromTo, nil
 }
 
-const fromToHelpFormat = "Valid FromTo are pairs of Source-Destination words (e.g. BlobLocal, BlobBlob) that specify the source and destination resource types. All valid FromTos are: %s"
+const fromToHelpFormat = "Specified to nudge AzCopy when resource detection may not work (e.g. piping/emulator/azure stack); Valid FromTo are pairs of Source-Destination words (e.g. BlobLocal, BlobBlob) that specify the source and destination resource types. All valid FromTos are: %s"
 
 var fromToHelp = func() string {
 	validFromTos := ""
