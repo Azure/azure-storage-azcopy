@@ -6,6 +6,11 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"net/url"
 	"os"
 	"time"
@@ -16,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	minio "github.com/minio/minio-go"
 	"github.com/spf13/cobra"
@@ -45,7 +49,7 @@ func init() {
 	resourceTypeStr := ""
 
 	blobSize := uint32(0)
-	metaData := ""
+	metadata := ""
 	contentType := ""
 	contentEncoding := ""
 	contentDisposition := ""
@@ -53,7 +57,7 @@ func init() {
 	cacheControl := ""
 	contentMD5 := ""
 	location := ""
-	tier := azblob.DefaultAccessTier
+	var tier *blob.AccessTier = nil
 
 	createCmd := &cobra.Command{
 		Use:     "create",
@@ -91,14 +95,14 @@ func init() {
 					createBlob(
 						resourceURL,
 						blobSize,
-						getBlobMetadata(metaData),
-						azblob.BlobHTTPHeaders{
-							ContentType:        contentType,
-							ContentDisposition: contentDisposition,
-							ContentEncoding:    contentEncoding,
-							ContentLanguage:    contentLanguage,
-							ContentMD5:         md5,
-							CacheControl:       cacheControl,
+						getBlobMetadata(metadata),
+						&blob.HTTPHeaders{
+							BlobContentType:        &contentType,
+							BlobContentDisposition: &contentDisposition,
+							BlobContentEncoding:    &contentEncoding,
+							BlobContentLanguage:    &contentLanguage,
+							BlobContentMD5:         md5,
+							BlobCacheControl:       &cacheControl,
 						}, tier)
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
@@ -111,7 +115,7 @@ func init() {
 					createFile(
 						resourceURL,
 						blobSize,
-						getFileMetadata(metaData),
+						getFileMetadata(metadata),
 						azfile.FileHTTPHeaders{
 							ContentType:        contentType,
 							ContentDisposition: contentDisposition,
@@ -140,7 +144,7 @@ func init() {
 							ContentEncoding:    contentEncoding,
 							ContentLanguage:    contentLanguage,
 							CacheControl:       cacheControl,
-							UserMetadata:       getS3Metadata(metaData),
+							UserMetadata:       getS3Metadata(metadata),
 						})
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
@@ -156,7 +160,7 @@ func init() {
 						ContentEncoding:    contentEncoding,
 						ContentLanguage:    contentLanguage,
 						CacheControl:       cacheControl,
-						Metadata:           getS3Metadata(metaData),
+						Metadata:           getS3Metadata(metadata),
 					})
 				}
 			case EServiceType.BlobFS():
@@ -171,7 +175,7 @@ func init() {
 	createCmd.PersistentFlags().StringVar(&serviceTypeStr, "serviceType", "Blob", "Service type, could be blob, file or blobFS currently.")
 	createCmd.PersistentFlags().StringVar(&resourceTypeStr, "resourceType", "SingleFile", "Resource type, could be a single file, bucket.")
 	createCmd.PersistentFlags().Uint32Var(&blobSize, "blob-size", 0, "")
-	createCmd.PersistentFlags().StringVar(&metaData, "metadata", "", "metadata for blob.")
+	createCmd.PersistentFlags().StringVar(&metadata, "metadata", "", "metadata for blob.")
 	createCmd.PersistentFlags().StringVar(&contentType, "content-type", "", "content type for blob.")
 	createCmd.PersistentFlags().StringVar(&contentEncoding, "content-encoding", "", "content encoding for blob.")
 	createCmd.PersistentFlags().StringVar(&contentDisposition, "content-disposition", "", "content disposition for blob.")
@@ -183,14 +187,14 @@ func init() {
 
 }
 
-func getBlobMetadata(metadataString string) azblob.Metadata {
-	var metadata azblob.Metadata
+func getBlobMetadata(metadataString string) map[string]*string {
+	var metadata map[string]*string
 
 	if len(metadataString) > 0 {
-		metadata = azblob.Metadata{}
+		metadata = map[string]*string{}
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadata[kv[0]] = kv[1]
+			metadata[kv[0]] = to.Ptr(kv[1])
 		}
 	}
 
@@ -225,18 +229,9 @@ func getS3Metadata(metadataString string) map[string]string {
 }
 
 // Can be used for overwrite scenarios.
-func createContainer(container string) {
-	u, err := url.Parse(container)
-
-	if err != nil {
-		fmt.Println("error parsing the container URL with SAS ", err)
-		os.Exit(1)
-	}
-
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-
-	containerURL := azblob.NewContainerURL(*u, p)
-	_, err = containerURL.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
+func createContainer(containerURL string) {
+	containerClient, err := container.NewClientWithNoCredential(containerURL, nil)
+	_, err = containerClient.Create(context.Background(), nil)
 
 	if ignoreStorageConflictStatus(err) != nil {
 		fmt.Println("fail to create container, ", err)
@@ -244,44 +239,30 @@ func createContainer(container string) {
 	}
 }
 
-func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders, tier azblob.AccessTierType) {
-	url, err := url.Parse(blobURL)
-	if err != nil {
-		fmt.Println("error parsing the blob sas ", err)
-		os.Exit(1)
-	}
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	blobUrl := azblob.NewBlockBlobURL(*url, p)
+func createBlob(blobURL string, blobSize uint32, metadata map[string]*string, blobHTTPHeaders *blob.HTTPHeaders, tier *blob.AccessTier) {
+	blobClient, err := blockblob.NewClientWithNoCredential(blobURL, nil)
 
 	randomString := createStringWithRandomChars(int(blobSize))
-	if blobHTTPHeaders.ContentType == "" {
-		blobHTTPHeaders.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
+	if blobHTTPHeaders.BlobContentType == nil {
+		blobHTTPHeaders.BlobContentType = to.Ptr(strings.Split(http.DetectContentType([]byte(randomString)), ";")[0])
 	}
 
 	// Generate a content MD5 for the new blob if requested
 	if genMD5 {
 		md5hasher := md5.New()
 		md5hasher.Write([]byte(randomString))
-		blobHTTPHeaders.ContentMD5 = md5hasher.Sum(nil)
+		blobHTTPHeaders.BlobContentMD5 = md5hasher.Sum(nil)
 	}
 
-	putBlobResp, err := blobUrl.Upload(
-		context.Background(),
-		strings.NewReader(randomString),
-		blobHTTPHeaders,
-		metadata,
-		azblob.BlobAccessConditions{},
-		tier,
-		nil,
-		azblob.ClientProvidedKeyOptions{},
-		azblob.ImmutabilityPolicyOptions{})
+	_, err = blobClient.Upload(context.Background(), streaming.NopCloser(strings.NewReader(randomString)),
+		&blockblob.UploadOptions{
+			HTTPHeaders: blobHTTPHeaders,
+			Metadata: metadata,
+			Tier: tier,
+		})
 	if err != nil {
 		fmt.Printf("error uploading the blob %v\n", err)
 		os.Exit(1)
-	}
-	if putBlobResp.Response() != nil {
-		_, _ = io.Copy(io.Discard, putBlobResp.Response().Body)
-		putBlobResp.Response().Body.Close()
 	}
 }
 

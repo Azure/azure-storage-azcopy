@@ -4,6 +4,10 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"google.golang.org/api/iterator"
 	"net/http"
@@ -16,7 +20,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 	"github.com/spf13/cobra"
@@ -152,24 +155,18 @@ func init() {
 	cleanCmd.PersistentFlags().StringVar(&serviceTypeStr, "serviceType", "Blob", "Account type, could be blob, file or blobFS currently.")
 }
 
-func cleanContainer(container string) {
-	containerURLBase, err := url.Parse(container)
+func cleanContainer(resourceURL string) {
+	containerClient := createContainerClient(resourceURL)
 
-	if err != nil {
-		fmt.Println("error parsing the container sas, ", err)
-		os.Exit(1)
-	}
-
-	p := createBlobPipeline(*containerURLBase)
-	containerUrl := azblob.NewContainerURL(*containerURLBase, p)
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Create the container. This will fail if it's already present but this saves us the pain of a container being missing for one reason or another.
-	_, _ = containerUrl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+	_, _ = containerClient.Create(ctx, nil)
 
 	// perform a list blob
-	for marker := (azblob.Marker{}); marker.NotDone(); {
+	pager := containerClient.NewListBlobsFlatPager(nil)
+	for pager.More() {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker, azblob.ListBlobsSegmentOptions{})
+		listBlob, err := pager.NextPage(ctx)
 		if err != nil {
 			fmt.Println("error listing blobs inside the container. Please check the container sas", err)
 			os.Exit(1)
@@ -177,29 +174,20 @@ func cleanContainer(container string) {
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
-			_, err := containerUrl.NewBlobURL(blobInfo.Name).Delete(ctx, "include", azblob.BlobAccessConditions{})
+			_, err := containerClient.NewBlobClient(*blobInfo.Name).Delete(ctx, &blob.DeleteOptions{DeleteSnapshots: to.Ptr(blob.DeleteSnapshotsOptionTypeInclude)})
 			if err != nil {
 				fmt.Println("error deleting the blob from container ", blobInfo.Name)
 				os.Exit(1)
 			}
 		}
-		marker = listBlob.NextMarker
 	}
 }
 
-func cleanBlob(blob string) {
-	blobURLBase, err := url.Parse(blob)
-
-	if err != nil {
-		fmt.Println("error parsing the container sas ", err)
-		os.Exit(1)
-	}
-
-	p := createBlobPipeline(*blobURLBase)
-	blobUrl := azblob.NewBlobURL(*blobURLBase, p)
+func cleanBlob(resourceURL string) {
+	blobClient := createBlobClient(resourceURL)
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	_, err = blobUrl.Delete(ctx, "include", azblob.BlobAccessConditions{})
+	_, err := blobClient.Delete(ctx, &blob.DeleteOptions{DeleteSnapshots: to.Ptr(blob.DeleteSnapshotsOptionTypeInclude)})
 	if err != nil {
 		fmt.Println("error deleting the blob ", err)
 		os.Exit(1)
@@ -258,11 +246,53 @@ func cleanFile(fileURLStr string) {
 	}
 }
 
-func createBlobPipeline(u url.URL) pipeline.Pipeline {
+func createBlobClient(resourceURL string) *blob.Client {
+	blobURLParts, err := blob.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	blobClient := createBlobServiceClient(resourceURL).NewContainerClient(blobURLParts.ContainerName).NewBlobClient(blobURLParts.BlobName)
+	if blobURLParts.Snapshot != "" {
+		blobClient, err = blobClient.WithSnapshot(blobURLParts.Snapshot)
+		if err != nil {
+			fmt.Println("Failed to create snapshot client")
+			os.Exit(1)
+		}
+	}
+	if blobURLParts.VersionID != "" {
+		blobClient, err = blobClient.WithVersionID(blobURLParts.VersionID)
+		if err != nil {
+			fmt.Println("Failed to create version id client")
+			os.Exit(1)
+		}
+	}
+
+	return blobClient
+}
+
+func createContainerClient(resourceURL string) *container.Client {
+	blobURLParts, err := blob.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	return createBlobServiceClient(resourceURL).NewContainerClient(blobURLParts.ContainerName)
+}
+
+func createBlobServiceClient(resourceURL string) *blobservice.Client {
 	// Get name and key variables from environment.
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
-	blobURLParts := azblob.NewBlobURLParts(u)
+	blobURLParts, err := blob.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	blobURLParts.ContainerName = ""
+	blobURLParts.BlobName = ""
+	blobURLParts.VersionID = ""
+	blobURLParts.Snapshot = ""
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in the environment, and there is no SAS token present
 	if (name == "" && key == "") && blobURLParts.SAS.Encode() == "" {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
@@ -270,15 +300,25 @@ func createBlobPipeline(u url.URL) pipeline.Pipeline {
 	}
 	// create the pipeline, preferring SAS over account name/key
 	if blobURLParts.SAS.Encode() != "" {
-		return azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+		bsc, err := blobservice.NewClientWithNoCredential(resourceURL, nil)
+		if err != nil {
+			fmt.Println("Failed to create blob service client")
+			os.Exit(1)
+		}
+		return bsc
 	}
 
-	c, err := azblob.NewSharedKeyCredential(name, key)
+	c, err := blob.NewSharedKeyCredential(name, key)
 	if err != nil {
 		fmt.Println("Failed to create shared key credential!")
 		os.Exit(1)
 	}
-	return azblob.NewPipeline(c, azblob.PipelineOptions{})
+	bsc, err := blobservice.NewClientWithSharedKeyCredential(resourceURL, c, nil)
+	if err != nil {
+		fmt.Println("Failed to create blob service client")
+		os.Exit(1)
+	}
+	return bsc
 }
 
 func createFilePipeline(u url.URL) pipeline.Pipeline {
@@ -369,33 +409,26 @@ func cleanBfsFile(fileURLStr string) {
 }
 
 func cleanBlobAccount(resourceURL string) {
-	accountURLBase, err := url.Parse(resourceURL)
-
-	if err != nil {
-		fmt.Println("error parsing the account sas ", err)
-		os.Exit(1)
-	}
-
-	p := createBlobPipeline(*accountURLBase)
-	accountURL := azblob.NewServiceURL(*accountURLBase, p)
+	serviceClient := createBlobServiceClient(resourceURL)
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// perform a list account
-	for marker := (azblob.Marker{}); marker.NotDone(); {
+	pager := serviceClient.NewListContainersPager(nil)
+
+	for pager.More() {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		lResp, err := accountURL.ListContainersSegment(ctx, marker, azblob.ListContainersSegmentOptions{})
+		lResp, err := pager.NextPage(ctx)
 		if err != nil {
 			fmt.Println("error listing containers, please check the container sas, ", err)
 			os.Exit(1)
 		}
 
 		for _, containerItem := range lResp.ContainerItems {
-			_, err := accountURL.NewContainerURL(containerItem.Name).Delete(ctx, azblob.ContainerAccessConditions{})
+			_, err := serviceClient.NewContainerClient(*containerItem.Name).Delete(ctx, nil)
 			if err != nil {
 				fmt.Println("error deleting the container from account, ", err)
 				os.Exit(1)
 			}
 		}
-		marker = lResp.NextMarker
 	}
 }
 

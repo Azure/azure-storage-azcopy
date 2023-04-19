@@ -4,6 +4,14 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,12 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +42,7 @@ type TestBlobCommand struct {
 	// If the object is directory, then validation goes through another path.
 	IsObjectDirectory bool
 	// Metadata of the blob to be validated.
-	MetaData string
+	Metadata string
 	// NoGuessMimeType represent the azcopy NoGuessMimeType flag set while uploading the blob.
 	NoGuessMimeType bool
 	// Represents the flag to determine whether number of blocks or pages needs
@@ -92,7 +97,7 @@ func init() {
 	}
 	rootCmd.AddCommand(testBlobCmd)
 	// add flags.
-	testBlobCmd.PersistentFlags().StringVar(&cmdInput.MetaData, "metadata", "", "metadata expected from the blob in the container")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.Metadata, "metadata", "", "metadata expected from the blob in the container")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentType, "content-type", "", "content type expected from the blob in the container")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentEncoding, "content-encoding", "", "Validate content encoding.")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentDisposition, "content-disposition", "", "Validate content disposition.")
@@ -104,21 +109,24 @@ func init() {
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.VerifyBlockOrPageSize, "verify-block-size", false, "this flag verify the block size by determining the number of blocks")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.NoGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.BlobType, "blob-type", "BlockBlob", "Upload to Azure Storage using this blob type.")
-	testBlobCmd.PersistentFlags().StringVar(&cmdInput.BlobTier, "blob-tier", string(azblob.AccessTierNone), "access tier type for the block blob")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.BlobTier, "blob-tier", "", "access tier type for the block blob")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.CheckContentType, "check-content-type", false, "Validate content type.")
 }
 
-func verifyBlobType(url url.URL, ctx context.Context, p pipeline.Pipeline, intendedBlobType string) (bool, error) {
-	bURL := azblob.NewBlobURL(url, p)
-	pResp, err := bURL.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+func verifyBlobType(resourceURL string, ctx context.Context, intendedBlobType string) (bool, error) {
+	blobClient, err := blob.NewClientWithNoCredential(resourceURL, nil)
+	if err != nil {
+		return false, err
+	}
+	pResp, err := blobClient.GetProperties(ctx, nil)
 
 	if err != nil {
 		return false, err
 	}
 
-	if string(pResp.BlobType()) != intendedBlobType {
-		return false, fmt.Errorf("blob URL is not intended blob type %s, but instead %s", intendedBlobType, pResp.BlobType())
+	if string(*pResp.BlobType) != intendedBlobType {
+		return false, fmt.Errorf("blob URL is not intended blob type %s, but instead %s", intendedBlobType, *pResp.BlobType)
 	}
 
 	return true, nil
@@ -152,29 +160,30 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 	sasUrl.Path = "/" + containerName
 
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
-	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    10 * time.Minute,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay},
-		nil,
-		ste.NewAzcopyHTTPClient(0),
-		nil)
-	containerUrl := azblob.NewContainerURL(*sasUrl, p)
+	containerClient, err := container.NewClientWithNoCredential(sasUrl.String(), &container.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Telemetry: policy.TelemetryOptions{ApplicationID: common.UserAgent},
+			Retry: policy.RetryOptions{
+				MaxRetries: ste.UploadMaxTries,
+				TryTimeout: 10*time.Minute,
+				RetryDelay: ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+			Transport: ste.NewAzcopyHTTPClient(0),
+		}})
+	if err != nil {
+		fmt.Printf("error creating container client. failed with error %s\n", err.Error())
+		os.Exit(1)
+	}
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 	// perform a list blob with search prefix "dirname/"
 	dirName := strings.Split(testBlobCmd.Object, "/")
 	searchPrefix := dirName[len(dirName)-1] + "/"
-	for marker := (azblob.Marker{}); marker.NotDone(); {
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix})
+	for pager.More() {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobsFlatSegment(testCtx, marker, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
+		listBlob, err := pager.NextPage(testCtx)
 		if err != nil {
 			fmt.Println("error listing blobs inside the container. Please check the container sas")
 			os.Exit(1)
@@ -183,23 +192,21 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// get the blob
-			size := blobInfo.Properties.ContentLength
-			get, err := containerUrl.NewBlobURL(blobInfo.Name).Download(testCtx,
-				0, *size, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+			get, err := containerClient.NewBlobClient(*blobInfo.Name).DownloadStream(testCtx, nil)
 
 			if err != nil {
-				fmt.Printf("error downloading the blob %s\n", blobInfo.Name)
+				fmt.Printf("error downloading the blob %s\n", *blobInfo.Name)
 				os.Exit(1)
 			}
 
 			// read all bytes.
-			blobBytesDownloaded, err := io.ReadAll(get.Body(azblob.RetryReaderOptions{}))
+			blobBytesDownloaded, err := io.ReadAll(get.Body())
 			if err != nil {
-				fmt.Printf("error reading the body of blob %s downloaded and failed with error %s\n", blobInfo.Name, err.Error())
+				fmt.Printf("error reading the body of blob %s downloaded and failed with error %s\n", *blobInfo.Name, err.Error())
 				os.Exit(1)
 			}
 			// remove the search prefix from the blob name
-			blobName := strings.Replace(blobInfo.Name, searchPrefix, "", 1)
+			blobName := strings.Replace(*blobInfo.Name, searchPrefix, "", 1)
 			// blob path on local disk.
 			objectLocalPath := testBlobCmd.Object + string(os.PathSeparator) + blobName
 			// opening the file locally and memory mapping it.
@@ -229,40 +236,39 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 				os.Exit(1)
 			}
 		}
-		marker = listBlob.NextMarker
 	}
 
 }
 
-// validateMetadata compares the meta data provided while
+// validateMetadata compares the metadata provided while
 // uploading and metadata with blob in the container.
-func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metadata) bool {
-	if len(expectedMetaDataString) > 0 {
-		// split the meta data string to get the map of key value pair
+func validateMetadata(expectedMetadataString string, actualMetadata map[string]*string) bool {
+	if len(expectedMetadataString) > 0 {
+		// split the metadata string to get the map of key value pair
 		// metadata string is in format key1=value1;key2=value2;key3=value3
-		expectedMetaData := azblob.Metadata{}
+		expectedMetadata := map[string]*string{}
 		// split the metadata to get individual keyvalue pair in format key1=value1
-		keyValuePair := strings.Split(expectedMetaDataString, ";")
+		keyValuePair := strings.Split(expectedMetadataString, ";")
 		for index := 0; index < len(keyValuePair); index++ {
 			// split the individual key value pair to get key and value
 			keyValue := strings.Split(keyValuePair[index], "=")
-			expectedMetaData[keyValue[0]] = keyValue[1]
+			expectedMetadata[keyValue[0]] = to.Ptr(keyValue[1])
 		}
 		// if number of metadata provided while uploading
 		// doesn't match the metadata with blob on the container
-		if len(expectedMetaData) != len(actualMetaData) {
+		if len(expectedMetadata) != len(actualMetadata) {
 			fmt.Println("number of user given key value pair of the actual metadata differs from key value pair of expected metaData")
 			return false
 		}
 		// iterating through each key value pair of actual metaData and comparing the key value pair in expected metadata
-		for key, value := range actualMetaData {
-			if expectedMetaData[key] != value {
-				fmt.Printf("value of user given key %s is %s in actual data while it is %s in expected metadata\n", key, value, expectedMetaData[key])
+		for key, value := range actualMetadata {
+			if *expectedMetadata[key] != *value {
+				fmt.Printf("value of user given key %s is %s in actual data while it is %s in expected metadata\n", key, *value, *expectedMetadata[key])
 				return false
 			}
 		}
 	} else {
-		if len(actualMetaData) > 0 {
+		if len(actualMetadata) > 0 {
 			return false
 		}
 	}
@@ -283,69 +289,54 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		fmt.Println("error opening the file ", testBlobCmd.Object)
 	}
 
-	// getting the shared access signature of the resource.
-	sourceURL, err := url.Parse(testBlobCmd.Subject)
-	if err != nil {
-		fmt.Println("Error parsing the blob url source")
-		os.Exit(1)
-	}
-
-	// creating the page blob url of the resource on container.
-	// Create Pipeline to Get the Blob Properties or List Blob Segment
-	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    10 * time.Minute,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay},
-		nil,
-		ste.NewAzcopyHTTPClient(0),
-		nil)
-
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 
-	isPage, err := verifyBlobType(*sourceURL, testCtx, p, "PageBlob")
+	isPage, err := verifyBlobType(testBlobCmd.Subject, testCtx, "PageBlob")
 
 	if !isPage || err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	pageBlobUrl := azblob.NewPageBlobURL(*sourceURL, p)
+	pageBlobClient, err := pageblob.NewClientWithNoCredential(testBlobCmd.Subject, &pageblob.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Telemetry: policy.TelemetryOptions{ApplicationID: common.UserAgent},
+			Retry: policy.RetryOptions{
+				MaxRetries: ste.UploadMaxTries,
+				TryTimeout: 10*time.Minute,
+				RetryDelay: ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+			Transport: ste.NewAzcopyHTTPClient(0),
+		}})
+	if err != nil {
+		fmt.Printf("error creating page blob client. failed with error %s\n", err.Error())
+		os.Exit(1)
+	}
 
 	// get the blob properties and check the blob tier.
-	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
-		blobProperties, err := pageBlobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	if testBlobCmd.BlobTier != "" {
+		blobProperties, err := pageBlobClient.GetProperties(testCtx, nil)
 		if err != nil {
 			fmt.Printf("error getting the properties of the blob. failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
 		// If the blob tier does not match the expected blob tier.
-		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier) {
-			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", blobProperties.AccessTier(), testBlobCmd.BlobTier)
+		if !strings.EqualFold(*blobProperties.AccessTier, testBlobCmd.BlobTier) {
+			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", *blobProperties.AccessTier, testBlobCmd.BlobTier)
 			os.Exit(1)
-		}
-		// Closing the blobProperties response body.
-		if blobProperties.Response() != nil {
-			_, _ = io.Copy(io.Discard, blobProperties.Response().Body)
-			blobProperties.Response().Body.Close()
 		}
 	}
 
-	get, err := pageBlobUrl.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+	get, err := pageBlobClient.DownloadStream(testCtx, nil)
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
 	// reading all the bytes downloaded.
-	blobBytesDownloaded, err := io.ReadAll(get.Body(azblob.RetryReaderOptions{}))
-	if get.Response().Body != nil {
-		get.Response().Body.Close()
+	blobBytesDownloaded, err := io.ReadAll(get.Body)
+	if get.Body != nil {
+		get.Body.Close()
 	}
 	if err != nil {
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
@@ -383,42 +374,42 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	}
 
 	// verify the content-type
-	if testBlobCmd.CheckContentType && !validateString(expectedContentType, get.ContentType()) {
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, *get.ContentType) {
 		fmt.Printf(
 			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
 			expectedContentType,
-			get.ContentType())
+			*get.ContentType)
 		os.Exit(1)
 	}
 
 	// verify the user given metadata supplied while uploading the blob against the metadata actually present in the blob
-	if !validateMetadata(testBlobCmd.MetaData, get.NewMetadata()) {
+	if !validateMetadata(testBlobCmd.Metadata, get.Metadata) {
 		fmt.Println("meta data does not match between the actual and uploaded blob.")
 		os.Exit(1)
 	}
 
 	//verify the content-encoding
-	if !validateString(testBlobCmd.ContentEncoding, get.ContentEncoding()) {
+	if !validateString(testBlobCmd.ContentEncoding, *get.ContentEncoding) {
 		fmt.Println("mismatch ContentEncoding between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.CacheControl, get.CacheControl()) {
+	if !validateString(testBlobCmd.CacheControl, *get.CacheControl) {
 		fmt.Println("mismatch CacheControl between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.ContentDisposition, get.ContentDisposition()) {
+	if !validateString(testBlobCmd.ContentDisposition, *get.ContentDisposition) {
 		fmt.Println("mismatch ContentDisposition between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.ContentLanguage, get.ContentLanguage()) {
+	if !validateString(testBlobCmd.ContentLanguage, *get.ContentLanguage) {
 		fmt.Println("mismatch ContentLanguage between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if testBlobCmd.CheckContentMD5 && (get.ContentMD5() == nil || len(get.ContentMD5()) == 0) {
+	if testBlobCmd.CheckContentMD5 && (get.ContentMD5 == nil || len(get.ContentMD5) == 0) {
 		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}
@@ -428,12 +419,18 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	// this verifies the page-size and azcopy pageblob implementation.
 	if testBlobCmd.VerifyBlockOrPageSize {
 		numberOfPages := int(testBlobCmd.NumberOfBlocksOrPages)
-		resp, err := pageBlobUrl.GetPageRanges(testCtx, 0, 0, azblob.BlobAccessConditions{})
-		if err != nil {
-			fmt.Println("error getting the block blob list ", err.Error())
-			os.Exit(1)
+		pager := pageBlobClient.NewGetPageRangesPager(nil)
+		pageRanges := []*pageblob.PageRange{}
+		for pager.More() {
+			resp, err := pager.NextPage(testCtx)
+			if err != nil {
+				fmt.Println("error getting the block blob list ", err.Error())
+				os.Exit(1)
+			}
+			pageRanges = append(pageRanges, resp.PageRange...)
+
 		}
-		if numberOfPages != (len(resp.PageRange)) {
+		if numberOfPages != (len(pageRanges)) {
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
 		}
@@ -457,76 +454,60 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		fmt.Println("error opening the file ", objectLocalPath)
 	}
 
-	// getting the shared access signature of the resource.
-	sourceSas := testBlobCmd.Subject
-	sourceURL, err := url.Parse(sourceSas)
-	if err != nil {
-		fmt.Printf("Error parsing the blob url source %s\n", testBlobCmd.Object)
-		os.Exit(1)
-	}
-
-	// creating the blockblob url of the resource on container.
-	// Create Pipeline to Get the Blob Properties or List Blob Segment
-	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    10 * time.Minute,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay},
-		nil,
-		ste.NewAzcopyHTTPClient(0),
-		nil)
-
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 
-	isBlock, err := verifyBlobType(*sourceURL, testCtx, p, "BlockBlob")
+	isBlock, err := verifyBlobType(testBlobCmd.Subject, testCtx, "BlockBlob")
 
 	if !isBlock || err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	blobUrl := azblob.NewBlobURL(*sourceURL, p)
+	blockBlobClient, err := blockblob.NewClientWithNoCredential(testBlobCmd.Subject, &blockblob.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Telemetry: policy.TelemetryOptions{ApplicationID: common.UserAgent},
+			Retry: policy.RetryOptions{
+				MaxRetries: ste.UploadMaxTries,
+				TryTimeout: 10*time.Minute,
+				RetryDelay: ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+			Transport: ste.NewAzcopyHTTPClient(0),
+		}})
+	if err != nil {
+		fmt.Printf("error creating page blob client. failed with error %s\n", err.Error())
+		os.Exit(1)
+	}
 
 	// check for access tier type
 	// get the blob properties and get the Access Tier Type.
-	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
-		blobProperties, err := blobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	if testBlobCmd.BlobTier != "" {
+		blobProperties, err := blockBlobClient.GetProperties(testCtx, nil)
 		if err != nil {
 			fmt.Printf("error getting the blob properties. Failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
 		// Match the Access Tier Type with Expected Tier Type.
-		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier) {
-			fmt.Printf("block blob access tier %s does not matches the expected tier %s\n", blobProperties.AccessTier(), testBlobCmd.BlobTier)
+		if !strings.EqualFold(*blobProperties.AccessTier, testBlobCmd.BlobTier) {
+			fmt.Printf("block blob access tier %s does not matches the expected tier %s\n", *blobProperties.AccessTier, testBlobCmd.BlobTier)
 			os.Exit(1)
-		}
-		// Closing the blobProperties response.
-		if blobProperties.Response() != nil {
-			_, _ = io.Copy(io.Discard, blobProperties.Response().Body)
-			blobProperties.Response().Body.Close()
 		}
 		// If the access tier type of blob is set to Archive, then the blob is offline and reading the blob is not allowed,
 		// so exit the test.
-		if azblob.AccessTierType(testBlobCmd.BlobTier) == azblob.AccessTierArchive {
+		if blob.AccessTier(testBlobCmd.BlobTier) == blob.AccessTierArchive {
 			os.Exit(0)
 		}
 	}
 
-	get, err := blobUrl.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+	get, err := blockBlobClient.DownloadStream(testCtx, nil)
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
 	// reading all the blob bytes.
-	blobBytesDownloaded, err := io.ReadAll(get.Body(azblob.RetryReaderOptions{}))
-	if get.Response().Body != nil {
-		get.Response().Body.Close()
+	blobBytesDownloaded, err := io.ReadAll(get.Body)
+	if get.Body != nil {
+		get.Body.Close()
 	}
 	if err != nil {
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
@@ -560,7 +541,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 	// verify the user given metadata supplied while uploading the blob against the metadata actually present in the blob
-	if !validateMetadata(testBlobCmd.MetaData, get.NewMetadata()) {
+	if !validateMetadata(testBlobCmd.Metadata, get.Metadata) {
 		fmt.Println("meta data does not match between the actual and uploaded blob.")
 		os.Exit(1)
 	}
@@ -572,22 +553,22 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	} else {
 		expectedContentType = strings.Split(http.DetectContentType(mmap), ";")[0]
 	}
-	if testBlobCmd.CheckContentType && !validateString(expectedContentType, get.ContentType()) {
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, *get.ContentType) {
 		fmt.Printf(
 			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
 			expectedContentType,
-			get.ContentType())
+			*get.ContentType)
 		os.Exit(1)
 	}
 
 	//verify the content-encoding
-	if !validateString(testBlobCmd.ContentEncoding, get.ContentEncoding()) {
+	if !validateString(testBlobCmd.ContentEncoding, *get.ContentEncoding) {
 		fmt.Println("mismatch content encoding between actual and user given blob content encoding")
 		os.Exit(1)
 	}
 
 	if testBlobCmd.PreserveLastModifiedTime {
-		if fileInfo.ModTime().Unix() != get.LastModified().Unix() {
+		if fileInfo.ModTime().Unix() != (*get.LastModified).Unix() {
 			fmt.Println("modified time of downloaded and actual blob does not match")
 			os.Exit(1)
 		}
@@ -603,9 +584,8 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 
 	// verify the block size
 	if testBlobCmd.VerifyBlockOrPageSize {
-		blockBlobUrl := azblob.NewBlockBlobURL(*sourceURL, p)
 		numberOfBlocks := int(testBlobCmd.NumberOfBlocksOrPages)
-		resp, err := blockBlobUrl.GetBlockList(testCtx, azblob.BlockListNone, azblob.LeaseAccessConditions{})
+		resp, err := blockBlobClient.GetBlockList(testCtx, blockblob.BlockListTypeCommitted, nil)
 		if err != nil {
 			fmt.Println("error getting the block blob list")
 			os.Exit(1)
@@ -630,67 +610,54 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		fmt.Println("error opening the file ", testBlobCmd.Object)
 	}
 
-	// getting the shared access signature of the resource.
-	sourceURL, err := url.Parse(testBlobCmd.Subject)
-	if err != nil {
-		fmt.Printf("Error parsing the blob url source %s\n", testBlobCmd.Object)
-		os.Exit(1)
-	}
-
-	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    10 * time.Minute,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay},
-		nil,
-		ste.NewAzcopyHTTPClient(0),
-		nil)
-
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 
-	isAppend, err := verifyBlobType(*sourceURL, testCtx, p, "AppendBlob")
+	isAppend, err := verifyBlobType(testBlobCmd.Subject, testCtx, "AppendBlob")
 
 	if !isAppend || err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	appendBlobURL := azblob.NewAppendBlobURL(*sourceURL, p)
+	appendBlobClient, err := appendblob.NewClientWithNoCredential(testBlobCmd.Subject, &appendblob.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Telemetry: policy.TelemetryOptions{ApplicationID: common.UserAgent},
+			Retry: policy.RetryOptions{
+				MaxRetries: ste.UploadMaxTries,
+				TryTimeout: 10*time.Minute,
+				RetryDelay: ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+			Transport: ste.NewAzcopyHTTPClient(0),
+		}})
+	if err != nil {
+		fmt.Printf("error creating append blob client. failed with error %s\n", err.Error())
+		os.Exit(1)
+	}
 
 	// get the blob properties and check the blob tier.
-	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
-		blobProperties, err := appendBlobURL.GetProperties(testCtx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	if testBlobCmd.BlobTier != "" {
+		blobProperties, err := appendBlobClient.GetProperties(testCtx, nil)
 		if err != nil {
 			fmt.Printf("error getting the properties of the blob. failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
 		// If the blob tier does not match the expected blob tier.
-		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier) {
-			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", blobProperties.AccessTier(), testBlobCmd.BlobTier)
+		if !strings.EqualFold(*blobProperties.AccessTier, testBlobCmd.BlobTier) {
+			fmt.Printf("Access blob tier type %s does not match the expected %s tier type\n", *blobProperties.AccessTier, testBlobCmd.BlobTier)
 			os.Exit(1)
-		}
-		// Closing the blobProperties response body.
-		if blobProperties.Response() != nil {
-			_, _ = io.Copy(io.Discard, blobProperties.Response().Body)
-			blobProperties.Response().Body.Close()
 		}
 	}
 
-	get, err := appendBlobURL.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+	get, err := appendBlobClient.DownloadStream(testCtx, nil)
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
 	// reading all the bytes downloaded.
-	blobBytesDownloaded, err := io.ReadAll(get.Body(azblob.RetryReaderOptions{}))
-	if get.Response().Body != nil {
-		get.Response().Body.Close()
+	blobBytesDownloaded, err := io.ReadAll(get.Body)
+	if get.Body != nil {
+		get.Body.Close()
 	}
 	if err != nil {
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
@@ -729,41 +696,41 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 	}
 
 	// verify the user given metadata supplied while uploading the blob against the metadata actually present in the blob
-	if !validateMetadata(testBlobCmd.MetaData, get.NewMetadata()) {
+	if !validateMetadata(testBlobCmd.Metadata, get.Metadata) {
 		fmt.Println("meta data does not match between the actual and uploaded blob.")
 		os.Exit(1)
 	}
 
-	if testBlobCmd.CheckContentType && !validateString(expectedContentType, get.ContentType()) {
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, *get.ContentType) {
 		fmt.Printf(
 			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
 			expectedContentType,
-			get.ContentType())
+			*get.ContentType)
 		os.Exit(1)
 	}
 
 	//verify the content-encoding
-	if !validateString(testBlobCmd.ContentEncoding, get.ContentEncoding()) {
+	if !validateString(testBlobCmd.ContentEncoding, *get.ContentEncoding) {
 		fmt.Println("mismatch ContentEncoding between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.CacheControl, get.CacheControl()) {
+	if !validateString(testBlobCmd.CacheControl, *get.CacheControl) {
 		fmt.Println("mismatch CacheControl between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.ContentDisposition, get.ContentDisposition()) {
+	if !validateString(testBlobCmd.ContentDisposition, *get.ContentDisposition) {
 		fmt.Println("mismatch ContentDisposition between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if !validateString(testBlobCmd.ContentLanguage, get.ContentLanguage()) {
+	if !validateString(testBlobCmd.ContentLanguage, *get.ContentLanguage) {
 		fmt.Println("mismatch ContentLanguage between actual and user given blob")
 		os.Exit(1)
 	}
 
-	if testBlobCmd.CheckContentMD5 && (get.ContentMD5() == nil || len(get.ContentMD5()) == 0) {
+	if testBlobCmd.CheckContentMD5 && (get.ContentMD5 == nil || len(get.ContentMD5) == 0) {
 		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}
