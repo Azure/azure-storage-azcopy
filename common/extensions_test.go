@@ -2,12 +2,12 @@ package common
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"math/rand"
 	"net/url"
 	"strings"
 	"unsafe"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
 
@@ -160,7 +160,7 @@ func (*extensionsTestSuite) TestBlockblobBlockIDGeneration(c *chk.C) {
 	jobIdStr := string((*[16]byte)(unsafe.Pointer(&jobId))[:]) // 16Byte jobID
 	partNum := rand.Int31n(maxNumberOfParts) // 5B partNumber 
 	fileIndex  := rand.Int31n(numOfFilesPerDispatchJobPart) // 5Byte index of file in part
-	blockIndex := rand.Int31n(azblob.BlockBlobMaxBlocks) // 5B blockIndex
+	blockIndex := rand.Int31n(blockblob.MaxBlocks) // 5B blockIndex
 
 	blockNamePrefix := fmt.Sprintf("%s%s%05d%05d", placeHolder, jobIdStr, partNum, fileIndex)
 	blockName := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)
