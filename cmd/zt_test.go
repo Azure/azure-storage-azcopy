@@ -25,8 +25,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"io"
@@ -48,7 +55,6 @@ import (
 
 	chk "gopkg.in/check.v1"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
@@ -203,11 +209,10 @@ func generateBfsFileName() string {
 	return generateName(blobfsPrefix, 0)
 }
 
-func getContainerURL(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
+func getContainerClient(c *chk.C, bsc *blobservice.Client) (container *container.Client, name string) {
 	name = generateContainerName()
-	container = bsu.NewContainerURL(name)
-
-	return container, name
+	container = bsc.NewContainerClient(name)
+	return
 }
 
 func getFilesystemURL(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
@@ -217,11 +222,10 @@ func getFilesystemURL(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSy
 	return
 }
 
-func getBlockBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
+func getBlockBlobClient(c *chk.C, cc *container.Client, prefix string) (bbc *blockblob.Client, name string) {
 	name = prefix + generateBlobName()
-	blob = container.NewBlockBlobURL(name)
-
-	return blob, name
+	bbc = cc.NewBlockBlobClient(name)
+	return
 }
 
 func getBfsFileURL(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
@@ -231,17 +235,15 @@ func getBfsFileURL(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (
 	return
 }
 
-func getAppendBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
+func getAppendBlobClient(c *chk.C, cc *container.Client, prefix string) (abc *appendblob.Client, name string) {
 	name = generateBlobName()
-	blob = container.NewAppendBlobURL(prefix + name)
-
-	return blob, name
+	abc = cc.NewAppendBlobClient(prefix + name)
+	return
 }
 
-func getPageBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.PageBlobURL, name string) {
+func getPageBlobClient(c *chk.C, cc *container.Client, prefix string) (pbc *pageblob.Client, name string) {
 	name = generateBlobName()
-	blob = container.NewPageBlobURL(prefix + name)
-
+	pbc = cc.NewPageBlobClient(prefix + name)
 	return
 }
 
@@ -273,17 +275,20 @@ func getAccountAndKey() (string, string) {
 	return name, key
 }
 
-// get blob account service URL
-func getBSU() azblob.ServiceURL {
+// get blob account service client
+func getBSC() *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
+	u := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
-	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
 		panic(err)
 	}
-	pipeline := azblob.NewPipeline(credential, azblob.PipelineOptions{})
-	return azblob.NewServiceURL(*u, pipeline)
+	client, err := blobservice.NewClientWithSharedKeyCredential(u, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return client
 }
 
 func getFSU() azfile.ServiceURL {
@@ -307,16 +312,15 @@ func GetBFSSU() azbfs.ServiceURL {
 	return azbfs.NewServiceURL(*u, pipeline)
 }
 
-func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
-	container, name = getContainerURL(c, bsu)
+func createNewContainer(c *chk.C, bsc *blobservice.Client) (cc *container.Client, name string) {
+	cc, name = getContainerClient(c, bsc)
 
 	// ignore any errors here, since it doesn't matter if this fails (if it does, it's probably because the container didn't exist)
-	_, _ = container.Delete(ctx, azblob.ContainerAccessConditions{})
+	_, _ = cc.Delete(ctx, nil)
 
-	cResp, err := container.Create(ctx, nil, azblob.PublicAccessNone)
+	_, err := cc.Create(ctx, nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-	return container, name
+	return cc, name
 }
 
 func createNewFilesystem(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
@@ -349,35 +353,30 @@ func createNewBfsFile(c *chk.C, filesystem azbfs.FileSystemURL, prefix string) (
 	return
 }
 
-func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
-	blob, name = getBlockBlobURL(c, container, prefix)
+func createNewBlockBlob(c *chk.C, cc *container.Client, prefix string) (bbc *blockblob.Client, name string) {
+	bbc, name = getBlockBlobClient(c, cc, prefix)
 
-	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
-
+	_, err := bbc.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
 	return
 }
 
 // create metadata indicating that this is a dir
-func createNewDirectoryStub(c *chk.C, container azblob.ContainerURL, dirPath string) {
-	dir := container.NewBlockBlobURL(dirPath)
+func createNewDirectoryStub(c *chk.C, cc *container.Client, dirPath string) {
+	dirClient := cc.NewBlockBlobClient(dirPath)
 
-	cResp, err := dir.Upload(ctx, bytes.NewReader(nil), azblob.BlobHTTPHeaders{},
-		azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
-
+	_, err := dirClient.Upload(ctx, streaming.NopCloser(bytes.NewReader(nil)),
+		&blockblob.UploadOptions{
+			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
+		})
 	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
 	return
 }
 
 func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	share, name = getShareURL(c, fsu)
-
-	//
 
 	cResp, err := share.Create(ctx, nil, 0)
 	c.Assert(err, chk.IsNil)
@@ -406,30 +405,27 @@ func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
 	c.Assert(err, chk.IsNil)
 }
 
-func createNewAppendBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
-	blob, name = getAppendBlobURL(c, container, prefix)
+func createNewAppendBlob(c *chk.C, cc *container.Client, prefix string) (abc *appendblob.Client, name string) {
+	abc, name = getAppendBlobClient(c, cc, prefix)
 
-	resp, err := blob.Create(ctx, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
-
+	_, err := abc.Create(ctx, nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 201)
+
 	return
 }
 
-func createNewPageBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.PageBlobURL, name string) {
-	blob, name = getPageBlobURL(c, container, prefix)
+func createNewPageBlob(c *chk.C, cc *container.Client, prefix string) (pbc *pageblob.Client, name string) {
+	pbc, name = getPageBlobClient(c, cc, prefix)
 
-	resp, err := blob.Create(ctx, azblob.PageBlobPageBytes*10, 0, azblob.BlobHTTPHeaders{}, nil, azblob.BlobAccessConditions{}, azblob.DefaultPremiumBlobAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
-
+	_, err := pbc.Create(ctx, pageblob.PageBytes*10, nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 201)
+
 	return
 }
 
-func deleteContainer(c *chk.C, container azblob.ContainerURL) {
-	resp, err := container.Delete(ctx, azblob.ContainerAccessConditions{})
+func deleteContainer(c *chk.C, cc *container.Client) {
+	_, err := cc.Delete(ctx, nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 202)
 }
 
 func deleteFilesystem(c *chk.C, filesystem azbfs.FileSystemURL) {
@@ -438,9 +434,8 @@ func deleteFilesystem(c *chk.C, filesystem azbfs.FileSystemURL) {
 	c.Assert(resp.StatusCode(), chk.Equals, 202)
 }
 
-func validateStorageError(c *chk.C, err error, code azblob.ServiceCodeType) {
-	serr, _ := err.(azblob.StorageError)
-	c.Assert(serr.ServiceCode(), chk.Equals, code)
+func validateStorageError(c *chk.C, err error, code bloberror.Code) {
+	c.Assert(bloberror.HasCode(err, code), chk.Equals, true)
 }
 
 func getRelativeTimeGMT(amount time.Duration) time.Time {
@@ -666,18 +661,18 @@ func cleanGCPAccount(c *chk.C, client *gcpUtils.Client) {
 	}
 }
 
-func cleanBlobAccount(c *chk.C, serviceURL azblob.ServiceURL) {
-	marker := azblob.Marker{}
-	for marker.NotDone() {
-		resp, err := serviceURL.ListContainersSegment(ctx, marker, azblob.ListContainersSegmentOptions{})
+func cleanBlobAccount(c *chk.C, serviceClient *blobservice.Client) {
+	pager := serviceClient.NewListContainersPager(nil)
+	for pager.More() {
+		resp, err := pager.NextPage(ctx)
 		c.Assert(err, chk.IsNil)
-
 		for _, v := range resp.ContainerItems {
-			_, err = serviceURL.NewContainerURL(v.Name).Delete(ctx, azblob.ContainerAccessConditions{})
+			_, err = serviceClient.NewContainerClient(*v.Name).Delete(ctx, nil)
 
 			if err != nil {
-				if stgErr, ok := err.(azblob.StorageError); ok {
-					if stgErr.ServiceCode() == azblob.ServiceCodeContainerNotFound {
+				var respErr *azcore.ResponseError
+				if errors.As(err, &respErr) {
+					if respErr.ErrorCode == string(bloberror.ContainerNotFound) {
 						continue
 					}
 				}
@@ -685,8 +680,6 @@ func cleanBlobAccount(c *chk.C, serviceURL azblob.ServiceURL) {
 				c.Assert(err, chk.IsNil)
 			}
 		}
-
-		marker = resp.NextMarker
 	}
 }
 
@@ -752,59 +745,40 @@ func deleteShare(c *chk.C, share azfile.ShareURL) {
 // those changes not being reflected yet, we will wait 30 seconds and try the test again. If it fails this time for any reason,
 // we fail the test. It is the responsibility of the the testImplFunc to determine which error string indicates the test should be retried.
 // There can only be one such string. All errors that cannot be due to this detail should be asserted and not returned as an error string.
-func runTestRequiringServiceProperties(c *chk.C, bsu azblob.ServiceURL, code string,
-	enableServicePropertyFunc func(*chk.C, azblob.ServiceURL),
-	testImplFunc func(*chk.C, azblob.ServiceURL) error,
-	disableServicePropertyFunc func(*chk.C, azblob.ServiceURL)) {
-	enableServicePropertyFunc(c, bsu)
-	defer disableServicePropertyFunc(c, bsu)
-	err := testImplFunc(c, bsu)
+func runTestRequiringServiceProperties(c *chk.C, bsc *blobservice.Client, code string,
+	enableServicePropertyFunc func(*chk.C, *blobservice.Client),
+	testImplFunc func(*chk.C, *blobservice.Client) error,
+	disableServicePropertyFunc func(*chk.C, *blobservice.Client)) {
+	enableServicePropertyFunc(c, bsc)
+	defer disableServicePropertyFunc(c, bsc)
+	err := testImplFunc(c, bsc)
 	// We cannot assume that the error indicative of slow update will necessarily be a StorageError. As in ListBlobs.
 	if err != nil && err.Error() == code {
 		time.Sleep(time.Second * 30)
-		err = testImplFunc(c, bsu)
+		err = testImplFunc(c, bsc)
 		c.Assert(err, chk.IsNil)
 	}
 }
 
-func enableSoftDelete(c *chk.C, bsu azblob.ServiceURL) {
-	days := int32(1)
-	_, err := bsu.SetProperties(ctx, azblob.StorageServiceProperties{DeleteRetentionPolicy: &azblob.RetentionPolicy{Enabled: true, Days: &days}})
+func enableSoftDelete(c *chk.C, bsc *blobservice.Client) {
+	_, err := bsc.SetProperties(ctx, &blobservice.SetPropertiesOptions{
+		DeleteRetentionPolicy: &blobservice.RetentionPolicy{Enabled: to.Ptr(true), Days: to.Ptr(int32(1))},
+	})
 	c.Assert(err, chk.IsNil)
 }
 
-func disableSoftDelete(c *chk.C, bsu azblob.ServiceURL) {
-	_, err := bsu.SetProperties(ctx, azblob.StorageServiceProperties{DeleteRetentionPolicy: &azblob.RetentionPolicy{Enabled: false}})
+func disableSoftDelete(c *chk.C, bsc *blobservice.Client) {
+	_, err := bsc.SetProperties(ctx, &blobservice.SetPropertiesOptions{
+		DeleteRetentionPolicy: &blobservice.RetentionPolicy{Enabled: to.Ptr(false)},
+	})
 	c.Assert(err, chk.IsNil)
 }
 
-func validateUpload(c *chk.C, blobURL azblob.BlockBlobURL) {
-	resp, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+func validateUpload(c *chk.C, bbc *blockblob.Client) {
+	resp, err := bbc.DownloadStream(ctx, nil)
 	c.Assert(err, chk.IsNil)
-	data, _ := io.ReadAll(resp.Response().Body)
+	data, _ := io.ReadAll(resp.Body)
 	c.Assert(data, chk.HasLen, 0)
-}
-
-func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, containerName string) azblob.ContainerURL {
-	sasQueryParams, err := azblob.BlobSASSignatureValues{
-		Protocol:      azblob.SASProtocolHTTPS,
-		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
-		ContainerName: containerName,
-		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true}.String(),
-	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
-
-	// construct the url from scratch
-	qp := sasQueryParams.Encode()
-	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s?%s",
-		credential.AccountName(), containerName, qp)
-
-	// convert the raw url and validate it was parsed successfully
-	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
-
-	// TODO perhaps we need a global default pipeline
-	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
 func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, containerName string) *container.Client {
@@ -822,28 +796,6 @@ func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, c
 	c.Assert(err, chk.IsNil)
 
 	return client
-}
-
-func getBlobServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) azblob.ServiceURL {
-	sasQueryParams, err := azblob.AccountSASSignatureValues{
-		Protocol:      azblob.SASProtocolHTTPS,
-		ExpiryTime:    time.Now().Add(48 * time.Hour),
-		Permissions:   azblob.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true}.String(),
-		Services:      azblob.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
-		ResourceTypes: azblob.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
-	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
-
-	// construct the url from scratch
-	qp := sasQueryParams.Encode()
-	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/?%s",
-		credential.AccountName(), qp)
-
-	// convert the raw url and validate it was parsed successfully
-	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
-
-	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
 func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential) *blobservice.Client {

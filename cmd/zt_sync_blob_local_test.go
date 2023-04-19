@@ -23,13 +23,15 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
 
@@ -39,15 +41,15 @@ const (
 
 // regular blob->file sync
 func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBSC()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	for _, blobName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
-		c.Assert(containerURL, chk.NotNil)
+		scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
+		c.Assert(cc, chk.NotNil)
 
 		// set up the destination as a single file
 		time.Sleep(time.Second)
@@ -77,7 +79,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		time.Sleep(5 * time.Second)
 		// recreate the blob to have a later last modified time
 		time.Sleep(time.Second)
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
+		scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
 
 		runSyncAndVerify(c, raw, func(err error) {
@@ -90,13 +92,13 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 
 // regular container->directory sync but destination is empty, so everything has to be transferred
 func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination with an empty folder
@@ -138,13 +140,13 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 
 // regular container->directory sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination with a folder that have the exact same files
@@ -169,7 +171,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 	})
 
 	// refresh the blobs' last modified time so that they are newer
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 
 	runSyncAndVerify(c, raw, func(err error) {
@@ -180,13 +182,13 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 
 // regular container->directory sync where destination is missing some files from source, and also has some extra files
 func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination with a folder that have half of the files from source
@@ -224,18 +226,18 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C
 
 // include flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludePatternFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination with an empty folder
@@ -260,18 +262,18 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludePatternFlag(c *chk.C) {
 
 // exclude flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePatternFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToExclude, blockBlobDefaultData)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination with an empty folder
@@ -296,24 +298,24 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePatternFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludePatternFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToExclude, blockBlobDefaultData)
 	excludeString := "so*;not*;exactName"
 
 	// set up the destination with an empty folder
@@ -339,18 +341,18 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludePatternFlag(c
 
 // a specific path is avoided in the comparison
 func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePathFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"excludeSub/notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToExclude, blockBlobDefaultData)
 	excludeString := "excludeSub;exactName"
 
 	// set up the destination with an empty folder
@@ -376,7 +378,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePathFlag(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobsToExclude)
 
 	// re-create the ones at the source so that their lmts are newer
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToExclude, blockBlobDefaultData)
 
 	mockedRPC.reset()
 	runSyncAndVerify(c, raw, func(err error) {
@@ -393,13 +395,13 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePathFlag(c *chk.C) {
 
 // validate the bug fix for this scenario
 func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination as a missing folder
@@ -427,13 +429,13 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
 
 // there is a type mismatch between the source and destination
 func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination as a single file
@@ -473,15 +475,15 @@ func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
 
 // there is a type mismatch between the source and destination
 func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the container with a single blob
 	blobName := "singleblobisbest"
 	blobList := []string{blobName}
-	containerURL, containerName := createNewContainer(c, bsu)
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	// set up the destination as a directory
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -519,7 +521,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 // download a blob representing an ADLS directory to a local file
 // we should recognize that there is a type mismatch
 func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 	blobName := "adlsdir"
 
 	// set up the destination as a single file
@@ -529,13 +531,15 @@ func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, []string{blobName})
 
 	// set up the container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerClient, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, containerClient)
+	c.Assert(containerClient, chk.NotNil)
 
 	// create a single blob that represents an ADLS directory
-	_, err := containerURL.NewBlockBlobURL(blobName).Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+	_, err := containerClient.NewBlockBlobClient(blobName).Upload(context.Background(), streaming.NopCloser(bytes.NewReader(nil)),
+		&blockblob.UploadOptions{
+			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
+		})
 	c.Assert(err, chk.IsNil)
 
 	// set up interceptor
@@ -559,25 +563,28 @@ func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C
 // adls directory -> local directory sync
 // we should download every blob except the blob representing the directory
 func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 	adlsDirName := "adlsdir"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, adlsDirName+"/")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerClient, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerClient, adlsDirName+"/")
+	defer deleteContainer(c, containerClient)
+	c.Assert(containerClient, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// create a single blob that represents the ADLS directory
-	dirBlob := containerURL.NewBlockBlobURL(adlsDirName)
-	_, err := dirBlob.Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+	_, err := containerClient.NewBlockBlobClient(adlsDirName).Upload(context.Background(), streaming.NopCloser(bytes.NewReader(nil)),
+		&blockblob.UploadOptions{
+			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
+		})
 	c.Assert(err, chk.IsNil)
 
 	// create an extra blob that represents an empty ADLS directory, which should never be picked up
-	_, err = containerURL.NewBlockBlobURL(adlsDirName+"/neverpickup").Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+	_, err = containerClient.NewBlockBlobClient(adlsDirName+"/neverpickup").Upload(context.Background(), streaming.NopCloser(bytes.NewReader(nil)),
+		&blockblob.UploadOptions{
+			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
+		})
 	c.Assert(err, chk.IsNil)
 
 	// set up the destination with an empty folder

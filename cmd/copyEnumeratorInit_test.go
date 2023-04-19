@@ -33,15 +33,15 @@ var _ = chk.Suite(&copyEnumeratorSuite{})
 
 // ============================================= BLOB TRAVERSER TESTS =======================================
 func (ce *copyEnumeratorSuite) TestValidateSourceDirThatExists(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	dirName := "source_dir"
-	createNewDirectoryStub(c, containerURL, dirName)
+	createNewDirectoryStub(c, cc, dirName)
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -63,12 +63,12 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirThatExists(c *chk.C) {
 }
 
 func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	dirName := "source_dir/"
 	// set up to create blob traverser
@@ -92,15 +92,15 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
 }
 
 func (ce *copyEnumeratorSuite) TestValidateSourceFileExists(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	fileName := "source_file"
-	_, fileName = createNewBlockBlob(c, containerURL, fileName)
+	_, fileName = createNewBlockBlob(c, cc, fileName)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -116,12 +116,12 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileExists(c *chk.C) {
 }
 
 func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	fileName := "source_file"
 
@@ -139,12 +139,12 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
 }
 
 func (ce *copyEnumeratorSuite) TestValidateSourceWithWildCard(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	dirName := "source_dir_does_not_exist"
 	// set up to create blob traverser

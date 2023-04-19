@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
 
@@ -64,17 +63,17 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 }
 
 func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 	blobName := "extraBlob.pdf"
 
 	// set up the blob to delete
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{blobName}, blockBlobDefaultData)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	scenarioHelper{}.generateBlobsFromList(c, cc, []string{blobName}, blockBlobDefaultData)
 
 	// validate that the blob exists
-	blobURL := containerURL.NewBlobURL(blobName)
-	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	bc := cc.NewBlobClient(blobName)
+	_, err := bc.GetProperties(context.Background(), nil)
 	c.Assert(err, chk.IsNil)
 
 	// construct the cooked input to simulate user input
@@ -95,7 +94,7 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// validate that the blob was deleted
-	_, err = blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	_, err = bc.GetProperties(context.Background(),nil)
 	c.Assert(err, chk.NotNil)
 }
 

@@ -30,7 +30,7 @@ import (
 )
 
 func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
@@ -44,8 +44,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
 	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, filesToExclude, attrList)
 
 	// set up the destination as an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -63,7 +63,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
@@ -77,8 +77,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
 	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, filesToInclude, attrList)
 
 	// set up the destination as an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -101,7 +101,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
 // Create one file that matches both
 // Only the last file should be transferred
 func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
@@ -114,8 +114,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *ch
 	attrList := []string{"H", "I", "C"}
 	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, fileList[1:], attrList)
 
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
@@ -138,7 +138,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *ch
 // Create one file that matches both
 // None of them should be transferred
 func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
@@ -151,8 +151,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *ch
 	attrList := []string{"H", "I", "C"}
 	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, fileList[1:], attrList)
 
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
@@ -171,16 +171,16 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *ch
 
 // mouthfull of a test name, but this ensures that case insensitivity doesn't cause the unintended deletion of files
 func (s *cmdIntegrationSuite) TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(dstDirName)
 	fileList := []string{"FileWithCaps", "FiLeTwO", "FoOBaRBaZ"}
 
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList, "Hello, World!")
+	scenarioHelper{}.generateBlobsFromList(c, cc, fileList, "Hello, World!")
 
 	// let the local files be in the future; we don't want to do _anything_ to them; not delete nor download.
 	time.Sleep(time.Second * 5)

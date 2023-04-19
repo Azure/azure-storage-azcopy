@@ -31,9 +31,9 @@ import (
 )
 
 func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBSC()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	files := []string{
 		"filea",
@@ -69,9 +69,9 @@ func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBSC()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	files := []string{
 		"filea",
@@ -110,9 +110,9 @@ func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBSC()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	files := []string{
 		"filea",
@@ -151,9 +151,9 @@ func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestIncludeAndExcludeDir(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBSC()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	files := []string{
 		"xyz/aaa",
@@ -189,9 +189,9 @@ func (s *cmdIntegrationSuite) TestIncludeAndExcludeDir(c *chk.C) {
 
 // regular local file->blob upload
 func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBSC()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
@@ -249,9 +249,9 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.
 
 // regular local file->blob upload
 func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBSC()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
@@ -262,8 +262,8 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 
 		// set up the destination container with a single blob
 		dstBlobName := "whatever"
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
-		c.Assert(containerURL, chk.NotNil)
+		scenarioHelper{}.generateBlobsFromList(c, cc, []string{dstBlobName}, blockBlobDefaultData)
+		c.Assert(cc, chk.NotNil)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -306,7 +306,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 
 // regular directory->container upload
 func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
@@ -314,8 +314,8 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -350,7 +350,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
 
 // regular directory->virtual dir upload
 func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 	vdirName := "vdir"
 
 	// set up the source with numerous files
@@ -359,8 +359,8 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -396,7 +396,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
 
 // files(from pattern)->container upload
 func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
@@ -408,8 +408,8 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C
 	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -444,7 +444,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_Lo
 }
 
 func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the source directory
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
@@ -461,8 +461,8 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(
 	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, extraIgnoredFiles)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -501,7 +501,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_Loc
 }
 
 func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
@@ -517,8 +517,8 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(u
 	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -549,9 +549,9 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(u
 }
 
 func (s *cmdIntegrationSuite) TestDisableAutoDecoding(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBSC()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// Encoded file name since Windows won't create name with invalid chars
 	srcFileName := `%3C %3E %5C %2F %3A %22 %7C %3F %2A invalidcharsfile`

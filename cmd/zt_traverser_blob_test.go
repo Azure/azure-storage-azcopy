@@ -32,15 +32,15 @@ type traverserBlobSuite struct{}
 var _ = chk.Suite(&traverserBlobSuite{})
 
 func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	dirName := "source_dir"
-	createNewDirectoryStub(c, containerURL, dirName)
+	createNewDirectoryStub(c, cc, dirName)
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -55,12 +55,12 @@ func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
 }
 
 func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	dirName := "source_dir/"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
@@ -76,15 +76,15 @@ func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
 }
 
 func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	fileName := "source_file"
-	_, fileName = createNewBlockBlob(c, containerURL, fileName)
+	_, fileName = createNewBlockBlob(c, cc, fileName)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -99,12 +99,12 @@ func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
 }
 
 func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBSC()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 
 	fileName := "file_does_not_exist"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
