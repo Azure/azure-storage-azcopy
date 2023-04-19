@@ -43,7 +43,9 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 		return nil, err
 	}
 	srcPageBlobClient, err := common.CreatePageBlobClient(srcURL, jptm.S2SSourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-
+	if err != nil {
+		return nil, err
+	}
 	var destBlobTier blob.AccessTier
 	var pageRangeOptimizer *pageRangeOptimizer
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
