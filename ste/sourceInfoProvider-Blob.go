@@ -73,7 +73,7 @@ func (p *blobSourceInfoProvider) GetUNIXProperties() (common.UnixStatAdapter, er
 		return nil, err
 	}
 
-	return common.ReadStatFromMetadata(prop.SrcMetadata.ToAzBlobMetadata(), p.SourceSize())
+	return common.ReadStatFromMetadata(prop.SrcMetadata, p.SourceSize())
 }
 
 func (p *blobSourceInfoProvider) HasUNIXProperties() bool {

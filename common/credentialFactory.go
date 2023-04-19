@@ -35,7 +35,6 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
@@ -108,31 +107,6 @@ func GetSourceBlobCredential(credInfo CredentialInfo, options CredentialOpOption
 	return nil, nil
 }
 
-// CreateBlobCredential creates Blob credential according to credential info.
-func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) azblob.Credential {
-	credential := azblob.NewAnonymousCredential()
-
-	if credInfo.CredentialType.IsAzureOAuth() {
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
-		}
-
-		if credInfo.CredentialType == ECredentialType.MDOAuthToken() {
-			credInfo.OAuthTokenInfo.Resource = MDResource // token will instantly refresh with this
-		}
-
-		// Create TokenCredential with refresher.
-		return azblob.NewTokenCredential(
-				credInfo.OAuthTokenInfo.AccessToken,
-				func(credential azblob.TokenCredential) time.Duration {
-					return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential, options)
-				})
-
-	}
-
-	return credential
-}
-
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,
 // it checks how long it will be before the token get expired, and use half of the value as
 // duration to wait.
@@ -157,27 +131,6 @@ func refreshPolicyHalfOfExpiryWithin(token *adal.Token, options CredentialOpOpti
 	options.logInfo(fmt.Sprintf("next token refresh's wait duration: %v", waitDuration))
 
 	return waitDuration
-}
-
-func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azblob.TokenCredential, options CredentialOpOptions) time.Duration {
-	newToken, err := tokenInfo.Refresh(ctx)
-	if err != nil {
-		// Fail to get new token.
-		if _, ok := err.(adal.TokenRefreshError); ok && strings.Contains(err.Error(), "refresh token has expired") {
-			options.logError(fmt.Sprintf("failed to refresh token, OAuth refresh token has expired, please log in with azcopy login command again. (Error details: %v)", err))
-		} else {
-			options.logError(fmt.Sprintf("failed to refresh token, please check error details and try to log in with azcopy login command again. (Error details: %v)", err))
-		}
-		// Try to refresh again according to original token's info.
-		return refreshPolicyHalfOfExpiryWithin(&(tokenInfo.Token), options)
-	}
-
-	// Token has been refreshed successfully.
-	tokenCredential.SetToken(newToken.AccessToken)
-	options.logInfo(fmt.Sprintf("%v token refreshed successfully", time.Now().UTC()))
-
-	// Calculate wait duration, and schedule next refresh.
-	return refreshPolicyHalfOfExpiryWithin(newToken, options)
 }
 
 // CreateBlobFSCredential creates BlobFS credential according to credential info.
