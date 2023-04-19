@@ -72,7 +72,6 @@ type IJobPartTransferMgr interface {
 	CredentialOpOptions() *common.CredentialOpOptions
 
 	SourceProviderPipeline() pipeline.Pipeline
-	SourceCredential() pipeline.Factory
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -1004,10 +1003,6 @@ func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOption
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
-}
-
-func (jptm *jobPartTransferMgr) SourceCredential() pipeline.Factory {
-	return jptm.jobPartMgr.SourceCredential()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {

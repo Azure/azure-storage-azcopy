@@ -1438,12 +1438,6 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 				return srcCredInfo, err
 			}
 			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
-			jpo.CredentialInfo.SourceBlobToken = common.CreateBlobCredential(ctx, srcCredInfo, common.CredentialOpOptions{
-				// LogInfo:  glcm.Info, //Comment out for debugging
-				LogError: glcm.Info,
-			})
-			cca.credentialInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
-			srcCredInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
 			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
 		}
 	}
