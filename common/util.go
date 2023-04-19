@@ -12,7 +12,7 @@ func VerifyIsURLResolvable(url_string string) (error) {
 	 *    handle errors appropriately.
 	 * 2. We should either do a http.Get or net.Dial instead of lookIP. If we are behind a proxy, we may 
 	 *    not resolve this IP. #2144
-	 * 3. DNS erros may by temporary, we should try for a minute before we give up.
+	 * 3. DNS errors may by temporary, we should try for a minute before we give up.
 	 */
 	return nil
 	/*
