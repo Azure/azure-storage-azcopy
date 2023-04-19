@@ -20,8 +20,8 @@ github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0/go.mod h1:bhXu1AjYL+wutS
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.2.0 h1:leh5DwKv6Ihwi+h60uHtn6UWAxBbZ0q8DwQVMzf61zw=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.2.0/go.mod h1:eWRD7oawr1Mu1sLCawqVc0CUiF43ia3qQMxLscsKQ9w=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage v1.2.0 h1:Ma67P/GGprNwsslzEH6+Kb8nybI8jpDTm4Wmzu2ReK8=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.1-0.20230413201835-e9e6b6281766 h1:TiUnYwsSBrrJa063YeIYoo4kdxAdh5XG+dVGIve0CfY=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.1-0.20230413201835-e9e6b6281766/go.mod h1:rFl3/5kx6vi8zkW6VBHt467n3o9ZN9rLZeG5dl5cOuk=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.1-0.20230419164103-5e4becb50868 h1:FSx2QIoEH0HAiTE3LubqmyBJ8O1H9Fq2QEurufpZ+8g=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.1-0.20230419164103-5e4becb50868/go.mod h1:rFl3/5kx6vi8zkW6VBHt467n3o9ZN9rLZeG5dl5cOuk=
 github.com/Azure/azure-storage-blob-go v0.15.0 h1:rXtgp8tN1p29GvpGgfJetavIG0V7OgcSXPpwp3tx6qk=
 github.com/Azure/azure-storage-blob-go v0.15.0/go.mod h1:vbjsVbX0dlxnRc4FFMPsS9BsJWPcne7GB7onqlPvz58=
 github.com/Azure/azure-storage-file-go v0.6.1-0.20201111053559-3c1754dc00a5 h1:aHEvBM4oXIWSTOVdL55nCYXO0Cl7ie3Ui5xMQhLVez8=

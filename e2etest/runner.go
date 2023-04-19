@@ -79,8 +79,6 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 		t.flags[key] = fmt.Sprintf(format, value)
 	}
 
-	set("log-level", "debug", "debug")
-
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
 	set("as-subdir", !p.invertedAsSubdir, true)
