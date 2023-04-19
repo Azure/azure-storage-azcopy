@@ -337,3 +337,47 @@ func TestProperties_EnsureContainerBehavior(t *testing.T) {
 		"",
 	)
 }
+
+func TestProperties_ForceReadOnly(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:       true,
+			deleteDestination: common.EDeleteDestination.True(),
+			forceIfReadOnly: true,
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// Create dest-only item to get deleted; it MUST be read-only, or else this test is invalid.
+				h.CreateFile(f("destOnly.txt", with{smbAttributes: 1}), false)
+				// Create item to get overwritten; it MUST be read-only, or else this test is invalid.
+				h.CreateFile(f("asdf.txt", with{smbAttributes: 1}), false)
+
+				time.Sleep(10 * time.Second)
+				h.CreateFile(f("asdf.txt"), true)
+			},
+			afterValidation: func(h hookHelper) {
+				c := h.GetAsserter()
+
+				objects := h.GetDestination().getAllProperties(c)
+				_, ok := objects["destOnly.txt"]
+				c.Assert(ok, equals(), false, "Did not expect to find destOnly.txt in destination")
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("asdf.txt"),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
