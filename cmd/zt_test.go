@@ -787,7 +787,7 @@ func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, c
 	client, err := container.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 
 	sasURL, err := client.GetSASURL(
-		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true}, // TODO : Add tag permissions when SDK supports it
+		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true},
 		time.Now().Add(48*time.Hour),
 		nil)
 	c.Assert(err, chk.IsNil)

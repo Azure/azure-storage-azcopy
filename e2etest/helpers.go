@@ -462,7 +462,7 @@ func getContainerURLWithSAS(c asserter, credential *blob.SharedKeyCredential, co
 	cc, err := container.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 	c.AssertNoErr(err)
 
-	sasURL, err := cc.GetSASURL(blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true},
+	sasURL, err := cc.GetSASURL(blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true, Tag: true},
 		time.Now().UTC().Add(48 * time.Hour), nil)
 	c.AssertNoErr(err)
 

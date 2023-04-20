@@ -109,7 +109,7 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 	c.AssertNoErr(err)
 
 	sasURL, err := client.GetSASURL(
-		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, ModifyOwnership: true, ModifyPermissions: true},
+		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, ModifyOwnership: true, ModifyPermissions: true, Tag: true},
 		time.Now().Add(48 * time.Hour),
 		nil)
 	c.AssertNoErr(err)
