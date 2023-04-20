@@ -615,7 +615,7 @@ func (s *scenario) validateMetadata(expected, actual map[string]*string) {
 		actualValue, ok := actual[key]
 		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", key))
 		if ok {
-			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
+			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, *exValue, *actualValue))
 		}
 	}
 }
