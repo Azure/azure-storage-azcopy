@@ -20,7 +20,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sync/semaphore"
 )
@@ -166,42 +165,6 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 		PerCallPolicies:  perCallPolicies,
 		PerRetryPolicies: perRetryPolicies,
 	}
-}
-
-// TODO : Delete once tests are migrated
-// NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
-	if c == nil {
-		panic("c can't be nil")
-	}
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azblob.NewTelemetryPolicyFactory(o.Telemetry),
-		azblob.NewUniqueRequestIDPolicyFactory(),
-		NewBlobXferRetryPolicyFactory(r),      // actually retry the operation
-		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
-		c,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		// NewPacerPolicyFactory(p),
-		NewVersionPolicyFactory(),
-		// Bump the service version when using the Cold access tier.
-		pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-			// TODO: Remove me when bumping the service version is no longer relevant.
-			return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-				if request.Header.Get("x-ms-access-tier") == common.EBlockBlobTier.Cold().String() {
-					request.Header.Set("x-ms-version", "2021-12-02")
-				}
-
-				return next.Do(ctx, request)
-			}
-		}),
-		NewRequestLogPolicyFactory(RequestLogOptions{
-			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			SyslogDisabled:               common.IsForceLoggingDisabled(),
-		}),
-		newXferStatsPolicyFactory(statsAcc),
-	}
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service

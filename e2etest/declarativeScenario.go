@@ -33,7 +33,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
@@ -283,7 +282,7 @@ func (s *scenario) resumeAzCopy(logDir string) {
 	defer close(s.chToStdin)
 
 	r := newTestRunner()
-	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == azblob.PublicAccessNone && sas != "" {
+	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == "" && sas != "" {
 		r.flags["source-sas"] = sas
 	}
 	if sas := s.state.dest.getSAS(); sas != "" {
@@ -526,7 +525,7 @@ func (s *scenario) validateContent() {
 	}
 }
 
-func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]string) {
+func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]*string) {
 	if !s.p.preservePOSIXProperties {
 		return
 	}
@@ -539,14 +538,14 @@ func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]st
 		adapter = osScenarioHelper{}.GetUnixStatAdapterForFile(s.a, filepath.Join(s.state.dest.(*resourceLocal).dirPath, addedDirAtDest, f.name))
 	case common.ELocation.Blob():
 		var err error
-		adapter, err = common.ReadStatFromMetadata(common.FromAzFileMetadataToCommonMetadata(metadata), 0)
+		adapter, err = common.ReadStatFromMetadata(metadata, 0)
 		s.a.AssertNoErr(err, "reading stat from metadata")
 	}
 
 	s.a.Assert(f.verificationProperties.posixProperties.EquivalentToStatAdapter(adapter), equals(), "", "POSIX properties were mismatched")
 }
 
-func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
+func (s *scenario) validateSymlink(f *testObject, metadata map[string]*string) {
 	c := s.GetAsserter()
 
 	prepareSymlinkForComparison := func(oldName string) string {
@@ -604,7 +603,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 }
 
 // // Individual property validation routines
-func (s *scenario) validateMetadata(expected, actual map[string]string) {
+func (s *scenario) validateMetadata(expected, actual map[string]*string) {
 	for _, v := range common.AllLinuxProperties { // properties are evaluated elsewhere
 		delete(expected, v)
 		delete(actual, v)

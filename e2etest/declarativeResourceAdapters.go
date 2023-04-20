@@ -21,8 +21,8 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
@@ -43,41 +43,20 @@ type blobResourceAdapter struct {
 	obj *testObject
 }
 
-func (a blobResourceAdapter) toHeaders() azblob.BlobHTTPHeaders {
+func (a blobResourceAdapter) toHeaders() *blob.HTTPHeaders {
 	props := a.obj.creationProperties.contentHeaders
 	if props == nil {
-		return azblob.BlobHTTPHeaders{}
+		return nil
 	}
-	return azblob.BlobHTTPHeaders{
-		ContentType:        sval(props.contentType),
-		ContentMD5:         props.contentMD5,
-		ContentEncoding:    sval(props.contentEncoding),
-		ContentLanguage:    sval(props.contentLanguage),
-		ContentDisposition: sval(props.contentDisposition),
-		CacheControl:       sval(props.cacheControl),
+	return &blob.HTTPHeaders{
+		BlobContentType:        props.contentType,
+		BlobContentMD5:         props.contentMD5,
+		BlobContentEncoding:    props.contentEncoding,
+		BlobContentLanguage:    props.contentLanguage,
+		BlobContentDisposition: props.contentDisposition,
+		BlobCacheControl:       props.cacheControl,
 	}
 }
-
-func (a blobResourceAdapter) toMetadata() azblob.Metadata {
-	if a.obj.creationProperties.nameValueMetadata == nil {
-		a.obj.creationProperties.nameValueMetadata = azblob.Metadata{}
-	}
-
-	if a.obj.creationProperties.posixProperties != nil {
-		a.obj.creationProperties.posixProperties.AddToMetadata(a.obj.creationProperties.nameValueMetadata)
-	}
-
-	return a.obj.creationProperties.nameValueMetadata
-}
-
-func (a blobResourceAdapter) toBlobTags() azblob.BlobTagsMap {
-	if a.obj.creationProperties.blobTags == nil {
-		return azblob.BlobTagsMap{}
-	}
-	return azblob.BlobTagsMap(a.obj.creationProperties.blobTags)
-}
-
-////
 
 type filesResourceAdapter struct {
 	obj *testObject
@@ -140,5 +119,9 @@ func (a filesResourceAdapter) toMetadata() azfile.Metadata {
 	if a.obj.creationProperties.nameValueMetadata == nil {
 		return azfile.Metadata{}
 	}
-	return a.obj.creationProperties.nameValueMetadata
+	meta := azfile.Metadata{}
+	for k, v := range a.obj.creationProperties.nameValueMetadata {
+		meta[k] = sval(v)
+	}
+	return meta
 }
