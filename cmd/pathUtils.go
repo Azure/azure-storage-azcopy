@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"net/url"
 	"strings"
 
@@ -236,14 +236,14 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	//       It's not a breaking change to the way SAS tokens work, but a pretty major addition.
 	// TODO: Find a clever way to reduce code duplication in here. Especially the URL parsing.
 	case common.ELocation.Blob():
-		var bURLParts sas.URLParts
+		var bURLParts blobsas.URLParts
 		bURLParts, err = blob.ParseURL(resource)
 		if err != nil {
 			return resource, "", err
 		}
 
 		resourceToken = bURLParts.SAS.Encode()
-		bURLParts.SAS = sas.QueryParameters{} // clear the SAS token and drop the raw, base URL
+		bURLParts.SAS = blobsas.QueryParameters{} // clear the SAS token and drop the raw, base URL
 		resourceBase = bURLParts.String()
 		return
 	case common.ELocation.File():
