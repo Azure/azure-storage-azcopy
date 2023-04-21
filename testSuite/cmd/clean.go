@@ -293,7 +293,7 @@ func createBlobServiceClient(resourceURL string) *blobservice.Client {
 
 	// create the pipeline, preferring SAS over account name/key
 	if blobURLParts.SAS.Encode() != "" {
-		bsc, err := blobservice.NewClientWithNoCredential(resourceURL, nil)
+		bsc, err := blobservice.NewClientWithNoCredential(blobURLParts.String(), nil)
 		if err != nil {
 			fmt.Println("Failed to create blob service client")
 			os.Exit(1)
