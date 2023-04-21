@@ -200,7 +200,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 			}
 
 			// read all bytes.
-			blobBytesDownloaded, err := io.ReadAll(get.Body())
+			blobBytesDownloaded, err := io.ReadAll(get.Body)
 			if err != nil {
 				fmt.Printf("error reading the body of blob %s downloaded and failed with error %s\n", *blobInfo.Name, err.Error())
 				os.Exit(1)
