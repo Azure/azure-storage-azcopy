@@ -281,9 +281,6 @@ func createContainerClient(resourceURL string) *container.Client {
 }
 
 func createBlobServiceClient(resourceURL string) *blobservice.Client {
-	// Get name and key variables from environment.
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
 	blobURLParts, err := blob.ParseURL(resourceURL)
 	if err != nil {
 		fmt.Println("Failed to parse url")
@@ -293,11 +290,7 @@ func createBlobServiceClient(resourceURL string) *blobservice.Client {
 	blobURLParts.BlobName = ""
 	blobURLParts.VersionID = ""
 	blobURLParts.Snapshot = ""
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in the environment, and there is no SAS token present
-	if (name == "" && key == "") && blobURLParts.SAS.Encode() == "" {
-		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
-		os.Exit(1)
-	}
+
 	// create the pipeline, preferring SAS over account name/key
 	if blobURLParts.SAS.Encode() != "" {
 		bsc, err := blobservice.NewClientWithNoCredential(resourceURL, nil)
@@ -308,12 +301,20 @@ func createBlobServiceClient(resourceURL string) *blobservice.Client {
 		return bsc
 	}
 
+	// Get name and key variables from environment.
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in the environment, and there is no SAS token present
+	if (name == "" && key == "") && blobURLParts.SAS.Encode() == "" {
+		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
+		os.Exit(1)
+	}
 	c, err := blob.NewSharedKeyCredential(name, key)
 	if err != nil {
 		fmt.Println("Failed to create shared key credential!")
 		os.Exit(1)
 	}
-	bsc, err := blobservice.NewClientWithSharedKeyCredential(resourceURL, c, nil)
+	bsc, err := blobservice.NewClientWithSharedKeyCredential(blobURLParts.String(), c, nil)
 	if err != nil {
 		fmt.Println("Failed to create blob service client")
 		os.Exit(1)
