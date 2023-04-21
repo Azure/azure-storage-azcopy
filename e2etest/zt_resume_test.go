@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"testing"
 
@@ -87,7 +88,7 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 		nil,
 		testFiles{
 			defaultSize:  "1K",
-			sourcePublic: container.PublicAccessTypeBlob,
+			sourcePublic: to.Ptr(container.PublicAccessTypeBlob),
 			objectTarget: "a.txt",
 
 			shouldTransfer: []interface{}{
@@ -113,7 +114,7 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 		nil,
 		testFiles{
 			defaultSize:  "1K",
-			sourcePublic: container.PublicAccessTypeContainer,
+			sourcePublic: to.Ptr(container.PublicAccessTypeContainer),
 
 			shouldTransfer: []interface{}{
 				f("a.txt"),

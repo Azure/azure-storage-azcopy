@@ -461,7 +461,7 @@ type testFiles struct {
 	defaultSize  string                  // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
 	objectTarget string                  // should we target only a single file/folder?
 	destTarget   string                  // do we want to copy under a folder or rename?
-	sourcePublic container.PublicAccessType // should the source blob container be public? (ONLY APPLIES TO BLOB.)
+	sourcePublic *container.PublicAccessType // should the source blob container be public? (ONLY APPLIES TO BLOB.)
 
 	// The files/folders that we expect to be transferred. Elements of the list must be strings or testObject's.
 	// A string can be used if no properties need to be specified.

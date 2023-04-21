@@ -151,11 +151,11 @@ func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType
 	return blobURLWithSAS
 }
 
-func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess container.PublicAccessType, accountType AccountType) (cc *container.Client, name string, rawURL string) {
+func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess *container.PublicAccessType, accountType AccountType) (cc *container.Client, name string, rawURL string) {
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
 	cc = TestResourceFactory{}.GetBlobServiceURL(accountType).NewContainerClient(name)
 
-	_, err := cc.Create(context.Background(), &container.CreateOptions{Access: &publicAccess})
+	_, err := cc.Create(context.Background(), &container.CreateOptions{Access: publicAccess})
 	c.AssertNoErr(err)
 	return cc, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
 }

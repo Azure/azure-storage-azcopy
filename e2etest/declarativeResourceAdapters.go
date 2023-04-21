@@ -115,11 +115,11 @@ func (a filesResourceAdapter) toHeaders(c asserter, share azfile.ShareURL) azfil
 	return headers
 }
 
-func (a filesResourceAdapter) toMetadata() azfile.Metadata {
+func (a filesResourceAdapter) toMetadata() map[string]string {
 	if a.obj.creationProperties.nameValueMetadata == nil {
-		return azfile.Metadata{}
+		return nil
 	}
-	meta := azfile.Metadata{}
+	meta := map[string]string{}
 	for k, v := range a.obj.creationProperties.nameValueMetadata {
 		meta[k] = sval(v)
 	}

@@ -282,7 +282,7 @@ func (s *scenario) resumeAzCopy(logDir string) {
 	defer close(s.chToStdin)
 
 	r := newTestRunner()
-	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == "" && sas != "" {
+	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == nil && sas != "" {
 		r.flags["source-sas"] = sas
 	}
 	if sas := s.state.dest.getSAS(); sas != "" {
