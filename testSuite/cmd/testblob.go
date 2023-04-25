@@ -262,7 +262,7 @@ func validateMetadata(expectedMetadataString string, actualMetadata map[string]*
 		}
 		// iterating through each key value pair of actual metaData and comparing the key value pair in expected metadata
 		for key, value := range actualMetadata {
-			if *expectedMetadata[key] != *value {
+			if *expectedMetadata[strings.ToLower(key)] != *value {
 				fmt.Printf("value of user given key %s is %s in actual data while it is %s in expected metadata\n", key, *value, *expectedMetadata[key])
 				return false
 			}
@@ -475,7 +475,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			Transport: ste.NewAzcopyHTTPClient(0),
 		}})
 	if err != nil {
-		fmt.Printf("error creating page blob client. failed with error %s\n", err.Error())
+		fmt.Printf("error creating block blob client. failed with error %s\n", err.Error())
 		os.Exit(1)
 	}
 
