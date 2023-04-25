@@ -40,10 +40,10 @@ func init() {
 	cleanCmd.PersistentFlags().Int64Var(&numberOfResource, "resource-num", 0, "number of resource inside the container")
 }
 
-func getContainerURLFromString(sourceUrl *url.URL) string {
-	containerName := strings.SplitAfterN(sourceUrl.Path[1:], "/", 2)[0]
-	sourceUrl.Path = "/" + containerName
-	return sourceUrl.String()
+func getContainerURLFromString(url url.URL) string {
+	containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
+	url.Path = "/" + containerName
+	return url.String()
 }
 
 // checks if a given url points to a container, as opposed to a blob or prefix match
@@ -73,7 +73,7 @@ func listContainer(resourceUrl string, numberOfResources int64) {
 	}
 
 	// get the container url to be used for listing
-	literalContainerUrl := getContainerURLFromString(sourceUrl)
+	literalContainerUrl := getContainerURLFromString(*sourceUrl)
 	cc, err := container.NewClientWithNoCredential(literalContainerUrl, &container.ClientOptions{ClientOptions: azcore.ClientOptions{
 		Retry: policy.RetryOptions{
 			MaxRetries: ste.UploadMaxTries,

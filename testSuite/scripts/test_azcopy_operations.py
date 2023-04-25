@@ -33,11 +33,6 @@ class Azcopy_Operation_User_Scenario(unittest.TestCase):
         result = util.Command("rm").add_arguments(destination).add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
-        print("Started sleep for test_remove_virtual_directory")
-        time.sleep( 30 )
-        print("Ended sleep for test_remove_virtual_directory")
-
-
         result = util.Command("list").add_arguments(destination).add_flags("resource-num", "0").execute_azcopy_verify()
         self.assertTrue(result)
 
@@ -54,10 +49,6 @@ class Azcopy_Operation_User_Scenario(unittest.TestCase):
         destination = util.get_object_without_sas(util.test_oauth_container_url, dir_name)
         result = util.Command("rm").add_arguments(destination).add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
-
-        print("Started sleep for test_remove_virtual_directory_oauth")
-        time.sleep( 30 )
-        print("Ended sleep for test_remove_virtual_directory_oauth")
 
         destination_with_sas = util.get_object_sas(util.test_oauth_container_validate_sas_url, dir_name)
         result = util.Command("list").add_arguments(destination_with_sas).add_flags("resource-num", "0").execute_azcopy_verify()
