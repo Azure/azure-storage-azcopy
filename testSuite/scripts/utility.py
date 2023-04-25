@@ -259,10 +259,8 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
         print("failed to clean test filesystem.")
     if not clean_test_container(test_container_url):
         print("failed to clean test blob container.")
-    if not clean_test_container(test_oauth_container_url):
+    if not clean_test_container(test_oauth_container_validate_sas_url):
         print("failed to clean OAuth test blob container.")
-    if not clean_test_container(test_oauth_container_url):
-        print("failed to clean OAuth container.")
     if not clean_test_container(test_premium_account_contaier_url):
         print("failed to clean premium container.")
     if not clean_test_blob_account(test_s2s_src_blob_account_url):
