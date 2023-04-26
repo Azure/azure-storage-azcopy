@@ -123,7 +123,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 
 		if transfer.Dst != os.DevNull { // Don't check if the destination is NUL-- It won't be correct.
 			// the relative paths should be equal
-			c.Assert(srcRelativeFilePath, equals(), dstRelativeFilePath)
+			c.Assert(dstRelativeFilePath, equals(), srcRelativeFilePath)
 		}
 
 		// look up the path from the expected transfers, make sure it exists

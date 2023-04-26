@@ -306,3 +306,34 @@ func TestProperties_SMBTimes(t *testing.T) {
 		"",
 	)
 }
+
+func TestProperties_EnsureContainerBehavior(t *testing.T) {
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.FileFile()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive: true,
+			preserveSMBInfo: BoolPointer(true),
+			preserveSMBPermissions: true,
+		},
+		nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("aeiou.txt"),
+				folder("a"),
+				f("a/asdf.txt"),
+				folder("b"),
+				f("b/1234.txt"),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
