@@ -23,7 +23,9 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"net/http"
 )
 
 type serviceAPIVersionOverride struct{}
@@ -49,4 +51,19 @@ func NewVersionPolicyFactory() pipeline.Factory {
 			return resp, err
 		}
 	})
+}
+
+type versionPolicy struct {
+}
+
+func newVersionPolicy() policy.Policy {
+	return &versionPolicy{}
+}
+
+func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
+	// get the service api version value using the ServiceAPIVersionOverride set in the context.
+	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
+		req.Raw().Header["x-ms-version"] = []string{value.(string)}
+	}
+	return req.Next()
 }
