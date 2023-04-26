@@ -487,6 +487,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 			return err
 		}
 	}
+	processor = mutexProcessor(processor)
 
 	// spin up hashing threads
 	for i := 0; i < hashingThreadCount; i++ {
@@ -575,7 +576,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						noMetdata,
 						"", // Local has no such thing as containers
 					),
-					mutexProcessor(processor),
+					processor, // the original processor is wrapped in the mutex processor.
 				)
 				_, err = getProcessingError(err)
 				if err != nil {
@@ -589,6 +590,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 	// wrap the processor, try to grab hashes, or defer processing to the goroutines
 	hashingProcessor = func(storedObject StoredObject) error {
 		if storedObject.entityType != common.EEntityType.File() {
+			// the original processor is wrapped in the mutex processor.
 			return processor(storedObject) // no process folders
 		}
 
@@ -603,6 +605,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 			switch err {
 			case ErrorNoHashPresent, ErrorHashNoLongerValid, ErrorHashNotCompatible:
 				glcm.Info("No usable hash is present for " + fullPath + ". Will transfer if not present at destination.")
+				// the original processor is wrapped in the mutex processor.
 				return processor(storedObject) // There is no hash data, so this file will be overwritten (in theory).
 			case ErrorHashAsyncCalculation:
 				return nil // File will be processed later
@@ -620,7 +623,8 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 		}
 
 		// delay the mutex until after potentially long-running operations
-		return mutexProcessor(processor)(storedObject)
+		// the original processor is wrapped in the mutex processor.
+		return processor(storedObject)
 	}
 
 	return finalizer, hashingProcessor
