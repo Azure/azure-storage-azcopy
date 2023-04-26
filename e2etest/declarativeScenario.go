@@ -585,7 +585,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]*string) {
 		case common.ELocation.Blob():
 			val, ok := metadata[common.POSIXSymlinkMeta]
 			c.Assert(ok, equals(), true)
-			c.Assert(val, equals(), "true")
+			c.Assert(*val, equals(), "true")
 
 			content := dest.downloadContent(c, downloadContentOptions{
 				resourceRelPath: fixSlashes(path.Join(addedDirAtDest, f.name), common.ELocation.Blob()),
