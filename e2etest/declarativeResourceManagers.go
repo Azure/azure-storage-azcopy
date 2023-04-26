@@ -23,6 +23,7 @@ package e2etest
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"net/url"
 	"os"
 	"path"
@@ -238,6 +239,29 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		options.accessTier = s.p.accessTier
 	}
 	scenarioHelper{}.generateBlobsFromList(a, options)
+
+	// set root ACL
+	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
+		containerURLParts, err := blob.ParseURL(r.containerClient.URL())
+		a.AssertNoErr(err)
+
+		for _,v := range options.generateFromListOptions.fs {
+			if v.name == "" {
+				if v.creationProperties.adlsPermissionsACL == nil {
+					break
+				}
+
+				rootURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(containerURLParts.ContainerName).NewDirectoryURL("/")
+
+				_, err := rootURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
+					ACL: *v.creationProperties.adlsPermissionsACL,
+				})
+				a.AssertNoErr(err)
+
+				break
+			}
+		}
+	}
 }
 
 func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
@@ -297,7 +321,23 @@ func (r *resourceBlobContainer) appendSourcePath(filePath string, useSas bool) {
 }
 
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
-	return scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient)
+	objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient)
+
+	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
+		urlParts, err := blob.ParseURL(r.containerClient.URL())
+		a.AssertNoErr(err)
+		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("/")
+
+		ACL, err := fsURL.GetAccessControl(ctx)
+		a.AssertNoErr(err)
+
+		objects[""] = &objectProperties{
+			entityType: common.EEntityType.Folder(),
+			adlsPermissionsACL: &ACL.ACL,
+		}
+	}
+
+	return objects
 }
 
 func (r *resourceBlobContainer) downloadContent(a asserter, options downloadContentOptions) []byte {
