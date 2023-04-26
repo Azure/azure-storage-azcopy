@@ -1,5 +1,3 @@
-import time
-
 import utility as util
 import json
 import unittest
