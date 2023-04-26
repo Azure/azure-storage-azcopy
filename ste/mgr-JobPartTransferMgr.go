@@ -981,9 +981,9 @@ func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context)
 		if err != nil {
 			return nil, err
 		}
-		scope := []string{"https://storage.azure.com/.default"}
+		scope := []string{common.StorageScope}
 		if jptm.S2SSourceCredentialInfo().CredentialType == common.ECredentialType.MDOAuthToken() {
-			scope = []string{"https://disk.azure.com//.default"}
+			scope = []string{common.ManagedDiskScope}
 		}
 
 		token, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scope})
