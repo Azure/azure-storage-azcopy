@@ -435,13 +435,15 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	return nil
 }
 
-func getEntityType(blobInfo map[string]*string) common.EntityType {
+func getEntityType(metadata map[string]*string) common.EntityType {
 	// Note: We are just checking keys here, not their corresponding values. Is that safe?
-	if _, isfolder := blobInfo["hdi_isfolder"]; isfolder {
+	if _, isfolder := metadata["hdi_isfolder"]; isfolder {
 		return common.EEntityType.Folder()
-	} else if _, isfolder := blobInfo["Hdi_isfolder"]; isfolder {
+	} else if _, isfolder := metadata["Hdi_isfolder"]; isfolder {
 		return common.EEntityType.Folder()
-	} else if _, isSymlink := blobInfo["is_symlink"]; isSymlink {
+	} else if _, isSymlink := metadata["is_symlink"]; isSymlink {
+		return common.EEntityType.Symlink()
+	} else if _, isSymlink := metadata["Is_symlink"]; isSymlink {
 		return common.EEntityType.Symlink()
 	}
 
