@@ -305,14 +305,13 @@ type LogOptions struct {
 	// TODO : Unravel LogOptions and RequestLogOptions
 	RequestLogOptions  RequestLogOptions
 	LogOptions         pipeline.LogOptions
-	AllowedHeaders     []string
-	AllowedQueryParams []string
 }
 
 type logPolicy struct {
 	LogOptions         LogOptions
-	allowedHeaders     map[string]struct{}
-	allowedQueryParams map[string]struct{}
+	disallowedHeaders     map[string]struct{}
+	sanitizedUrlHeaders   map[string]struct{}
+	disallowedQueryParams map[string]struct{}
 }
 
 func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
@@ -438,47 +437,20 @@ func newLogPolicy(options LogOptions) policy.Policy {
 	if options.LogOptions.Log == nil {
 		options.LogOptions.Log = func(pipeline.LogLevel, string) {} // No-op logger
 	}
-	// TODO : Possibly add to default set?
-	// construct default hash set of allowed headers
-	allowedHeaders := map[string]struct{}{
-		"accept":                        {},
-		"cache-control":                 {},
-		"connection":                    {},
-		"content-length":                {},
-		"content-type":                  {},
-		"date":                          {},
-		"etag":                          {},
-		"expires":                       {},
-		"if-match":                      {},
-		"if-modified-since":             {},
-		"if-none-match":                 {},
-		"if-unmodified-since":           {},
-		"last-modified":                 {},
-		"ms-cv":                         {},
-		"pragma":                        {},
-		"request-id":                    {},
-		"retry-after":                   {},
-		"server":                        {},
-		"traceparent":                   {},
-		"transfer-encoding":             {},
-		"user-agent":                    {},
-		"www-authenticate":              {},
-		"x-ms-request-id":               {},
-		"x-ms-client-request-id":        {},
-		"x-ms-return-client-request-id": {},
+	disallowedHeaders := map[string]struct{}{
+		"authorization": {},
+		"x-ms-encryption-key": {},
+		"x-ms-copy-source-authorization": {},
 	}
-	// add any caller-specified allowed headers to the set
-	for _, ah := range options.AllowedHeaders {
-		allowedHeaders[strings.ToLower(ah)] = struct{}{}
+	sanitizedUrlHeaders := map[string]struct{}{
+		"x-ms-copy-source": {},
 	}
+
 	// now do the same thing for query params
-	allowedQP := map[string]struct{}{
-		"api-version": {},
+	disallowedQP := map[string]struct{}{
+		"sig": {},
 	}
-	for _, qp := range options.AllowedQueryParams {
-		allowedQP[strings.ToLower(qp)] = struct{}{}
-	}
-	return logPolicy{LogOptions: options, allowedHeaders: allowedHeaders, allowedQueryParams: allowedQP}
+	return logPolicy{LogOptions: options, disallowedHeaders: disallowedHeaders, disallowedQueryParams: disallowedQP, sanitizedUrlHeaders: sanitizedUrlHeaders}
 }
 
 const redactedValue = "REDACTED"
@@ -487,7 +459,7 @@ func (p *logPolicy) writeRequestAsOneLine(b *bytes.Buffer, req *policy.Request) 
 	cpURL := *req.Raw().URL
 	qp := cpURL.Query()
 	for k := range qp {
-		if _, ok := p.allowedQueryParams[strings.ToLower(k)]; !ok {
+		if _, ok := p.disallowedQueryParams[strings.ToLower(k)]; ok {
 			qp.Set(k, redactedValue)
 		}
 	}
@@ -502,7 +474,7 @@ func (p *logPolicy) writeRequestWithResponse(b *bytes.Buffer, req *policy.Reques
 	cpURL := *req.Raw().URL
 	qp := cpURL.Query()
 	for k := range qp {
-		if _, ok := p.allowedQueryParams[strings.ToLower(k)]; !ok {
+		if _, ok := p.disallowedQueryParams[strings.ToLower(k)]; ok {
 			qp.Set(k, redactedValue)
 		}
 	}
@@ -535,9 +507,22 @@ func (p *logPolicy) writeHeader(b *bytes.Buffer, header http.Header) {
 	sort.Strings(keys)
 	for _, k := range keys {
 		value := header.Get(k)
-		// redact all header values not in the allow-list
-		if _, ok := p.allowedHeaders[strings.ToLower(k)]; !ok {
+		// sanitize or redact certain headers
+		// redact all header values in the disallow-list
+		if _, ok := p.disallowedHeaders[strings.ToLower(k)]; ok {
 			value = redactedValue
+		} else if _, ok := p.sanitizedUrlHeaders[strings.ToLower(k)]; ok {
+			u, err := url.Parse(value)
+			if err == nil {
+				rawQuery := u.RawQuery
+				sigRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, common.SigAzure)
+				xAmzSignatureRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, common.SigXAmzForAws)
+
+				if sigRedacted || xAmzSignatureRedacted {
+					u.RawQuery = rawQuery
+				}
+				value = u.String()
+			}
 		}
 		fmt.Fprintf(b, "   %s: %+v\n", k, value)
 	}
