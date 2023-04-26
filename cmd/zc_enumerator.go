@@ -447,10 +447,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc, err := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
-		if err != nil {
-			return nil, err
-		}
+		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
 
 		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {

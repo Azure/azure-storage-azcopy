@@ -315,10 +315,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			}
 			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
 
-			blobClient, err := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
-			if err != nil {
-				return err
-			}
+			blobClient := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
 			_, err = blobClient.Delete(b.ctx, nil)
 			return err
 		case common.ELocation.File():

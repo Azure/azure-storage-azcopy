@@ -74,10 +74,8 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipelin
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
 		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
 
-		srcPagBlobClient, err := common.CreatePageBlobClient(jptm.Info().Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-		if err != nil {
-			bd.jptm.FailActiveDownload("Creating blob client", err)
-		}
+		srcPagBlobClient := common.CreatePageBlobClient(jptm.Info().Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+
 		bd.pageRangeOptimizer = newPageRangeOptimizer(srcPagBlobClient, jptm.Context())
 		bd.pageRangeOptimizer.fetchPages()
 	}
@@ -139,10 +137,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 
 		// download blob from start Index till startIndex + adjustedChunkSize
 		source := jptm.Info().Source
-		blobClient, err := common.CreateBlobClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-		if err != nil {
-			jptm.FailActiveDownload("Creating blob client", err)
-		}
+		blobClient := common.CreateBlobClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 		// TODO (gapra) : This can be removed after Access Conditions fix is released.
 		// set access conditions, to protect against inconsistencies from changes-while-being-read

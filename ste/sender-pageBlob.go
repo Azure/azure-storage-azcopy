@@ -95,10 +95,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	destPageBlobClient, err := common.CreatePageBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-	if err != nil {
-		return nil, err
-	}
+	destPageBlobClient := common.CreatePageBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	// This is only necessary if our destination is a managed disk impexp account.
 	// Read the in struct explanation if necessary.

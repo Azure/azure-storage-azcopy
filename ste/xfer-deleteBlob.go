@@ -35,10 +35,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 	info := jptm.Info()
 	// Get the source blob url of blob to delete
-	blobClient, err := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-	if err != nil {
-		jptm.LogError(info.Source, "DELETE ERROR (creating blob client): ", err)
-	}
+	blobClient := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
@@ -63,7 +60,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob
 	// we still count this delete operation as successful since we accomplished the desired outcome
-	_, err = blobClient.Delete(jptm.Context(), &blob.DeleteOptions{
+	_, err := blobClient.Delete(jptm.Context(), &blob.DeleteOptions{
 		DeleteSnapshots: jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(),
 		BlobDeleteType: jptm.PermanentDeleteOption().ToPermanentDeleteOptionType(),
 	})
