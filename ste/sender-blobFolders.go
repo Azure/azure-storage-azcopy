@@ -126,7 +126,8 @@ func (b *blobFolderSender) SetContainerACL() error {
 	if err != nil {
 		b.jptm.FailActiveSend("Parsing blob URL", err)
 	}
-	blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
+	blobURLParts.BlobName = "/" // container level perms MUST have a /
+	//blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
 	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
 	dfsURL, err := url.Parse(blobURLParts.String())
 	if err != nil {
