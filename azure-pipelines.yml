@@ -49,9 +49,8 @@ jobs:
           curl -O -L "https://azcopyvnextrelease.blob.core.windows.net/testcont/azure-storage-azcopy-m1"
         displayName: 'Fetch m1 build'
 
-      - steps:
-        - publish: ./azure-storage-azcopy-m1
-          artifact: m1_build
+      - publish: ./azure-storage-azcopy-m1
+        artifact: m1_build
 
       - script: |
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
