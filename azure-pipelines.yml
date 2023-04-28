@@ -46,7 +46,7 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          curl -o curl -o "$(Build.ArtifactStagingDirectory)/m1_build" -L "https://azcopyvnextrelease.blob.core.windows.net/testcont/azure-storage-azcopy-m1"
+          curl -o "$(Build.ArtifactStagingDirectory)/m1_build" -L "https://azcopyvnextrelease.blob.core.windows.net/testcont/azure-storage-azcopy-m1"
         displayName: 'Fetch m1 build'
 
       - script: |
