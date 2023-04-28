@@ -131,7 +131,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, cca.isHNSToHNS, strings.EqualFold(cca.destination.Value, common.Dev_Null), false) // sync always acts like stripTopDir=true
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), false) // sync always acts like stripTopDir=true
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -193,7 +193,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			// since only then can we know which local files definitely don't exist remotely
 			var deleteScheduler objectProcessor
 			switch cca.fromTo.To() {
-			case common.ELocation.Blob(), common.ELocation.File():
+			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
 				deleter, err := newSyncDeleteProcessor(cca)
 				if err != nil {
 					return err

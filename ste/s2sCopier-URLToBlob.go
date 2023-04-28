@@ -23,6 +23,7 @@ package ste
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -32,6 +33,22 @@ import (
 // Creates the right kind of URL to blob copier, based on the blob type of the source
 func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
+
+	// If our destination is a dfs endpoint, make an attempt to cast it to the blob endpoint
+	// Like other dfs<->blob casts, dfs doesn't actually exist on stack/emu, so the only time this should get used is against the real service.
+	fromTo := jptm.FromTo()
+	if fromTo.To() == common.ELocation.BlobFS() {
+		u, err := url.Parse(destination)
+		if err != nil {
+			return nil, err
+		}
+
+		bURLParts := azblob.NewBlobURLParts(*u)
+
+		bURLParts.Host = strings.Replace(bURLParts.Host, ".dfs", ".blob", 1)
+		newDest := bURLParts.URL()
+		destination = newDest.String()
+	}
 
 	var targetBlobType azblob.BlobType
 

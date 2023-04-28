@@ -109,7 +109,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			case common.ELocation.File():
 				return newURLToAzureFileCopier
 			case common.ELocation.BlobFS():
-				panic(blobFSNotS2S)
+				return newURLToBlobCopier
 			default:
 				panic("unexpected target location type")
 			}
@@ -139,7 +139,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		case common.ELocation.File():
 			return newFileSourceInfoProvider
 		case common.ELocation.BlobFS():
-			panic(blobFSNotS2S)
+			return newBlobSourceInfoProvider
 		case common.ELocation.S3():
 			return newS3SourceInfoProvider
 		case common.ELocation.GCP():

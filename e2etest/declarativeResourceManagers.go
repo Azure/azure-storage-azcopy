@@ -299,6 +299,10 @@ func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFil
 		uri = bURLParts.URL()
 	}
 
+	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
+		uri.Host = strings.ReplaceAll(uri.Host, "blob", "dfs")
+	}
+
 	return uri.String()
 }
 
