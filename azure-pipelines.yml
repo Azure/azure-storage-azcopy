@@ -46,11 +46,8 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          curl -O -L "https://azcopyvnextrelease.blob.core.windows.net/testcont/azure-storage-azcopy-m1"
+          curl -o curl -o "$(Build.ArtifactStagingDirectory)/m1_build" -L "https://azcopyvnextrelease.blob.core.windows.net/testcont/azure-storage-azcopy-m1"
         displayName: 'Fetch m1 build'
-
-      - publish: ./azure-storage-azcopy-m1
-        artifact: m1_build
 
       - script: |
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
