@@ -23,12 +23,12 @@ package ste
 import (
 	"bytes"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -36,10 +36,10 @@ import (
 type urlToBlockBlobCopier struct {
 	blockBlobSenderBase
 
-	srcURL url.URL
+	srcURL string
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
 	var destBlobTier blob.AccessTier
 	// If the source is block blob, preserve source's blob tier.
@@ -49,7 +49,7 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 		}
 	}
 
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider, destBlobTier)
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, pacer, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}
@@ -59,14 +59,9 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
-	sourceURL, err := url.Parse(srcURL)
-	if err != nil {
-		return nil, err
-	}
-
 	return &urlToBlockBlobCopier{
 		blockBlobSenderBase: *senderBase,
-		srcURL:              *sourceURL}, nil
+		srcURL:              srcURL}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -77,7 +72,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	}
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl with the exception of files
 	fromTo := c.blockBlobSenderBase.jptm.FromTo()
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) && fromTo.From() != common.ELocation.File() {
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(blockblob.MaxUploadBlobBytes) && fromTo.From() != common.ELocation.File() {
 		/*
 		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
 		 * invalid error from service due to PutBlockFromUrl.
@@ -98,30 +93,39 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		// Create blob and finish.
-		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
+		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobClient, c.jptm.Context(), false) {
 			c.destBlobTier = ""
 		}
 
 		blobTags := c.blobTagsToApply
-		separateSetTagsRequired := separateSetTagsRequired(blobTags)
-		if separateSetTagsRequired || len(blobTags) == 0 {
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
-		destBlobTier := c.destBlobTier
-		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = ""
+		destBlobTier := &c.destBlobTier
+		if c.jptm.IsSourceEncrypted() {
+			destBlobTier = nil
 		}
 
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), common.ToAzBlobHTTPHeaders(c.headersToApply), c.metadataToApply.ToAzBlobMetadata(), azblob.BlobAccessConditions{}, azblob.AccessTierType(destBlobTier), blobTags, c.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		_, err := c.destBlockBlobClient.Upload(c.jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
+			&blockblob.UploadOptions{
+				HTTPHeaders: &c.headersToApply,
+				Metadata: c.metadataToApply,
+				Tier: destBlobTier,
+				Tags: blobTags,
+				CPKInfo: c.jptm.CpkInfo(),
+				CPKScopeInfo: c.jptm.CpkScopeInfo(),
+			})
+		if err != nil {
 			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
 
 		atomic.AddInt32(&c.atomicChunksWritten, 1)
 
-		if separateSetTagsRequired {
+		if setTags {
 			if _, err := c.destBlockBlobClient.SetTags(jptm.Context(), c.blobTagsToApply, nil); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}
@@ -150,8 +154,18 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destBlockBlobURL.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
-			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{}, c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
+		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
+			return
+		}
+		_, err = c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
+			&blockblob.StageBlockFromURLOptions{
+				Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
+				CPKInfo:                 c.jptm.CpkInfo(),
+				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+				CopySourceAuthorization: token,
+			})
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
@@ -167,29 +181,41 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 
 		// Create blob and finish.
-		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobURL.BlobURL, c.jptm.Context(), false) {
+		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobClient, c.jptm.Context(), false) {
 			c.destBlobTier = ""
 		}
 
 		blobTags := c.blobTagsToApply
-		separateSetTagsRequired := separateSetTagsRequired(blobTags)
-		if separateSetTagsRequired || len(blobTags) == 0 {
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
-		destBlobTier := c.destBlobTier
-		if c.cpkToApply.EncryptionScope != nil || (c.cpkToApply.EncryptionKey != nil && c.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = ""
+		destBlobTier := &c.destBlobTier
+		if c.jptm.IsSourceEncrypted() {
+			destBlobTier = nil
 		}
 
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
+		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
+			return
+		}
 
-		_, err := c.destBlockBlobURL.PutBlobFromURL(c.jptm.Context(), common.ToAzBlobHTTPHeaders(c.headersToApply), c.srcURL, c.metadataToApply.ToAzBlobMetadata(),
-			azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}, nil, nil, azblob.AccessTierType(destBlobTier), blobTags,
-			c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
+		_, err = c.destBlockBlobClient.UploadBlobFromURL(c.jptm.Context(), c.srcURL,
+			&blockblob.UploadBlobFromURLOptions{
+				HTTPHeaders:             &c.headersToApply,
+				Metadata:                c.metadataToApply,
+				Tier:                    destBlobTier,
+				Tags:                    blobTags,
+				CPKInfo:                 c.jptm.CpkInfo(),
+				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
+				CopySourceAuthorization: token,
+			})
 
 		if err != nil {
 			c.jptm.FailActiveSend("Put Blob from URL", err)
@@ -198,7 +224,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		atomic.AddInt32(&c.atomicChunksWritten, 1)
 
-		if separateSetTagsRequired {
+		if setTags {
 			if _, err := c.destBlockBlobClient.SetTags(c.jptm.Context(), c.blobTagsToApply, nil); err != nil {
 				c.jptm.Log(pipeline.LogWarning, err.Error())
 			}

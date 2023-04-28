@@ -22,10 +22,12 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type pageBlobUploader struct {
@@ -35,8 +37,8 @@ type pageBlobUploader struct {
 	sip        ISourceInfoProvider
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, "")
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, sip, "")
 	if err != nil {
 		return nil, err
 	}
@@ -84,9 +86,9 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			// in the event the page blob uploader is sending to a managed disk.
 			if u.destPageRangeOptimizer != nil {
 				destContainsData = u.destPageRangeOptimizer.doesRangeContainData(
-					azblob.PageRange{
-						Start: id.OffsetInFile(),
-						End:   id.OffsetInFile() + reader.Length() - 1,
+					pageblob.PageRange{
+						Start: to.Ptr(id.OffsetInFile()),
+						End: to.Ptr(id.OffsetInFile() + reader.Length() - 1),
 					})
 			}
 
@@ -112,7 +114,11 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
-		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile(), body, azblob.PageBlobAccessConditions{}, nil, u.cpkToApply)
+		_, err := u.destPageBlobClient.UploadPages(enrichedContext, body, blob.HTTPRange{Offset: id.OffsetInFile(), Count: reader.Length()},
+			&pageblob.UploadPagesOptions{
+				CPKInfo:      u.jptm.CpkInfo(),
+				CPKScopeInfo: u.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			jptm.FailActiveUpload("Uploading page", err)
 			return

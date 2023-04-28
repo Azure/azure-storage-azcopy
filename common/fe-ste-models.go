@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"math"
@@ -141,12 +142,12 @@ func (d *DeleteSnapshotsOption) Parse(s string) error {
 	return err
 }
 
-func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() blob.DeleteSnapshotsOptionType {
+func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() *blob.DeleteSnapshotsOptionType {
 	if d == EDeleteSnapshotsOption.None() {
-		return ""
+		return nil
 	}
 
-	return blob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+	return to.Ptr(blob.DeleteSnapshotsOptionType(strings.ToLower(d.String())))
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -179,11 +180,11 @@ func (p PermanentDeleteOption) String() string {
 	return enum.StringInt(p, reflect.TypeOf(p))
 }
 
-func (p PermanentDeleteOption) ToPermanentDeleteOptionType() blob.DeleteType {
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() *blob.DeleteType {
 	if p == EPermanentDeleteOption.None() {
-		return ""
+		return nil
 	}
-	return blob.DeleteTypePermanent
+	return to.Ptr(blob.DeleteTypePermanent)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1040,35 +1041,12 @@ func (m Metadata) Clone() Metadata {
 	return out
 }
 
-// ToAzBlobMetadata converts metadata to azblob's metadata.
-func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
-	out := make(azblob.Metadata)
-
-	for k, v := range m {
-		out[k] = *v
-	}
-
-	return out
-}
-
 // ToAzFileMetadata converts metadata to azfile's metadata.
 func (m Metadata) ToAzFileMetadata() azfile.Metadata {
 	out := make(azfile.Metadata)
 
 	for k, v := range m {
 		out[k] = *v
-	}
-
-	return out
-}
-
-// FromAzBlobMetadataToCommonMetadata converts azblob's metadata to common metadata.
-func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
-	out := make(Metadata)
-
-	for k, v := range m {
-		value := v
-		out[k] = &value
 	}
 
 	return out
@@ -1220,11 +1198,6 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 // BlobTags is a map of key-value pair
 type BlobTags map[string]string
 
-// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
-func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
-	return azblob.BlobTagsMap(bt)
-}
-
 //// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
 // func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
 //	return BlobTags(azbt)
@@ -1336,18 +1309,6 @@ func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 		BlobContentLanguage:    &h.ContentLanguage,
 		BlobContentDisposition: &h.ContentDisposition,
 		BlobCacheControl:       &h.CacheControl,
-	}
-}
-
-// ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
-func ToAzBlobHTTPHeaders(h blob.HTTPHeaders) azblob.BlobHTTPHeaders {
-	return azblob.BlobHTTPHeaders{
-		ContentType:        *h.BlobContentType,
-		ContentMD5:         h.BlobContentMD5,
-		ContentEncoding:    *h.BlobContentEncoding,
-		ContentLanguage:    *h.BlobContentLanguage,
-		ContentDisposition: *h.BlobContentDisposition,
-		CacheControl:       *h.BlobCacheControl,
 	}
 }
 
@@ -1585,6 +1546,7 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	}
 }
 
+// TODO : Remove after tests migrated
 ////////////////////////////////////////////////////////////////
 func ToClientProvidedKeyOptions(cpkInfo *blob.CPKInfo, cpkScopeInfo *blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
 	if cpkInfo != nil {
@@ -1630,12 +1592,6 @@ func (options CpkOptions) GetCPKScopeInfo() *blob.CPKScopeInfo {
 	} else {
 		return GetCpkScopeInfo(options.CpkScopeInfo)
 	}
-}
-
-func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
-	_cpkInfo := GetCpkInfo(options.CpkInfo)
-	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
-	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
 }
 
 // //////////////////////////////////////////////////////////////////////////////

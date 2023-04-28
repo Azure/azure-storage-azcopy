@@ -61,7 +61,6 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 }
 
 func (p *gcpSourceInfoProvider) PreSignedSourceURL() (string, error) {
-
 	conf, err := google.JWTConfigFromJSON(jsonKey)
 	if err != nil {
 		return "", fmt.Errorf("Could not get config from json key. Error: %v", err)

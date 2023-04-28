@@ -21,21 +21,19 @@
 package ste
 
 import (
-	"net/url"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type urlToAppendBlobCopier struct {
 	appendBlobSenderBase
 
-	srcURL url.URL
+	srcURL string
 }
 
-func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider)
+func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+	senderBase, err := newAppendBlobSenderBase(jptm, destination, pacer, srcInfoProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -44,14 +42,10 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pi
 	if err != nil {
 		return nil, err
 	}
-	sourceURL, err := url.Parse(srcURL)
-	if err != nil {
-		return nil, err
-	}
 
 	return &urlToAppendBlobCopier{
 		appendBlobSenderBase: *senderBase,
-		srcURL:               *sourceURL}, nil
+		srcURL:               srcURL}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -62,10 +56,20 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destAppendBlobURL.AppendBlockFromURL(c.jptm.Context(), c.srcURL, id.OffsetInFile(), adjustedChunkSize,
-			azblob.AppendBlobAccessConditions{
-				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
-			}, azblob.ModifiedAccessConditions{}, nil, c.cpkToApply, c.jptm.GetS2SSourceBlobTokenCredential())
+		offset := id.OffsetInFile()
+		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
+		if err != nil {
+			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
+			return
+		}
+		_, err = c.destAppendBlobClient.AppendBlockFromURL(c.jptm.Context(), c.srcURL,
+			&appendblob.AppendBlockFromURLOptions{
+				Range: blob.HTTPRange{Offset: offset, Count: adjustedChunkSize},
+				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
+				CPKInfo: c.jptm.CpkInfo(),
+				CPKScopeInfo: c.jptm.CpkScopeInfo(),
+				CopySourceAuthorization: token,
+			})
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
 			return

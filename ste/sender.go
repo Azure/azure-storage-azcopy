@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -224,27 +222,27 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 	}
 
 	if jptm.Info().IsFolderPropertiesTransfer() {
-		return newBlobFolderSender(jptm, destination, p, pacer, sip)
+		return newBlobFolderSender(jptm, destination, sip)
 	} else if jptm.Info().EntityType == common.EEntityType.Symlink() {
-		return newBlobSymlinkSender(jptm, destination, p, pacer, sip)
+		return newBlobSymlinkSender(jptm, destination, sip)
 	}
 
 	switch intendedType {
 	case blob.BlobTypeBlockBlob:
-		return newBlockBlobUploader(jptm, destination, p, pacer, sip)
+		return newBlockBlobUploader(jptm, destination, pacer, sip)
 	case blob.BlobTypePageBlob:
-		return newPageBlobUploader(jptm, destination, p, pacer, sip)
+		return newPageBlobUploader(jptm, destination, pacer, sip)
 	case blob.BlobTypeAppendBlob:
-		return newAppendBlobUploader(jptm, destination, p, pacer, sip)
+		return newAppendBlobUploader(jptm, destination, pacer, sip)
 	default:
-		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.
+		return newBlockBlobUploader(jptm, destination, pacer, sip) // If no blob type was inferred, assume block blob.
 	}
 }
 
 const TagsHeaderMaxLength = 2000
 
 // If length of tags <= 2kb, pass it in the header x-ms-tags. Else do a separate SetTags call
-func separateSetTagsRequired(tagsMap azblob.BlobTagsMap) bool {
+func separateSetTagsRequired(tagsMap common.BlobTags) bool {
 	tagsLength := 0
 	for k, v := range tagsMap {
 		tagsLength += len(k) + len(v) + 2

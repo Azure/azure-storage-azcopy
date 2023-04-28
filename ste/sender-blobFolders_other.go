@@ -2,6 +2,6 @@
 
 package ste
 
-func (b blobFolderSender) getExtraProperties() error {
+func (b *blobFolderSender) getExtraProperties() error {
 	return nil
 }

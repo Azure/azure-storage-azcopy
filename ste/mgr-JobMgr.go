@@ -23,7 +23,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/http"
 	"runtime"
 	"strings"
@@ -112,7 +111,7 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool, sourceBlobToken azblob.Credential) IJobMgr {
+	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -188,7 +187,6 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
 		isDaemon:         daemonMode,
-		sourceBlobToken:  sourceBlobToken,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
@@ -338,7 +336,6 @@ type jobMgr struct {
 	jstm                *jobStatusManager
 
 	isDaemon        bool /* is it running as service */
-	sourceBlobToken azblob.Credential
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -969,7 +966,7 @@ func (jm *jobMgr) scheduleJobParts() {
 				go jm.poolSizer()
 				startedPoolSizer = true
 			}
-			jobPart.ScheduleTransfers(jm.Context(), jm.sourceBlobToken)
+			jobPart.ScheduleTransfers(jm.Context())
 		}
 	}
 }

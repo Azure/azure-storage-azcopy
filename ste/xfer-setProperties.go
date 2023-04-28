@@ -1,11 +1,12 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/http"
 	"net/url"
@@ -26,9 +27,9 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 		to := jptm.FromTo()
 		switch to.From() {
 		case common.ELocation.Blob():
-			setPropertiesBlob(jptm, p)
+			setPropertiesBlob(jptm)
 		case common.ELocation.BlobFS():
-			setPropertiesBlobFS(jptm, p)
+			setPropertiesBlobFS(jptm)
 		case common.ELocation.File():
 			setPropertiesFile(jptm, p)
 		default:
@@ -38,13 +39,8 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	jptm.ScheduleChunks(cf)
 }
 
-func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func setPropertiesBlob(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
-	// Get the source blob url of blob to set properties on
-	// TODO : Migrate this when GetAccountInfo is added to blob client level in Track 2.
-	u, _ := url.Parse(info.Source)
-	srcBlobURL := azblob.NewBlobURL(*u, p)
-
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Reports Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
@@ -73,12 +69,12 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		blockBlobTier, pageBlobTier := jptm.BlobTiers()
 
 		var err error = nil
-		if jptm.Info().SrcBlobType == blob.BlobTypeBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
+		if jptm.Info().SrcBlobType == blob.BlobTypeBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), true) {
 			_, err = srcBlobClient.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
 		// cannot return true for >1, therefore only one of these will run
-		if jptm.Info().SrcBlobType == blob.BlobTypePageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), true) {
+		if jptm.Info().SrcBlobType == blob.BlobTypePageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), true) {
 			_, err = srcBlobClient.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
@@ -109,12 +105,8 @@ func setPropertiesBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	transferDone(common.ETransferStatus.Success(), nil)
 }
 
-func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
-	// Get the source blob url of blob to delete
-	u, _ := url.Parse(info.Source)
-	srcBlobURL := azblob.NewBlobURL(*u, p)
-
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
@@ -143,7 +135,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		rehydratePriority := info.RehydratePriority
 		_, pageBlobTier := jptm.BlobTiers()
 		var err error = nil
-		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobURL, jptm.Context(), false) {
+		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), false) {
 			_, err = srcBlobClient.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
@@ -214,8 +206,15 @@ func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 }
 
 func errorHandlerForXferSetProperties(err error, jptm IJobPartTransferMgr, transferDone func(status common.TransferStatus, err error)) {
-	if strErr, ok := err.(azblob.StorageError); ok {
-
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) && respErr.StatusCode == http.StatusForbidden {
+		// If the status code was 403, it means there was an authentication error, and we exit.
+		// User can resume the job if completely ordered with a new sas.
+		errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
+		jptm.Log(pipeline.LogError, errMsg)
+		common.GetLifecycleMgr().Error(errMsg)
+		// TODO : Migrate on azfile
+	} else if strErr, ok := err.(azfile.StorageError); ok {
 		// If the status code was 403, it means there was an authentication error, and we exit.
 		// User can resume the job if completely ordered with a new sas.
 		if strErr.Response().StatusCode == http.StatusForbidden {
