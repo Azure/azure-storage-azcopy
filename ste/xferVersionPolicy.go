@@ -67,3 +67,18 @@ func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	}
 	return req.Next()
 }
+
+// TODO: Delete me when bumping the service version is no longer relevant.
+type coldTierPolicy struct {
+}
+
+func newColdTierPolicy() policy.Policy {
+	return &coldTierPolicy{}
+}
+
+func (r *coldTierPolicy) Do(req *policy.Request) (*http.Response, error) {
+	if req.Raw().Header.Get("x-ms-access-tier") == common.EBlockBlobTier.Cold().String() {
+		req.Raw().Header["x-ms-version"] = []string{"2021-12-02"}
+	}
+	return req.Next()
+}

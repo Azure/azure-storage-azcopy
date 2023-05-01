@@ -151,7 +151,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newLogPolicy(log), newStatsPolicy(statsAcc)}
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newColdTierPolicy(), newLogPolicy(log), newStatsPolicy(statsAcc)}
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
