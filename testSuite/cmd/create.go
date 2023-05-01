@@ -230,8 +230,8 @@ func getS3Metadata(metadataString string) map[string]string {
 
 // Can be used for overwrite scenarios.
 func createContainer(containerURL string) {
-	containerClient, err := container.NewClientWithNoCredential(containerURL, nil)
-	_, err = containerClient.Create(context.Background(), nil)
+	containerClient, _ := container.NewClientWithNoCredential(containerURL, nil)
+	_, err := containerClient.Create(context.Background(), nil)
 
 	if ignoreStorageConflictStatus(err) != nil {
 		fmt.Println("fail to create container, ", err)
@@ -240,7 +240,7 @@ func createContainer(containerURL string) {
 }
 
 func createBlob(blobURL string, blobSize uint32, metadata map[string]*string, blobHTTPHeaders *blob.HTTPHeaders, tier *blob.AccessTier) {
-	blobClient, err := blockblob.NewClientWithNoCredential(blobURL, nil)
+	blobClient, _ := blockblob.NewClientWithNoCredential(blobURL, nil)
 
 	randomString := createStringWithRandomChars(int(blobSize))
 	if blobHTTPHeaders.BlobContentType == nil {
@@ -254,7 +254,7 @@ func createBlob(blobURL string, blobSize uint32, metadata map[string]*string, bl
 		blobHTTPHeaders.BlobContentMD5 = md5hasher.Sum(nil)
 	}
 
-	_, err = blobClient.Upload(context.Background(), streaming.NopCloser(strings.NewReader(randomString)),
+	_, err := blobClient.Upload(context.Background(), streaming.NopCloser(strings.NewReader(randomString)),
 		&blockblob.UploadOptions{
 			HTTPHeaders: blobHTTPHeaders,
 			Metadata: metadata,
