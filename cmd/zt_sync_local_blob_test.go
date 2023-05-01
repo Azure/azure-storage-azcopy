@@ -29,15 +29,14 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
 
 // regular file->blob sync
 func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	for _, srcFileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
@@ -49,8 +48,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		// set up the destination container with a single blob
 		time.Sleep(time.Second) // later LMT
 		dstBlobName := srcFileName
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
-		c.Assert(containerURL, chk.NotNil)
+		scenarioHelper{}.generateBlobsFromList(c, cc, []string{dstBlobName}, blockBlobDefaultData)
+		c.Assert(cc, chk.NotNil)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -87,7 +86,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 // regular directory->container sync but destination is empty, so everything has to be transferred
 // this test seems to flake out.
 func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -96,8 +95,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 	time.Sleep(time.Second)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -134,7 +133,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 
 // regular directory->container sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -142,12 +141,12 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// set up an the container with the exact same files, but later lmts
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// wait for 1 second so that the last modified times of the blobs are guaranteed to be newer
 	time.Sleep(time.Second)
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, fileList, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -177,7 +176,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 
 // regular container->directory sync where destination is missing some files from source, and also has some extra files
 func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -187,10 +186,10 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 	// set up an the container with half of the files, but later lmts
 	// also add some extra blobs that are not present at the source
 	extraBlobs := []string{"extraFile1.pdf, extraFile2.txt"}
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList[0:len(fileList)/2], blockBlobDefaultData)
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, extraBlobs, blockBlobDefaultData)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	scenarioHelper{}.generateBlobsFromList(c, cc, fileList[0:len(fileList)/2], blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, extraBlobs, blockBlobDefaultData)
 	expectedOutput := fileList[len(fileList)/2:]
 
 	// set up interceptor
@@ -208,7 +207,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 
 		// make sure the extra blobs were deleted
 		for _, blobName := range extraBlobs {
-			exists := scenarioHelper{}.blobExists(containerURL.NewBlobURL(blobName))
+			exists := scenarioHelper{}.blobExists(cc.NewBlobClient(blobName))
 			c.Assert(exists, chk.Equals, false)
 		}
 	})
@@ -216,7 +215,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 
 // include flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncUploadWithIncludePatternFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -229,8 +228,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludePatternFlag(c *chk.C) {
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination as an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -250,7 +249,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludePatternFlag(c *chk.C) {
 
 // exclude flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePatternFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -263,8 +262,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePatternFlag(c *chk.C) {
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination as an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -284,7 +283,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePatternFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludePatternFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -303,8 +302,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludePatternFlag(c *
 	excludeString := "so*;not*;exactName"
 
 	// set up the destination as an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -325,7 +324,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludePatternFlag(c *
 
 // a specific path is avoided in the comparison
 func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -338,8 +337,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
 	excludeString := "excludeSub;exactName"
 
 	// set up the destination as an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -357,7 +356,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
 	})
 
 	// now set up the destination with the blobs to be excluded, and make sure they are not touched
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, filesToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, filesToExclude, blockBlobDefaultData)
 
 	// re-create the ones at the source so that their lmts are newer
 	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, filesToExclude)
@@ -369,7 +368,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
 
 		// make sure the extra blobs were not touched
 		for _, blobName := range filesToExclude {
-			exists := scenarioHelper{}.blobExists(containerURL.NewBlobURL(blobName))
+			exists := scenarioHelper{}.blobExists(cc.NewBlobClient(blobName))
 			c.Assert(exists, chk.Equals, true)
 		}
 	})
@@ -377,7 +376,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
 
 // validate the bug fix for this scenario
 func (s *cmdIntegrationSuite) TestSyncUploadWithMissingDestination(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -385,10 +384,10 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMissingDestination(c *chk.C) {
 	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// set up the destination as an non-existent container
-	containerURL, containerName := getContainerURL(c, bsu)
+	cc, containerName := getContainerClient(c, bsc)
 
 	// validate that the container does not exist
-	_, err := containerURL.GetProperties(context.Background(), azblob.LeaseAccessConditions{})
+	_, err := cc.GetProperties(context.Background(), nil)
 	c.Assert(err, chk.NotNil)
 
 	// set up interceptor
@@ -410,7 +409,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMissingDestination(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoBlob(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	//set up local src
 	blobsToInclude := []string{"AzURE2.jpeg", "sub1/aTestOne.txt", "sub1/sub2/testTwo.pdf"}
@@ -419,10 +418,10 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoBlob(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, blobsToInclude)
 
 	//set up dst container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
 	blobsToDelete := []string{"testThree.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(c, dstContainerURL, blobsToDelete, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, dstContainerClient, blobsToDelete, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -445,11 +444,11 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoBlob(c *chk.C) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstContainerClient.URL()), chk.Equals, true)
 			} else {
 				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstContainerClient.URL()), chk.Equals, true)
 			}
 		}
 

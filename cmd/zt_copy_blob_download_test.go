@@ -28,16 +28,15 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
-	bsu := getBSU()
-	cURL, cName := createNewContainer(c, bsu)
-	defer deleteContainer(c, cURL)
+	bsc := getBlobServiceClient()
+	cc, cName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	blobNames := []string{
 		"*", // File name that we want to retain compatibility with
@@ -49,7 +48,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 	// ----- TEST # 1: Test inferred as false by using escaped * -----
 
 	// set up container name
-	scenarioHelper{}.generateBlobsFromList(c, cURL, blobNames, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobNames, blockBlobDefaultData)
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 
@@ -163,17 +162,17 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 
 // Test downloading the entire account.
 func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
-	bsu := getBSU()
-	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
+	bsc := getBlobServiceClient()
+	rawBSC := scenarioHelper{}.getBlobServiceClientWithSAS(c)
 
 	// Just in case there are no existing containers...
-	curl, name := createNewContainer(c, bsu)
-	defer deleteContainer(c, curl)
-	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
+	cc, name := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSU, name, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobAccountTraverser(rawBSC, name, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
@@ -192,7 +191,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	raw := getDefaultCopyRawInput(rawBSU.URL(), dstDirName)
+	raw := getDefaultCopyRawInput(rawBSC.URL(), dstDirName)
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -204,13 +203,13 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 
 // Test downloading the entire account.
 func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
-	bsu := getBSU()
-	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(c)
+	bsc := getBlobServiceClient()
+	rawBSC := scenarioHelper{}.getBlobServiceClientWithSAS(c)
 
 	// Create a unique container to be targeted.
 	cname := generateName("blah-unique-blah", 63)
-	curl := bsu.NewContainerURL(cname)
-	_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+	curl := bsc.NewContainerClient(cname)
+	_, err := curl.Create(ctx, nil)
 	c.Assert(err, chk.IsNil)
 	defer deleteContainer(c, curl)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, curl, "")
@@ -220,7 +219,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobAccountTraverser(rawBSC, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
@@ -239,7 +238,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	raw := getDefaultCopyRawInput(rawBSU.URL(), dstDirName)
+	raw := getDefaultCopyRawInput(rawBSC.URL(), dstDirName)
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -251,15 +250,15 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 
 // regular blob->local file download
 func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	for _, blobName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
-		c.Assert(containerURL, chk.NotNil)
+		scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
+		c.Assert(cc, chk.NotNil)
 
 		// set up the destination as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -305,13 +304,13 @@ func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
 
 // regular container->directory download
 func (s *cmdIntegrationSuite) TestDownloadBlobContainer(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination with an empty folder
@@ -350,14 +349,14 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainer(c *chk.C) {
 
 // regular vdir->dir download
 func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination with an empty folder
@@ -400,18 +399,18 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
 // TODO the current pattern matching behavior is inconsistent with the posix filesystem
 //   update test after re-writing copy enumerators
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobsToIgnore), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.pdf", "includeSub/wow/amazing.pdf"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToInclude, blockBlobDefaultData)
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -458,18 +457,18 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 // test for include with one regular expression
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobsToIgnore), chk.Not(chk.Equals), 0)
 
 	// add blobs that we wish to include
 	blobsToInclude := []string{"tessssssssssssst.txt", "subOne/tetingessssss.jpeg", "subOne/tessssst/hi.pdf"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToInclude, blockBlobDefaultData)
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -509,18 +508,18 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C
 
 // test multiple regular expression with include
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobsToIgnore := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobsToIgnore), chk.Not(chk.Equals), 0)
 
 	// add blobs that we wish to include
 	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToInclude, blockBlobDefaultData)
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -561,14 +560,14 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *c
 
 // testing empty expressions for both include and exclude
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithEmptyRegex(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
-	containerURL, containerName := createNewContainer(c, bsu)
+	cc, containerName := createNewContainer(c, bsc)
 	// test empty regex flag so all blobs will be included since there is no filter
-	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobsToInclude), chk.Not(chk.Equals), 0)
 
 	// set up the destination with an empty folder
@@ -602,18 +601,18 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithEmptyRegex(c *chk.C) 
 
 // testing exclude with one regular expression
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobsToInclude), chk.Not(chk.Equals), 0)
 
 	// add blobs that we wish to exclude
 	blobsToIgnore := []string{"tessssssssssssst.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToIgnore, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToIgnore, blockBlobDefaultData)
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -653,18 +652,18 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C
 
 // testing exclude with multiple regular expressions
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobsToInclude := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobsToInclude), chk.Not(chk.Equals), 0)
 
 	// add blobs that we wish to exclude
 	blobsToIgnore := []string{"tessssssssssssst.txt", "subOne/dogs.jpeg", "subOne/subTwo/tessssst.pdf"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToIgnore, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToIgnore, blockBlobDefaultData)
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -703,7 +702,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *c
 }
 
 func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the local source
 	blobsToInclude := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
@@ -713,9 +712,9 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 	c.Assert(srcDirName, chk.NotNil)
 
 	// set up the destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -739,7 +738,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 		for i := 0; i < len(blobsToInclude); i++ {
 			c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
 			c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
-			c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], dstContainerClient.URL()), chk.Equals, true)
 		}
 
 		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
@@ -747,19 +746,19 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up src container
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
 	blobsToInclude := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
-	c.Assert(srcContainerURL, chk.NotNil)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerClient, blobsToInclude, blockBlobDefaultData)
+	c.Assert(srcContainerClient, chk.NotNil)
 
 	// set up the destination
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -783,8 +782,8 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		for i := 0; i < len(blobsToInclude); i++ {
 			c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
-			c.Check(strings.Contains(msg[i], srcContainerURL.String()), chk.Equals, true)
-			c.Check(strings.Contains(msg[i], dstContainerURL.String()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], srcContainerClient.URL()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], dstContainerClient.URL()), chk.Equals, true)
 		}
 
 		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
@@ -792,18 +791,18 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlobJson(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	// set up src container
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
 	blobsToInclude := []string{"AzURE2021.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, blobsToInclude, blockBlobDefaultData)
-	c.Assert(srcContainerURL, chk.NotNil)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerClient, blobsToInclude, blockBlobDefaultData)
+	c.Assert(srcContainerClient, chk.NotNil)
 
 	// set up the destination
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}

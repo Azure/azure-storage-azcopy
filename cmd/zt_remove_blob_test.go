@@ -23,8 +23,12 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 	"log"
 	"net/url"
@@ -34,15 +38,15 @@ import (
 )
 
 func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
-		c.Assert(containerURL, chk.NotNil)
+		scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
+		c.Assert(cc, chk.NotNil)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -63,13 +67,13 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up interceptor
@@ -109,14 +113,14 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, vdirName)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up interceptor
@@ -156,18 +160,18 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 
 // include flag limits the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveWithIncludeFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -189,18 +193,18 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeFlag(c *chk.C) {
 
 // exclude flag limits the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToExclude, blockBlobDefaultData)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -223,24 +227,24 @@ func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToExclude, blockBlobDefaultData)
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -264,15 +268,15 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestRemoveListOfBlobsAndVirtualDirs(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
-	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName+"/")
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, vdirName+"/")
 	blobList := append(blobListPart1, blobListPart2...)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
@@ -327,25 +331,25 @@ func (s *cmdIntegrationSuite) TestRemoveListOfBlobsAndVirtualDirs(c *chk.C) {
 
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestRemoveListOfBlobsWithIncludeAndExclude(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
-	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName+"/")
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	c.Assert(cc, chk.NotNil)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, vdirName+"/")
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobsToExclude, blockBlobDefaultData)
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -385,14 +389,14 @@ func (s *cmdIntegrationSuite) TestRemoveListOfBlobsWithIncludeAndExclude(c *chk.
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(c, containerURL, vdirName)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(c, cc, vdirName)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobAndDirStubsList), chk.Not(chk.Equals), 0)
 
 	// set up interceptor
@@ -435,19 +439,19 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubsWithListOfFiles(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(c, containerURL, vdirName)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(c, cc, vdirName)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobAndDirStubsList), chk.Not(chk.Equals), 0)
 
 	// set up another empty dir
 	vdirName2 := "emptydir"
-	createNewDirectoryStub(c, containerURL, vdirName2)
+	createNewDirectoryStub(c, cc, vdirName2)
 	blobAndDirStubsList = append(blobAndDirStubsList, vdirName2)
 
 	// set up interceptor
@@ -485,14 +489,14 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubsWithListOfFiles(c
 }
 
 func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up the container with a single blob
 	blobName := []string{"sub1/test/testing.txt"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobName, blockBlobDefaultData)
-	c.Assert(containerURL, chk.NotNil)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobName, blockBlobDefaultData)
+	c.Assert(cc, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -514,20 +518,20 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
 		msg := <-mockedLcm.dryrunLog
 		// comparing message printed for dry run
 		c.Check(strings.Contains(msg, "DRYRUN: remove"), chk.Equals, true)
-		c.Check(strings.Contains(msg, containerURL.String()), chk.Equals, true)
+		c.Check(strings.Contains(msg, cc.URL()), chk.Equals, true)
 		c.Check(strings.Contains(msg, blobName[0]), chk.Equals, true)
 	})
 }
 
 func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up the container with a single blob
 	blobList := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
-	c.Assert(containerURL, chk.NotNil)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
+	c.Assert(cc, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -550,7 +554,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		for i := 0; i < len(blobList); i++ {
 			c.Check(strings.Contains(msg[i], "DRYRUN: remove"), chk.Equals, true)
-			c.Check(strings.Contains(msg[i], containerURL.String()), chk.Equals, true)
+			c.Check(strings.Contains(msg[i], cc.URL()), chk.Equals, true)
 		}
 
 		c.Check(testDryrunStatements(blobList, msg), chk.Equals, true)
@@ -558,14 +562,14 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up the container with a single blob
 	blobName := []string{"tech.txt"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobName, blockBlobDefaultData)
-	c.Assert(containerURL, chk.NotNil)
+	scenarioHelper{}.generateBlobsFromList(c, cc, blobName, blockBlobDefaultData)
+	c.Assert(cc, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -597,15 +601,15 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) 
 }
 
 func (s *cmdIntegrationSuite) TestRemoveSingleBlobWithFromTo(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
-		c.Assert(containerURL, chk.NotNil)
+		scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
+		c.Assert(cc, chk.NotNil)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -627,13 +631,13 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlobWithFromTo(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainerWithFromTo(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up interceptor
@@ -674,14 +678,14 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainerWithFromTo(c *chk.C) 
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName)
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, vdirName)
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up interceptor
@@ -721,19 +725,24 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C)
 }
 
 func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *chk.C) {
-	serviceURL := setUpAccountPermDelete(c)
+	bsc := setUpAccountPermDelete(c)
 	os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
 
 	time.Sleep(time.Second * 10)
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, serviceURL)
-	defer deleteContainer(c, containerURL)
-	blobName, blobList, _ := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, containerURL, "")
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	blobName, blobList, _ := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, cc, "")
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Equals, 3)
 
-	list, _ := containerURL.ListBlobsFlatSegment(ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Deleted: true, Snapshots: true}, Prefix: blobName})
+	pager := cc.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Prefix: to.Ptr(blobName),
+		Include: container.ListBlobsInclude{Deleted: true, Snapshots: true},
+	})
+	list, err := pager.NextPage(ctx)
+	c.Assert(err, chk.IsNil)
 	c.Assert(list.Segment.BlobItems, chk.NotNil)
 	c.Assert(len(list.Segment.BlobItems), chk.Equals, 4)
 
@@ -756,16 +765,16 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderSingleBlob(c *
 }
 
 func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderContainer(c *chk.C) {
-	serviceURL := setUpAccountPermDelete(c)
+	bsc := setUpAccountPermDelete(c)
 	os.Setenv("AZCOPY_DISABLE_HIERARCHICAL_SCAN", "true")
 
 	time.Sleep(time.Second * 10)
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(c, serviceURL)
-	defer deleteContainer(c, containerURL)
-	_, blobList, listOfTransfers := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, containerURL, "")
-	c.Assert(containerURL, chk.NotNil)
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
+	_, blobList, listOfTransfers := scenarioHelper{}.generateCommonRemoteScenarioForSoftDelete(c, cc, "")
+	c.Assert(cc, chk.NotNil)
 	c.Assert(len(blobList), chk.Equals, 3)
 
 	// set up interceptor
@@ -786,34 +795,37 @@ func (s *cmdIntegrationSuite) TestPermDeleteSnapshotsVersionsUnderContainer(c *c
 	})
 }
 
-func setUpAccountPermDelete(c *chk.C) azblob.ServiceURL {
+func setUpAccountPermDelete(c *chk.C) *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
+	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
-	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
 		panic(err)
 	}
 
-	sasQueryParams, err := azblob.AccountSASSignatureValues{
-		Protocol:      azblob.SASProtocolHTTPS,
-		ExpiryTime:    time.Now().UTC().Add(12 * time.Hour), // 12 hr long sas
-		Permissions:   azblob.AccountSASPermissions{Read: true, List: true, Write: true, Create: true, PermanentDelete: true, Delete: true, DeletePreviousVersion: true}.String(),
-		Services:      azblob.AccountSASServices{Blob: true}.String(),
-		ResourceTypes: azblob.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
-	}.NewSASQueryParameters(credential)
+	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	qp := sasQueryParams.Encode()
-	accountURLWithSAS := fmt.Sprintf("https://%s.blob.core.windows.net?%s", accountName, qp)
-	u, _ = url.Parse(accountURLWithSAS)
-	serviceURL := azblob.NewServiceURL(*u, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
-	days := int32(5)
-	allowDelete := true
-	_, err = serviceURL.SetProperties(ctx, azblob.StorageServiceProperties{DeleteRetentionPolicy: &azblob.RetentionPolicy{Enabled: true, Days: &days, AllowPermanentDelete: &allowDelete}})
+	sasURL, err := client.GetSASURL(
+		sas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		sas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, PermanentDelete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true},
+		time.Now().Add(12*time.Hour),
+		nil)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	client, err = blobservice.NewClientWithNoCredential(sasURL, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = client.SetProperties(ctx, &blobservice.SetPropertiesOptions{
+		DeleteRetentionPolicy: &blobservice.RetentionPolicy{Enabled: to.Ptr(true), Days: to.Ptr(int32(5)), AllowPermanentDelete: to.Ptr(true)},
+	})
 	c.Assert(err, chk.IsNil)
 
-	return serviceURL
+	return client
 }

@@ -504,9 +504,9 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 // validate traversing a single Blob, a single Azure File, and a single local file
 // compare that the traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	fsu := getFSU()
 	shareURL, shareName := createNewAzureShare(c, fsu)
@@ -535,7 +535,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	for _, storedObjectName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob", "满汉全席.txt"} {
 		// set up the container with a single blob
 		blobList := []string{storedObjectName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
+		scenarioHelper{}.generateBlobsFromList(c, cc, blobList, blockBlobDefaultData)
 
 		// set up the directory as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -652,9 +652,9 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 // validate traversing a container, a share, and a local directory containing the same objects
 // compare that traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	fsu := getFSU()
 	shareURL, shareName := createNewAzureShare(c, fsu)
@@ -680,8 +680,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	}
 
 	// set up the container with numerous blobs
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	c.Assert(containerURL, chk.NotNil)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, "")
+	c.Assert(cc, chk.NotNil)
 
 	// set up an Azure File Share with the same files
 	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
@@ -810,9 +810,9 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 // validate traversing a virtual and a local directory containing the same objects
 // compare that blob and local traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	fsu := getFSU()
 	shareURL, shareName := createNewAzureShare(c, fsu)
@@ -838,8 +838,8 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 	// set up the container with numerous blobs
 	virDirName := "virdir"
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, virDirName+"/")
-	c.Assert(containerURL, chk.NotNil)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, virDirName+"/")
+	c.Assert(cc, chk.NotNil)
 
 	// set up an Azure File Share with the same files
 	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
@@ -970,14 +970,14 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 // validate traversing a virtual directory containing the same objects
 // compare that the serial and parallel blob traversers get consistent results
 func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, cc)
 
 	// set up the container with numerous blobs
 	virDirName := "virdir"
-	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, virDirName+"/")
-	c.Assert(containerURL, chk.NotNil)
+	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, cc, virDirName+"/")
+	c.Assert(cc, chk.NotNil)
 
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {

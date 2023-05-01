@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"strings"
@@ -30,7 +31,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
 
@@ -182,10 +182,10 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
-		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
-		defer deleteContainer(c, containerURL)
+		bsc := scenarioHelper{}.getBlobServiceClient(c)
+		cc := bsc.NewContainerClient(resolvedBucketName)
+		c.Assert(scenarioHelper{}.containerExists(cc), chk.Equals, true)
+		defer deleteContainer(c, cc)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -236,10 +236,10 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
-		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
-		defer deleteContainer(c, containerURL)
+		bsc := scenarioHelper{}.getBlobServiceClient(c)
+		cc := bsc.NewContainerClient(resolvedBucketName)
+		c.Assert(scenarioHelper{}.containerExists(cc), chk.Equals, true)
+		defer deleteContainer(c, cc)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -603,10 +603,10 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolv
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
-		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
-		defer deleteContainer(c, containerURL)
+		bsc := scenarioHelper{}.getBlobServiceClient(c)
+		cc := bsc.NewContainerClient(resolvedBucketName)
+		c.Assert(scenarioHelper{}.containerExists(cc), chk.Equals, true)
+		defer deleteContainer(c, cc)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -651,10 +651,10 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithWildcardInSrcAndBucket
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
-		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
-		defer deleteContainer(c, containerURL)
+		bsc := scenarioHelper{}.getBlobServiceClient(c)
+		cc := bsc.NewContainerClient(resolvedBucketName)
+		c.Assert(scenarioHelper{}.containerExists(cc), chk.Equals, true)
+		defer deleteContainer(c, cc)
 
 		validateS2STransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING+bucketName, common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
 	})
@@ -801,18 +801,18 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPObjectToBlobContainer(c *chk.C) 
 
 // Copy from container to container, preserve blob tier.
 func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTier(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 
 	blobName := "blobWithCoolTier"
-	scenarioHelper{}.generateBlockBlobWithAccessTier(c, srcContainerURL, blobName, azblob.AccessTierCool)
+	scenarioHelper{}.generateBlockBlobWithAccessTier(c, srcContainerClient, blobName, to.Ptr(blob.AccessTierCool))
 
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -837,18 +837,18 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTie
 
 // Copy from container to container, and don't preserve blob tier.
 func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobTier(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 
 	blobName := "blobWithCoolTier"
-	scenarioHelper{}.generateBlockBlobWithAccessTier(c, srcContainerURL, blobName, azblob.AccessTierCool)
+	scenarioHelper{}.generateBlockBlobWithAccessTier(c, srcContainerClient, blobName, to.Ptr(blob.AccessTierCool))
 
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -875,19 +875,19 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 // Attempt to copy from a page blob to a block blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerClient, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -927,19 +927,19 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 
 // Attempt to copy from a block blob to a page blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerClient, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -979,19 +979,19 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 
 // Attempt to copy from a block blob to an append blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerClient, objectList, blockBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1032,19 +1032,19 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 // Attempt to copy from an append blob to a block blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerURL, objectList, appendBlobDefaultData)
+	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerClient, objectList, appendBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1085,19 +1085,19 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 // Attempt to copy from a page blob to an append blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerClient, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1138,19 +1138,19 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 // Attempt to copy from an append blob to a page blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerClient, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1189,18 +1189,18 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, srcContainerClient)
+	c.Assert(srcContainerClient, chk.NotNil)
 
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerClient, objectList, blockBlobDefaultData)
 
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -1240,7 +1240,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
@@ -1249,9 +1249,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *c
 
 	scenarioHelper{}.generateFlatFiles(c, srcShareURL, []string{"file"})
 
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	defer deleteContainer(c, dstContainerClient)
+	c.Assert(dstContainerClient, chk.NotNil)
 
 	// set up interceptor
 	mockedRPC := interceptor{}

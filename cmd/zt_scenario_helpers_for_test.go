@@ -23,9 +23,14 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"io"
 	"net/url"
 	"os"
@@ -41,7 +46,6 @@ import (
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 )
@@ -136,34 +140,35 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, containerURL azblob.ContainerURL, prefix string) (string, []azblob.BlockBlobURL, []string) {
-	blobList := make([]azblob.BlockBlobURL, 3)
+func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, containerClient *container.Client, prefix string) (string, []*blockblob.Client, []string) {
+	blobList := make([]*blockblob.Client, 3)
 	blobNames := make([]string, 3)
 	var listOfTransfers []string
 
-	blobURL1, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
-	blobURL2, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
-	blobURL3, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
+	blobClient1, blobName1 := createNewBlockBlob(c, containerClient, prefix+"top")
+	blobClient2, blobName2 := createNewBlockBlob(c, containerClient, prefix+"sub1/")
+	blobClient3, blobName3 := createNewBlockBlob(c, containerClient, prefix+"sub1/sub3/sub5/")
 
-	blobList[0] = blobURL1
+	blobList[0] = blobClient1
 	blobNames[0] = blobName1
-	blobList[1] = blobURL2
+	blobList[1] = blobClient2
 	blobNames[1] = blobName2
-	blobList[2] = blobURL3
+	blobList[2] = blobClient3
 	blobNames[2] = blobName3
 
 	for i := 0; i < len(blobList); i++ {
 		for j := 0; j < 3; j++ { // create 3 soft-deleted snapshots for each blob
 			// Create snapshot for blob
-			snapResp, err := blobList[i].CreateSnapshot(ctx, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+			snapResp, err := blobList[i].CreateSnapshot(ctx, nil)
 			c.Assert(snapResp, chk.NotNil)
 			c.Assert(err, chk.IsNil)
 
 			time.Sleep(time.Millisecond * 30)
 
 			// Soft delete snapshot
-			snapshotBlob := blobList[i].WithSnapshot(snapResp.Snapshot())
-			_, err = snapshotBlob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			snapshotBlob, err := blobList[i].WithSnapshot(*snapResp.Snapshot)
+			c.Assert(err, chk.IsNil)
+			_, err = snapshotBlob.Delete(ctx, nil)
 			c.Assert(err, chk.IsNil)
 
 			listOfTransfers = append(listOfTransfers, blobNames[i])
@@ -175,15 +180,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, contai
 	return blobName1, blobList, listOfTransfers
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerClient *container.Client, prefix string) (blobList []string) {
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
-		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
-		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/")
-		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
-		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i])
+		_, blobName1 := createNewBlockBlob(c, containerClient, prefix+"top")
+		_, blobName2 := createNewBlockBlob(c, containerClient, prefix+"sub1/")
+		_, blobName3 := createNewBlockBlob(c, containerClient, prefix+"sub2/")
+		_, blobName4 := createNewBlockBlob(c, containerClient, prefix+"sub1/sub3/sub5/")
+		_, blobName5 := createNewBlockBlob(c, containerClient, prefix+specialNames[i])
 
 		blobList[5*i] = blobName1
 		blobList[5*i+1] = blobName2
@@ -198,15 +203,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL
 }
 
 // same as blob, but for every virtual directory, a blob with the same name is created, and it has metadata 'hdi_isfolder = true'
-func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerClient *container.Client, prefix string) (blobList []string) {
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
-		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
-		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/")
-		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
-		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i])
+		_, blobName1 := createNewBlockBlob(c, containerClient, prefix+"top")
+		_, blobName2 := createNewBlockBlob(c, containerClient, prefix+"sub1/")
+		_, blobName3 := createNewBlockBlob(c, containerClient, prefix+"sub2/")
+		_, blobName4 := createNewBlockBlob(c, containerClient, prefix+"sub1/sub3/sub5/")
+		_, blobName5 := createNewBlockBlob(c, containerClient, prefix+specialNames[i])
 
 		blobList[5*i] = blobName1
 		blobList[5*i+1] = blobName2
@@ -217,14 +222,14 @@ func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerURL
 
 	if prefix != "" {
 		rootDir := strings.TrimSuffix(prefix, "/")
-		createNewDirectoryStub(c, containerURL, rootDir)
+		createNewDirectoryStub(c, containerClient, rootDir)
 		blobList = append(blobList, rootDir)
 	}
 
-	createNewDirectoryStub(c, containerURL, prefix+"sub1")
-	createNewDirectoryStub(c, containerURL, prefix+"sub1/sub3")
-	createNewDirectoryStub(c, containerURL, prefix+"sub1/sub3/sub5")
-	createNewDirectoryStub(c, containerURL, prefix+"sub2")
+	createNewDirectoryStub(c, containerClient, prefix+"sub1")
+	createNewDirectoryStub(c, containerClient, prefix+"sub1/sub3")
+	createNewDirectoryStub(c, containerClient, prefix+"sub1/sub3/sub5")
+	createNewDirectoryStub(c, containerClient, prefix+"sub2")
 
 	for _, dirPath := range []string{prefix + "sub1", prefix + "sub1/sub3", prefix + "sub1/sub3/sub5", prefix + "sub2"} {
 		blobList = append(blobList, dirPath)
@@ -279,13 +284,13 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareUR
 	return
 }
 
-func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c *chk.C, serviceURL azblob.ServiceURL, containerList []string, blobList []string, data string) {
+func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c *chk.C, serviceClient *blobservice.Client, containerList []string, blobList []string, data string) {
 	for _, containerName := range containerList {
-		curl := serviceURL.NewContainerURL(containerName)
-		_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+		containerClient := serviceClient.NewContainerClient(containerName)
+		_, err := containerClient.Create(ctx, nil)
 		c.Assert(err, chk.IsNil)
 
-		s.generateBlobsFromList(c, curl, blobList, data)
+		s.generateBlobsFromList(c, containerClient, blobList, data)
 	}
 }
 
@@ -328,92 +333,62 @@ func (s scenarioHelper) generateGCPBucketsAndObjectsFromLists(c *chk.C, client *
 }
 
 // create the demanded blobs
-func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
+func (scenarioHelper) generateBlobsFromList(c *chk.C, containerClient *container.Client, blobList []string, data string) {
 	for _, blobName := range blobList {
-		blob := containerURL.NewBlockBlobURL(blobName)
-		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+		blobClient := containerClient.NewBlockBlobClient(blobName)
+		_, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader(data)), nil)
 		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
+func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerClient *container.Client, blobList []string, data string) {
 	for _, blobName := range blobList {
 		// Create the blob (PUT blob)
-		blob := containerURL.NewPageBlobURL(blobName)
-		cResp, err := blob.Create(ctx,
+		blobClient := containerClient.NewPageBlobClient(blobName)
+		_, err := blobClient.Create(ctx,
 			int64(len(data)),
-			0,
-			azblob.BlobHTTPHeaders{
-				ContentType: "text/random",
-			},
-			azblob.Metadata{},
-			azblob.BlobAccessConditions{},
-			azblob.DefaultPremiumBlobAccessTier,
-			nil,
-			azblob.ClientProvidedKeyOptions{},
-			azblob.ImmutabilityPolicyOptions{},
-		)
+			&pageblob.CreateOptions{
+				SequenceNumber: to.Ptr(int64(0)),
+				HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
+			})
 		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
 		// Create the page (PUT page)
-		uResp, err := blob.UploadPages(ctx,
-			0,
-			strings.NewReader(data),
-			azblob.PageBlobAccessConditions{},
-			nil,
-			azblob.ClientProvidedKeyOptions{},
-		)
+		_, err = blobClient.UploadPages(ctx, streaming.NopCloser(strings.NewReader(data)),
+			blob.HTTPRange{Offset: 0, Count: int64(len(data))}, nil)
 		c.Assert(err, chk.IsNil)
-		c.Assert(uResp.StatusCode(), chk.Equals, 201)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
+func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerClient *container.Client, blobList []string, data string) {
 	for _, blobName := range blobList {
 		// Create the blob (PUT blob)
-		blob := containerURL.NewAppendBlobURL(blobName)
-		cResp, err := blob.Create(ctx,
-			azblob.BlobHTTPHeaders{
-				ContentType: "text/random",
-			},
-			azblob.Metadata{},
-			azblob.BlobAccessConditions{},
-			nil,
-			azblob.ClientProvidedKeyOptions{},
-			azblob.ImmutabilityPolicyOptions{},
-		)
+		blobClient := containerClient.NewAppendBlobClient(blobName)
+		_, err := blobClient.Create(ctx,
+			&appendblob.CreateOptions{
+				HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
+			})
 		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
 		// Append a block (PUT block)
-		uResp, err := blob.AppendBlock(ctx,
-			strings.NewReader(data),
-			azblob.AppendBlobAccessConditions{},
-			nil,
-			azblob.ClientProvidedKeyOptions{})
+		_, err = blobClient.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), nil)
 		c.Assert(err, chk.IsNil)
-		c.Assert(uResp.StatusCode(), chk.Equals, 201)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
-	blob := containerURL.NewBlockBlobURL(blobName)
-	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerClient *container.Client, blobName string, accessTier *blob.AccessTier) {
+	blobClient := containerClient.NewBlockBlobClient(blobName)
+	_, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), &blockblob.UploadOptions{Tier: accessTier})
 	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 }
 
 // create the demanded objects
@@ -613,12 +588,15 @@ func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 	return modifiedList
 }
 
-func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) url.URL {
+func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
-	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
-	return containerURLWithSAS.URL()
+	cc := getContainerClientWithSAS(c, credential, containerName)
+
+	u := cc.URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
 }
 
 func (scenarioHelper) getContainerClientWithSAS(c *chk.C, containerName string) *container.Client {
@@ -629,13 +607,16 @@ func (scenarioHelper) getContainerClientWithSAS(c *chk.C, containerName string) 
 	return containerURLWithSAS
 }
 
-func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string) url.URL {
+func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
-	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
-	blobURLWithSAS := containerURLWithSAS.NewBlockBlobURL(blobName)
-	return blobURLWithSAS.URL()
+	cc := getContainerClientWithSAS(c, credential, containerName)
+	bc := cc.NewBlockBlobClient(blobName)
+
+	u := bc.URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
 }
 
 func (scenarioHelper) getBlobClientWithSAS(c *chk.C, containerName string, blobName string) *blob.Client {
@@ -647,15 +628,17 @@ func (scenarioHelper) getBlobClientWithSAS(c *chk.C, containerName string, blobN
 	return blobURLWithSAS
 }
 
-func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) url.URL {
+func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) *url.URL {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 
-	return getBlobServiceURLWithSAS(c, *credential).URL()
+	u := getBlobServiceClientWithSAS(c, credential).URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
 }
 
-func (scenarioHelper) getBlobServiceClientWithSAS(c *chk.C) *service.Client {
+func (scenarioHelper) getBlobServiceClientWithSAS(c *chk.C) *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
@@ -663,7 +646,7 @@ func (scenarioHelper) getBlobServiceClientWithSAS(c *chk.C) *service.Client {
 	return getBlobServiceClientWithSAS(c, credential)
 }
 
-func (scenarioHelper) getBlobServiceClientWithSASFromURL(c *chk.C, rawURL string) *service.Client {
+func (scenarioHelper) getBlobServiceClientWithSASFromURL(c *chk.C, rawURL string) *blobservice.Client {
 	blobURLParts, err := blob.ParseURL(rawURL)
 	c.Assert(err, chk.IsNil)
 	blobURLParts.ContainerName = ""
@@ -671,7 +654,7 @@ func (scenarioHelper) getBlobServiceClientWithSASFromURL(c *chk.C, rawURL string
 	blobURLParts.VersionID = ""
 	blobURLParts.Snapshot = ""
 
-	client, err := service.NewClientWithNoCredential(blobURLParts.String(), nil)
+	client, err := blobservice.NewClientWithNoCredential(blobURLParts.String(), nil)
 	c.Assert(err, chk.IsNil)
 
 	return client
@@ -692,22 +675,21 @@ func (scenarioHelper) getRawAdlsServiceURLWithSAS(c *chk.C) azbfs.ServiceURL {
 	return getAdlsServiceURLWithSAS(c, *credential)
 }
 
-func (scenarioHelper) getBlobServiceURL(c *chk.C) azblob.ServiceURL {
+func (scenarioHelper) getBlobServiceClient(c *chk.C) *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net", credential.AccountName())
 
-	// convert the raw url and validate it was parsed successfully
-	fullURL, err := url.Parse(rawURL)
+	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 	c.Assert(err, chk.IsNil)
 
-	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(credential, azblob.PipelineOptions{}))
+	return client
 }
 
-func (s scenarioHelper) getContainerURL(c *chk.C, containerName string) azblob.ContainerURL {
-	serviceURL := s.getBlobServiceURL(c)
-	containerURL := serviceURL.NewContainerURL(containerName)
+func (s scenarioHelper) getContainerClient(c *chk.C, containerName string) *container.Client {
+	serviceURL := s.getBlobServiceClient(c)
+	containerURL := serviceURL.NewContainerClient(containerName)
 
 	return containerURL
 }
@@ -778,16 +760,16 @@ func (scenarioHelper) getRawShareURLWithSAS(c *chk.C, shareName string) url.URL 
 	return shareURLWithSAS.URL()
 }
 
-func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
-	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+func (scenarioHelper) blobExists(blobClient *blob.Client) bool {
+	_, err := blobClient.GetProperties(context.Background(), nil)
 	if err == nil {
 		return true
 	}
 	return false
 }
 
-func (scenarioHelper) containerExists(containerURL azblob.ContainerURL) bool {
-	_, err := containerURL.GetProperties(context.Background(), azblob.LeaseAccessConditions{})
+func (scenarioHelper) containerExists(containerClient *container.Client) bool {
+	_, err := containerClient.GetProperties(context.Background(), nil)
 	if err == nil {
 		return true
 	}

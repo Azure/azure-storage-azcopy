@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"context"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 
@@ -14,10 +12,10 @@ import (
 // Separated the ADLS tests from others as ADLS can't safely be tested on the same storage account
 func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk.C) {
 	bfssu := GetBFSSU()
-	bsu := getBSU() // Only used to clean up
+	bsc := getBlobServiceClient() // Only used to clean up
 
 	// BlobFS is tested on the same account, therefore this is safe to clean up this way
-	cleanBlobAccount(c, bsu)
+	cleanBlobAccount(c, bsc)
 
 	containerList := []string{
 		generateName("suchcontainermanystorage", 63),
@@ -48,8 +46,8 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 	defer func() {
 		for _, v := range containerList {
 			// create container URLs
-			blobContainer := bsu.NewContainerURL(v)
-			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
+			cc := bsc.NewContainerClient(v)
+			_, _ = cc.Delete(ctx, nil)
 		}
 	}()
 
@@ -88,7 +86,7 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 }
 
 func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 	testS3 := false // Only test S3 if credentials are present.
 	testGCP := false
@@ -115,7 +113,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 		cleanGCPAccount(c, gcpClient)
 	}
 	// BlobFS is tested on the same account, therefore this is safe to clean up this way
-	cleanBlobAccount(c, bsu)
+	cleanBlobAccount(c, bsc)
 	cleanFileAccount(c, fsu)
 
 	containerList := []string{
@@ -141,7 +139,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	objectData := "Hello world!"
 
 	// Generate remote scenarios
-	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(c, bsu, containerList, objectList, objectData)
+	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(c, bsc, containerList, objectList, objectData)
 	scenarioHelper{}.generateFileSharesAndFilesFromLists(c, fsu, containerList, objectList, objectData)
 	if testS3 {
 		scenarioHelper{}.generateS3BucketsAndObjectsFromLists(c, s3Client, containerList, objectList, objectData)
@@ -154,7 +152,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	defer func() {
 		for _, v := range containerList {
 			// create container URLs
-			blobContainer := bsu.NewContainerURL(v)
+			cc := bsc.NewContainerClient(v)
 			fileShare := fsu.NewShareURL(v)
 
 			// Ignore errors from cleanup.
@@ -164,7 +162,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 			if testGCP {
 				deleteGCPBucket(c, gcpClient, v, true)
 			}
-			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
+			_, _ = cc.Delete(ctx, nil)
 			_, _ = fileShare.Delete(ctx, azfile.DeleteSnapshotsOptionNone)
 		}
 	}()
@@ -256,7 +254,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 }
 
 func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 	bfssu := GetBFSSU()
 	testS3 := false // Only test S3 if credentials are present.
@@ -283,7 +281,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	if testGCP {
 		cleanGCPAccount(c, gcpClient)
 	}
-	cleanBlobAccount(c, bsu)
+	cleanBlobAccount(c, bsc)
 	cleanFileAccount(c, fsu)
 
 	containerList := []string{
@@ -322,7 +320,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	objectData := "Hello world!"
 
 	// Generate remote scenarios
-	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(c, bsu, containerList, objectList, objectData)
+	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(c, bsc, containerList, objectList, objectData)
 	scenarioHelper{}.generateFileSharesAndFilesFromLists(c, fsu, containerList, objectList, objectData)
 	// Subject ADLS tests to a different container name prefix to avoid conflicts with blob
 	scenarioHelper{}.generateFilesystemsAndFilesFromLists(c, bfssu, bfsContainerList, objectList, objectData)
@@ -337,7 +335,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	defer func() {
 		for _, v := range containerList {
 			// create container URLs
-			blobContainer := bsu.NewContainerURL(v)
+			cc := bsc.NewContainerClient(v)
 			fileShare := fsu.NewShareURL(v)
 
 			// Ignore errors from cleanup.
@@ -347,7 +345,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 			if testGCP {
 				deleteGCPBucket(c, gcpClient, v, true)
 			}
-			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
+			_, _ = cc.Delete(ctx, nil)
 			_, _ = fileShare.Delete(ctx, azfile.DeleteSnapshotsOptionNone)
 		}
 	}()
