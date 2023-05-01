@@ -81,8 +81,6 @@ func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFacto
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 
-	const blobFSNotS2S = "blobFS not supported as S2S source"
-
 	//local helper functions
 
 	getDownloader := func(sourceType common.Location) downloaderFactory {

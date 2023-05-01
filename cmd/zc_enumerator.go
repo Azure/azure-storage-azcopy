@@ -490,6 +490,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		if credential.CredentialType == common.ECredentialType.SharedKey() {
 			// Convert the shared key credential to a blob credential & re-use it
 			credElement, err = azblob.NewSharedKeyCredential(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName()), glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey()))
+
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			// Get a standard blob credential, anything else is compatible
 			credElement = common.CreateBlobCredential(*ctx, *credential, common.CredentialOpOptions{

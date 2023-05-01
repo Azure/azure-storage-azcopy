@@ -629,7 +629,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	globalBlobFSMd5ValidationOption = cooked.md5ValidationOption // workaround, to avoid having to pass this all the way through the chain of methods in enumeration, just for one weird and (presumably) temporary workaround
 
 	cooked.CheckLength = raw.CheckLength
 	// length of devnull will be 0, thus this will always fail unless downloading an empty file
@@ -1528,7 +1527,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
 		var e *CopyEnumerator
-		srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+		var srcCredInfo common.CredentialInfo
+		srcCredInfo, err = cca.getSrcCredential(ctx, &jobPartOrder)
 		if err != nil {
 			return fmt.Errorf("failed to discern source credential type: %w", err)
 		}
