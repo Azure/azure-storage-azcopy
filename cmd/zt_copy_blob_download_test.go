@@ -34,7 +34,7 @@ import (
 )
 
 func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, cName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -162,7 +162,7 @@ func (s *cmdIntegrationSuite) TestInferredStripTopDirDownload(c *chk.C) {
 
 // Test downloading the entire account.
 func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	rawBSC := scenarioHelper{}.getBlobServiceClientWithSAS(c)
 
 	// Just in case there are no existing containers...
@@ -203,7 +203,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccount(c *chk.C) {
 
 // Test downloading the entire account.
 func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	rawBSC := scenarioHelper{}.getBlobServiceClientWithSAS(c)
 
 	// Create a unique container to be targeted.
@@ -250,7 +250,7 @@ func (s *cmdIntegrationSuite) TestDownloadAccountWildcard(c *chk.C) {
 
 // regular blob->local file download
 func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -304,7 +304,7 @@ func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
 
 // regular container->directory download
 func (s *cmdIntegrationSuite) TestDownloadBlobContainer(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -349,7 +349,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainer(c *chk.C) {
 
 // regular vdir->dir download
 func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1"
 
 	// set up the container with numerous blobs
@@ -399,7 +399,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
 // TODO the current pattern matching behavior is inconsistent with the posix filesystem
 //   update test after re-writing copy enumerators
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -457,7 +457,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 // test for include with one regular expression
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -508,7 +508,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexInclude(c *chk.C
 
 // test multiple regular expression with include
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -560,7 +560,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexInclude(c *c
 
 // testing empty expressions for both include and exclude
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithEmptyRegex(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -601,7 +601,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithEmptyRegex(c *chk.C) 
 
 // testing exclude with one regular expression
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -652,7 +652,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithRegexExclude(c *chk.C
 
 // testing exclude with multiple regular expressions
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with  blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -702,7 +702,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithMultRegexExclude(c *c
 }
 
 func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the local source
 	blobsToInclude := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
@@ -746,7 +746,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyLocalToBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up src container
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -791,7 +791,7 @@ func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunCopyBlobToBlobJson(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	// set up src container
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)

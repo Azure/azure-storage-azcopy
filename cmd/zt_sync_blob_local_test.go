@@ -41,7 +41,7 @@ const (
 
 // regular blob->file sync
 func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -92,7 +92,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 
 // regular container->directory sync but destination is empty, so everything has to be transferred
 func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -140,7 +140,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 
 // regular container->directory sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -182,7 +182,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 
 // regular container->directory sync where destination is missing some files from source, and also has some extra files
 func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -226,7 +226,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C
 
 // include flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -262,7 +262,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludePatternFlag(c *chk.C) {
 
 // exclude flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -298,7 +298,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePatternFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -341,7 +341,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludePatternFlag(c
 
 // a specific path is avoided in the comparison
 func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePathFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -395,7 +395,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludePathFlag(c *chk.C) {
 
 // validate the bug fix for this scenario
 func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -429,7 +429,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
 
 // there is a type mismatch between the source and destination
 func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -475,7 +475,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
 
 // there is a type mismatch between the source and destination
 func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with a single blob
 	blobName := "singleblobisbest"
@@ -521,7 +521,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 // download a blob representing an ADLS directory to a local file
 // we should recognize that there is a type mismatch
 func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	blobName := "adlsdir"
 
 	// set up the destination as a single file
@@ -563,7 +563,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C
 // adls directory -> local directory sync
 // we should download every blob except the blob representing the directory
 func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	adlsDirName := "adlsdir"
 
 	// set up the container with numerous blobs

@@ -33,7 +33,7 @@ var _ = chk.Suite(&copyEnumeratorSuite{})
 
 // ============================================= BLOB TRAVERSER TESTS =======================================
 func (ce *copyEnumeratorSuite) TestValidateSourceDirThatExists(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -63,7 +63,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirThatExists(c *chk.C) {
 }
 
 func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -92,7 +92,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
 }
 
 func (ce *copyEnumeratorSuite) TestValidateSourceFileExists(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -116,7 +116,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileExists(c *chk.C) {
 }
 
 func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -139,7 +139,7 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
 }
 
 func (ce *copyEnumeratorSuite) TestValidateSourceWithWildCard(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)
