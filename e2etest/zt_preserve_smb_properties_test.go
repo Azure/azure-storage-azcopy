@@ -4,6 +4,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"strings"
 	"testing"
 	"time"
@@ -317,7 +318,7 @@ func TestProperties_EnsureContainerBehavior(t *testing.T) {
 		anonymousAuthOnly,
 		params{
 			recursive: true,
-			preserveSMBInfo: BoolPointer(true),
+			preserveSMBInfo: to.Ptr(true),
 			preserveSMBPermissions: true,
 		},
 		nil,
