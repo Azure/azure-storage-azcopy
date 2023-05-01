@@ -568,7 +568,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
 		sourceCred := azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
-		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
+		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
 			credOption := common.CredentialOpOptions{
 				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
 				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },

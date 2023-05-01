@@ -35,7 +35,6 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -486,18 +485,35 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 		recommendHttpsIfNecessary(*resourceURL)
 
-		bfsURL := azbfs.NewBfsURLParts(*resourceURL)
+		// Convert BlobFS pipeline to blob-compatible pipeline
+		var credElement azblob.Credential
+		if credential.CredentialType == common.ECredentialType.SharedKey() {
+			// Convert the shared key credential to a blob credential & re-use it
+			credElement, err = azblob.NewSharedKeyCredential(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName()), glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey()))
+		} else {
+			// Get a standard blob credential, anything else is compatible
+			credElement = common.CreateBlobCredential(*ctx, *credential, common.CredentialOpOptions{
+				LogError: glcm.Info,
+			})
+		}
 
-		if bfsURL.FileSystemName == "" || strings.Contains(bfsURL.FileSystemName, "*") {
-			// TODO service traverser
+		blobPipeline := createBlobPipelineFromCred(credElement, logLevel)
 
+		burl := azblob.NewBlobURLParts(*resourceURL)
+		burl.Host = strings.Replace(burl.Host, ".dfs", ".blob", 1)
+		blobResourceURL := burl.URL()
+
+		includeDirectoryStubs = true // DFS is supposed to feed folders in
+		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobFSAccountTraverser(resourceURL, *p, *ctx, incrementEnumerationCounter)
+			output = newBlobAccountTraverser(&blobResourceURL, blobPipeline, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions)
+		} else if listOfVersionIds != nil {
+			output = newBlobVersionsTraverser(&blobResourceURL, blobPipeline, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobFSTraverser(resourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+			output = newBlobTraverser(&blobResourceURL, blobPipeline, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions)
 		}
 	case common.ELocation.S3():
 		resourceURL, err := resource.FullURL()

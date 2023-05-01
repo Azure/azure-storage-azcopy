@@ -512,6 +512,10 @@ func (l Location) IsFolderAware() bool {
 	}
 }
 
+func (l Location) CanForwardOAuthTokens() bool {
+	return l == ELocation.Blob() || l == ELocation.BlobFS()
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)

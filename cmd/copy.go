@@ -1383,15 +1383,16 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 // get source credential - if there is a token it will be used to get passed along our pipeline
 func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialInfo, error) {
-
 	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions)
 	if err != nil {
 		return srcCredInfo, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.FromTo.IsS2S() &&
-		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && cca.FromTo.To() != common.ELocation.Blob()) || // Blob can forward OAuth tokens
+		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && !cca.FromTo.To().CanForwardOAuthTokens()) || // Blob can forward OAuth tokens; BlobFS inherits this.
 			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
-		return srcCredInfo, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource, or the destination is blob storage")
+		return srcCredInfo, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource. Blob and BlobFS additionally support OAuth on both source and destination")
+	} else if cca.FromTo.IsS2S() && (srcCredInfo.CredentialType == common.ECredentialType.SharedKey() || jpo.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
+		return srcCredInfo, errors.New("shared key auth is not supported for S2S operations")
 	}
 
 	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
@@ -1527,7 +1528,10 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
 		var e *CopyEnumerator
-		srcCredInfo, _ := cca.getSrcCredential(ctx, &jobPartOrder)
+		srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+		if err != nil {
+			return fmt.Errorf("failed to discern source credential type: %w", err)
+		}
 
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
