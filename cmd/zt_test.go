@@ -276,7 +276,7 @@ func getAccountAndKey() (string, string) {
 }
 
 // get blob account service client
-func getBSC() *blobservice.Client {
+func getBlobServiceClient() *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	u := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 

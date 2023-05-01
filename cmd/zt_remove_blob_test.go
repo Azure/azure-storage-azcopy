@@ -38,7 +38,7 @@ import (
 )
 
 func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -67,7 +67,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -113,7 +113,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
@@ -160,7 +160,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 
 // include flag limits the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveWithIncludeFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -193,7 +193,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeFlag(c *chk.C) {
 
 // exclude flag limits the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -227,7 +227,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -268,7 +268,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestRemoveListOfBlobsAndVirtualDirs(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
@@ -331,7 +331,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfBlobsAndVirtualDirs(c *chk.C) {
 
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestRemoveListOfBlobsWithIncludeAndExclude(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
@@ -389,7 +389,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfBlobsWithIncludeAndExclude(c *chk.
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/"
 
 	// set up the container with numerous blobs
@@ -439,7 +439,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubs(c *chk.C) {
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubsWithListOfFiles(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/"
 
 	// set up the container with numerous blobs
@@ -489,7 +489,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsWithDirectoryStubsWithListOfFiles(c
 }
 
 func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -524,7 +524,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveSingleBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -562,7 +562,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainer(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -601,7 +601,7 @@ func (s *cmdIntegrationSuite) TestDryrunRemoveBlobsUnderContainerJson(c *chk.C) 
 }
 
 func (s *cmdIntegrationSuite) TestRemoveSingleBlobWithFromTo(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -631,7 +631,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlobWithFromTo(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainerWithFromTo(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -678,7 +678,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainerWithFromTo(c *chk.C) 
 
 func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDirWithFromTo(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
