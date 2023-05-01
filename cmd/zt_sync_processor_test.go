@@ -63,7 +63,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 }
 
 func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	blobName := "extraBlob.pdf"
 
 	// set up the blob to delete

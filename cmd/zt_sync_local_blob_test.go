@@ -34,7 +34,7 @@ import (
 
 // regular file->blob sync
 func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -86,7 +86,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 // regular directory->container sync but destination is empty, so everything has to be transferred
 // this test seems to flake out.
 func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -133,7 +133,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 
 // regular directory->container sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -176,7 +176,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 
 // regular container->directory sync where destination is missing some files from source, and also has some extra files
 func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -215,7 +215,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 
 // include flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncUploadWithIncludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -249,7 +249,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludePatternFlag(c *chk.C) {
 
 // exclude flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -283,7 +283,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePatternFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -324,7 +324,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludePatternFlag(c *
 
 // a specific path is avoided in the comparison
 func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -376,7 +376,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludePathFlag(c *chk.C) {
 
 // validate the bug fix for this scenario
 func (s *cmdIntegrationSuite) TestSyncUploadWithMissingDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -409,7 +409,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMissingDestination(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	//set up local src
 	blobsToInclude := []string{"AzURE2.jpeg", "sub1/aTestOne.txt", "sub1/sub2/testTwo.pdf"}

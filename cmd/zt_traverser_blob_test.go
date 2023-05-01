@@ -32,7 +32,7 @@ type traverserBlobSuite struct{}
 var _ = chk.Suite(&traverserBlobSuite{})
 
 func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -55,7 +55,7 @@ func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
 }
 
 func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -76,7 +76,7 @@ func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
 }
 
 func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -99,7 +99,7 @@ func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
 }
 
 func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	cc, containerName := createNewContainer(c, bsc)

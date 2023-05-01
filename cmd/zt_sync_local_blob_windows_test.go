@@ -30,7 +30,7 @@ import (
 )
 
 func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
@@ -63,7 +63,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
@@ -101,7 +101,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
 // Create one file that matches both
 // Only the last file should be transferred
 func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
@@ -138,7 +138,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *ch
 // Create one file that matches both
 // None of them should be transferred
 func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(srcDirName)
@@ -171,7 +171,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *ch
 
 // mouthfull of a test name, but this ensures that case insensitivity doesn't cause the unintended deletion of files
 func (s *cmdIntegrationSuite) TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(dstDirName)

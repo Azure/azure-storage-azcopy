@@ -31,7 +31,7 @@ import (
 )
 
 func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -69,7 +69,7 @@ func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -110,7 +110,7 @@ func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -151,7 +151,7 @@ func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestIncludeAndExcludeDir(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -189,7 +189,7 @@ func (s *cmdIntegrationSuite) TestIncludeAndExcludeDir(c *chk.C) {
 
 // regular local file->blob upload
 func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -249,7 +249,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.
 
 // regular local file->blob upload
 func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -306,7 +306,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 
 // regular directory->container upload
 func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
@@ -350,7 +350,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
 
 // regular directory->virtual dir upload
 func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir"
 
 	// set up the source with numerous files
@@ -396,7 +396,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
 
 // files(from pattern)->container upload
 func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
@@ -444,7 +444,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_Lo
 }
 
 func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source directory
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
@@ -501,7 +501,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_Loc
 }
 
 func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
@@ -549,7 +549,7 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(u
 }
 
 func (s *cmdIntegrationSuite) TestDisableAutoDecoding(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 

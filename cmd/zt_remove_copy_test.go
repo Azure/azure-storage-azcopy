@@ -7,7 +7,7 @@ import (
 
 func (s *cmdIntegrationSuite) TestCopyBlobsWithDirectoryStubsS2S(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/"
 
 	// create container and dest container

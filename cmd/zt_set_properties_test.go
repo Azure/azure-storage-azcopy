@@ -133,7 +133,7 @@ func validateSetPropertiesTransfersAreScheduled(c *chk.C, isSrcEncoded bool, exp
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -170,7 +170,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTier(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -224,7 +224,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForBlobTier(c 
 // TODO: func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C)
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -263,7 +263,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForBlobTier(c *chk
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -304,7 +304,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForBlobTier(c *chk
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -353,7 +353,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForBlobT
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTier(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
@@ -423,7 +423,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForBlobT
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
@@ -489,7 +489,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeF
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -526,7 +526,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForBlobTier(c
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -581,7 +581,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForB
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTier(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
@@ -638,7 +638,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToFor
 ///////////////////////////////// METADATA /////////////////////////////////
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -675,7 +675,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForMetadata(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForEmptyMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -712,7 +712,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForEmptyMetadata(c *chk
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -763,7 +763,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForMetadata(c 
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -802,7 +802,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForMetadata(c *chk
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -843,7 +843,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForMetadata(c *chk
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -892,7 +892,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForMetad
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForMetadata(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
@@ -962,7 +962,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForMetad
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeForMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
@@ -1028,7 +1028,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeF
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -1065,7 +1065,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForMetadata(c
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForMetadata(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -1120,7 +1120,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForM
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToForMetadata(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
@@ -1177,7 +1177,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToFor
 ///////////////////////////////// TAGS /////////////////////////////////
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -1214,7 +1214,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForBlobTags(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForEmptyBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -1251,7 +1251,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobForEmptyBlobTags(c *chk
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -1302,7 +1302,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerForBlobTags(c 
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -1341,7 +1341,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeFlagForBlobTags(c *chk
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -1382,7 +1382,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithExcludeFlagForBlobTags(c *chk
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -1431,7 +1431,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesWithIncludeAndExcludeFlagForBlobT
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTags(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
@@ -1501,7 +1501,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsAndVirtualDirsForBlobT
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
@@ -1567,7 +1567,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesListOfBlobsWithIncludeAndExcludeF
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -1604,7 +1604,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesSingleBlobWithFromToForBlobTags(c
 }
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForBlobTags(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
 	cc, containerName := createNewContainer(c, bsc)
@@ -1659,7 +1659,7 @@ func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderContainerWithFromToForB
 
 func (s *cmdIntegrationSuite) TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTags(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs

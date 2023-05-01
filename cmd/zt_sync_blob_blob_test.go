@@ -36,7 +36,7 @@ import (
 
 // regular blob->file sync
 func (s *cmdIntegrationSuite) TestSyncS2SWithSingleBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -81,7 +81,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithSingleBlob(c *chk.C) {
 
 // regular container->container sync but destination is empty, so everything has to be transferred
 func (s *cmdIntegrationSuite) TestSyncS2SWithEmptyDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -127,7 +127,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithEmptyDestination(c *chk.C) {
 
 // regular container->container sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestSyncS2SWithIdenticalDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -170,7 +170,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIdenticalDestination(c *chk.C) {
 // regular container->container sync where destination is missing some files from source, and also has some extra files
 func (s *cmdIntegrationSuite) TestSyncS2SWithMismatchedDestination(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -222,7 +222,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithMismatchedDestination(c *chk.C) {
 
 // include flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncS2SWithIncludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -257,7 +257,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludePatternFlag(c *chk.C) {
 
 // exclude flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -292,7 +292,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePatternFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludePatternFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -334,7 +334,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludePatternFlag(c *chk
 
 // a specific path is avoided in the comparison
 func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePathFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -387,7 +387,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludePathFlag(c *chk.C) {
 
 // validate the bug fix for this scenario
 func (s *cmdIntegrationSuite) TestSyncS2SWithMissingDestination(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -421,7 +421,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithMissingDestination(c *chk.C) {
 
 // there is a type mismatch between the source and destination
 func (s *cmdIntegrationSuite) TestSyncS2SMismatchContainerAndBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -467,7 +467,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SMismatchContainerAndBlob(c *chk.C) {
 
 // container <-> virtual dir sync
 func (s *cmdIntegrationSuite) TestSyncS2SContainerAndEmptyVirtualDir(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -514,7 +514,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SContainerAndEmptyVirtualDir(c *chk.C) {
 
 // regular vdir -> vdir sync
 func (s *cmdIntegrationSuite) TestSyncS2SBetweenVirtualDirs(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -562,7 +562,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SBetweenVirtualDirs(c *chk.C) {
 // trailing slash is used to disambiguate the path as a vdir
 func (s *cmdIntegrationSuite) TestSyncS2SBetweenVirtualDirsWithConflictingBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -635,7 +635,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SBetweenVirtualDirsWithConflictingBlob(c
 // sync a vdir with a blob representing an ADLS directory
 // we should recognize this and sync with the virtual directory instead
 func (s *cmdIntegrationSuite) TestSyncS2SADLSDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -690,7 +690,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SADLSDirectory(c *chk.C) {
 
 // testing multiple include regular expression
 func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeRegexFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -736,7 +736,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeRegexFlag(c *chk.C) {
 
 // testing multiple exclude regular expressions
 func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeRegexFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -774,7 +774,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithExcludeRegexFlag(c *chk.C) {
 
 // testing with both include and exclude regular expression flags
 func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -825,7 +825,7 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithIncludeAndExcludeRegexFlag(c *chk.C
 }
 
 func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up src container
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -875,7 +875,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunSyncBlobtoBlobJson(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up src container
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)

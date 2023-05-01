@@ -30,7 +30,7 @@ import (
 
 // TestBlobAccountCopyToFileShareS2S actually ends up testing the entire account->container scenario as that is not dependent on destination or source.
 func (s *cmdIntegrationSuite) TestBlobAccountCopyToFileShareS2S(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	// Ensure no containers with similar naming schemes exist
@@ -83,7 +83,7 @@ func (s *cmdIntegrationSuite) TestBlobAccountCopyToFileShareS2S(c *chk.C) {
 
 // TestBlobCopyToFileS2SImplicitDstShare uses a service-level URL on the destination to implicitly create the destination share.
 func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SImplicitDstShare(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	// create source container
@@ -122,7 +122,7 @@ func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SImplicitDstShare(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -178,7 +178,7 @@ func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestContainerToShareCopyS2S(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	// Create source container and destination share, schedule their deletion
@@ -222,7 +222,7 @@ func (s *cmdIntegrationSuite) TestContainerToShareCopyS2S(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	// generate source container and destination fileshare
@@ -287,7 +287,7 @@ func (s *cmdIntegrationSuite) TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(c 
 }
 
 func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	// generate source container and destination fileshare
@@ -349,7 +349,7 @@ func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(
 }
 
 func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SIncludeExcludeMix(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	// generate source container and destination fileshare
@@ -404,7 +404,7 @@ func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SIncludeExcludeMix(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SWithDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	// create container and share

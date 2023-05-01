@@ -12,7 +12,7 @@ import (
 // Separated the ADLS tests from others as ADLS can't safely be tested on the same storage account
 func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk.C) {
 	bfssu := GetBFSSU()
-	bsc := getBSC() // Only used to clean up
+	bsc := getBlobServiceClient() // Only used to clean up
 
 	// BlobFS is tested on the same account, therefore this is safe to clean up this way
 	cleanBlobAccount(c, bsc)
@@ -86,7 +86,7 @@ func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk
 }
 
 func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 	testS3 := false // Only test S3 if credentials are present.
 	testGCP := false
@@ -254,7 +254,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 }
 
 func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 	bfssu := GetBFSSU()
 	testS3 := false // Only test S3 if credentials are present.
