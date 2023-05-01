@@ -61,7 +61,7 @@ func (processorTestSuiteHelper) getCopyJobTemplate() *common.CopyJobPartOrderReq
 }
 
 func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// set up source and destination
 	cc, _ := getContainerClient(c, bsc)
@@ -102,7 +102,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 }
 
 func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, _ := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 

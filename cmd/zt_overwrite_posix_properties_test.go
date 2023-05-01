@@ -39,7 +39,7 @@ func (s *cmdIntegrationSuite) TestOverwritePosixProperties(c *chk.C) {
 		c.Skip("This test will run only on linux")
 	}
 	
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	containerClient, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, containerClient)
 

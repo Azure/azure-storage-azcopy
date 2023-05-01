@@ -504,7 +504,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 // validate traversing a single Blob, a single Azure File, and a single local file
 // compare that the traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -652,7 +652,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 // validate traversing a container, a share, and a local directory containing the same objects
 // compare that traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -810,7 +810,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 // validate traversing a virtual and a local directory containing the same objects
 // compare that blob and local traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
@@ -970,7 +970,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 // validate traversing a virtual directory containing the same objects
 // compare that the serial and parallel blob traversers get consistent results
 func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 

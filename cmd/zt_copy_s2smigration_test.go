@@ -801,7 +801,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPObjectToBlobContainer(c *chk.C) 
 
 // Copy from container to container, preserve blob tier.
 func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -837,7 +837,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTie
 
 // Copy from container to container, and don't preserve blob tier.
 func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobTier(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -875,7 +875,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 // Attempt to copy from a page blob to a block blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -927,7 +927,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 
 // Attempt to copy from a block blob to a page blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -979,7 +979,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 
 // Attempt to copy from a block blob to an append blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -1032,7 +1032,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 // Attempt to copy from an append blob to a block blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -1085,7 +1085,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 // Attempt to copy from a page blob to an append blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -1138,7 +1138,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 // Attempt to copy from an append blob to a page blob
 func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 	c.Skip("Enable after setting Account to non-HNS")
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
@@ -1189,7 +1189,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
@@ -1240,7 +1240,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 }
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *chk.C) {
-	bsc := getBSC()
+	bsc := getBlobServiceClient()
 	fsu := getFSU()
 
 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
