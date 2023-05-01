@@ -1,6 +1,18 @@
 
 # Change Log
 
+## Version 10.18.1
+
+### Bug fixes
+
+1. Fixed a data race when utilizing hash-based sync. ([Issue 2146](https://github.com/Azure/azure-storage-azcopy/issues/2146))
+2. Fixed the destination naming behavior for container-to-container transfers while using --preserve-permissions ([Issue 2141](https://github.com/Azure/azure-storage-azcopy/issues/2141))
+3. Temporarily disabled hostname lookup before enumeration ([Issue 2144](https://github.com/Azure/azure-storage-azcopy/issues/2144))
+
+### Documentation
+
+1. Modified `--from-to` flag to be more clear ([Issue 2153](https://github.com/Azure/azure-storage-azcopy/issues/2153))
+
 ## Version 10.18.0
 
 ### New features

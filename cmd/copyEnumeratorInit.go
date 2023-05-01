@@ -118,8 +118,14 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && !cca.preservePermissions.IsTruthy() {
-		cca.StripTopDir = true
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
+		if cca.preservePermissions.IsTruthy() {
+			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
+			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
+			cca.asSubdir = false
+		} else {
+			cca.StripTopDir = true
+		}
 	}
 
 	// Create a Remote resource resolver
