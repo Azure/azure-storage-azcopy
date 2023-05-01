@@ -79,13 +79,30 @@ func TestTrailingDot_LocalNegative(t *testing.T) {
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestTrailingDot_Min(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+			trailingDot: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
 func TestTrailingDot_MinNegative(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
 		}, nil,
 		testFiles{
-			defaultSize: "1K",
+			defaultSize: "1K",shouldTransfer: []interface{}{
+				folder(""),
+			},
 			shouldSkip: []interface{}{
 				f("file."),
 			},
