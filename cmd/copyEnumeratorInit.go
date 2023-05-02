@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"log"
 	"net/url"
 	"os"
@@ -19,8 +20,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -449,11 +448,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	}
 
 	options := createClientOptions(logLevel.ToPipelineLogLevel())
-	// TODO: we can pass cred here as well
-	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
-	if err != nil {
-		return
-	}
 
 	// Because the only use-cases for createDstContainer will be on service-level S2S and service-level download
 	// We only need to create "containers" on local and blob.
@@ -490,15 +484,9 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		dstURL, err := url.Parse(accountRoot)
-
-		if err != nil {
-			return err
-		}
-
-		fsu := azfile.NewServiceURL(*dstURL, dstPipeline)
-		shareURL := fsu.NewShareURL(containerName)
-		_, err = shareURL.GetProperties(ctx)
+		fsc := common.CreateFileServiceClient(accountRoot, dstCredInfo, nil, options)
+		sc := fsc.NewShareClient(containerName)
+		_, err = sc.GetProperties(ctx, nil)
 
 		if err == nil {
 			return err
@@ -506,15 +494,11 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 		// Create a destination share with the default service quota
 		// TODO: Create a flag for the quota
-		_, err = shareURL.Create(ctx, azfile.Metadata{}, 0)
-
-		if stgErr, ok := err.(azfile.StorageError); ok {
-			if stgErr.ServiceCode() != azfile.ServiceCodeShareAlreadyExists {
-				return err
-			}
-		} else {
-			return err
+		_, err = sc.Create(ctx, nil)
+		if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
+			return nil
 		}
+		return err
 	default:
 		panic(fmt.Sprintf("cannot create a destination container at location %s.", cca.FromTo.To()))
 	}

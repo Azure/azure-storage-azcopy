@@ -26,11 +26,10 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-file-go/azfile"
-	"net/url"
 	"os"
 	"path"
 	"runtime"
@@ -262,36 +261,29 @@ func (l *localFileDeleter) deleteFile(object StoredObject) error {
 }
 
 func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
-	rawURL, err := cca.destination.FullURL()
+	rawURL, err := cca.destination.String()
 	if err != nil {
 		return nil, err
 	}
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
-	if err != nil {
-		return nil, err
-	}
 	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel())
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To()).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To()).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
-	rootURL        *url.URL
-	p              pipeline.Pipeline
+	rootURL        string
 	credInfo       common.CredentialInfo
 	clientOptions  azcore.ClientOptions
 	ctx            context.Context
 	targetLocation common.Location
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, credInfo common.CredentialInfo, clientOptions azcore.ClientOptions, ctx context.Context, targetLocation common.Location) *remoteResourceDeleter {
+func newRemoteResourceDeleter(rawRootURL string, credInfo common.CredentialInfo, clientOptions azcore.ClientOptions, ctx context.Context, targetLocation common.Location) *remoteResourceDeleter {
 	return &remoteResourceDeleter{
 		rootURL:        rawRootURL,
-		p:              p,
 		credInfo:       credInfo,
 		clientOptions:  clientOptions,
 		ctx:            ctx,
@@ -309,7 +301,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		}
 		switch b.targetLocation {
 		case common.ELocation.Blob():
-			blobURLParts, err := blob.ParseURL(b.rootURL.String())
+			blobURLParts, err := blobsas.ParseURL(b.rootURL)
 			if err != nil {
 				return err
 			}
@@ -319,10 +311,13 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			_, err = blobClient.Delete(b.ctx, nil)
 			return err
 		case common.ELocation.File():
-			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+			fileURLParts, err := filesas.ParseURL(b.rootURL)
+			if err != nil {
+				return err
+			}
 			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
-			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
-			_, err := fileURL.Delete(b.ctx)
+			fileClient := common.CreateShareFileClient(fileURLParts.String(), b.credInfo, nil, b.clientOptions)
+			_, err = fileClient.Delete(b.ctx, nil)
 			return err
 		default:
 			panic("not implemented, check your code")

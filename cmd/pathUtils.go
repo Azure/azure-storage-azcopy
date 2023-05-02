@@ -2,12 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"net/url"
 	"strings"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
@@ -108,7 +107,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 
 	//noinspection GoNilness
 	case common.ELocation.Blob():
-		bURLParts, err := blob.ParseURL(resource)
+		bURLParts, err := blobsas.ParseURL(resource)
 		if err != nil {
 			return resource, err
 		}
@@ -125,33 +124,36 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 
 	//noinspection GoNilness
 	case common.ELocation.File():
-		bURLParts := azfile.NewFileURLParts(*resourceURL)
+		fURLParts, err := filesas.ParseURL(resource)
+		if err != nil {
+			return resource, err
+		}
 
-		if bURLParts.ShareName == "" || strings.Contains(bURLParts.ShareName, "*") {
-			if bURLParts.DirectoryOrFilePath != "" {
+		if fURLParts.ShareName == "" || strings.Contains(fURLParts.ShareName, "*") {
+			if fURLParts.DirectoryOrFilePath != "" {
 				return resource, errors.New("cannot combine account-level traversal and specific file/folder names.")
 			}
 
-			bURLParts.ShareName = ""
+			fURLParts.ShareName = ""
 		}
-
-		bURL := bURLParts.URL()
-		return bURL.String(), nil
+		return fURLParts.String(), nil
 
 	//noinspection GoNilness
 	case common.ELocation.BlobFS():
-		bURLParts := azfile.NewFileURLParts(*resourceURL)
+		// TODO (gapra): This should probably use the new BlobFS URL parts
+		fURLParts, err := filesas.ParseURL(resource)
+		if err != nil {
+			return resource, err
+		}
 
-		if bURLParts.ShareName == "" || strings.Contains(bURLParts.ShareName, "*") {
-			if bURLParts.DirectoryOrFilePath != "" {
+		if fURLParts.ShareName == "" || strings.Contains(fURLParts.ShareName, "*") {
+			if fURLParts.DirectoryOrFilePath != "" {
 				return resource, errors.New("cannot combine account-level traversal and specific file/folder names.")
 			}
 
-			bURLParts.ShareName = ""
+			fURLParts.ShareName = ""
 		}
-
-		bURL := bURLParts.URL()
-		return bURL.String(), nil
+		return fURLParts.String(), nil
 
 	// noinspection GoNilness
 	case common.ELocation.S3():
@@ -236,8 +238,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	//       It's not a breaking change to the way SAS tokens work, but a pretty major addition.
 	// TODO: Find a clever way to reduce code duplication in here. Especially the URL parsing.
 	case common.ELocation.Blob():
-		var bURLParts blobsas.URLParts
-		bURLParts, err = blob.ParseURL(resource)
+		var bURLParts blobsas.URLParts // Do not shadow err for clean return statement
+		bURLParts, err = blobsas.ParseURL(resource)
 		if err != nil {
 			return resource, "", err
 		}
@@ -247,14 +249,12 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		resourceBase = bURLParts.String()
 		return
 	case common.ELocation.File():
-		var baseURL *url.URL // Do not shadow err for clean return statement
-		baseURL, err = url.Parse(resource)
-
+		var fURLParts filesas.URLParts // Do not shadow err for clean return statement
+		fURLParts, err = filesas.ParseURL(resource)
 		if err != nil {
 			return resource, "", err
 		}
 
-		fURLParts := azfile.NewFileURLParts(*baseURL)
 		resourceToken = fURLParts.SAS.Encode()
 		if resourceToken == "" {
 			// Azure Files only supports the use of SAS tokens currently
@@ -262,9 +262,8 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 			// Therefore, it is safe to error here if no SAS token is present, as neither a source nor a destination could safely not have a SAS token.
 			return resource, "", errors.New("azure files only supports the use of SAS token authentication")
 		}
-		fURLParts.SAS = azfile.SASQueryParameters{} // clear the SAS token and drop the raw, base URL
-		fileURL := fURLParts.URL()                  // Can't call .String() on .URL() because Go can't take the pointer of a function's return
-		resourceBase = fileURL.String()
+		fURLParts.SAS = filesas.QueryParameters{} // clear the SAS token and drop the raw, base URL
+		resourceBase = fURLParts.String()
 		return
 	case common.ELocation.BlobFS():
 		var baseURL *url.URL // Do not shadow err for clean return statement
@@ -340,7 +339,7 @@ func GetAccountRoot(resource common.ResourceString, location common.Location) (s
 		}
 
 		// Clear the path
-		bURLParts, err := blob.ParseURL(baseURL)
+		bURLParts, err := blobsas.ParseURL(baseURL)
 		if err != nil {
 			return "", err
 		}
@@ -363,7 +362,7 @@ func GetContainerName(path string, location common.Location) (string, error) {
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS():
-		bURLParts, err := blob.ParseURL(path)
+		bURLParts, err := blobsas.ParseURL(path)
 		if err != nil {
 			return "", err
 		}

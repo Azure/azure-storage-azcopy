@@ -30,6 +30,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 )
 
 var glcm = GetLifecycleMgr()
@@ -150,6 +153,48 @@ func CreatePageBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cred
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*pageblob.Client, error) {
 			return pageblob.NewClientWithNoCredential(u, &pageblob.ClientOptions{ClientOptions: options})
+		},
+	}
+
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
+}
+
+///////////////////////////////////////////////// FILE FUNCTIONS /////////////////////////////////////////////////
+
+// CreateFileServiceClient creates a blob service client with credentials specified by credInfo
+func CreateFileServiceClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *fileservice.Client {
+	callbacks := newClientCallbacks[fileservice.Client, sharefile.SharedKeyCredential]{
+		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*fileservice.Client, error) {
+			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+		},
+		NoCredential: func(u string, options azcore.ClientOptions) (*fileservice.Client, error) {
+			return fileservice.NewClientWithNoCredential(u, &fileservice.ClientOptions{ClientOptions: options})
+		},
+	}
+
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
+}
+
+func CreateShareClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *share.Client {
+	callbacks := newClientCallbacks[share.Client, sharefile.SharedKeyCredential]{
+		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*share.Client, error) {
+			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+		},
+		NoCredential: func(u string, options azcore.ClientOptions) (*share.Client, error) {
+			return share.NewClientWithNoCredential(u, &share.ClientOptions{ClientOptions: options})
+		},
+	}
+
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
+}
+
+func CreateShareFileClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *sharefile.Client {
+	callbacks := newClientCallbacks[sharefile.Client, sharefile.SharedKeyCredential]{
+		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*sharefile.Client, error) {
+			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+		},
+		NoCredential: func(u string, options azcore.ClientOptions) (*sharefile.Client, error) {
+			return sharefile.NewClientWithNoCredential(u, &sharefile.ClientOptions{ClientOptions: options})
 		},
 	}
 

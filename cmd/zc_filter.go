@@ -28,8 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -394,6 +392,8 @@ func buildIncludeSoftDeleted(permanentDeleteOption common.PermanentDeleteOption)
 	return filters
 }
 
+const ISO8601 = "2006-01-02T15:04:05.0000000Z" // must have 0's for fractional seconds, because Files Service requires fixed width
+
 // parseISO8601 parses ISO 8601 dates. This routine is needed because GoLang's time.Parse* routines require all expected
 // elements to be present.  I.e. you can't specify just a date, and have the time default to 00:00. But ISO 8601 requires
 // that and, for usability, that's what we want.  (So that users can omit the whole time, or at least the seconds portion of it, if they wish)
@@ -401,7 +401,7 @@ func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 
 	// list of ISO-8601 Go-lang formats in descending order of completeness
 	formats := []string{
-		azfile.ISO8601,              // Support AzFile's more accurate format
+		ISO8601,              		 // Support AzFile's more accurate format
 		"2006-01-02T15:04:05Z07:00", // equal to time.RFC3339, which in Go parsing is basically "ISO 8601 with nothing optional"
 		"2006-01-02T15:04:05",       // no timezone
 		"2006-01-02T15:04",          // no seconds

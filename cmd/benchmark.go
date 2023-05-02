@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"net/url"
 	"os"
 	"strconv"
@@ -31,7 +32,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -197,12 +197,15 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		return p.String(), err
 
 	case common.ELocation.File():
-		p := azfile.NewFileURLParts(*u)
+		p, err := filesas.ParseURL(target)
+		if err != nil {
+			return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
+		}
 		if p.ShareName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the Azure Files target must be a file share root")
 		}
 		p.DirectoryOrFilePath = virtualDir
-		result = p.URL()
+		return p.String(), err
 
 	case common.ELocation.BlobFS():
 		p := azbfs.NewBfsURLParts(*u)
