@@ -569,16 +569,19 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 		sourceCred := azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
 		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			credOption := common.CredentialOpOptions{
-				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-				Panic:    jpm.Panic,
-				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-				Cancel:   jpm.jobMgr.Cancel,
-			}
 			if jpm.sourceCredential == nil {
 				sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
 				jpm.sourceCredential = sourceCred
+			}
+		} else if fromTo.IsDownload() && jobState.CredentialInfo.CredentialType.IsAzureOAuth() {
+			sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo, credOption)
+		} else if fromTo.IsDownload() && jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey() {
+			lcm := common.GetLifecycleMgr()
+			var err error
+			// Convert the shared key credential to a blob credential & re-use it
+			sourceCred, err = azblob.NewSharedKeyCredential(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName()), lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey()))
+			if err != nil {
+				jpm.Panic(fmt.Errorf("sanity check: failed to initialize shared key credential: %w", err))
 			}
 		}
 
