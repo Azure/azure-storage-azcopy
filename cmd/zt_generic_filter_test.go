@@ -80,24 +80,24 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 }
 
 func (s *genericFilterSuite) TestTrailingDotFilter(c *chk.C) {
-	raw := rawSyncCmdArgs{}
-	excludePatternList := raw.parsePatterns("*.;*./*")
-	excludeFilterList := buildExcludeFilters(excludePatternList, false)
+	excludeFilterList := []ObjectFilter{&TrailingDotFilter{}}
 
 	// test the positive cases
-	filesToPass := []string{"file", "directory", "directory/file"}
-	for _, file := range filesToPass {
+	fileNamesToPass := []string{"file", "directory", "file"}
+	fileRelativePathsToPass := []string{"", "", "directory"}
+	for i, file := range fileNamesToPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
+		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file, relativePath: fileRelativePathsToPass[i]}, dummyProcessor.process)
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(dummyProcessor.record), chk.Equals, 1)
 	}
 
 	// test the negative cases
-	filesToNotPass := []string{"file.", "directory.", "directory./file.", "directory./file", "directory/file."}
-	for _, file := range filesToNotPass {
+	fileNamesToPass = []string{"file.", "directory.", "file.", "file", "file."}
+	fileRelativePathsToPass = []string{"file.", "directory.", "directory.", "directory.", "directory"}
+	for i, file := range fileNamesToPass {
 		dummyProcessor := &dummyProcessor{}
-		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
+		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file, relativePath: fileRelativePathsToPass[i]}, dummyProcessor.process)
 		c.Assert(err, chk.Equals, ignoredError)
 		c.Assert(len(dummyProcessor.record), chk.Equals, 0)
 	}
