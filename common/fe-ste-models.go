@@ -598,15 +598,15 @@ func (ft *FromTo) From() Location {
 }
 
 func (ft *FromTo) IsDownload() bool {
-	return ft.From().IsRemote() && ft.To().IsLocal()
+	return ft.From().IsRemote() && ft.To().IsLocal() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
 func (ft *FromTo) IsS2S() bool {
-	return ft.From().IsRemote() && ft.To().IsRemote()
+	return ft.From().IsRemote() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
 func (ft *FromTo) IsUpload() bool {
-	return ft.From().IsLocal() && ft.To().IsRemote()
+	return ft.From().IsLocal() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
 func (ft *FromTo) IsDelete() bool {
