@@ -1329,7 +1329,7 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
 		// c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
 	})
