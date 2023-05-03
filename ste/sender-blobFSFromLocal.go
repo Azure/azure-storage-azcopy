@@ -23,7 +23,9 @@ package ste
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"math"
+	"strings"
 )
 
 type blobFSUploader struct {
@@ -89,6 +91,38 @@ func (u *blobFSUploader) Epilogue() {
 			}
 		} else {
 			jptm.FailActiveUpload("Getting hash", errNoHash) // don't return, since need cleanup below
+		}
+	}
+
+	// Write POSIX data
+	if jptm.IsLive() {
+		if jptm.Info().PreservePOSIXProperties {
+			sip, err := newLocalSourceInfoProvider(jptm) // never returns an error (as of yet)
+			if err != nil {
+				jptm.FailActiveUpload("Creating local source info provider for POSIX properties", err)
+				return // Defensively handle the error just in case
+			}
+
+			if unixSIP, ok := sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+				stat, err := unixSIP.GetUNIXProperties()
+				if err != nil {
+					jptm.FailActiveUpload("Getting POSIX properties from source", err)
+					return
+				}
+
+				blobPipeline := jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline
+				bURLParts := azblob.NewBlobURLParts(u.fileOrDirURL.URL())
+				bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".dfs", ".blob") // switch back to blob
+				blobURL := azblob.NewBlobURL(bURLParts.URL(), blobPipeline)
+
+				meta := azblob.Metadata{}
+				common.AddStatToBlobMetadata(stat, meta)
+
+				_, err = blobURL.SetMetadata(jptm.Context(), meta, azblob.BlobAccessConditions{}, common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()))
+				if err != nil {
+					jptm.FailActiveSend("Putting POSIX properties in blob metadata", err)
+				}
+			}
 		}
 	}
 }
