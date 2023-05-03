@@ -19,7 +19,7 @@ func TestPOSIX_SpecialFilesToBlob(t *testing.T) {
 		eOperation.Copy(),
 		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal()), // no blobblob since that's just metadata and we already test that
 		eValidate.Auto(),
-		anonymousAuthOnly, // this is a small test, so running it with all cred types (which will really just be oauth and anon) is fine
+		allCredentialTypes, // this relies upon a working source info provider; this validates appropriate creds are supplied to it.
 		anonymousAuthOnly,
 		params{
 			recursive: true,
