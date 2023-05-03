@@ -432,8 +432,8 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 		recommendHttpsIfNecessary(*resourceURL)
 
-		if ctx == nil || p == nil {
-			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a blob traverser")
 		}
 		r := resourceURL.String()
 
