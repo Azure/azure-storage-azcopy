@@ -162,8 +162,9 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 
 	// then test reading from the filename exactly, because that's a different codepath.
 	seenContentType = false
-	fileURL := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileName)
-	traverser = newFileTraverser(&fileURL, pipeline, ctx, false, true, func(common.EntityType) {})
+	rawFileURLWithSAS := scenarioHelper{}.getFileClientWithSAS(c, shareName, fileName).URL()
+	fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(c, rawFileURLWithSAS)
+	traverser = newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, false, true, func(common.EntityType) {})
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
 	c.Assert(err, chk.IsNil)
@@ -715,8 +716,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawContainerURLWithSAS := scenarioHelper{}.getContainerClientWithSAS(c, containerName).URL()
-		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawContainerURLWithSAS)
-		blobTraverser := newBlobTraverser(rawContainerURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		blobServiceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawContainerURLWithSAS)
+		blobTraverser := newBlobTraverser(rawContainerURLWithSAS, blobServiceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -724,9 +725,9 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		c.Assert(err, chk.IsNil)
 
 		// construct an Azure File traverser
-		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {})
+		rawShareURLWithSAS := scenarioHelper{}.getShareClientWithSAS(c, shareName).URL()
+		fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(c, rawContainerURLWithSAS)
+		azureFileTraverser := newFileTraverser(rawShareURLWithSAS, fileServiceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {})
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}

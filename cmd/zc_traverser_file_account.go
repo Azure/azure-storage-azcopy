@@ -23,16 +23,12 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net/url"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
 
 // Enumerates an entire files account, looking into each matching share as it goes
 type fileAccountTraverser struct {
-	accountURL    azfile.ServiceURL
-	p             pipeline.Pipeline
+	serviceClient   *service.Client
 	ctx           context.Context
 	sharePattern  string
 	cachedShares  []string
@@ -48,20 +44,20 @@ func (t *fileAccountTraverser) IsDirectory(isSource bool) (bool, error) {
 
 func (t *fileAccountTraverser) listContainers() ([]string, error) {
 	if len(t.cachedShares) == 0 {
-		marker := azfile.Marker{}
 		shareList := make([]string, 0)
 
-		for marker.NotDone() {
-			resp, err := t.accountURL.ListSharesSegment(t.ctx, marker, azfile.ListSharesOptions{})
+		pager := t.serviceClient.NewListSharesPager(nil)
+		for pager.More() {
+			resp, err := pager.NextPage(t.ctx)
 
 			if err != nil {
 				return nil, err
 			}
 
-			for _, v := range resp.ShareItems {
+			for _, v := range resp.Shares {
 				// Match a pattern for the share name and the share name only
 				if t.sharePattern != "" {
-					if ok, err := containerNameMatchesPattern(v.Name, t.sharePattern); err != nil {
+					if ok, err := containerNameMatchesPattern(*v.Name, t.sharePattern); err != nil {
 						// Break if the pattern is invalid
 						return nil, err
 					} else if !ok {
@@ -70,10 +66,8 @@ func (t *fileAccountTraverser) listContainers() ([]string, error) {
 					}
 				}
 
-				shareList = append(shareList, v.Name)
+				shareList = append(shareList, *v.Name)
 			}
-
-			marker = resp.NextMarker
 		}
 
 		t.cachedShares = shareList
@@ -92,8 +86,8 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	}
 
 	for _, v := range shareList {
-		shareURL := t.accountURL.NewShareURL(v).URL()
-		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
+		shareURL := t.serviceClient.NewShareClient(v).URL()
+		shareTraverser := newFileTraverser(shareURL, t.serviceClient, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -108,14 +102,13 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileAccountTraverser) {
-	fURLparts := azfile.NewFileURLParts(*rawURL)
-	sPattern := fURLparts.ShareName
-
-	if fURLparts.ShareName != "" {
-		fURLparts.ShareName = ""
+func newFileAccountTraverser(serviceClient *service.Client, share string, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileAccountTraverser) {
+	t = &fileAccountTraverser{
+		ctx: ctx,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		serviceClient: serviceClient,
+		sharePattern: share,
+		getProperties: getProperties,
 	}
-
-	t = &fileAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern, getProperties: getProperties}
 	return
 }

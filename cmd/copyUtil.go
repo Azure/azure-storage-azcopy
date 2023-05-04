@@ -32,7 +32,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 const (
@@ -143,26 +142,6 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 	}
 
 	return isDir
-}
-
-func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
-	// Azure file share case
-	if util.urlIsContainerOrVirtualDirectory(url.String()) {
-		return true
-	}
-
-	// Need make request to ensure if it's directory
-	directoryURL := azfile.NewDirectoryURL(*url, p)
-	_, err := directoryURL.GetProperties(ctx)
-	if err != nil {
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err), pipeline.LogWarning)
-		}
-
-		return false
-	}
-
-	return true
 }
 
 // doesBlobRepresentAFolder verifies whether blob is valid or not.

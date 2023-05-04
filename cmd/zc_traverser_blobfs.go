@@ -105,7 +105,7 @@ func (t *blobFSTraverser) Traverse(preprocessor objectMorpher, processor objectP
 			pathProperties.ContentLength(),
 			md5OnlyAdapter{md5: pathProperties.ContentMD5()}, // not supplying full props, since we can't below, and it would be inconsistent to do so here
 			noBlobProps,
-			noMetdata, // not supplying metadata, since we can't below and it would be inconsistent to do so here
+			noMetadata, // not supplying metadata, since we can't below and it would be inconsistent to do so here
 			bfsURLParts.FileSystemName,
 		)
 
@@ -139,7 +139,7 @@ func (t *blobFSTraverser) Traverse(preprocessor objectMorpher, processor objectP
 			size,
 			contentProps,
 			noBlobProps,
-			noMetdata,
+			noMetadata,
 			bfsURLParts.FileSystemName)
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter(common.EEntityType.Folder())
@@ -192,7 +192,7 @@ func (t *blobFSTraverser) Traverse(preprocessor objectMorpher, processor objectP
 				size,
 				contentProps,
 				noBlobProps,
-				noMetdata,
+				noMetadata,
 				bfsURLParts.FileSystemName,
 			)
 

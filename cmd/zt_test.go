@@ -36,6 +36,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"io"
 	"math/rand"
 	"net/url"
@@ -798,6 +802,23 @@ func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, c
 	return client
 }
 
+func getShareClientWithSAS(c *chk.C, credential *file.SharedKeyCredential, shareName string) *share.Client {
+	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s",
+		credential.AccountName(), shareName)
+	client, err := share.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+
+	sasURL, err := client.GetSASURL(
+		filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
+		time.Now().Add(48*time.Hour),
+		nil)
+	c.Assert(err, chk.IsNil)
+
+	client, err = share.NewClientWithNoCredential(sasURL, nil)
+	c.Assert(err, chk.IsNil)
+
+	return client
+}
+
 func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential) *blobservice.Client {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/",
 		credential.AccountName())
@@ -811,6 +832,24 @@ func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential)
 	c.Assert(err, chk.IsNil)
 
 	client, err = blobservice.NewClientWithNoCredential(sasURL, nil)
+	c.Assert(err, chk.IsNil)
+
+	return client
+}
+
+func getFileServiceClientWithSAS(c *chk.C, credential *file.SharedKeyCredential) *fileservice.Client {
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/",
+		credential.AccountName())
+	client, err := fileservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+
+	sasURL, err := client.GetSASURL(
+		filesas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		filesas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, Create: true},
+		time.Now().Add(48*time.Hour),
+		nil)
+	c.Assert(err, chk.IsNil)
+
+	client, err = fileservice.NewClientWithNoCredential(sasURL, nil)
 	c.Assert(err, chk.IsNil)
 
 	return client

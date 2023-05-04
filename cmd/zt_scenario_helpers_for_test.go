@@ -31,6 +31,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"io"
 	"net/url"
 	"os"
@@ -607,6 +611,14 @@ func (scenarioHelper) getContainerClientWithSAS(c *chk.C, containerName string) 
 	return containerURLWithSAS
 }
 
+func (scenarioHelper) getShareClientWithSAS(c *chk.C, shareName string) *share.Client {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := fileservice.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+	shareURLWithSAS := getShareClientWithSAS(c, credential, shareName)
+	return shareURLWithSAS
+}
+
 func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
@@ -626,6 +638,15 @@ func (scenarioHelper) getBlobClientWithSAS(c *chk.C, containerName string, blobN
 	containerURLWithSAS := getContainerClientWithSAS(c, credential, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlobClient(blobName)
 	return blobURLWithSAS
+}
+
+func (scenarioHelper) getFileClientWithSAS(c *chk.C, shareName string, directoryOrFilePath string) *file.Client {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := fileservice.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+	shareURLWithSAS := getShareClientWithSAS(c, credential, shareName)
+	fileURLWithSAS := shareURLWithSAS.NewRootDirectoryClient().NewFileClient(directoryOrFilePath)
+	return fileURLWithSAS
 }
 
 func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) *url.URL {
@@ -655,6 +676,27 @@ func (scenarioHelper) getBlobServiceClientWithSASFromURL(c *chk.C, rawURL string
 	blobURLParts.Snapshot = ""
 
 	client, err := blobservice.NewClientWithNoCredential(blobURLParts.String(), nil)
+	c.Assert(err, chk.IsNil)
+
+	return client
+}
+
+func (scenarioHelper) getFileServiceClientWithSAS(c *chk.C) *fileservice.Client {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := fileservice.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+
+	return getFileServiceClientWithSAS(c, credential)
+}
+
+func (scenarioHelper) getFileServiceClientWithSASFromURL(c *chk.C, rawURL string) *fileservice.Client {
+	fileURLParts, err := filesas.ParseURL(rawURL)
+	c.Assert(err, chk.IsNil)
+	fileURLParts.ShareName = ""
+	fileURLParts.DirectoryOrFilePath = ""
+	fileURLParts.ShareSnapshot = ""
+
+	client, err := fileservice.NewClientWithNoCredential(fileURLParts.String(), nil)
 	c.Assert(err, chk.IsNil)
 
 	return client

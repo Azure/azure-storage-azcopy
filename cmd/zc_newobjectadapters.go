@@ -24,12 +24,14 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"time"
 )
 
 var noContentProps = emptyPropertiesAdapter{}
 var noBlobProps = emptyPropertiesAdapter{}
-var noMetdata common.Metadata = nil
+var noMetadata common.Metadata = nil
 
 // emptyPropertiesAdapter supplies empty (zero-like) values
 // for all methods in contentPropsProvider and blobPropsProvider
@@ -94,7 +96,7 @@ func (m md5OnlyAdapter) ContentMD5() []byte {
 	return m.md5
 }
 
-// blobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to the blobPropsProvider interface
+// blobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to both the blobPropsProvider and contentPropsProvider interface
 type blobPropertiesResponseAdapter struct {
 	*blob.GetPropertiesResponse
 }
@@ -205,4 +207,50 @@ func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
 
 func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
 	return common.IffNotNil(a.BlobProperties.ArchiveStatus, "")
+}
+
+// shareFilePropertiesAdapter adapts a FileGetPropertiesResponse object to both the
+// contentPropsProvider interfaces
+type shareFilePropertiesAdapter struct {
+	FileProperties *file.GetPropertiesResponse
+}
+
+func (a shareFilePropertiesAdapter) Metadata() map[string]*string {
+	return a.FileProperties.Metadata
+}
+
+func (a shareFilePropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.FileProperties.LastModified, time.Time{})
+}
+
+func (a shareFilePropertiesAdapter) FileLastWriteTime() time.Time {
+	return common.IffNotNil(a.FileProperties.FileLastWriteTime, time.Time{})
+}
+
+func (a shareFilePropertiesAdapter) ContentLength() int64 {
+	return common.IffNotNil(a.FileProperties.ContentLength, 0)
+}
+
+func (a shareFilePropertiesAdapter) CacheControl() string {
+	return common.IffNotNil(a.FileProperties.CacheControl, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentDisposition() string {
+	return common.IffNotNil(a.FileProperties.ContentDisposition, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentEncoding() string {
+	return common.IffNotNil(a.FileProperties.ContentEncoding, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentLanguage() string {
+	return common.IffNotNil(a.FileProperties.ContentLanguage, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentType() string {
+	return common.IffNotNil(a.FileProperties.ContentType, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentMD5() []byte {
+	return a.FileProperties.ContentMD5
 }
