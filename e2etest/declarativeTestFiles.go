@@ -114,6 +114,10 @@ type objectUnixStatContainer struct {
 	modTime    *time.Time
 }
 
+func (o *objectUnixStatContainer) HasTimes() bool {
+	return o != nil && (o.accessTime != nil || o.modTime != nil)
+}
+
 func (o *objectUnixStatContainer) Empty() bool {
 	if o == nil {
 		return true

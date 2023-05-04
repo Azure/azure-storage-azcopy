@@ -163,6 +163,19 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 			}
 			if file.creationProperties.lastWriteTime != nil {
 				c.AssertNoErr(os.Chtimes(destFile, time.Now(), *file.creationProperties.lastWriteTime), "set times")
+			} else if file.creationProperties.posixProperties.HasTimes() {
+				aTime, mTime := time.Now(), time.Now()
+				props := file.creationProperties.posixProperties
+
+				if props.modTime != nil {
+					mTime = *props.modTime
+				}
+
+				if props.accessTime != nil {
+					aTime = *props.accessTime
+				}
+
+				c.AssertNoErr(os.Chtimes(destFile, aTime, mTime), "set times")
 			}
 		} else if file.creationProperties.entityType == common.EEntityType.Symlink() {
 			c.Assert(file.creationProperties.symlinkTarget, notEquals(), nil)
