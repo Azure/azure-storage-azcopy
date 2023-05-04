@@ -64,6 +64,10 @@ const (
 	defaultBlobFSFileSizeInBytes = 1000
 )
 
+func pointerTo[T any](in T) *T {
+	return &in
+}
+
 // if S3_TESTS_OFF is set at all, S3 tests are disabled.
 func isS3Disabled() bool {
 	return strings.ToLower(os.Getenv("S3_TESTS_OFF")) != ""

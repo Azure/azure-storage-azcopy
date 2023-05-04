@@ -6,6 +6,7 @@ package e2etest
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
+	"time"
 )
 
 // Block/char device rep is untested due to difficulty to test
@@ -80,10 +81,6 @@ func TestPOSIX_SpecialFilesToHNS(t *testing.T) {
 
 // Block/char device rep is untested due to difficulty to test
 func TestPOSIX_SpecialFilesFromHNS(t *testing.T) {
-	ptr := func(u uint32) *uint32 {
-		return &u
-	}
-
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -100,10 +97,10 @@ func TestPOSIX_SpecialFilesFromHNS(t *testing.T) {
 		testFiles{
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
-				folder(""),
-				f("fifo", with{ posixProperties: objectUnixStatContainer{ mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFIFO) } }), // fifo should work
-				f("sock", with{ posixProperties: objectUnixStatContainer{ mode: ptr(common.DEFAULT_FILE_PERM | common.S_IFSOCK) } }), // sock should work
-				"a",
+				folder("", with{ posixProperties: objectUnixStatContainer{ modTime: pointerTo(time.Now().Add(time.Second*-5))}}),
+				f("fifo", with{ posixProperties: objectUnixStatContainer{ mode: pointerTo(uint32(common.DEFAULT_FILE_PERM | common.S_IFIFO)) } }),  // fifo should work
+				f("sock", with{ posixProperties: objectUnixStatContainer{ mode: pointerTo(uint32(common.DEFAULT_FILE_PERM | common.S_IFSOCK)) } }), // sock should work
+				f("a", with{ posixProperties: objectUnixStatContainer{ modTime: pointerTo(time.Now().Add(time.Second*-5))}}),
 				symlink("b", "a"), //symlink to real target should succeed
 				symlink("d", "c"), //symlink to nowhere should succeed
 			},
