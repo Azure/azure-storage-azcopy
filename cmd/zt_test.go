@@ -205,6 +205,12 @@ func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name s
 	return share, name
 }
 
+func getShareClient(c *chk.C, fsc *fileservice.Client) (share *share.Client, name string) {
+	name = generateShareName()
+	share = fsc.NewShareClient(name)
+	return
+}
+
 func generateAzureFileName() string {
 	return generateName(azureFilePrefix, 0)
 }
@@ -289,6 +295,21 @@ func getBlobServiceClient() *blobservice.Client {
 		panic(err)
 	}
 	client, err := blobservice.NewClientWithSharedKeyCredential(u, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+func getFileServiceClient() *fileservice.Client {
+	accountName, accountKey := getAccountAndKey()
+	u := fmt.Sprintf("https://%s.file.core.windows.net/", accountName)
+
+	credential, err := fileservice.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -388,6 +409,15 @@ func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL
 	return share, name
 }
 
+func createNewShare(c *chk.C, fsc *fileservice.Client) (share *share.Client, name string) {
+	share, name = getShareClient(c, fsc)
+
+	_, err := share.Create(ctx, nil)
+	c.Assert(err, chk.IsNil)
+
+	return share, name
+}
+
 func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
 	file, name = getAzureFileURL(c, share, prefix)
 
@@ -405,7 +435,14 @@ func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
 	accountName, accountKey := getAccountAndKey()
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
 	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRootV1(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
+	c.Assert(err, chk.IsNil)
+}
+
+func generateParentsForShareFile(c *chk.C, fileClient *file.Client) {
+	serviceClient := getFileServiceClient()
+	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileClient, serviceClient, t)
 	c.Assert(err, chk.IsNil)
 }
 

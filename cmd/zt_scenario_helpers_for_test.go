@@ -31,6 +31,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
@@ -498,6 +499,23 @@ func (scenarioHelper) generateCommonRemoteScenarioForGCP(c *chk.C, client *gcpUt
 }
 
 // create the demanded azure files
+func (scenarioHelper) generateShareFilesFromList(c *chk.C, shareClient *share.Client, fileList []string) {
+	for _, filePath := range fileList {
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(filePath)
+
+		// create parents first
+		generateParentsForShareFile(c, fileClient)
+
+		// create the file itself
+		_, err := fileClient.Create(ctx, defaultAzureFileSizeInBytes, nil)
+		c.Assert(err, chk.IsNil)
+	}
+
+	// sleep a bit so that the files' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+}
+
+// create the demanded azure files
 func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
 	for _, filePath := range fileList {
 		file := shareURL.NewRootDirectoryURL().NewFileURL(filePath)
@@ -647,6 +665,15 @@ func (scenarioHelper) getFileClientWithSAS(c *chk.C, shareName string, directory
 	shareURLWithSAS := getShareClientWithSAS(c, credential, shareName)
 	fileURLWithSAS := shareURLWithSAS.NewRootDirectoryClient().NewFileClient(directoryOrFilePath)
 	return fileURLWithSAS
+}
+
+func (scenarioHelper) getDirectoryClientWithSAS(c *chk.C, shareName string, directoryOrFilePath string) *directory.Client {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := fileservice.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+	shareURLWithSAS := getShareClientWithSAS(c, credential, shareName)
+	directoryClient := shareURLWithSAS.NewDirectoryClient(directoryOrFilePath)
+	return directoryClient
 }
 
 func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) *url.URL {

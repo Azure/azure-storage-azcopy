@@ -23,6 +23,8 @@ package cmd
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,7 +34,6 @@ import (
 
 	gcpUtils "cloud.google.com/go/storage"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/minio/minio-go"
 	chk "gopkg.in/check.v1"
 
@@ -120,26 +121,27 @@ func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
 // GetProperties does not exist on Blob, as the properties come in the list call.
 // While BlobFS could get properties in the future, it's currently disabled as BFS source S2S isn't set up right now, and likely won't be.
 func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
-	fsu := getFSU()
-	share, shareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	share, shareName := createNewShare(c, fsc)
 	fileName := generateAzureFileName()
 
-	headers := azfile.FileHTTPHeaders{
-		ContentType:        "text/random",
-		ContentEncoding:    "testEncoding",
-		ContentLanguage:    "en-US",
-		ContentDisposition: "testDisposition",
-		CacheControl:       "testCacheControl",
+	headers := file.HTTPHeaders{
+		ContentType:        to.Ptr("text/random"),
+		ContentEncoding:    to.Ptr("testEncoding"),
+		ContentLanguage:    to.Ptr("en-US"),
+		ContentDisposition: to.Ptr("testDisposition"),
+		CacheControl:       to.Ptr("testCacheControl"),
 	}
 
-	scenarioHelper{}.generateAzureFilesFromList(c, share, []string{fileName})
-	_, err := share.NewRootDirectoryURL().NewFileURL(fileName).SetHTTPHeaders(ctx, headers)
+	scenarioHelper{}.generateShareFilesFromList(c, share, []string{fileName})
+	_, err := share.NewRootDirectoryClient().NewFileClient(fileName).SetHTTPHeaders(ctx,
+		&file.SetHTTPHeadersOptions{HTTPHeaders: &headers,})
 	c.Assert(err, chk.IsNil)
-	shareURL := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+	shareURL := scenarioHelper{}.getShareClientWithSAS(c, shareName).URL()
+	fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(c, shareURL)
 
-	pipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	// first test reading from the share itself
-	traverser := newFileTraverser(&shareURL, pipeline, ctx, false, true, func(common.EntityType) {})
+	traverser := newFileTraverser(shareURL, fileServiceClientWithSAS, ctx, false, true, func(common.EntityType) {})
 
 	// embed the check into the processor for ease of use
 	seenContentType := false
@@ -163,7 +165,7 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 	// then test reading from the filename exactly, because that's a different codepath.
 	seenContentType = false
 	rawFileURLWithSAS := scenarioHelper{}.getFileClientWithSAS(c, shareName, fileName).URL()
-	fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(c, rawFileURLWithSAS)
+	fileServiceClientWithSAS = scenarioHelper{}.getFileServiceClientWithSASFromURL(c, rawFileURLWithSAS)
 	traverser = newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, false, true, func(common.EntityType) {})
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
@@ -579,9 +581,9 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 			scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
 
 			// construct an Azure file traverser
-			filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
-			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, false, func(common.EntityType) {})
+			rawFileURLWithSAS := scenarioHelper{}.getFileClientWithSAS(c, shareName, fileList[0]).URL()
+			fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(c, rawFileURLWithSAS)
+			azureFileTraverser := newFileTraverser(rawFileURLWithSAS, fileServiceClientWithSAS, ctx, false, false, func(common.EntityType) {})
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
@@ -886,9 +888,9 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		c.Assert(err, chk.IsNil)
 
 		// construct an Azure File traverser
-		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, virDirName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {})
+		rawDirectoryURLWithSAS := scenarioHelper{}.getDirectoryClientWithSAS(c, shareName, virDirName).URL()
+		fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(c, rawDirectoryURLWithSAS)
+		azureFileTraverser := newFileTraverser(rawDirectoryURLWithSAS, fileServiceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {})
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
