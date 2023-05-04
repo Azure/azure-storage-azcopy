@@ -5,10 +5,91 @@ package ste
 import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"golang.org/x/sys/unix"
+	"io"
 	"os"
 	"syscall"
 	"time"
 )
+
+// CreateFile covers the following UNIX properties:
+// File Mode, File Type
+// TODO: Consolidate and reduce duplication later
+func (bd *blobFSDownloader) CreateFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool, t FolderCreationTracker) (file io.WriteCloser, needChunks bool, err error) {
+	var sip ISourceInfoProvider
+	sip, err = newBlobSourceInfoProvider(jptm)
+	if err != nil {
+		return
+	}
+
+	unixSIP := sip.(IUNIXPropertyBearingSourceInfoProvider) // Blob may have unix properties.
+
+	err = common.CreateParentDirectoryIfNotExist(destination, t)
+	if err != nil {
+		return
+	}
+
+	// try to remove the file before we create something else over it
+	_ = os.Remove(destination)
+
+	needChunks = size > 0
+	needMakeFile := true
+	var mode = uint32(common.DEFAULT_FILE_PERM)
+	if jptm.Info().PreservePOSIXProperties && unixSIP.HasUNIXProperties() {
+		var stat common.UnixStatAdapter
+		stat, err = unixSIP.GetUNIXProperties()
+
+		if stat.Extended() {
+			if stat.StatxMask()&common.STATX_MODE == common.STATX_MODE { // We need to retain access to the file until we're well & done with it
+				mode = stat.FileMode() | common.DEFAULT_FILE_PERM
+			}
+		} else {
+			mode = stat.FileMode() | common.DEFAULT_FILE_PERM
+		}
+
+		if mode != 0 { // Folders & Symlinks are not necessary to handle
+			switch {
+			case mode&common.S_IFBLK == common.S_IFBLK || mode&common.S_IFCHR == common.S_IFCHR:
+				// the file is representative of a device and does not need to be written to
+				err = unix.Mknod(destination, mode, int(stat.RDevice()))
+
+				needChunks = false
+				needMakeFile = false
+			case mode&common.S_IFIFO == common.S_IFIFO || mode&common.S_IFSOCK == common.S_IFSOCK:
+				// the file is a pipe and does not need to be written to
+				err = unix.Mknod(destination, mode, 0)
+
+				needChunks = false
+				needMakeFile = false
+			}
+		}
+	}
+
+	if !needMakeFile {
+		return
+	}
+
+	flags := os.O_RDWR | os.O_CREATE | os.O_TRUNC
+	if writeThrough {
+		flags |= os.O_SYNC
+	}
+
+	file, err = os.OpenFile(destination, flags, os.FileMode(mode)) // os.FileMode is uint32 on Linux.
+	if err != nil {
+		return
+	}
+
+	if size == 0 {
+		return
+	}
+
+	err = syscall.Fallocate(int(file.(*os.File).Fd()), 0, 0, size)
+	if err == syscall.ENOTSUP {
+		err = file.(*os.File).Truncate(size) // err will get returned at the end
+	}
+
+	return
+}
 
 func (bd *blobFSDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (stage string, err error) {
 	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.

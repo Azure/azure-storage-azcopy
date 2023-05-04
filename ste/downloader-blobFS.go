@@ -23,6 +23,7 @@ package ste
 import (
 	"errors"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -41,6 +42,7 @@ func newBlobFSDownloader() downloader {
 
 func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
 	bd.jptm = jptm
+	bd.txInfo = jptm.Info() // Inform the downloader
 }
 
 func (bd *blobFSDownloader) Epilogue() {
@@ -110,4 +112,18 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 			return
 		}
 	})
+}
+
+func (bd *blobFSDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
+	sip, err := newBlobSourceInfoProvider(jptm)
+	if err != nil {
+		return err
+	}
+	symsip := sip.(ISymlinkBearingSourceInfoProvider) // blob always implements this
+	symlinkInfo, _ := symsip.ReadLink()
+
+	// create the link
+	err = os.Symlink(symlinkInfo, jptm.Info().Destination)
+
+	return err
 }
