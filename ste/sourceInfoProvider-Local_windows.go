@@ -4,6 +4,7 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strings"
 	"syscall"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -129,7 +129,36 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
 }
 
-func (hi HandleInfo) FileAttributes() azfile.FileAttributeFlags {
+func (hi HandleInfo) FileAttributes() file.NTFSFileAttributes {
 	// Can't shorthand it because the function name overrides.
-	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes)
+	return parseWindowsFileAttributes(hi.ByHandleFileInformation.FileAttributes)
+}
+
+func parseWindowsFileAttributes(attributes uint32) file.NTFSFileAttributes {
+	attr := file.NTFSFileAttributes{}
+	if attributes&windows.FILE_ATTRIBUTE_READONLY != 0 {
+		attr.ReadOnly = true
+	}
+	if attributes&windows.FILE_ATTRIBUTE_HIDDEN != 0 {
+		attr.Hidden = true
+	}
+	if attributes&windows.FILE_ATTRIBUTE_SYSTEM != 0 {
+		attr.System = true
+	}
+	if attributes&windows.FILE_ATTRIBUTE_ARCHIVE != 0 {
+		attr.Archive = true
+	}
+	if attributes&windows.FILE_ATTRIBUTE_TEMPORARY != 0 {
+		attr.Temporary = true
+	}
+	if attributes&windows.FILE_ATTRIBUTE_OFFLINE != 0 {
+		attr.Offline = true
+	}
+	if attributes&windows.FILE_ATTRIBUTE_NOT_CONTENT_INDEXED != 0 {
+		attr.NotContentIndexed = true
+	}
+	if attributes&windows.FILE_ATTRIBUTE_NO_SCRUB_DATA != 0 {
+		attr.NoScrubData = true
+	}
+	return attr
 }

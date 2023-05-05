@@ -24,6 +24,7 @@ import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"time"
@@ -45,6 +46,15 @@ type blobPropertiesResponseAdapter struct {
 func (a blobPropertiesResponseAdapter) LastModified() time.Time {
 	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
+
+type filePropertiesResponseAdapter struct {
+	file.GetPropertiesResponse
+}
+
+func (a filePropertiesResponseAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
 
 // remoteObjectExists takes the error returned when trying to access a remote object, sees whether is
 // a "not found" error.  If the object exists (i.e. error is nil) it returns (true, nil).  If the

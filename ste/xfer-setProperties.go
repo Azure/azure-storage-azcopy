@@ -6,14 +6,13 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
-func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func SetProperties(jptm IJobPartTransferMgr, _ pipeline.Pipeline, _ pacer) {
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytes transferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
@@ -31,7 +30,7 @@ func SetProperties(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 		case common.ELocation.BlobFS():
 			setPropertiesBlobFS(jptm)
 		case common.ELocation.File():
-			setPropertiesFile(jptm, p)
+			setPropertiesFile(jptm)
 		default:
 			panic("Attempting set-properties on invalid location: " + to.From().String())
 		}
@@ -159,11 +158,9 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 	transferDone(common.ETransferStatus.Success(), nil)
 }
 
-func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func setPropertiesFile(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
-	u, _ := url.Parse(info.Source)
-	srcFileURL := azfile.NewFileURL(*u, p)
-	_ = srcFileURL
+	srcFileClient := common.CreateShareFileClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
@@ -188,7 +185,7 @@ func setPropertiesFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		transferDone(common.ETransferStatus.Failed(), err)
 	}
 	if PropertiesToTransfer.ShouldTransferMetaData() {
-		_, err := srcFileURL.SetMetadata(jptm.Context(), metadata.ToAzFileMetadata())
+		_, err := srcFileClient.SetMetadata(jptm.Context(), &file.SetMetadataOptions{Metadata: metadata})
 		if err != nil {
 			errorHandlerForXferSetProperties(err, jptm, transferDone)
 			return
@@ -206,15 +203,6 @@ func errorHandlerForXferSetProperties(err error, jptm IJobPartTransferMgr, trans
 		errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
 		jptm.Log(pipeline.LogError, errMsg)
 		common.GetLifecycleMgr().Error(errMsg)
-		// TODO : Migrate on azfile
-	} else if strErr, ok := err.(azfile.StorageError); ok {
-		// If the status code was 403, it means there was an authentication error, and we exit.
-		// User can resume the job if completely ordered with a new sas.
-		if strErr.Response().StatusCode == http.StatusForbidden {
-			errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
-			jptm.Log(pipeline.LogError, errMsg)
-			common.GetLifecycleMgr().Error(errMsg)
-		}
 	}
 
 	// in all other cases, make the transfer as failed

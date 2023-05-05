@@ -3,9 +3,8 @@ package common
 import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 )
@@ -17,7 +16,7 @@ import (
 type GenericResourceURLParts struct {
 	location     Location // underlying location selects which URLParts we're using
 	blobURLParts blob.URLParts
-	fileURLParts azfile.FileURLParts
+	fileURLParts file.URLParts
 	bfsURLParts  azbfs.BfsURLParts
 	s3URLParts   S3URLParts
 	gcpURLParts  GCPURLParts
@@ -25,14 +24,15 @@ type GenericResourceURLParts struct {
 
 func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericResourceURLParts {
 	g := GenericResourceURLParts{location: location}
+	var err error
 
 	switch location {
 	case ELocation.Blob():
-		var err error
 		g.blobURLParts, err = blob.ParseURL(resourceURL.String())
 		PanicIfErr(err)
 	case ELocation.File():
-		g.fileURLParts = azfile.NewFileURLParts(resourceURL)
+		g.fileURLParts, err = file.ParseURL(resourceURL.String())
+		PanicIfErr(err)
 	case ELocation.BlobFS():
 		g.bfsURLParts = azbfs.NewBfsURLParts(resourceURL)
 	case ELocation.S3():
@@ -112,7 +112,7 @@ func (g GenericResourceURLParts) String() string {
 	case ELocation.Blob():
 		return g.blobURLParts.String()
 	case ELocation.File():
-		URLOut = g.fileURLParts.URL()
+		return g.fileURLParts.String()
 	case ELocation.BlobFS():
 		URLOut = g.bfsURLParts.URL()
 
@@ -131,7 +131,10 @@ func (g GenericResourceURLParts) URL() url.URL {
 		PanicIfErr(err)
 		return *parsedURL
 	case ELocation.File():
-		return g.fileURLParts.URL()
+		u := g.fileURLParts.String()
+		parsedURL, err := url.Parse(u)
+		PanicIfErr(err)
+		return *parsedURL
 	case ELocation.BlobFS():
 		return g.bfsURLParts.URL()
 	case ELocation.S3():

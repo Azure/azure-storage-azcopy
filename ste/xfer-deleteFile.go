@@ -2,14 +2,17 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
@@ -21,6 +24,7 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	}
 
 	info := jptm.Info()
+	// TODO : Get rid of url Parse here. Move to RecordChildExists
 	srcUrl, _ := url.Parse(info.Source)
 
 	// Register existence with the deletion manager. Do it now, before we make the chunk funcs,
@@ -35,8 +39,8 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 
 	if info.EntityType == common.EEntityType.Folder() {
 
-		au := azfile.NewFileURLParts(*srcUrl)
-		isFileShareRoot := au.DirectoryOrFilePath == ""
+		fileURLParts, _ := file.ParseURL(info.Source)
+		isFileShareRoot := fileURLParts.DirectoryOrFilePath == ""
 		if !isFileShareRoot {
 			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Queuing folder, to be deleted after it's children are deleted")
 			jptm.FolderDeletionManager().RequestDeletion(
@@ -70,7 +74,7 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	// Get the source file url of file to delete
 	srcUrl, _ := url.Parse(info.Source)
 
-	srcFileUrl := azfile.NewFileURL(*srcUrl, p)
+	srcFileClient := common.CreateShareFileClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
@@ -101,19 +105,20 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	// Delete the source file
 	helper := &azureFileSenderBase{}
 	err := helper.DoWithOverrideReadOnly(jptm.Context(),
-		func() (interface{}, error) { return srcFileUrl.Delete(jptm.Context()) },
-		srcFileUrl,
+		func() (interface{}, error) { return srcFileClient.Delete(jptm.Context(), nil) },
+		srcFileClient,
 		jptm.GetForceIfReadOnly())
 	if err != nil {
-		// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
-		if strErr, ok := err.(azfile.StorageError); ok {
-			if strErr.Response().StatusCode == http.StatusNotFound {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
+			if respErr.StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
 				return
 			}
 			// If the status code was 403, it means there was an authentication error and we exit.
 			// User can resume the job if completely ordered with a new sas.
-			if strErr.Response().StatusCode == http.StatusForbidden {
+			if respErr.StatusCode == http.StatusForbidden {
 				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
 				jptm.Log(pipeline.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)
@@ -127,36 +132,34 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 func doDeleteFolder(ctx context.Context, folder string, p pipeline.Pipeline, jptm IJobPartTransferMgr, logger common.ILogger) bool {
 
-	u, err := url.Parse(folder)
+	fileURLParts, err := file.ParseURL(folder)
 	if err != nil {
 		return false
 	}
 
-	loggableName := u.Path
+	loggableName := fileURLParts.DirectoryOrFilePath
 
 	logger.Log(pipeline.LogDebug, "About to attempt to delete folder "+loggableName)
 
-	dirUrl := azfile.NewDirectoryURL(*u, p)
+	directoryClient := common.CreateShareDirectoryClient(folder, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	helper := &azureFileSenderBase{}
 	err = helper.DoWithOverrideReadOnly(ctx,
-		func() (interface{}, error) { return dirUrl.Delete(ctx) },
-		dirUrl,
+		func() (interface{}, error) { return directoryClient.Delete(ctx, nil) },
+		directoryClient,
 		jptm.GetForceIfReadOnly())
 	if err == nil {
 		logger.Log(pipeline.LogInfo, "Empty folder deleted "+loggableName) // not using capitalized DELETE SUCCESSFUL here because we can't use DELETE ERROR for folder delete failures (since there may be a retry if we delete more files, but we don't know that at time of logging)
 		return true
 	}
 
-	// If the delete failed with err 404, i.e resource not found, then consider the deletion a success. (It's already gone)
-	if strErr, ok := err.(azfile.StorageError); ok {
-		if strErr.Response().StatusCode == http.StatusNotFound {
-			logger.Log(pipeline.LogDebug, "Folder already gone before call to delete "+loggableName)
-			return true
-		}
-		if strErr.ServiceCode() == azfile.ServiceCodeDirectoryNotEmpty {
-			logger.Log(pipeline.LogInfo, "Folder not deleted because it's not empty yet. Will retry if this job deletes more files from it. Folder name: "+loggableName)
-			return false
-		}
+	// If the delete failed with err 404, i.e. resource not found, then consider the deletion a success. (It's already gone)
+	if fileerror.HasCode(err, fileerror.ResourceNotFound) {
+		logger.Log(pipeline.LogDebug, "Folder already gone before call to delete "+loggableName)
+		return true
+	}
+	if fileerror.HasCode(err, fileerror.DirectoryNotEmpty) {
+		logger.Log(pipeline.LogInfo, "Folder not deleted because it's not empty yet. Will retry if this job deletes more files from it. Folder name: "+loggableName)
+		return false
 	}
 	logger.Log(pipeline.LogInfo,
 		fmt.Sprintf("Folder not deleted due to error. Will retry if this job deletes more files from it. Folder name: %s Error: %s", loggableName, err),

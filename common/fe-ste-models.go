@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"os"
 	"reflect"
@@ -1040,17 +1041,6 @@ func (m Metadata) Clone() Metadata {
 	return out
 }
 
-// ToAzFileMetadata converts metadata to azfile's metadata.
-func (m Metadata) ToAzFileMetadata() azfile.Metadata {
-	out := make(azfile.Metadata)
-
-	for k, v := range m {
-		out[k] = *v
-	}
-
-	return out
-}
-
 // FromAzFileMetadataToCommonMetadata converts azfile's metadata to common metadata.
 func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
 	out := make(Metadata)
@@ -1294,7 +1284,7 @@ type ResourceHTTPHeaders struct {
 	CacheControl       string
 }
 
-// ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
+// ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's BlobHTTPHeaders.
 func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 	return blob.HTTPHeaders{
 		BlobContentType:        &h.ContentType,
@@ -1306,15 +1296,15 @@ func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 	}
 }
 
-// ToAzFileHTTPHeaders converts ResourceHTTPHeaders to azfile's FileHTTPHeaders.
-func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
-	return azfile.FileHTTPHeaders{
-		ContentType:        h.ContentType,
+// ToFileHTTPHeaders converts ResourceHTTPHeaders to file's FileHTTPHeaders.
+func (h ResourceHTTPHeaders) ToFileHTTPHeaders() file.HTTPHeaders {
+	return file.HTTPHeaders{
+		ContentType:        &h.ContentType,
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+		ContentEncoding:    &h.ContentEncoding,
+		ContentLanguage:    &h.ContentLanguage,
+		ContentDisposition: &h.ContentDisposition,
+		CacheControl:       &h.CacheControl,
 	}
 }
 

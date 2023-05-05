@@ -3,6 +3,9 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"net/url"
 	"sync"
 
@@ -33,12 +36,11 @@ func newSecurityInfoPersistenceManager(ctx context.Context) *securityInfoPersist
 // Technically, yes, GetSDDLFromID can be used in conjunction with PutSDDL.
 // Being realistic though, GetSDDLFromID will only be called when downloading,
 // and PutSDDL will only be called when uploading/doing S2S.
-func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareURL azfile.ShareURL) (string, error) {
-	fileURLParts := azfile.NewFileURLParts(shareURL.URL())
-	fileURLParts.SAS = azfile.SASQueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
-	rawfURL := fileURLParts.URL()
+func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareClient *share.Client) (string, error) {
+	fileURLParts, err := file.ParseURL(shareClient.URL())
+	fileURLParts.SAS = filesas.QueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
 
-	sddlKey := rawfURL.String() + "|SDDL|" + sddlString
+	sddlKey := fileURLParts.String() + "|SDDL|" + sddlString
 
 	// Acquire a read lock.
 	sipm.sipmMu.RLock()
@@ -52,13 +54,13 @@ func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareURL 
 		return id.(string), nil
 	}
 
-	cResp, err := shareURL.CreatePermission(sipm.ctx, sddlString)
+	cResp, err := shareClient.CreatePermission(sipm.ctx, sddlString, nil)
 
 	if err != nil {
 		return "", err
 	}
 
-	permKey := cResp.FilePermissionKey()
+	permKey := *cResp.FilePermissionKey
 
 	sipm.sipmMu.Lock()
 	sipm.cache.Add(sddlKey, permKey)
