@@ -139,7 +139,7 @@ func prefetchVirtualMemory(virtualAddresses *memoryRangeEntry) (err error) {
 
 	// make system call to prefetch the memory range
 	hProcess, _ := syscall.GetCurrentProcess()
-	r1, _, e1 := syscall.Syscall6(procPrefetchVirtualMemory.Addr(), 4, uintptr(hProcess), 1, uintptr(unsafe.Pointer(virtualAddresses)), 0, 0, 0)
+	r1, _, e1 := syscall.SyscallN(procPrefetchVirtualMemory.Addr(), 4, uintptr(hProcess), 1, uintptr(unsafe.Pointer(virtualAddresses)), 0, 0, 0)
 
 	if r1 == 0 {
 		if e1 != 0 {
