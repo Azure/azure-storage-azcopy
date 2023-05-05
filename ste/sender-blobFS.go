@@ -26,6 +26,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -237,7 +238,9 @@ func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, e
 	}
 }
 
-func (u *blobFSSenderBase) SetPOSIXProperties() error {
+var HNSSetAccessControlFailedOnce = &sync.Once{}
+
+func (u *blobFSSenderBase) SetPOSIXProperties(hnsOnly bool) error {
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
 		return fmt.Errorf("failed to get POSIX properties")
@@ -249,12 +252,57 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 	common.AddStatToBlobMetadata(adapter, meta)
 	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
-	_, err = u.GetBlobURL().SetMetadata(u.jptm.Context(), meta, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
-	return err
+	var AccessControlURL interface {SetAccessControl(ctx context.Context, permissions azbfs.BlobFSAccessControl) (*azbfs.PathUpdateResponse, error)}
+	switch u.SendableEntityType() {
+	case common.EEntityType.File(), common.EEntityType.Symlink():
+		AccessControlURL = u.fileURL()
+	case common.EEntityType.Folder():
+		AccessControlURL = u.dirURL()
+	}
+
+	isRoot := false
+	if dURL, ok := AccessControlURL.(azbfs.DirectoryURL); ok {
+		if dURL.IsFileSystemRoot() {
+			isRoot = true
+		}
+	}
+
+	if !hnsOnly && !isRoot { // don't try to set metadata on the container
+		_, err = u.GetBlobURL().SetMetadata(u.jptm.Context(), meta, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	mode := adapter.FileMode()
+	fields := []uint32{common.S_IRUSR, common.S_IWUSR, common.S_IXUSR, common.S_IRGRP, common.S_IWGRP, common.S_IXGRP, common.S_IROTH, common.S_IWOTH, common.S_IXOTH }
+	chars := "rwx"
+	out := ""
+	for _, field := range fields {
+		if mode & field == field {
+			out += string(chars[len(out) % 3])
+		} else {
+			out += "-"
+		}
+	}
+
+	_, err = AccessControlURL.SetAccessControl(u.jptm.Context(), azbfs.BlobFSAccessControl{
+		Owner: fmt.Sprint(adapter.Owner()),
+		Group: fmt.Sprint(adapter.Group()),
+		Permissions: out,
+	})
+	if err != nil { // A user could be targeting a non-HNS account with the dfs endpoint; it's best to warn rather than fail.
+		u.jptm.LogAtLevelForCurrentTransfer(pipeline.LogError, fmt.Sprintf("Failed to set dfs owner/group: %s", err.Error()))
+		HNSSetAccessControlFailedOnce.Do(func() {
+			common.GetLifecycleMgr().Info("One or more files or directories have failed to set access control; check the logs for details. (are you targeting a non-HNS account?)")
+		})
+	}
+
+	return nil
 }
 
 func (u *blobFSSenderBase) SetFolderProperties() error {
-	return u.SetPOSIXProperties()
+	return u.SetPOSIXProperties(false)
 }
 
 func (u *blobFSSenderBase) DirUrlToString() string {
@@ -295,6 +343,9 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 		nil, // dfs doesn't support tags
 		azblob.ClientProvidedKeyOptions{}, // cpk isn't used for dfs
 		azblob.ImmutabilityPolicyOptions{}) // dfs doesn't support immutability policy
+	if err != nil {
+		return err
+	}
 
-	return err
+	return u.SetPOSIXProperties(true) // set only the HNS props
 }

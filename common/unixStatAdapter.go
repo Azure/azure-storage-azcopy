@@ -324,15 +324,15 @@ const ( // Values cloned from x/sys/unix to avoid dependency
 	S_IFIFO  = 0x1000
 	S_IFLNK  = 0xa000
 
-	S_IRUSR = 0x400
-	S_IWUSR = 0x200
-	S_IXUSR = 0x100
-	S_IRGRP = 0x040
-	S_IWGRP = 0x020
-	S_IXGRP = 0x010
-	S_IROTH = 0x004
-	S_IWOTH = 0x002
-	S_IXOTH = 0x001
+	S_IRUSR = 0400
+	S_IWUSR = 0200
+	S_IXUSR = 0100
+	S_IRGRP = 0040
+	S_IWGRP = 0020
+	S_IXGRP = 0010
+	S_IROTH = 0004
+	S_IWOTH = 0002
+	S_IXOTH = 0001
 
 	S_ALLPERM = 0x777
 )
