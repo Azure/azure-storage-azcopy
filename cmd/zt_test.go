@@ -840,7 +840,7 @@ func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, c
 }
 
 func getShareClientWithSAS(c *chk.C, credential *file.SharedKeyCredential, shareName string) *share.Client {
-	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s",
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s",
 		credential.AccountName(), shareName)
 	client, err := share.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 
