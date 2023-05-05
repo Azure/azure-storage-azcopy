@@ -44,7 +44,7 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer 
 				return
 			} else {
 				err = os.Remove(info.Destination)
-				if err != nil {
+				if err != nil && !os.IsNotExist(err) { // should not get back a non-existent error, but if we do, it's not a bad thing.
 					jptm.FailActiveSend("deleting old file", err)
 					jptm.ReportTransferDone()
 					return
@@ -53,7 +53,7 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer 
 		}
 	} else {
 		err := os.Remove(info.Destination)
-		if err != nil {
+		if err != nil && !os.IsNotExist(err) { // it's OK to fail because it doesn't exist.
 			jptm.FailActiveSend("deleting old file", err)
 			jptm.ReportTransferDone()
 			return

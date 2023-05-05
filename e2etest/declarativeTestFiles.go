@@ -208,7 +208,7 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]string) {
 
 	if o.modTime != nil {
 		mask |= common.STATX_MTIME
-		metadata[common.POSIXModTimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
+		metadata[common.POSIXModTimeMeta] = strconv.FormatInt(o.modTime.UnixNano(), 10)
 	}
 
 	metadata[common.LINUXStatxMaskMeta] = strconv.FormatUint(uint64(mask), 10)
