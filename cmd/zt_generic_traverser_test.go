@@ -728,7 +728,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 		// construct an Azure File traverser
 		rawShareURLWithSAS := scenarioHelper{}.getShareClientWithSAS(c, shareName).URL()
-		fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(c, rawContainerURLWithSAS)
+		fileServiceClientWithSAS := scenarioHelper{}.getFileServiceClientWithSASFromURL(c, rawShareURLWithSAS)
 		azureFileTraverser := newFileTraverser(rawShareURLWithSAS, fileServiceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {})
 
 		// invoke the file traversal with a dummy processor
