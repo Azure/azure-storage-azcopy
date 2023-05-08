@@ -34,7 +34,7 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 		attribs := uint32(propHolder.FileAttributes())
 
 		xattrbuf := make([]byte, 4)
-		binary.LittleEndian.PutUint32(xattrbuf, uint32(attribs))
+		binary.LittleEndian.PutUint32(xattrbuf, fileAttributesToUint32(attribs))
 
 		err := xattr.Set(txInfo.Destination, common.CIFS_XATTR_ATTRIB, xattrbuf)
 		if err != nil {

@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
 	"sync"
 	"time"
@@ -32,11 +33,19 @@ import (
 )
 
 type richSMBPropertyHolder interface {
-	azfile.SMBPropertyHolder
+	CreationTime() time.Time
+	LastWriteTime() time.Time
+	Attributes() file.NTFSFileAttributes
 	FilePermissionKey() string
 	NewMetadata() azfile.Metadata
 	LastModified() time.Time
 }
+
+type fileGetPropertiesAdaptor struct {
+	file.GetPropertiesResponse
+}
+
+
 
 type contentPropsProvider interface {
 	CacheControl() string
@@ -81,6 +90,7 @@ func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, er
 	switch p.EntityType() {
 	case common.EEntityType.File():
 		fileURL := azfile.NewFileURL(*sourceURL, p.jptm.SourceProviderPipeline())
+		props, err := fileURL.GetProperties(p.ctx)
 		return fileURL.GetProperties(p.ctx)
 	case common.EEntityType.Folder():
 		dirURL := azfile.NewDirectoryURL(*sourceURL, p.jptm.SourceProviderPipeline())
@@ -105,7 +115,7 @@ func (p *fileSourceInfoProvider) getCachedProperties() (richSMBPropertyHolder, e
 func (p *fileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
 	cachedProps, err := p.getCachedProperties()
 
-	return &azfile.SMBPropertyAdapter{PropertySource: cachedProps}, err
+	return cachedProps, err
 }
 
 func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
