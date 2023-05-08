@@ -476,6 +476,11 @@ func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 				return nil
 			}
 		}
+		sErr, sErrOk := err.(azfile.StorageError)
+		if sErrOk && sErr.Response() != nil &&
+			(sErr.Response().StatusCode == http.StatusConflict) { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
+			return nil
+		}
 		return err
 	}
 
