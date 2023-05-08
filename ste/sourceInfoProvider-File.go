@@ -22,8 +22,10 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,19 +35,115 @@ import (
 )
 
 type richSMBPropertyHolder interface {
-	CreationTime() time.Time
-	LastWriteTime() time.Time
-	Attributes() file.NTFSFileAttributes
+	FileCreationTime() time.Time
+	FileLastWriteTime() time.Time
+	FileAttributes() file.NTFSFileAttributes
 	FilePermissionKey() string
-	NewMetadata() azfile.Metadata
+	Metadata() map[string]*string
 	LastModified() time.Time
 }
 
-type fileGetPropertiesAdaptor struct {
-	file.GetPropertiesResponse
+var modify = map[string]func(*file.NTFSFileAttributes){
+	"ReadOnly": func(attr *file.NTFSFileAttributes) {
+		attr.ReadOnly = true
+	},
+	"Hidden": func(attr *file.NTFSFileAttributes) {
+		attr.Hidden = true
+
+	},
+	"System": func(attr *file.NTFSFileAttributes) {
+		attr.System = true
+	},
+	"Directory": func(attr *file.NTFSFileAttributes) {
+		attr.Directory = true
+	},
+	"Archive": func(attr *file.NTFSFileAttributes) {
+		attr.Archive = true
+	},
+	"None": func(attr *file.NTFSFileAttributes) {
+		attr.None = true
+	},
+	"Temporary": func(attr *file.NTFSFileAttributes) {
+		attr.Temporary = true
+	},
+	"Offline": func(attr *file.NTFSFileAttributes) {
+		attr.Offline = true
+	},
+	"NotContentIndexed": func(attr *file.NTFSFileAttributes) {
+		attr.NotContentIndexed = true
+	},
+	"NoScrubData": func(attr *file.NTFSFileAttributes) {
+		attr.NoScrubData = true
+	},
 }
 
+func toNTFSAttributes(attr *string) file.NTFSFileAttributes {
+	result := &file.NTFSFileAttributes{}
+	if attr == nil {
+		return *result
+	}
+	attributes := strings.Split(*attr, "|")
+	for _, a := range attributes {
+		modify[a](result)
+	}
+	return *result
+}
 
+type fileGetPropertiesAdaptor struct {
+	GetProperties file.GetPropertiesResponse
+}
+
+func (f fileGetPropertiesAdaptor) FileCreationTime() time.Time {
+	return common.IffNotNil(f.GetProperties.FileCreationTime, time.Time{})
+}
+
+func (f fileGetPropertiesAdaptor) FileLastWriteTime() time.Time {
+	return common.IffNotNil(f.GetProperties.FileLastWriteTime, time.Time{})
+}
+
+func (f fileGetPropertiesAdaptor) FileAttributes() file.NTFSFileAttributes {
+	return toNTFSAttributes(f.GetProperties.FileAttributes)
+}
+
+func (f fileGetPropertiesAdaptor) FilePermissionKey() string {
+	return common.IffNotNil(f.GetProperties.FilePermissionKey, "")
+}
+
+func (f fileGetPropertiesAdaptor) Metadata() map[string]*string {
+	return f.GetProperties.Metadata
+}
+
+func (f fileGetPropertiesAdaptor) LastModified() time.Time {
+	return common.IffNotNil(f.GetProperties.LastModified, time.Time{})
+}
+
+type directoryGetPropertiesAdaptor struct {
+	GetProperties directory.GetPropertiesResponse
+}
+
+func (f directoryGetPropertiesAdaptor) FileCreationTime() time.Time {
+	return common.IffNotNil(f.GetProperties.FileCreationTime, time.Time{})
+}
+
+func (f directoryGetPropertiesAdaptor) FileLastWriteTime() time.Time {
+	return common.IffNotNil(f.GetProperties.FileLastWriteTime, time.Time{})
+}
+
+func (f directoryGetPropertiesAdaptor) FileAttributes() file.NTFSFileAttributes {
+	return toNTFSAttributes(f.GetProperties.FileAttributes)
+}
+
+func (f directoryGetPropertiesAdaptor) FilePermissionKey() string {
+	return common.IffNotNil(f.GetProperties.FilePermissionKey, "")
+}
+
+func (f directoryGetPropertiesAdaptor) Metadata() map[string]*string {
+	return f.GetProperties.Metadata
+}
+
+func (f directoryGetPropertiesAdaptor) LastModified() time.Time {
+	return common.IffNotNil(f.GetProperties.LastModified, time.Time{})
+}
 
 type contentPropsProvider interface {
 	CacheControl() string
@@ -78,23 +176,20 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 }
 
 func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, error) {
-	presigned, err := p.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-	sourceURL, err := url.Parse(presigned)
+	source, err := p.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
 	}
 
 	switch p.EntityType() {
 	case common.EEntityType.File():
-		fileURL := azfile.NewFileURL(*sourceURL, p.jptm.SourceProviderPipeline())
-		props, err := fileURL.GetProperties(p.ctx)
-		return fileURL.GetProperties(p.ctx)
+		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+		props, err := fileClient.GetProperties(p.ctx, nil)
+		return &fileGetPropertiesAdaptor{props}, err
 	case common.EEntityType.Folder():
-		dirURL := azfile.NewDirectoryURL(*sourceURL, p.jptm.SourceProviderPipeline())
-		return dirURL.GetProperties(p.ctx)
+		directoryClient := common.CreateShareDirectoryClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+		props, err := directoryClient.GetProperties(p.ctx, nil)
+		return &directoryGetPropertiesAdaptor{props}, err
 	default:
 		panic("unexpected case")
 	}
@@ -174,12 +269,12 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 					CacheControl:       fileProps.CacheControl(),
 					ContentMD5:         fileProps.ContentMD5(),
 				},
-				SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+				SrcMetadata: properties.Metadata(),
 			}
 		case common.EEntityType.Folder():
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{}, // no contentType etc for folders
-				SrcMetadata:    common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+				SrcMetadata:    properties.Metadata(),
 			}
 		default:
 			panic("unsupported entity type")
