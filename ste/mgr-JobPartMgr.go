@@ -652,6 +652,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
+	// Create pipeline for Azure File.
+	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
+		common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileNone():
+
 	default:
 		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}
