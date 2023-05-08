@@ -38,6 +38,12 @@ type richSMBPropertyHolder interface {
 	FilePermissionKey() string
 	Metadata() map[string]*string
 	LastModified() time.Time
+	CacheControl() string
+	ContentDisposition() string
+	ContentEncoding() string
+	ContentLanguage() string
+	ContentType() string
+	ContentMD5() []byte
 }
 
 var modify = map[string]func(*file.NTFSFileAttributes){
@@ -90,6 +96,30 @@ type fileGetPropertiesAdaptor struct {
 	GetProperties file.GetPropertiesResponse
 }
 
+func (f fileGetPropertiesAdaptor) CacheControl() string {
+	return common.IffNotNil(f.GetProperties.CacheControl, "")
+}
+
+func (f fileGetPropertiesAdaptor) ContentDisposition() string {
+	return common.IffNotNil(f.GetProperties.ContentDisposition, "")
+}
+
+func (f fileGetPropertiesAdaptor) ContentEncoding() string {
+	return common.IffNotNil(f.GetProperties.ContentEncoding, "")
+}
+
+func (f fileGetPropertiesAdaptor) ContentLanguage() string {
+	return common.IffNotNil(f.GetProperties.ContentLanguage, "")
+}
+
+func (f fileGetPropertiesAdaptor) ContentType() string {
+	return common.IffNotNil(f.GetProperties.ContentType, "")
+}
+
+func (f fileGetPropertiesAdaptor) ContentMD5() []byte {
+	return f.GetProperties.ContentMD5
+}
+
 func (f fileGetPropertiesAdaptor) FileCreationTime() time.Time {
 	return common.IffNotNil(f.GetProperties.FileCreationTime, time.Time{})
 }
@@ -118,6 +148,30 @@ type directoryGetPropertiesAdaptor struct {
 	GetProperties directory.GetPropertiesResponse
 }
 
+func (e directoryGetPropertiesAdaptor) CacheControl() string {
+	return ""
+}
+
+func (e directoryGetPropertiesAdaptor) ContentDisposition() string {
+	return ""
+}
+
+func (e directoryGetPropertiesAdaptor) ContentEncoding() string {
+	return ""
+}
+
+func (e directoryGetPropertiesAdaptor) ContentLanguage() string {
+	return ""
+}
+
+func (e directoryGetPropertiesAdaptor) ContentType() string {
+	return ""
+}
+
+func (e directoryGetPropertiesAdaptor) ContentMD5() []byte {
+	return make([]byte, 0)
+}
+
 func (f directoryGetPropertiesAdaptor) FileCreationTime() time.Time {
 	return common.IffNotNil(f.GetProperties.FileCreationTime, time.Time{})
 }
@@ -140,15 +194,6 @@ func (f directoryGetPropertiesAdaptor) Metadata() map[string]*string {
 
 func (f directoryGetPropertiesAdaptor) LastModified() time.Time {
 	return common.IffNotNil(f.GetProperties.LastModified, time.Time{})
-}
-
-type contentPropsProvider interface {
-	CacheControl() string
-	ContentDisposition() string
-	ContentEncoding() string
-	ContentLanguage() string
-	ContentType() string
-	ContentMD5() []byte
 }
 
 // Source info provider for Azure blob
@@ -255,15 +300,14 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 
 		switch p.EntityType() {
 		case common.EEntityType.File():
-			fileProps := properties.(contentPropsProvider)
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
-					ContentType:        fileProps.ContentType(),
-					ContentEncoding:    fileProps.ContentEncoding(),
-					ContentDisposition: fileProps.ContentDisposition(),
-					ContentLanguage:    fileProps.ContentLanguage(),
-					CacheControl:       fileProps.CacheControl(),
-					ContentMD5:         fileProps.ContentMD5(),
+					ContentType:        properties.ContentType(),
+					ContentEncoding:    properties.ContentEncoding(),
+					ContentDisposition: properties.ContentDisposition(),
+					ContentLanguage:    properties.ContentLanguage(),
+					CacheControl:       properties.CacheControl(),
+					ContentMD5:         properties.ContentMD5(),
 				},
 				SrcMetadata: properties.Metadata(),
 			}
