@@ -6,6 +6,7 @@ package ste
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -28,10 +29,10 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	// Set 32-bit FileAttributes for the file.
 	setAttributes := func() error {
 		// This is a safe conversion.
-		attribs := uint32(propHolder.FileAttributes())
+		attribs := fileAttributesToUint32(propHolder.FileAttributes())
 
 		xattrbuf := make([]byte, 4)
-		binary.LittleEndian.PutUint32(xattrbuf, fileAttributesToUint32(attribs))
+		binary.LittleEndian.PutUint32(xattrbuf, attribs)
 
 		err := xattr.Set(txInfo.Destination, common.CIFS_XATTR_ATTRIB, xattrbuf)
 		if err != nil {
