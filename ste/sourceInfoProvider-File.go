@@ -24,12 +24,9 @@ import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -226,17 +223,16 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 
 	// Call into SIPM and grab our SDDL string.
 	sipm := p.jptm.SecurityInfoPersistenceManager()
-	presigned, err := p.PreSignedSourceURL()
+	source, err := p.PreSignedSourceURL()
 	if err != nil {
 		return "", err
 	}
-	sourceURL, err := url.Parse(presigned)
+	fURLParts, err := file.ParseURL(source)
 	if err != nil {
 		return "", err
 	}
-	fURLParts := azfile.NewFileURLParts(*sourceURL)
 	fURLParts.DirectoryOrFilePath = ""
-	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.URL(), p.jptm.SourceProviderPipeline())
+	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.String(), p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 
 	return sddlString, err
 }

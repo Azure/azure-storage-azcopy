@@ -17,7 +17,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type IJobPartTransferMgr interface {
@@ -845,8 +844,6 @@ func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
 		return respErr.StatusCode, respErr.RawResponse.Status
 	}
 	switch e := err.(type) {
-	case azfile.StorageError:
-		return e.Response().StatusCode, e.Response().Status
 	case azbfs.StorageError:
 		return e.Response().StatusCode, e.Response().Status
 	default:

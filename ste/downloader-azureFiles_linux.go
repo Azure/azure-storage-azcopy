@@ -6,15 +6,12 @@ package ste
 import (
 	"encoding/binary"
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/pkg/xattr"
 	"golang.org/x/sys/unix"
 )
@@ -219,11 +216,10 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 
 // TODO: this method may become obsolete if/when we are able to get permissions from the share root
 func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
-	u, err := url.Parse(source)
+	f, err := file.ParseURL(source)
 	if err != nil {
 		return false
 	}
-	f := azfile.NewFileURLParts(*u)
 	path := f.DirectoryOrFilePath
 	sep := common.DeterminePathSeparator(path)
 	splitPath := strings.Split(strings.Trim(path, sep), sep)

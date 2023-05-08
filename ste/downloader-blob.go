@@ -171,7 +171,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.NewRetryReader(enrichedContext, &blob.RetryReaderOptions{
 			MaxRetries:   int32(destWriter.MaxRetryPerDownloadBody()),
-			OnFailedRead: common.NewReadLogFunc(jptm, source),
+			OnFailedRead: common.NewBlobReadLogFunc(jptm, source),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
