@@ -87,7 +87,7 @@ func toNTFSAttributes(attr *string) file.NTFSFileAttributes {
 	}
 	attributes := strings.Split(*attr, "|")
 	for _, a := range attributes {
-		modify[a](result)
+		modify[strings.TrimSpace(a)](result)
 	}
 	return *result
 }
