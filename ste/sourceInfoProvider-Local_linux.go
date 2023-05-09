@@ -229,5 +229,5 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 
 func (hi HandleInfo) FileAttributes() file.NTFSFileAttributes {
 	// Can't shorthand it because the function name overrides.
-	return fileAttributesFromUint32(hi.ByHandleFileInformation.FileAttributes)
+	return FileAttributesFromUint32(hi.ByHandleFileInformation.FileAttributes)
 }

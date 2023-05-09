@@ -17,7 +17,7 @@ const (
 	FileAttributeNoScrubData       uint32 = 131072
 )
 
-func fileAttributesFromUint32(attributes uint32) file.NTFSFileAttributes {
+func FileAttributesFromUint32(attributes uint32) file.NTFSFileAttributes {
 	attr := file.NTFSFileAttributes{}
 	if attributes&FileAttributeReadonly != 0 {
 		attr.ReadOnly = true

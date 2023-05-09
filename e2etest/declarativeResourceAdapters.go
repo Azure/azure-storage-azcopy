@@ -22,8 +22,11 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"time"
 )
 
 func sval(s *string) string {
@@ -62,8 +65,11 @@ type filesResourceAdapter struct {
 	obj *testObject
 }
 
-func (a filesResourceAdapter) toHeaders(c asserter, share azfile.ShareURL) azfile.FileHTTPHeaders {
-	headers := azfile.FileHTTPHeaders{}
+func (a filesResourceAdapter) toHeaders(c asserter, shareClient *share.Client) (*file.HTTPHeaders, *file.NTFSFileAttributes, *file.Permissions, *time.Time) {
+	headers := file.HTTPHeaders{}
+	attributes := file.NTFSFileAttributes{}
+	permissions := file.Permissions{}
+	lastWriteTime := time.Time{}
 
 	if a.obj.creationProperties.smbPermissionsSddl != nil {
 		parsedSDDL, err := sddl.ParseSDDL(*a.obj.creationProperties.smbPermissionsSddl)
@@ -72,47 +78,41 @@ func (a filesResourceAdapter) toHeaders(c asserter, share azfile.ShareURL) azfil
 		var permKey string
 
 		if len(parsedSDDL.PortableString()) > 8000 {
-			createPermResp, err := share.CreatePermission(ctx, parsedSDDL.PortableString())
+			createPermResp, err := shareClient.CreatePermission(ctx, parsedSDDL.PortableString(), nil)
 			c.AssertNoErr(err)
 
-			permKey = createPermResp.FilePermissionKey()
+			permKey = *createPermResp.FilePermissionKey
 		}
-
-		var smbprops azfile.SMBProperties
 
 		if permKey != "" {
-			smbprops.PermissionKey = &permKey
+			permissions.PermissionKey = &permKey
 		} else {
 			perm := parsedSDDL.PortableString()
-			smbprops.PermissionString = &perm
+			permissions.Permission = &perm
 		}
-
-		headers.SMBProperties = smbprops
 	}
 
 	if a.obj.creationProperties.smbAttributes != nil {
-		attribs := azfile.FileAttributeFlags(*a.obj.creationProperties.smbAttributes)
-		headers.SMBProperties.FileAttributes = &attribs
+		attributes = ste.FileAttributesFromUint32(*a.obj.creationProperties.smbAttributes)
 	}
 
 	if a.obj.creationProperties.lastWriteTime != nil {
-		lwt := *a.obj.creationProperties.lastWriteTime
-		headers.SMBProperties.FileLastWriteTime = &lwt
+		lastWriteTime = *a.obj.creationProperties.lastWriteTime
 	}
 
 	props := a.obj.creationProperties.contentHeaders
 	if props == nil {
-		return headers
+		return &headers, &attributes, &permissions, &lastWriteTime
 	}
 
-	headers.ContentType = sval(props.contentType)
+	headers.ContentType = props.contentType
 	headers.ContentMD5 = props.contentMD5
-	headers.ContentEncoding = sval(props.contentEncoding)
-	headers.ContentLanguage = sval(props.contentLanguage)
-	headers.ContentDisposition = sval(props.contentDisposition)
-	headers.CacheControl = sval(props.cacheControl)
+	headers.ContentEncoding = props.contentEncoding
+	headers.ContentLanguage = props.contentLanguage
+	headers.ContentDisposition = props.contentDisposition
+	headers.CacheControl = props.cacheControl
 
-	return headers
+	return &headers, &attributes, &permissions, &lastWriteTime
 }
 
 func (a filesResourceAdapter) toMetadata() map[string]string {

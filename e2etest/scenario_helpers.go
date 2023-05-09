@@ -36,6 +36,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/google/uuid"
 	"io"
 	"net/url"
@@ -52,7 +55,6 @@ import (
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 const defaultFileSize = 1024
@@ -306,15 +308,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, filesyst
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, shareURL azfile.ShareURL, prefix string) (fileList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, shareClient *share.Client, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, fileName1 := createNewAzureFile(c, shareURL, prefix+"top")
-		_, fileName2 := createNewAzureFile(c, shareURL, prefix+"sub1/")
-		_, fileName3 := createNewAzureFile(c, shareURL, prefix+"sub2/")
-		_, fileName4 := createNewAzureFile(c, shareURL, prefix+"sub1/sub3/sub5/")
-		_, fileName5 := createNewAzureFile(c, shareURL, prefix+specialNames[i])
+		_, fileName1 := createNewAzureFile(c, shareClient, prefix+"top")
+		_, fileName2 := createNewAzureFile(c, shareClient, prefix+"sub1/")
+		_, fileName3 := createNewAzureFile(c, shareClient, prefix+"sub2/")
+		_, fileName4 := createNewAzureFile(c, shareClient, prefix+"sub1/sub3/sub5/")
+		_, fileName5 := createNewAzureFile(c, shareClient, prefix+specialNames[i])
 
 		fileList[5*i] = fileName1
 		fileList[5*i+1] = fileName2
@@ -343,14 +345,14 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serv
 	}
 }
 
-func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceURL azfile.ServiceURL, shareList []string, fileList []*testObject) {
+func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceClient *fileservice.Client, shareList []string, fileList []*testObject) {
 	for _, shareName := range shareList {
-		sURL := serviceURL.NewShareURL(shareName)
-		_, err := sURL.Create(ctx, azfile.Metadata{}, 0)
+		sURL := serviceClient.NewShareClient(shareName)
+		_, err := sURL.Create(ctx, nil)
 		c.AssertNoErr(err)
 
 		s.generateAzureFilesFromList(c, &generateAzureFilesFromListOptions{
-			shareURL:    sURL,
+			shareClient:    sURL,
 			fileList:    fileList,
 			defaultSize: defaultStringFileSize,
 		})
@@ -769,7 +771,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *mini
 }
 
 type generateAzureFilesFromListOptions struct {
-	shareURL    azfile.ShareURL
+	shareClient    *share.Client
 	fileList    []*testObject
 	defaultSize string
 }

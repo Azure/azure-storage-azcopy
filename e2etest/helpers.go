@@ -35,6 +35,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"io"
 	"math/rand"
 	"mime"
@@ -50,8 +54,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/minio/minio-go"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 var ctx = context.Background()
@@ -111,11 +113,10 @@ func generateFilesystemName(c asserter) string {
 	return generateName(c, blobfsPrefix, 63)
 }
 
-func getShareURL(c asserter, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+func getShareClient(c asserter, fsc *fileservice.Client) (sc *share.Client, name string) {
 	name = generateShareName(c)
-	share = fsu.NewShareURL(name)
-
-	return share, name
+	sc = fsc.NewShareClient(name)
+	return
 }
 
 func generateAzureFileName(c asserter) string {
@@ -165,10 +166,9 @@ func getPageBlobURL(c asserter, cc *container.Client, prefix string) (bc *pagebl
 	return
 }
 
-func getAzureFileURL(c asserter, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
+func getAzureFileURL(c asserter, sc *share.Client, prefix string) (fc *file.Client, name string) {
 	name = prefix + generateAzureFileName(c)
-	fileURL = shareURL.NewRootDirectoryURL().NewFileURL(name)
-
+	fc = sc.NewRootDirectoryClient().NewFileClient(name)
 	return
 }
 
@@ -224,24 +224,23 @@ func createNewBlockBlob(c asserter, cc *container.Client, prefix string) (bc *bl
 	return
 }
 
-func createNewAzureShare(c asserter, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
-	share, name = getShareURL(c, fsu)
+func createNewAzureShare(c asserter, fsc *fileservice.Client) (sc *share.Client, name string) {
+	sc, name = getShareClient(c, fsc)
 
-	cResp, err := share.Create(ctx, nil, 0)
+	_, err := sc.Create(ctx, nil)
 	c.AssertNoErr(err)
-	c.Assert(cResp.StatusCode(), equals(), 201)
-	return share, name
+
+	return
 }
 
-func createNewAzureFile(c asserter, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
-	file, name = getAzureFileURL(c, share, prefix)
+func createNewAzureFile(c asserter, sc *share.Client, prefix string) (fc *file.Client, name string) {
+	fc, name = getAzureFileURL(c, sc, prefix)
 
 	// generate parents first
-	generateParentsForAzureFile(c, file)
+	generateParentsForAzureFile(c, fc)
 
-	cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
+	_, err := fc.Create(ctx, defaultAzureFileSizeInBytes, nil)
 	c.AssertNoErr(err)
-	c.Assert(cResp.StatusCode(), equals(), 201)
 
 	return
 }
@@ -250,10 +249,24 @@ func newNullFolderCreationTracker() ste.FolderCreationTracker {
 	return ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 }
 
-func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
+func getFileServiceClient() *fileservice.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
-	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRootV1(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), newNullFolderCreationTracker())
+	u := fmt.Sprintf("https://%s.file.core.windows.net/", accountName)
+
+	credential, err := fileservice.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+func generateParentsForAzureFile(c asserter, fc *file.Client) {
+	fsc := getFileServiceClient()
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fc, fsc, newNullFolderCreationTracker())
 	c.AssertNoErr(err)
 }
 
@@ -404,18 +417,16 @@ func cleanBlobAccount(c asserter, sc *blobservice.Client) {
 	}
 }
 
-func cleanFileAccount(c asserter, serviceURL azfile.ServiceURL) {
-	marker := azfile.Marker{}
-	for marker.NotDone() {
-		resp, err := serviceURL.ListSharesSegment(ctx, marker, azfile.ListSharesOptions{})
+func cleanFileAccount(c asserter, sc *fileservice.Client) {
+	pager := sc.NewListSharesPager(nil)
+	for pager.More() {
+		resp, err := pager.NextPage(ctx)
 		c.AssertNoErr(err)
 
-		for _, v := range resp.ShareItems {
-			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
+		for _, v := range resp.Shares {
+			_, err = sc.NewShareClient(*v.Name).Delete(ctx, nil)
 			c.AssertNoErr(err)
 		}
-
-		marker = resp.NextMarker
 	}
 
 	time.Sleep(time.Minute)
