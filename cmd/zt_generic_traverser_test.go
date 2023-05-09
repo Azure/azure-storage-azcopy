@@ -148,11 +148,11 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 	processor := func(object StoredObject) error {
 		if object.entityType == common.EEntityType.File() {
 			// test all attributes (but only for files, since folders don't have them)
-			c.Assert(object.contentType, chk.Equals, headers.ContentType)
-			c.Assert(object.contentEncoding, chk.Equals, headers.ContentEncoding)
-			c.Assert(object.contentLanguage, chk.Equals, headers.ContentLanguage)
-			c.Assert(object.contentDisposition, chk.Equals, headers.ContentDisposition)
-			c.Assert(object.cacheControl, chk.Equals, headers.CacheControl)
+			c.Assert(object.contentType, chk.Equals, *headers.ContentType)
+			c.Assert(object.contentEncoding, chk.Equals, *headers.ContentEncoding)
+			c.Assert(object.contentLanguage, chk.Equals, *headers.ContentLanguage)
+			c.Assert(object.contentDisposition, chk.Equals, *headers.ContentDisposition)
+			c.Assert(object.cacheControl, chk.Equals, *headers.CacheControl)
 			seenContentType = true
 		}
 		return nil

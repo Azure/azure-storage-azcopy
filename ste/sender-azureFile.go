@@ -494,73 +494,6 @@ func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []str
 	})
 }
 
-// getParentDirectoryClient gets parent directory URL of an Azure FileURL.
-func (AzureFileParentDirCreator) getParentDirectoryClient(uh URLHolder, serviceClient *fileservice.Client) (*share.Client, *directory.Client, error) {
-	rawURL, _ := url.Parse(uh.URL())
-	directoryURLParts, err := filesas.ParseURL(rawURL.String())
-	if err != nil {
-		return nil, nil, err
-	}
-	directoryOrFilePath := directoryURLParts.DirectoryOrFilePath[:strings.LastIndex(directoryURLParts.DirectoryOrFilePath, "/")]
-	shareClient := serviceClient.NewShareClient(directoryURLParts.ShareName)
-	if directoryURLParts.ShareSnapshot != "" {
-		shareClient, err = shareClient.WithSnapshot(directoryURLParts.ShareSnapshot)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	return shareClient, shareClient.NewRootDirectoryClient().NewSubdirectoryClient(directoryOrFilePath), nil
-}
-
-// CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileClient *file.Client, serviceClient *fileservice.Client, t FolderCreationTracker) error {
-	shareClient, directoryClient, err := d.getParentDirectoryClient(fileClient, serviceClient)
-	if err != nil {
-		return err
-	}
-	return d.CreateDirToRoot(ctx, shareClient, directoryClient, t)
-}
-
-// CreateDirToRoot Creates the dir (and parents as necessary) if it does not exist
-func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareClient *share.Client, directoryClient *directory.Client, t FolderCreationTracker) error {
-	directoryURLParts, err := filesas.ParseURL(directoryClient.URL())
-	if err != nil {
-		return err
-	}
-	if _, err := directoryClient.GetProperties(ctx, nil); err != nil {
-		var respErr *azcore.ResponseError
-		if errors.As(err, &respErr) && (respErr.StatusCode == http.StatusNotFound || respErr.StatusCode == http.StatusForbidden) {
-			// Either the parent directory does not exist, or we may not have read permissions.
-			// Try to create the parent directories. Split directories as segments.
-			segments := d.splitWithoutToken(directoryURLParts.DirectoryOrFilePath, '/')
-
-			currDirClient := shareClient.NewRootDirectoryClient() // Share directory should already exist, doesn't support creating share
-			// Try to create the directories
-			for i := 0; i < len(segments); i++ {
-				currDirClient = currDirClient.NewSubdirectoryClient(segments[i])
-				rawURL := currDirClient.URL()
-				recorderURL, err := url.Parse(rawURL)
-				if err != nil {
-					return err
-				}
-				recorderURL.RawQuery = ""
-				err = t.CreateFolder(recorderURL.String(), func() error {
-					_, err := currDirClient.Create(ctx, nil)
-					return err
-				})
-				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
-					return verifiedErr
-				}
-			}
-		} else {
-			return err
-		}
-	}
-
-	// Directly return if parent directory exists.
-	return nil
-}
-
 // getParentDirectoryURLV1 gets parent directory URL of an Azure FileURL.
 func (AzureFileParentDirCreator) getParentDirectoryURLV1(uh URLHolderV1, p pipeline.Pipeline) azfile.DirectoryURL {
 	u := uh.URL()
@@ -594,6 +527,75 @@ func (d AzureFileParentDirCreator) CreateDirToRootV1(ctx context.Context, dirURL
 				recorderURL.RawQuery = ""
 				err = t.CreateFolder(recorderURL.String(), func() error {
 					_, err := curDirURL.Create(ctx, azfile.Metadata{}, azfile.SMBProperties{})
+					return err
+				})
+				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
+					return verifiedErr
+				}
+			}
+		} else {
+			return err
+		}
+	}
+
+	// Directly return if parent directory exists.
+	return nil
+}
+
+// getParentDirectoryClient gets parent directory URL of an Azure FileURL.
+func (AzureFileParentDirCreator) getParentDirectoryClient(uh URLHolder, serviceClient *fileservice.Client) (*share.Client, *directory.Client, error) {
+	rawURL, _ := url.Parse(uh.URL())
+	rawURL.Path = rawURL.Path[:strings.LastIndex(rawURL.Path, "/")]
+	directoryURLParts, err := filesas.ParseURL(rawURL.String())
+	if err != nil {
+		return nil, nil, err
+	}
+	directoryOrFilePath := directoryURLParts.DirectoryOrFilePath
+	shareClient := serviceClient.NewShareClient(directoryURLParts.ShareName)
+	if directoryURLParts.ShareSnapshot != "" {
+		shareClient, err = shareClient.WithSnapshot(directoryURLParts.ShareSnapshot)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return shareClient, shareClient.NewRootDirectoryClient().NewSubdirectoryClient(directoryOrFilePath), nil
+}
+
+// CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
+func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileClient *file.Client, serviceClient *fileservice.Client, t FolderCreationTracker) error {
+	shareClient, directoryClient, err := d.getParentDirectoryClient(fileClient, serviceClient)
+	if err != nil {
+		return err
+	}
+	return d.CreateDirToRoot(ctx, shareClient, directoryClient, t)
+}
+
+// CreateDirToRoot Creates the dir (and parents as necessary) if it does not exist
+func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareClient *share.Client, directoryClient *directory.Client, t FolderCreationTracker) error {
+	directoryURLParts, err := filesas.ParseURL(directoryClient.URL())
+	if err != nil {
+		return err
+	}
+	if _, err := directoryClient.GetProperties(ctx, nil); err != nil {
+		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
+			(resp.Response().StatusCode == http.StatusNotFound ||
+				resp.Response().StatusCode == http.StatusForbidden) {
+			// Either the parent directory does not exist, or we may not have read permissions.
+			// Try to create the parent directories. Split directories as segments.
+			segments := d.splitWithoutToken(directoryURLParts.DirectoryOrFilePath, '/')
+
+			currDirClient := shareClient.NewRootDirectoryClient() // Share directory should already exist, doesn't support creating share
+			// Try to create the directories
+			for i := 0; i < len(segments); i++ {
+				currDirClient = currDirClient.NewSubdirectoryClient(segments[i])
+				rawURL := currDirClient.URL()
+				recorderURL, err := url.Parse(rawURL)
+				if err != nil {
+					return err
+				}
+				recorderURL.RawQuery = ""
+				err = t.CreateFolder(recorderURL.String(), func() error {
+					_, err := currDirClient.Create(ctx, nil)
 					return err
 				})
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
