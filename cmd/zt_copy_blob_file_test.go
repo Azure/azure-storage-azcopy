@@ -31,7 +31,7 @@ import (
 // TestBlobAccountCopyToFileShareS2S actually ends up testing the entire account->container scenario as that is not dependent on destination or source.
 func (s *cmdIntegrationSuite) TestBlobAccountCopyToFileShareS2S(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// Ensure no containers with similar naming schemes exist
 	cleanBlobAccount(c, bsc)
@@ -58,7 +58,7 @@ func (s *cmdIntegrationSuite) TestBlobAccountCopyToFileShareS2S(c *chk.C) {
 	}
 
 	// generate destination share
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, dstShareURL)
 
 	// initialize mocked RPC
@@ -84,14 +84,14 @@ func (s *cmdIntegrationSuite) TestBlobAccountCopyToFileShareS2S(c *chk.C) {
 // TestBlobCopyToFileS2SImplicitDstShare uses a service-level URL on the destination to implicitly create the destination share.
 func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SImplicitDstShare(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// create source container
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, srcContainerClient)
 
 	// prepare a destination container URL to be deleted.
-	dstShareURL := fsu.NewShareURL(srcContainerName)
+	dstShareURL := fsc.NewShareClient(srcContainerName)
 	defer deleteShare(c, dstShareURL)
 
 	// create a scenario on the source container
@@ -113,7 +113,7 @@ func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SImplicitDstShare(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil) // Check there was no error
 
-		_, err = dstShareURL.GetProperties(ctx)
+		_, err = dstShareURL.GetProperties(ctx, nil)
 		c.Assert(err, chk.IsNil) // Ensure the destination share exists
 
 		// Ensure the transfers were scheduled
@@ -123,10 +123,10 @@ func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SImplicitDstShare(c *chk.C) {
 
 func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteContainer(c, srcContainerClient)
 	defer deleteShare(c, dstShareURL)
 
@@ -179,11 +179,11 @@ func (s *cmdIntegrationSuite) TestBlobCopyToFileS2SWithSingleFile(c *chk.C) {
 
 func (s *cmdIntegrationSuite) TestContainerToShareCopyS2S(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// Create source container and destination share, schedule their deletion
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteContainer(c, srcContainerClient)
 	defer deleteShare(c, dstShareURL)
 
@@ -223,11 +223,11 @@ func (s *cmdIntegrationSuite) TestContainerToShareCopyS2S(c *chk.C) {
 
 func (s *cmdIntegrationSuite) TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// generate source container and destination fileshare
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteContainer(c, srcContainerClient)
 	defer deleteShare(c, dstShareURL)
 
@@ -288,11 +288,11 @@ func (s *cmdIntegrationSuite) TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(c 
 
 func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// generate source container and destination fileshare
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteContainer(c, srcContainerClient)
 	defer deleteShare(c, dstShareURL)
 
@@ -350,11 +350,11 @@ func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(
 
 func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SIncludeExcludeMix(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// generate source container and destination fileshare
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteContainer(c, srcContainerClient)
 	defer deleteShare(c, dstShareURL)
 
@@ -405,11 +405,11 @@ func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SIncludeExcludeMix(c *chk.C) {
 
 func (s *cmdIntegrationSuite) TestBlobToFileCopyS2SWithDirectory(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// create container and share
 	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteContainer(c, srcContainerClient)
 	defer deleteShare(c, dstShareURL)
 

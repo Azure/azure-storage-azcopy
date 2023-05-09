@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 	"os"
 	"sort"
@@ -33,9 +32,9 @@ import (
 
 // regular file->file sync
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithSingleFile(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -78,9 +77,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithSingleFile(c *chk.C) {
 
 // regular share->share sync but destination is empty, so everything has to be transferred
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithEmptyDestination(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -125,9 +124,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithEmptyDestination(c *chk.C) {
 
 // regular share->share sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestination(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -167,9 +166,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestination(c *chk.C) 
 
 // regular share->share sync where destination is missing some files from source, and also has some extra files
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithMismatchedDestination(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -210,14 +209,14 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithMismatchedDestination(c *chk.C)
 
 		// make sure the extra files were deleted
 		extraFilesFound := false
-		for marker := (azfile.Marker{}); marker.NotDone(); {
-			listResponse, err := dstShareURL.NewRootDirectoryURL().ListFilesAndDirectoriesSegment(ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
+		pager := dstShareURL.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
+		for pager.More() {
+			listResponse, err := pager.NextPage(ctx)
 			c.Assert(err, chk.IsNil)
-			marker = listResponse.NextMarker
 
 			// if ever the extra files are found, note it down
-			for _, file := range listResponse.FileItems {
-				if strings.Contains(file.Name, "extra") {
+			for _, file := range listResponse.Segment.Files {
+				if strings.Contains(*file.Name, "extra") {
 					extraFilesFound = true
 				}
 			}
@@ -229,9 +228,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithMismatchedDestination(c *chk.C)
 
 // include flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -264,9 +263,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeFlag(c *chk.C) {
 
 // exclude flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithExcludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -299,9 +298,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithExcludeFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeAndExcludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -342,9 +341,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeAndExcludeFlag(c *chk.C)
 // TODO: Fix me, passes locally (Windows and WSL2), but not on CI
 // // validate the bug fix for this scenario
 // func (s *cmdIntegrationSuite) TestFileSyncS2SWithMissingDestination(c *chk.C) {
-// 	fsu := getFSU()
-// 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-// 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+// fsc := getFileServiceClient()
+// srcShareURL, srcShareName := createNewShare(c, fsc)
+// dstShareURL, dstShareName := createNewShare(c, fsc)
 // 	defer deleteShare(c, srcShareURL)
 //
 // 	// delete the destination share to simulate non-existing destination, or recently removed destination
@@ -376,9 +375,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeAndExcludeFlag(c *chk.C)
 
 // there is a type mismatch between the source and destination
 func (s *cmdIntegrationSuite) TestFileSyncS2SMismatchShareAndFile(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -422,9 +421,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SMismatchShareAndFile(c *chk.C) {
 
 // share <-> dir sync
 func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -440,7 +439,7 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
 	// construct the raw input to simulate user input
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
 	dirName := "emptydir"
-	_, err := dstShareURL.NewDirectoryURL(dirName).Create(context.Background(), azfile.Metadata{}, azfile.SMBProperties{})
+	_, err := dstShareURL.NewDirectoryClient(dirName).Create(context.Background(), nil)
 	c.Assert(err, chk.IsNil)
 	dstDirURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, dstShareName, dirName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstDirURLWithSAS.String())
@@ -473,9 +472,9 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
 
 // regular dir -> dir sync
 func (s *cmdIntegrationSuite) TestFileSyncS2SBetweenDirs(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -518,16 +517,16 @@ func (s *cmdIntegrationSuite) TestFileSyncS2SBetweenDirs(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunSyncFiletoFile(c *chk.C) {
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	//set up src share
 	filesToInclude := []string{"AzURE2.jpeg", "TestOne.txt"}
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
+	srcShareURL, srcShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, filesToInclude)
 
 	//set up dst share
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, dstShareURL)
 	fileToDelete := []string{"testThree.jpeg"}
 	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileToDelete)
@@ -554,11 +553,11 @@ func (s *cmdIntegrationSuite) TestDryrunSyncFiletoFile(c *chk.C) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstShareURL.URL()), chk.Equals, true)
 			} else {
 				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], srcShareName), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstShareURL.URL()), chk.Equals, true)
 			}
 		}
 
@@ -568,7 +567,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncFiletoFile(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoFile(c *chk.C) {
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	//set up local src
 	blobsToInclude := []string{"AzURE2.jpeg"}
@@ -577,7 +576,7 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoFile(c *chk.C) {
 	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, blobsToInclude)
 
 	//set up dst share
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, dstShareURL)
 	fileToDelete := []string{"testThree.jpeg"}
 	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileToDelete)
@@ -603,11 +602,11 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoFile(c *chk.C) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstShareURL.URL()), chk.Equals, true)
 			} else {
 				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
 				c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
+				c.Check(strings.Contains(msg[i], dstShareURL.URL()), chk.Equals, true)
 			}
 		}
 
@@ -618,9 +617,9 @@ func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoFile(c *chk.C) {
 
 // regular share->share sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestinationTemp(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 

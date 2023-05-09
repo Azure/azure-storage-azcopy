@@ -37,6 +37,7 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
@@ -58,8 +59,6 @@ import (
 	"github.com/minio/minio-go"
 
 	chk "gopkg.in/check.v1"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 // Hookup to the testing framework
@@ -198,13 +197,6 @@ func generateFilesystemName() string {
 	return generateName(blobfsPrefix, 63)
 }
 
-func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
-	name = generateShareName()
-	share = fsu.NewShareURL(name)
-
-	return share, name
-}
-
 func getShareClient(c *chk.C, fsc *fileservice.Client) (share *share.Client, name string) {
 	name = generateShareName()
 	share = fsc.NewShareClient(name)
@@ -257,10 +249,9 @@ func getPageBlobClient(c *chk.C, cc *container.Client, prefix string) (pbc *page
 	return
 }
 
-func getAzureFileURL(c *chk.C, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
+func getShareFileClient(c *chk.C, sc *share.Client, prefix string) (fc *file.Client, name string) {
 	name = prefix + generateAzureFileName()
-	fileURL = shareURL.NewRootDirectoryURL().NewFileURL(name)
-
+	fc = sc.NewRootDirectoryClient().NewFileClient(name)
 	return
 }
 
@@ -314,18 +305,6 @@ func getFileServiceClient() *fileservice.Client {
 		panic(err)
 	}
 	return client
-}
-
-func getFSU() azfile.ServiceURL {
-	accountName, accountKey := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("https://%s.file.core.windows.net/", accountName))
-
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	if err != nil {
-		panic(err)
-	}
-	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{})
-	return azfile.NewServiceURL(*u, pipeline)
 }
 
 func GetBFSSU() azbfs.ServiceURL {
@@ -400,15 +379,6 @@ func createNewDirectoryStub(c *chk.C, cc *container.Client, dirPath string) {
 	return
 }
 
-func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
-	share, name = getShareURL(c, fsu)
-
-	cResp, err := share.Create(ctx, nil, 0)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-	return share, name
-}
-
 func createNewShare(c *chk.C, fsc *fileservice.Client) (share *share.Client, name string) {
 	share, name = getShareClient(c, fsc)
 
@@ -418,25 +388,16 @@ func createNewShare(c *chk.C, fsc *fileservice.Client) (share *share.Client, nam
 	return share, name
 }
 
-func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
-	file, name = getAzureFileURL(c, share, prefix)
+func createNewShareFile(c *chk.C, shareClient *share.Client, prefix string) (fileClient *file.Client, name string) {
+	fileClient, name = getShareFileClient(c, shareClient, prefix)
 
 	// generate parents first
-	generateParentsForAzureFile(c, file)
+	generateParentsForShareFile(c, fileClient)
 
-	cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
+	_, err := fileClient.Create(ctx, defaultAzureFileSizeInBytes, nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
 	return
-}
-
-func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
-	accountName, accountKey := getAccountAndKey()
-	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRootV1(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
-	c.Assert(err, chk.IsNil)
 }
 
 func generateParentsForShareFile(c *chk.C, fileClient *file.Client) {
@@ -724,60 +685,31 @@ func cleanBlobAccount(c *chk.C, serviceClient *blobservice.Client) {
 	}
 }
 
-func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
-	marker := azfile.Marker{}
-	for marker.NotDone() {
-		resp, err := serviceURL.ListSharesSegment(ctx, marker, azfile.ListSharesOptions{})
+func cleanFileAccount(c *chk.C, serviceClient *fileservice.Client) {
+	pager := serviceClient.NewListSharesPager(nil)
+	for pager.More() {
+		resp, err := pager.NextPage(ctx)
 		c.Assert(err, chk.IsNil)
 
-		for _, v := range resp.ShareItems {
-			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
+		for _, v := range resp.Shares {
+			_, err = serviceClient.NewShareClient(*v.Name).Delete(ctx, nil)
 
 			if err != nil {
-				if stgErr, ok := err.(azfile.StorageError); ok {
-					if stgErr.ServiceCode() == azfile.ServiceCodeShareNotFound {
-						continue
-					}
+				if fileerror.HasCode(err, fileerror.ShareNotFound) {
+					continue
 				}
-
 				c.Assert(err, chk.IsNil)
 			}
 		}
-
-		marker = resp.NextMarker
 	}
 
 	time.Sleep(time.Minute)
 }
 
-func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
-	accountNameEnvVar := accountType + "ACCOUNT_NAME"
-	accountKeyEnvVar := accountType + "ACCOUNT_KEY"
-	accountName, accountKey := os.Getenv(accountNameEnvVar), os.Getenv(accountKeyEnvVar)
-	if accountName == "" || accountKey == "" {
-		return nil, errors.New(accountNameEnvVar + " and/or " + accountKeyEnvVar + " environment variables not specified.")
-	}
-	return azfile.NewSharedKeyCredential(accountName, accountKey)
-}
-
-func getAlternateFSU() (azfile.ServiceURL, error) {
-	secondaryAccountName, secondaryAccountKey := os.Getenv("SECONDARY_ACCOUNT_NAME"), os.Getenv("SECONDARY_ACCOUNT_KEY")
-	if secondaryAccountName == "" || secondaryAccountKey == "" {
-		return azfile.ServiceURL{}, errors.New("SECONDARY_ACCOUNT_NAME and/or SECONDARY_ACCOUNT_KEY environment variables not specified.")
-	}
-	fsURL, _ := url.Parse("https://" + secondaryAccountName + ".file.core.windows.net/")
-
-	credential, err := azfile.NewSharedKeyCredential(secondaryAccountName, secondaryAccountKey)
-	if err != nil {
-		return azfile.ServiceURL{}, err
-	}
-	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{ /*Log: pipeline.NewLogWrapper(pipeline.LogInfo, log.New(os.Stderr, "", log.LstdFlags))*/ })
-
-	return azfile.NewServiceURL(*fsURL, pipeline), nil
-}
-
-func deleteShare(c *chk.C, share azfile.ShareURL) {
-	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
+func deleteShare(c *chk.C, shareClient *share.Client) {
+	_, err := shareClient.Delete(ctx, &share.DeleteOptions{
+		DeleteSnapshots: to.Ptr(share.DeleteSnapshotsOptionTypeInclude),
+	})
 	c.Assert(err, chk.IsNil)
 }
 
@@ -892,54 +824,13 @@ func getFileServiceClientWithSAS(c *chk.C, credential *file.SharedKeyCredential)
 	return client
 }
 
-func getFileServiceURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential) azfile.ServiceURL {
-	sasQueryParams, err := azfile.AccountSASSignatureValues{
-		Protocol:      azfile.SASProtocolHTTPS,
-		ExpiryTime:    time.Now().Add(48 * time.Hour),
-		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
-		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
-		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
-	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
-
-	qp := sasQueryParams.Encode()
-	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/?%s", credential.AccountName(), qp)
-
-	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
-
-	return azfile.NewServiceURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
-}
-
-func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareName string) azfile.ShareURL {
-	sasQueryParams, err := azfile.FileSASSignatureValues{
-		Protocol:    azfile.SASProtocolHTTPS,
-		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
-		ShareName:   shareName,
-		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
-	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
-
-	// construct the url from scratch
-	qp := sasQueryParams.Encode()
-	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s?%s",
-		credential.AccountName(), shareName, qp)
-
-	// convert the raw url and validate it was parsed successfully
-	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
-
-	// TODO perhaps we need a global default pipeline
-	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
-}
-
 func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) azbfs.ServiceURL {
 	sasQueryParams, err := azbfs.AccountSASSignatureValues{
 		Protocol:      azbfs.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().Add(48 * time.Hour),
-		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
-		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
-		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+		Permissions:   "rwdlacup",
+		Services:      "bqf",
+		ResourceTypes: "sco",
 	}.NewSASQueryParameters(&credential)
 	c.Assert(err, chk.IsNil)
 

@@ -51,7 +51,6 @@ import (
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 )
 
@@ -267,15 +266,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c *chk.C, filesystem
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareURL azfile.ShareURL, prefix string) (fileList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareClient *share.Client, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, fileName1 := createNewAzureFile(c, shareURL, prefix+"top")
-		_, fileName2 := createNewAzureFile(c, shareURL, prefix+"sub1/")
-		_, fileName3 := createNewAzureFile(c, shareURL, prefix+"sub2/")
-		_, fileName4 := createNewAzureFile(c, shareURL, prefix+"sub1/sub3/sub5/")
-		_, fileName5 := createNewAzureFile(c, shareURL, prefix+specialNames[i])
+		_, fileName1 := createNewShareFile(c, shareClient, prefix+"top")
+		_, fileName2 := createNewShareFile(c, shareClient, prefix+"sub1/")
+		_, fileName3 := createNewShareFile(c, shareClient, prefix+"sub2/")
+		_, fileName4 := createNewShareFile(c, shareClient, prefix+"sub1/sub3/sub5/")
+		_, fileName5 := createNewShareFile(c, shareClient, prefix+specialNames[i])
 
 		fileList[5*i] = fileName1
 		fileList[5*i+1] = fileName2
@@ -299,13 +298,13 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c *chk.C, servic
 	}
 }
 
-func (s scenarioHelper) generateFileSharesAndFilesFromLists(c *chk.C, serviceURL azfile.ServiceURL, shareList []string, fileList []string, data string) {
+func (s scenarioHelper) generateFileSharesAndFilesFromLists(c *chk.C, serviceClient *fileservice.Client, shareList []string, fileList []string, data string) {
 	for _, shareName := range shareList {
-		surl := serviceURL.NewShareURL(shareName)
-		_, err := surl.Create(ctx, azfile.Metadata{}, 0)
+		shareClient := serviceClient.NewShareClient(shareName)
+		_, err := shareClient.Create(ctx, nil)
 		c.Assert(err, chk.IsNil)
 
-		s.generateAzureFilesFromList(c, surl, fileList)
+		s.generateAzureFilesFromList(c, shareClient, fileList)
 	}
 }
 
@@ -420,10 +419,10 @@ func (scenarioHelper) generateGCPObjects(c *chk.C, client *gcpUtils.Client, buck
 }
 
 // create the demanded files
-func (scenarioHelper) generateFlatFiles(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
+func (scenarioHelper) generateFlatFiles(c *chk.C, shareClient *share.Client, fileList []string) {
 	for _, fileName := range fileList {
-		file := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
-		err := azfile.UploadBufferToAzureFile(ctx, []byte(fileDefaultData), file, azfile.UploadToAzureFileOptions{})
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileName)
+		err := fileClient.UploadBuffer(ctx, []byte(fileDefaultData), nil)
 		c.Assert(err, chk.IsNil)
 	}
 
@@ -516,17 +515,16 @@ func (scenarioHelper) generateShareFilesFromList(c *chk.C, shareClient *share.Cl
 }
 
 // create the demanded azure files
-func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
+func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareClient *share.Client, fileList []string) {
 	for _, filePath := range fileList {
-		file := shareURL.NewRootDirectoryURL().NewFileURL(filePath)
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(filePath)
 
 		// create parents first
-		generateParentsForAzureFile(c, file)
+		generateParentsForShareFile(c, fileClient)
 
 		// create the file itself
-		cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
+		_, err := fileClient.Create(ctx, defaultAzureFileSizeInBytes, nil)
 		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
@@ -729,12 +727,14 @@ func (scenarioHelper) getFileServiceClientWithSASFromURL(c *chk.C, rawURL string
 	return client
 }
 
-func (scenarioHelper) getRawFileServiceURLWithSAS(c *chk.C) url.URL {
+func (scenarioHelper) getRawFileServiceURLWithSAS(c *chk.C) *url.URL {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 
-	return getFileServiceURLWithSAS(c, *credential).URL()
+	u := getFileServiceClientWithSAS(c, credential).URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
 }
 
 func (scenarioHelper) getRawAdlsServiceURLWithSAS(c *chk.C) azbfs.ServiceURL {
@@ -813,20 +813,25 @@ func (scenarioHelper) getRawGCPObjectURL(c *chk.C, bucketName string, objectName
 	return *fullURL
 }
 
-func (scenarioHelper) getRawFileURLWithSAS(c *chk.C, shareName string, fileName string) url.URL {
-	credential, err := getGenericCredentialForFile("")
+func (scenarioHelper) getRawFileURLWithSAS(c *chk.C, shareName string, fileName string) *url.URL {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
-	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
-	fileURLWithSAS := shareURLWithSAS.NewRootDirectoryURL().NewFileURL(fileName)
-	return fileURLWithSAS.URL()
+
+	shareClient := getShareClientWithSAS(c, credential, shareName)
+	u := shareClient.NewRootDirectoryClient().NewFileClient(fileName).URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
 }
 
-func (scenarioHelper) getRawShareURLWithSAS(c *chk.C, shareName string) url.URL {
+func (scenarioHelper) getRawShareURLWithSAS(c *chk.C, shareName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
-	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
-	return shareURLWithSAS.URL()
+
+	u := getShareClientWithSAS(c, credential, shareName).URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
 }
 
 func (scenarioHelper) blobExists(blobClient *blob.Client) bool {
