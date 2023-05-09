@@ -511,8 +511,8 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	shareURL, shareName := createNewShare(c, fsc)
 	defer deleteShare(c, shareURL)
 
 	bfsu := GetBFSSU()
@@ -659,8 +659,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	shareURL, shareName := createNewShare(c, fsc)
 	defer deleteShare(c, shareURL)
 
 	bfsu := GetBFSSU()
@@ -817,8 +817,8 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	cc, containerName := createNewContainer(c, bsc)
 	defer deleteContainer(c, cc)
 
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	shareURL, shareName := createNewShare(c, fsc)
 	defer deleteShare(c, shareURL)
 
 	bfsu := GetBFSSU()
