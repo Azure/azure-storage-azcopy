@@ -32,7 +32,6 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/http"
 	"net/url"
 	"strings"
@@ -476,11 +475,6 @@ func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 				return nil
 			}
 		}
-		sErr, sErrOk := err.(azfile.StorageError)
-		if sErrOk && sErr.Response() != nil &&
-			(sErr.Response().StatusCode == http.StatusConflict) { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
-			return nil
-		}
 		return err
 	}
 
@@ -547,54 +541,6 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 				recorderURL.RawQuery = ""
 				err = t.CreateFolder(recorderURL.String(), func() error {
 					_, err := currDirClient.Create(ctx, nil)
-					return err
-				})
-				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
-					return verifiedErr
-				}
-			}
-		} else {
-			return err
-		}
-	}
-
-	// Directly return if parent directory exists.
-	return nil
-}
-
-// getParentDirectoryURLV1 gets parent directory URL of an Azure FileURL.
-func (AzureFileParentDirCreator) getParentDirectoryURLV1(uh URLHolderV1, p pipeline.Pipeline) azfile.DirectoryURL {
-	u := uh.URL()
-	u.Path = u.Path[:strings.LastIndex(u.Path, "/")]
-	return azfile.NewDirectoryURL(u, p)
-}
-
-// CreateParentDirToRootV1 creates parent directories of the Azure file if file's parent directory doesn't exist.
-func (d AzureFileParentDirCreator) CreateParentDirToRootV1(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t FolderCreationTracker) error {
-	dirURL := d.getParentDirectoryURLV1(fileURL, p)
-	return d.CreateDirToRootV1(ctx, dirURL, p, t)
-}
-
-// CreateDirToRootV1 Creates the dir (and parents as necessary) if it does not exist
-func (d AzureFileParentDirCreator) CreateDirToRootV1(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline, t FolderCreationTracker) error {
-	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
-	if _, err := dirURL.GetProperties(ctx); err != nil {
-		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
-			(resp.Response().StatusCode == http.StatusNotFound ||
-				resp.Response().StatusCode == http.StatusForbidden) {
-			// Either the parent directory does not exist, or we may not have read permissions.
-			// Try to create the parent directories. Split directories as segments.
-			segments := d.splitWithoutToken(dirURLExtension.DirectoryOrFilePath, '/')
-
-			shareURL := azfile.NewShareURL(dirURLExtension.GetShareURL(), p)
-			curDirURL := shareURL.NewRootDirectoryURL() // Share directory should already exist, doesn't support creating share
-			// Try to create the directories
-			for i := 0; i < len(segments); i++ {
-				curDirURL = curDirURL.NewDirectoryURL(segments[i])
-				recorderURL := curDirURL.URL()
-				recorderURL.RawQuery = ""
-				err = t.CreateFolder(recorderURL.String(), func() error {
-					_, err := curDirURL.Create(ctx, azfile.Metadata{}, azfile.SMBProperties{})
 					return err
 				})
 				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
