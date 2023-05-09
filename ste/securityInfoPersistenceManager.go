@@ -104,7 +104,7 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL st
 
 	sipm.sipmMu.Lock()
 	// If we got the permission fine, commit to the cache.
-	sipm.cache.Add(sddlKey, si.Permission)
+	sipm.cache.Add(sddlKey, *si.Permission)
 	sipm.sipmMu.Unlock()
 
 	return *si.Permission, nil
