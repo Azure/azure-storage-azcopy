@@ -28,9 +28,9 @@ import (
 
 // regular file->file copy
 func (s *cmdIntegrationSuite) TestFileCopyS2SWithSingleFile(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -81,9 +81,9 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithSingleFile(c *chk.C) {
 
 // regular share->share copy
 func (s *cmdIntegrationSuite) TestFileCopyS2SWithShares(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -126,9 +126,9 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithShares(c *chk.C) {
 
 // include flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestFileCopyS2SWithIncludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -162,9 +162,9 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithIncludeFlag(c *chk.C) {
 
 // exclude flag limits the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestFileCopyS2SWithExcludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -198,9 +198,9 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithExcludeFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func (s *cmdIntegrationSuite) TestFileCopyS2SWithIncludeAndExcludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 
@@ -241,9 +241,9 @@ func (s *cmdIntegrationSuite) TestFileCopyS2SWithIncludeAndExcludeFlag(c *chk.C)
 
 // regular dir -> dir copy
 func (s *cmdIntegrationSuite) TestFileCopyS2SWithDirectory(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
+	fsc := getFileServiceClient()
+	srcShareURL, srcShareName := createNewShare(c, fsc)
+	dstShareURL, dstShareName := createNewShare(c, fsc)
 	defer deleteShare(c, srcShareURL)
 	defer deleteShare(c, dstShareURL)
 

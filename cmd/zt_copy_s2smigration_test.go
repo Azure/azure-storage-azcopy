@@ -1241,9 +1241,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *chk.C) {
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
+	srcShareURL, srcShareName := createNewShare(c, fsu)
 	defer deleteShare(c, srcShareURL)
 	c.Assert(srcShareURL, chk.NotNil)
 

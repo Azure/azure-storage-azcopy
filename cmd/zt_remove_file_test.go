@@ -28,8 +28,8 @@ import (
 )
 
 func (s *cmdIntegrationSuite) TestRemoveSingleFile(c *chk.C) {
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	fsu := getFileServiceClient()
+	shareURL, shareName := createNewShare(c, fsu)
 	defer deleteShare(c, shareURL)
 
 	for _, fileName := range []string{"top/mid/low/singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
@@ -57,10 +57,8 @@ func (s *cmdIntegrationSuite) TestRemoveSingleFile(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveFilesUnderShare(c *chk.C) {
-	fsu := getFSU()
-
-	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	fsu := getFileServiceClient()
+	shareURL, shareName := createNewShare(c, fsu)
 	defer deleteShare(c, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
 	c.Assert(shareURL, chk.NotNil)
@@ -108,11 +106,11 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderShare(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectory(c *chk.C) {
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 	dirName := "dir1/dir2/dir3/"
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	shareURL, shareName := createNewShare(c, fsu)
 	defer deleteShare(c, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, dirName)
 	c.Assert(shareURL, chk.NotNil)
@@ -164,10 +162,10 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectory(c *chk.C) {
 
 // include flag limits the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeFlag(c *chk.C) {
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	shareURL, shareName := createNewShare(c, fsu)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
 	defer deleteShare(c, shareURL)
 	c.Assert(shareURL, chk.NotNil)
@@ -197,10 +195,10 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeFlag(c *chk.C) {
 
 // exclude flag limits the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveFilesWithExcludeFlag(c *chk.C) {
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	shareURL, shareName := createNewShare(c, fsu)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
 	defer deleteShare(c, shareURL)
 	c.Assert(shareURL, chk.NotNil)
@@ -230,10 +228,10 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithExcludeFlag(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeAndExcludeFlag(c *chk.C) {
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	shareURL, shareName := createNewShare(c, fsu)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
 	defer deleteShare(c, shareURL)
 	c.Assert(shareURL, chk.NotNil)
@@ -270,11 +268,11 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeAndExcludeFlag(c *chk.C)
 
 // note: list-of-files flag is used
 func (s *cmdIntegrationSuite) TestRemoveListOfFilesAndDirectories(c *chk.C) {
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 	dirName := "megadir"
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	shareURL, shareName := createNewShare(c, fsu)
 	c.Assert(shareURL, chk.NotNil)
 	defer deleteShare(c, shareURL)
 	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
@@ -337,11 +335,11 @@ func (s *cmdIntegrationSuite) TestRemoveListOfFilesAndDirectories(c *chk.C) {
 
 // include and exclude flag can work together to limit the scope of the delete
 func (s *cmdIntegrationSuite) TestRemoveListOfFilesWithIncludeAndExclude(c *chk.C) {
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 	dirName := "megadir"
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	shareURL, shareName := createNewShare(c, fsu)
 	c.Assert(shareURL, chk.NotNil)
 	defer deleteShare(c, shareURL)
 	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
@@ -394,8 +392,8 @@ func (s *cmdIntegrationSuite) TestRemoveListOfFilesWithIncludeAndExclude(c *chk.
 }
 
 func (s *cmdIntegrationSuite) TestRemoveSingleFileWithFromTo(c *chk.C) {
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	fsu := getFileServiceClient()
+	shareURL, shareName := createNewShare(c, fsu)
 	defer deleteShare(c, shareURL)
 
 	for _, fileName := range []string{"top/mid/low/singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
@@ -424,10 +422,10 @@ func (s *cmdIntegrationSuite) TestRemoveSingleFileWithFromTo(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveFilesUnderShareWithFromTo(c *chk.C) {
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	shareURL, shareName := createNewShare(c, fsu)
 	defer deleteShare(c, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
 	c.Assert(shareURL, chk.NotNil)
@@ -476,11 +474,11 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderShareWithFromTo(c *chk.C) {
 }
 
 func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectoryWithFromTo(c *chk.C) {
-	fsu := getFSU()
+	fsu := getFileServiceClient()
 	dirName := "dir1/dir2/dir3/"
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(c, fsu)
+	shareURL, shareName := createNewShare(c, fsu)
 	defer deleteShare(c, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, dirName)
 	c.Assert(shareURL, chk.NotNil)
