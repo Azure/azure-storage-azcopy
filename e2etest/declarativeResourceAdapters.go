@@ -21,12 +21,12 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"time"
 )
 
 func sval(s *string) string {
@@ -65,13 +65,25 @@ type filesResourceAdapter struct {
 	obj *testObject
 }
 
-func (a filesResourceAdapter) toHeaders(c asserter, shareClient *share.Client) (*file.HTTPHeaders, *file.NTFSFileAttributes, *file.Permissions, *time.Time) {
-	headers := file.HTTPHeaders{}
-	attributes := file.NTFSFileAttributes{}
-	permissions := file.Permissions{}
-	lastWriteTime := time.Time{}
+func (a filesResourceAdapter) toSMBProperties() *file.SMBProperties {
+	return &file.SMBProperties{
+		Attributes: a.toAttributes(),
+		LastWriteTime: a.obj.creationProperties.lastWriteTime,
+	}
+}
 
+
+
+func (a filesResourceAdapter) toAttributes() *file.NTFSFileAttributes {
+	if a.obj.creationProperties.smbAttributes != nil {
+		return to.Ptr(ste.FileAttributesFromUint32(*a.obj.creationProperties.smbAttributes))
+	}
+	return nil
+}
+
+func (a filesResourceAdapter) toPermissions(c asserter, shareClient *share.Client) *file.Permissions {
 	if a.obj.creationProperties.smbPermissionsSddl != nil {
+		permissions := file.Permissions{}
 		parsedSDDL, err := sddl.ParseSDDL(*a.obj.creationProperties.smbPermissionsSddl)
 		c.AssertNoErr(err, "Failed to parse SDDL")
 
@@ -90,38 +102,23 @@ func (a filesResourceAdapter) toHeaders(c asserter, shareClient *share.Client) (
 			perm := parsedSDDL.PortableString()
 			permissions.Permission = &perm
 		}
+		return &permissions
 	}
-
-	if a.obj.creationProperties.smbAttributes != nil {
-		attributes = ste.FileAttributesFromUint32(*a.obj.creationProperties.smbAttributes)
-	}
-
-	if a.obj.creationProperties.lastWriteTime != nil {
-		lastWriteTime = *a.obj.creationProperties.lastWriteTime
-	}
-
-	props := a.obj.creationProperties.contentHeaders
-	if props == nil {
-		return &headers, &attributes, &permissions, &lastWriteTime
-	}
-
-	headers.ContentType = props.contentType
-	headers.ContentMD5 = props.contentMD5
-	headers.ContentEncoding = props.contentEncoding
-	headers.ContentLanguage = props.contentLanguage
-	headers.ContentDisposition = props.contentDisposition
-	headers.CacheControl = props.cacheControl
-
-	return &headers, &attributes, &permissions, &lastWriteTime
+	return nil
 }
 
-func (a filesResourceAdapter) toMetadata() map[string]string {
-	if a.obj.creationProperties.nameValueMetadata == nil {
+func (a filesResourceAdapter) toHeaders() *file.HTTPHeaders {
+	props := a.obj.creationProperties.contentHeaders
+	if props == nil {
 		return nil
 	}
-	meta := map[string]string{}
-	for k, v := range a.obj.creationProperties.nameValueMetadata {
-		meta[k] = sval(v)
+
+	return &file.HTTPHeaders{
+		ContentType:        props.contentType,
+		ContentMD5:         props.contentMD5,
+		ContentEncoding:    props.contentEncoding,
+		ContentLanguage:    props.contentLanguage,
+		ContentDisposition: props.contentDisposition,
+		CacheControl:       props.cacheControl,
 	}
-	return meta
 }
