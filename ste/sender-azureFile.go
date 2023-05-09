@@ -495,11 +495,12 @@ func (d AzureFileParentDirCreator) CreateDirToRootV1(ctx context.Context, dirURL
 // getParentDirectoryClient gets parent directory URL of an Azure FileURL.
 func (AzureFileParentDirCreator) getParentDirectoryClient(uh URLHolder, serviceClient *fileservice.Client) (*share.Client, *directory.Client, error) {
 	rawURL, _ := url.Parse(uh.URL())
+	rawURL.Path = rawURL.Path[:strings.LastIndex(rawURL.Path, "/")]
 	directoryURLParts, err := filesas.ParseURL(rawURL.String())
 	if err != nil {
 		return nil, nil, err
 	}
-	directoryOrFilePath := directoryURLParts.DirectoryOrFilePath[:strings.LastIndex(directoryURLParts.DirectoryOrFilePath, "/")]
+	directoryOrFilePath := directoryURLParts.DirectoryOrFilePath
 	shareClient := serviceClient.NewShareClient(directoryURLParts.ShareName)
 	if directoryURLParts.ShareSnapshot != "" {
 		shareClient, err = shareClient.WithSnapshot(directoryURLParts.ShareSnapshot)
