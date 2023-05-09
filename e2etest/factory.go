@@ -136,7 +136,7 @@ func (TestResourceFactory) GetFileShareURLWithSAS(c asserter, accountType Accoun
 	c.AssertNoErr(err)
 
 	sasURL, err := client.GetSASURL(
-		filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true},
+		filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
 		time.Now().Add(48 * time.Hour),
 		nil)
 	c.AssertNoErr(err)
