@@ -29,7 +29,7 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	// Set 32-bit FileAttributes for the file.
 	setAttributes := func() error {
 		// This is a safe conversion.
-		attribs := fileAttributesToUint32(propHolder.FileAttributes())
+		attribs := FileAttributesToUint32(propHolder.FileAttributes())
 
 		xattrbuf := make([]byte, 4)
 		binary.LittleEndian.PutUint32(xattrbuf, attribs)

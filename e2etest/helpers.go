@@ -25,7 +25,6 @@ package e2etest
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -36,9 +35,9 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"io"
 	"math/rand"
 	"mime"
@@ -432,18 +431,8 @@ func cleanFileAccount(c asserter, sc *fileservice.Client) {
 	time.Sleep(time.Minute)
 }
 
-func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
-	accountNameEnvVar := accountType + "ACCOUNT_NAME"
-	accountKeyEnvVar := accountType + "ACCOUNT_KEY"
-	accountName, accountKey := os.Getenv(accountNameEnvVar), os.Getenv(accountKeyEnvVar)
-	if accountName == "" || accountKey == "" {
-		return nil, errors.New(accountNameEnvVar + " and/or " + accountKeyEnvVar + " environment variables not specified.")
-	}
-	return azfile.NewSharedKeyCredential(accountName, accountKey)
-}
-
-func deleteShare(c asserter, share azfile.ShareURL) {
-	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
+func deleteShare(c asserter, sc *share.Client) {
+	_, err := sc.Delete(ctx, nil)
 	c.AssertNoErr(err)
 }
 
@@ -498,54 +487,44 @@ func getBlobServiceURLWithSAS(c asserter, credential *blob.SharedKeyCredential) 
 	return bsc
 }
 
-func getFileServiceURLWithSAS(c asserter, credential azfile.SharedKeyCredential) azfile.ServiceURL {
-	sasQueryParams, err := azfile.AccountSASSignatureValues{
-		Protocol:      azfile.SASProtocolHTTPS,
-		ExpiryTime:    time.Now().Add(48 * time.Hour),
-		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
-		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
-		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
-	}.NewSASQueryParameters(&credential)
+func getFileServiceURLWithSAS(c asserter, credential *file.SharedKeyCredential) *fileservice.Client {
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/",
+		credential.AccountName())
+	fsc, err := fileservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 	c.AssertNoErr(err)
 
-	qp := sasQueryParams.Encode()
-	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/?%s", credential.AccountName(), qp)
-
-	fullURL, err := url.Parse(rawURL)
+	sasURL, err := fsc.GetSASURL(filesas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		filesas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, Create: true},
+		time.Now().UTC().Add(48 * time.Hour), nil)
 	c.AssertNoErr(err)
 
-	return azfile.NewServiceURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
+	fsc, err = fileservice.NewClientWithNoCredential(sasURL, nil)
+	c.AssertNoErr(err)
+	return fsc
 }
 
-func getShareURLWithSAS(c asserter, credential azfile.SharedKeyCredential, shareName string) azfile.ShareURL {
-	sasQueryParams, err := azfile.FileSASSignatureValues{
-		Protocol:    azfile.SASProtocolHTTPS,
-		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
-		ShareName:   shareName,
-		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
-	}.NewSASQueryParameters(&credential)
+func getShareURLWithSAS(c asserter, credential *file.SharedKeyCredential, shareName string) *share.Client {
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s",
+		credential.AccountName(), shareName)
+	sc, err := share.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 	c.AssertNoErr(err)
 
-	// construct the url from scratch
-	qp := sasQueryParams.Encode()
-	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s?%s",
-		credential.AccountName(), shareName, qp)
-
-	// convert the raw url and validate it was parsed successfully
-	fullURL, err := url.Parse(rawURL)
+	sasURL, err := sc.GetSASURL(filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
+		time.Now().UTC().Add(48 * time.Hour), nil)
 	c.AssertNoErr(err)
 
-	// TODO perhaps we need a global default pipeline
-	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
+	sc, err = share.NewClientWithNoCredential(sasURL, nil)
+	c.AssertNoErr(err)
+	return sc
 }
 
 func getAdlsServiceURLWithSAS(c asserter, credential azbfs.SharedKeyCredential) azbfs.ServiceURL {
 	sasQueryParams, err := azbfs.AccountSASSignatureValues{
 		Protocol:      azbfs.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().Add(48 * time.Hour),
-		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
-		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
-		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+		Permissions:   "rwdlacup",
+		Services:      "bqf",
+		ResourceTypes: "sco",
 	}.NewSASQueryParameters(&credential)
 	c.AssertNoErr(err)
 

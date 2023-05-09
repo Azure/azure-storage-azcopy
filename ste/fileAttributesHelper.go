@@ -46,7 +46,7 @@ func FileAttributesFromUint32(attributes uint32) file.NTFSFileAttributes {
 	return attr
 }
 
-func fileAttributesToUint32(attributes file.NTFSFileAttributes) uint32 {
+func FileAttributesToUint32(attributes file.NTFSFileAttributes) uint32 {
 	var attr uint32
 	if attributes.ReadOnly {
 		attr |= FileAttributeReadonly

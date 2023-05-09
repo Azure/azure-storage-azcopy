@@ -40,7 +40,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
 	chk "gopkg.in/check.v1"
 	"io"
@@ -659,7 +659,7 @@ func (s scenarioHelper) downloadBlobContent(a asserter, options downloadContentO
 	destData, err := io.ReadAll(downloadResp.Body)
 	defer downloadResp.Body.Close()
 	a.AssertNoErr(err)
-	return destData[:]
+	return destData
 }
 
 func (scenarioHelper) generatePageBlobsFromList(c asserter, containerClient *container.Client, blobList []string, data string) {
@@ -907,125 +907,113 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 }
 
 func (s scenarioHelper) enumerateShareFileProperties(a asserter, sc *share.Client) map[string]*objectProperties {
-	var dirQ []azfile.DirectoryURL
+	var dirQ []*directory.Client
 	result := make(map[string]*objectProperties)
 
-	root := shareURL.NewRootDirectoryURL()
-	rootProps, err := root.GetProperties(ctx)
+	root := sc.NewRootDirectoryClient()
+	rootProps, err := root.GetProperties(ctx, nil)
 	a.AssertNoErr(err)
-	rootAttr := uint32(azfile.ParseFileAttributeFlagsString(rootProps.FileAttributes()))
+	rootAttr := ste.ToNTFSAttributes(rootProps.FileAttributes)
 	var rootPerm *string
-	if permKey := rootProps.FilePermissionKey(); permKey != "" {
-		sharePerm, err := shareURL.GetPermission(ctx, permKey)
+	if permKey := rootProps.FilePermissionKey; permKey != nil {
+		sharePerm, err := sc.GetPermission(ctx, *permKey, nil)
 		a.AssertNoErr(err, "Failed to get permissions from key")
 
-		rootPerm = &sharePerm.Permission
+		rootPerm = sharePerm.Permission
 	}
 	result[""] = &objectProperties{
 		entityType:         common.EEntityType.Folder(),
 		smbPermissionsSddl: rootPerm,
-		smbAttributes:      &rootAttr,
+		smbAttributes:      to.Ptr(ste.FileAttributesToUint32(rootAttr)),
 	}
 
 	dirQ = append(dirQ, root)
 	for i := 0; i < len(dirQ); i++ {
 		currentDirURL := dirQ[i]
-		for marker := (azfile.Marker{}); marker.NotDone(); {
-			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(context.TODO(), marker, azfile.ListFilesAndDirectoriesOptions{})
+		pager := currentDirURL.NewListFilesAndDirectoriesPager(nil)
+		for pager.More() {
+			lResp, err := pager.NextPage(context.TODO())
 			a.AssertNoErr(err)
 
 			// Process the files and folders we listed
-			for _, fileInfo := range lResp.FileItems {
-				fileURL := currentDirURL.NewFileURL(fileInfo.Name)
-				fProps, err := fileURL.GetProperties(context.TODO())
+			for _, fileInfo := range lResp.Segment.Files {
+				fileURL := currentDirURL.NewFileClient(*fileInfo.Name)
+				fProps, err := fileURL.GetProperties(context.TODO(), nil)
 				a.AssertNoErr(err)
 
 				// Construct the properties object
-				fileSize := fProps.ContentLength()
-				creationTime, err := time.Parse(azfile.ISO8601, fProps.FileCreationTime())
-				a.AssertNoErr(err)
-				lastWriteTime, err := time.Parse(azfile.ISO8601, fProps.FileLastWriteTime())
-				a.AssertNoErr(err)
-				contentHeader := fProps.NewHTTPHeaders()
 				h := contentHeaders{
-					cacheControl:       &contentHeader.CacheControl,
-					contentDisposition: &contentHeader.ContentDisposition,
-					contentEncoding:    &contentHeader.ContentEncoding,
-					contentLanguage:    &contentHeader.ContentLanguage,
-					contentType:        &contentHeader.ContentType,
-					contentMD5:         contentHeader.ContentMD5,
+					cacheControl:       fProps.CacheControl,
+					contentDisposition: fProps.ContentDisposition,
+					contentEncoding:    fProps.ContentEncoding,
+					contentLanguage:    fProps.ContentLanguage,
+					contentType:        fProps.ContentType,
+					contentMD5:         fProps.ContentMD5,
 				}
-				fileAttrs := uint32(azfile.ParseFileAttributeFlagsString(fProps.FileAttributes()))
-				permissionKey := fProps.FilePermissionKey()
+				fileAttrs := ste.FileAttributesToUint32(ste.ToNTFSAttributes(fProps.FileAttributes))
+				permissionKey := fProps.FilePermissionKey
 
 				var perm string
-				if permissionKey != "" {
-					sharePerm, err := shareURL.GetPermission(ctx, permissionKey)
+				if permissionKey != nil {
+					sharePerm, err := sc.GetPermission(ctx, *permissionKey, nil)
 					a.AssertNoErr(err, "Failed to get permissions from key")
 
-					perm = sharePerm.Permission
+					perm = *sharePerm.Permission
 				}
 
 				props := objectProperties{
 					entityType:         common.EEntityType.File(), // only enumerating files in list call
-					size:               &fileSize,
-					nameValueMetadata:  common.FromAzFileMetadataToCommonMetadata(fProps.NewMetadata()),
+					size:               fProps.ContentLength,
+					nameValueMetadata:  fProps.Metadata,
 					contentHeaders:     &h,
-					creationTime:       &creationTime,
-					lastWriteTime:      &lastWriteTime,
+					creationTime:       fProps.FileCreationTime,
+					lastWriteTime:      fProps.FileLastWriteTime,
 					smbAttributes:      &fileAttrs,
 					smbPermissionsSddl: &perm,
 				}
 
-				relativePath := lResp.DirectoryPath + "/"
+				relativePath := *lResp.DirectoryPath + "/"
 				if relativePath == "/" {
 					relativePath = ""
 				}
-				result[relativePath+fileInfo.Name] = &props
+				result[relativePath+*fileInfo.Name] = &props
 			}
 
-			for _, dirInfo := range lResp.DirectoryItems {
-				dirURL := currentDirURL.NewDirectoryURL(dirInfo.Name)
-				dProps, err := dirURL.GetProperties(context.TODO())
+			for _, dirInfo := range lResp.Segment.Directories {
+				dirURL := currentDirURL.NewSubdirectoryClient(*dirInfo.Name)
+				dProps, err := dirURL.GetProperties(context.TODO(), nil)
 				a.AssertNoErr(err)
 
 				// Construct the properties object
-				creationTime, err := time.Parse(azfile.ISO8601, dProps.FileCreationTime())
-				a.AssertNoErr(err)
-				lastWriteTime, err := time.Parse(azfile.ISO8601, dProps.FileLastWriteTime())
-				a.AssertNoErr(err)
-
 				// Grab the permissions
-				permKey := dProps.FilePermissionKey()
+				permissionKey := dProps.FilePermissionKey
 
 				var perm string
-				if permKey != "" {
-					permResp, err := shareURL.GetPermission(ctx, permKey)
+				if permissionKey != nil {
+					sharePerm, err := sc.GetPermission(ctx, *permissionKey, nil)
 					a.AssertNoErr(err, "Failed to get permissions from key")
 
-					perm = permResp.Permission
+					perm = *sharePerm.Permission
 				}
 
 				// Set up properties
 				props := objectProperties{
 					entityType:         common.EEntityType.Folder(), // Only enumerating directories in list call
-					nameValueMetadata:  common.FromAzFileMetadataToCommonMetadata(dProps.NewMetadata()),
-					creationTime:       &creationTime,
-					lastWriteTime:      &lastWriteTime,
+					nameValueMetadata:  dProps.Metadata,
+					creationTime:       dProps.FileCreationTime,
+					lastWriteTime:      dProps.FileLastWriteTime,
 					smbPermissionsSddl: &perm,
 				}
 
 				// get the directory name properly
-				relativePath := lResp.DirectoryPath + "/"
+				relativePath := *lResp.DirectoryPath + "/"
 				if relativePath == "/" {
 					relativePath = ""
 				}
-				result[relativePath+dirInfo.Name] = &props
+				result[relativePath+*dirInfo.Name] = &props
 
 				dirQ = append(dirQ, dirURL)
 			}
-
-			marker = lResp.NextMarker
 		}
 	}
 
@@ -1033,16 +1021,13 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, sc *share.Clien
 }
 
 func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentOptions) []byte {
-	fileURL := options.shareURL.NewRootDirectoryURL().NewFileURL(options.resourceRelPath)
-	downloadResp, err := fileURL.Download(ctx, 0, azfile.CountToEnd, false)
+	fileURL := options.shareClient.NewRootDirectoryClient().NewFileClient(options.resourceRelPath)
+	downloadResp, err := fileURL.DownloadStream(ctx, nil)
 	a.AssertNoErr(err)
 
-	retryReader := downloadResp.Body(azfile.RetryReaderOptions{})
-	defer retryReader.Close() // The client must close the response body when finished with it
-
-	destData, err := io.ReadAll(retryReader)
+	destData, err := io.ReadAll(downloadResp.Body)
+	defer downloadResp.Body.Close()
 	a.AssertNoErr(err)
-	downloadResp.Body(azfile.RetryReaderOptions{})
 	return destData
 }
 
@@ -1118,12 +1103,12 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c asserter) string {
 	return getBlobServiceURLWithSAS(c, credential).URL()
 }
 
-func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) url.URL {
+func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) string {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
 	c.AssertNoErr(err)
 
-	return getFileServiceURLWithSAS(c, *credential).URL()
+	return getFileServiceURLWithSAS(c, credential).URL()
 }
 
 func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
@@ -1178,20 +1163,4 @@ func (scenarioHelper) getRawS3ObjectURL(c asserter, region string, bucketName st
 	c.AssertNoErr(err)
 
 	return *fullURL
-}
-
-func (scenarioHelper) getRawFileURLWithSAS(c asserter, shareName string, fileName string) url.URL {
-	credential, err := getGenericCredentialForFile("")
-	c.AssertNoErr(err)
-	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
-	fileURLWithSAS := shareURLWithSAS.NewRootDirectoryURL().NewFileURL(fileName)
-	return fileURLWithSAS.URL()
-}
-
-func (scenarioHelper) getRawShareURLWithSAS(c asserter, shareName string) url.URL {
-	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	c.AssertNoErr(err)
-	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
-	return shareURLWithSAS.URL()
 }

@@ -80,7 +80,7 @@ var modify = map[string]func(*file.NTFSFileAttributes){
 	},
 }
 
-func toNTFSAttributes(attr *string) file.NTFSFileAttributes {
+func ToNTFSAttributes(attr *string) file.NTFSFileAttributes {
 	result := &file.NTFSFileAttributes{}
 	if attr == nil {
 		return *result
@@ -129,7 +129,7 @@ func (f fileGetPropertiesAdaptor) FileLastWriteTime() time.Time {
 }
 
 func (f fileGetPropertiesAdaptor) FileAttributes() file.NTFSFileAttributes {
-	return toNTFSAttributes(f.GetProperties.FileAttributes)
+	return ToNTFSAttributes(f.GetProperties.FileAttributes)
 }
 
 func (f fileGetPropertiesAdaptor) FilePermissionKey() string {
@@ -181,7 +181,7 @@ func (f directoryGetPropertiesAdaptor) FileLastWriteTime() time.Time {
 }
 
 func (f directoryGetPropertiesAdaptor) FileAttributes() file.NTFSFileAttributes {
-	return toNTFSAttributes(f.GetProperties.FileAttributes)
+	return ToNTFSAttributes(f.GetProperties.FileAttributes)
 }
 
 func (f directoryGetPropertiesAdaptor) FilePermissionKey() string {
