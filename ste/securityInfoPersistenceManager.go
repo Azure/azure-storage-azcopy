@@ -94,7 +94,7 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL st
 			return "", err
 		}
 		fileURLParts.ShareSnapshot = "" // clear the snapshot value
-		actionableShareURL = common.CreateShareClient(shareURL, credInfo, credOpOptions, clientOptions)
+		actionableShareURL = common.CreateShareClient(fileURLParts.String(), credInfo, credOpOptions, clientOptions)
 	}
 
 	si, err := actionableShareURL.GetPermission(sipm.ctx, id, nil)
