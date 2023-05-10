@@ -1,5 +1,5 @@
 variables:
-  AZCOPY_GOLANG_VERSION: $(AZCOPY_GO_VER)
+  AZCOPY_GOLANG_VERSION: '1.20.0'
 
 trigger:
   branches:
@@ -129,7 +129,7 @@ jobs:
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-          go test -coverpkg="./..." -covermode=count -c -o $(build_name)
+          go build -cover -coverpkg="cmd,common,jobsAdmin,sddl,ste" -covermode=count -c -o $(build_name)
           echo 'starting E2E tests'
           go test -timeout=1h -v ./e2etest -coverprofile=coverage.txt 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
           $(go env GOPATH)/bin/gocov convert coverage.txt > coverage.json
