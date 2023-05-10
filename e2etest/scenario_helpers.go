@@ -879,7 +879,11 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 				*/
 
-				_, err := fileClient.SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{HTTPHeaders: ad.toHeaders()})
+				_, err := fileClient.SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{
+					HTTPHeaders: ad.toHeaders(),
+					SMBProperties: ad.toSMBProperties(),
+					Permissions: ad.toPermissions(c, options.shareClient),
+				})
 				c.AssertNoErr(err)
 
 				if f.creationProperties.smbPermissionsSddl != nil {
