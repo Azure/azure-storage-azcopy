@@ -422,7 +422,9 @@ func (scenarioHelper) generateGCPObjects(c *chk.C, client *gcpUtils.Client, buck
 func (scenarioHelper) generateFlatFiles(c *chk.C, shareClient *share.Client, fileList []string) {
 	for _, fileName := range fileList {
 		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileName)
-		err := fileClient.UploadBuffer(ctx, []byte(fileDefaultData), nil)
+		_, err := fileClient.Create(ctx, int64(len(fileDefaultData)), nil)
+		c.Assert(err, chk.IsNil)
+		err = fileClient.UploadBuffer(ctx, []byte(fileDefaultData), nil)
 		c.Assert(err, chk.IsNil)
 	}
 
