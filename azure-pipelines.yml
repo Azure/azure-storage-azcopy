@@ -120,6 +120,12 @@ jobs:
         inputs:
           version: $(AZCOPY_GOLANG_VERSION)
 
+      - name: Setup Go Path
+        run: |
+          echo "::set-env name=GOPATH::$(go env GOPATH)"
+          echo "::add-path::$(go env GOPATH)/bin"
+        shell: bash
+
       # Running E2E Tests on AMD64
       - script: |
           go install github.com/jstemmer/go-junit-report@v0.9.1
