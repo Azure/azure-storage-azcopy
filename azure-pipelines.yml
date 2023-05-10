@@ -104,14 +104,17 @@ jobs:
           imageName: 'ubuntu-20.04'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
+          go_path: '$(go env GOPATH)/bin'
         Windows:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
           display_name: "Windows"
+          go_path: '$(go env GOPATH)/bin'
         MacOS:
           imageName: 'macos-11'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
+          go_path: '$(go env GOPATH)/bin'
     pool:
       vmImage: $(imageName)
 
@@ -126,9 +129,9 @@ jobs:
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-          go build -o $(build_name)
+          go build -o $(build_name) -covermode=count -coverpkg="./..."
           echo 'starting E2E tests'
-          go test -timeout=1h ./e2etest -v -coverprofile=coverage.txt -covermode=count 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
+          go test -timeout=1h -v ./e2etest -coverprofile=coverage.txt 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
           $(go env GOPATH)/bin/gocov convert coverage.txt > coverage.json
           $(go env GOPATH)/bin/gocov-xml < coverage.json > coverage.xml
         env:
@@ -157,17 +160,18 @@ jobs:
           artifactName: logs
 
       - task: PublishTestResults@2
+        condition: succeededOrFailed()
         inputs:
           testRunner: JUnit
           testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+          testRunTitle: 'Go on $(display_name)'
 
       - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura
-          pathToSources: '$(System.DefaultWorkingDirectory)'
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/coverage.xml
-          reportDirectory: $(System.DefaultWorkingDirectory)/**/coverage
-          failIfCoverageEmpty: true
+          summaryFileLocation: './coverage.xml'
+          additionalCodeCoverageFiles: './coverage.html'
 
   - job: Test_On_Ubuntu
     variables:
