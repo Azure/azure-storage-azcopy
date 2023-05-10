@@ -120,9 +120,9 @@ jobs:
       # Running E2E Tests on Linux - AMD64
       - script: |
           set -e
-          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+          go build -o azcopy_linux_amd64
           export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-          go test -timeout 60m -race -short -cover ./e2etest
+          go test -timeout 60m -race -cover ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -143,9 +143,9 @@ jobs:
 
       # Running E2E Tests on Windows - AMD64
       - script: |
-          go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_amd64.exe
-          go build -o $(System.DefaultWorkingDirectory)/azcopy_windows_386.exe
+          go build -o azcopy_windows_amd64.exe
           echo 'starting E2E tests on windows'
+          export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_windows_amd64.exe
           go test -timeout 60m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
