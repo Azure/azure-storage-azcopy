@@ -122,9 +122,9 @@ jobs:
 
       # Running E2E Tests on AMD64
       - script: |
-          go get github.com/jstemmer/go-junit-report
-          go get github.com/axw/gocov/gocov
-          go get github.com/AlekSi/gocov-xml
+          go install github.com/jstemmer/go-junit-report
+          go install github.com/axw/gocov/gocov
+          go install github.com/AlekSi/gocov-xml
           go build -o $(build_name)
           echo 'starting E2E tests'
           go test -timeout 60m -race -cover -v ./e2etest -coverprofile=coverage.txt -covermode count ./... 2>&1 | go-junit-report > report.xml
