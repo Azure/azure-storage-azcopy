@@ -120,12 +120,6 @@ jobs:
         inputs:
           version: $(AZCOPY_GOLANG_VERSION)
 
-      - task: Go@0
-        inputs:
-          command: 'get'
-          arguments: '-d ./...'
-          workingDirectory: '$(System.DefaultWorkingDirectory)'
-
       # Running E2E Tests on AMD64
       - script: |
           go get github.com/jstemmer/go-junit-report
