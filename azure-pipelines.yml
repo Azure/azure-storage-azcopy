@@ -121,7 +121,6 @@ jobs:
       - script: |
           set -e
           go build -o azcopy_linux_amd64
-          export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           go test -timeout 60m -race -cover ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
@@ -138,6 +137,7 @@ jobs:
           AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/azcopy_linux_amd64
         displayName: 'E2E Test Linux - AMD64'
         condition: eq(variables.type, 'linux')
 
@@ -145,7 +145,6 @@ jobs:
       - script: |
           go build -o azcopy_windows_amd64.exe
           echo 'starting E2E tests on windows'
-          export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_windows_amd64.exe
           go test -timeout 60m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
@@ -171,7 +170,6 @@ jobs:
           set -e
           go build -o azcopy_darwin_amd64
           echo 'starting E2E tests on mac-os'
-          export AZCOPY_E2E_EXECUTABLE_PATH=$(pwd)/azcopy_darwin_amd64
           go test -timeout 60m -race -cover -v ./e2etest
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
@@ -188,6 +186,7 @@ jobs:
           AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/azcopy_darwin_amd64
         displayName: 'E2E Test MacOs AMD64'
         condition: eq(variables.type, 'mac-os')
 
