@@ -156,6 +156,19 @@ jobs:
           pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
           artifactName: logs
 
+      - task: PublishTestResults@2
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
+
+      - task: PublishCodeCoverageResults@1
+        inputs:
+          codeCoverageTool: Cobertura
+          pathToSources: '$(System.DefaultWorkingDirectory)'
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/coverage.xml
+          reportDirectory: $(System.DefaultWorkingDirectory)/**/coverage
+          failIfCoverageEmpty: true
+
   - job: Test_On_Ubuntu
     variables:
       isMutexSet: 'false'
