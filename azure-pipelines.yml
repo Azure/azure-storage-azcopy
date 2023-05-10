@@ -120,9 +120,13 @@ jobs:
         inputs:
           version: $(AZCOPY_GOLANG_VERSION)
 
-      # Running E2E Tests on AMD64
       - script: |
           echo '##vso[task.prependpath]$(go env GOPATH)/bin'
+        displayName: 'Set up Path'
+
+
+      # Running E2E Tests on AMD64
+      - script: |
           go install github.com/jstemmer/go-junit-report@v0.9.1
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
