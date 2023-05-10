@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
@@ -432,7 +433,7 @@ func cleanFileAccount(c asserter, sc *fileservice.Client) {
 }
 
 func deleteShare(c asserter, sc *share.Client) {
-	_, err := sc.Delete(ctx, nil)
+	_, err := sc.Delete(ctx, &share.DeleteOptions{DeleteSnapshots: to.Ptr(share.DeleteSnapshotsOptionTypeInclude)})
 	c.AssertNoErr(err)
 }
 

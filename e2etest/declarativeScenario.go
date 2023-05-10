@@ -655,6 +655,14 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]*string) {
 	}
 }
 
+func metadataWithProperCasing(original map[string]*string) map[string]*string {
+	result := make(map[string]*string)
+	for k, v := range original {
+		result[strings.ToLower(k)] = v
+	}
+	return result
+}
+
 // // Individual property validation routines
 func (s *scenario) validateMetadata(expected, actual map[string]*string) {
 	for _, v := range common.AllLinuxProperties { // properties are evaluated elsewhere
@@ -663,9 +671,10 @@ func (s *scenario) validateMetadata(expected, actual map[string]*string) {
 	}
 
 	s.a.Assert(len(actual), equals(), len(expected), "Both should have same number of metadata entries")
+	cased := metadataWithProperCasing(actual)
 	for key := range expected {
 		exValue := expected[key]
-		actualValue, ok := actual[key]
+		actualValue, ok := cased[key]
 		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", key))
 		if ok {
 			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, *exValue, *actualValue))
