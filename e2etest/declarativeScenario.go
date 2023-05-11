@@ -693,8 +693,8 @@ func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
 		s.a.Failed()
 		return
 	}
-	fmt.Println("here is enc scope", expected.EncryptionScope)
-	fmt.Println("here is enc scope", actual.EncryptionScope)
+	fmt.Println("here is enc scope", &expected.EncryptionScope)
+	fmt.Println("here is enc scope", &actual.EncryptionScope)
 	s.a.Assert(expected.EncryptionScope, equals(), actual.EncryptionScope,
 		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionScope, actual.EncryptionScope))
 }

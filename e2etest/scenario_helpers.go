@@ -582,7 +582,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 				contentMD5:         bp.ContentMD5,
 			}
 			md := map[string]string(blobInfo.Metadata)
-			fmt.Println("here is enc scope", bp.EncryptionScope)
+			fmt.Println("here is enc scope", &bp.EncryptionScope)
 			props := objectProperties{
 				entityType:         common.EEntityType.File(), // todo: posix properties includes folders
 				size:               bp.ContentLength,
