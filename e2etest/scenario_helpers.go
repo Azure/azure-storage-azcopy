@@ -137,7 +137,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 				mode = *file.creationProperties.posixProperties.mode
 			}
 			switch {
-			case mode & common.S_IFIFO == common.S_IFIFO || mode & common.S_IFSOCK == common.S_IFSOCK:
+			case mode&common.S_IFIFO == common.S_IFIFO || mode&common.S_IFSOCK == common.S_IFSOCK:
 				osScenarioHelper{}.Mknod(c, destFile, mode, 0)
 			default:
 				sourceData, err := s.generateLocalFile(
@@ -370,10 +370,10 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 }
 
 type generateFromListOptions struct {
-	fs          []*testObject
-	defaultSize string
+	fs                      []*testObject
+	defaultSize             string
 	preservePosixProperties bool
-	accountType AccountType
+	accountType             AccountType
 }
 
 type generateBlobFromListOptions struct {
@@ -424,7 +424,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				mode := *b.creationProperties.posixProperties.mode
 
 				// todo: support for device rep files may be difficult in a testing environment.
-				if mode & common.S_IFSOCK == common.S_IFSOCK || mode & common.S_IFIFO == common.S_IFIFO {
+				if mode&common.S_IFSOCK == common.S_IFSOCK || mode&common.S_IFIFO == common.S_IFIFO {
 					b.body = make([]byte, 0)
 				}
 			}
@@ -582,7 +582,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerUR
 				contentMD5:         bp.ContentMD5,
 			}
 			md := map[string]string(blobInfo.Metadata)
-
+			fmt.Println("here is enc scope", bp.EncryptionScope)
 			props := objectProperties{
 				entityType:         common.EEntityType.File(), // todo: posix properties includes folders
 				size:               bp.ContentLength,

@@ -606,12 +606,12 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 		case common.EFromTo.LocalBlob():
 			source := s.state.source.(*resourceLocal)
 
-			return strings.TrimPrefix(oldName, source.dirPath + common.OS_PATH_SEPARATOR)
+			return strings.TrimPrefix(oldName, source.dirPath+common.OS_PATH_SEPARATOR)
 		case common.EFromTo.BlobLocal():
 			dest := s.state.dest.(*resourceLocal)
 			_, _, _, _, addedDirAtDest := s.getTransferInfo()
 
-			return strings.TrimPrefix(oldName, path.Join(dest.dirPath, addedDirAtDest) + common.OS_PATH_SEPARATOR)
+			return strings.TrimPrefix(oldName, path.Join(dest.dirPath, addedDirAtDest)+common.OS_PATH_SEPARATOR)
 		case common.EFromTo.BlobBlob():
 			return oldName // no adjustment necessary
 		default:
@@ -630,7 +630,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 			symlinkDest := path.Join(dest.(*resourceLocal).dirPath, addedDirAtDest, f.name)
 			stat, err := os.Lstat(symlinkDest)
 			c.AssertNoErr(err)
-			c.Assert(stat.Mode() & os.ModeSymlink, equals(), os.ModeSymlink, "the file is not a symlink")
+			c.Assert(stat.Mode()&os.ModeSymlink, equals(), os.ModeSymlink, "the file is not a symlink")
 
 			oldName, err := os.Readlink(symlinkDest)
 			c.AssertNoErr(err)
@@ -657,7 +657,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 
 // // Individual property validation routines
 func (s *scenario) validateMetadata(expected, actual map[string]string) {
-	for _,v := range common.AllLinuxProperties { // properties are evaluated elsewhere
+	for _, v := range common.AllLinuxProperties { // properties are evaluated elsewhere
 		delete(expected, v)
 		delete(actual, v)
 	}
@@ -693,6 +693,8 @@ func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
 		s.a.Failed()
 		return
 	}
+	fmt.Println("here is enc scope", expected.EncryptionScope)
+	fmt.Println("here is enc scope", actual.EncryptionScope)
 	s.a.Assert(expected.EncryptionScope, equals(), actual.EncryptionScope,
 		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionScope, actual.EncryptionScope))
 }
