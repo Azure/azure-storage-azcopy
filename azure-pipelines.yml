@@ -123,12 +123,14 @@ jobs:
           version: $(AZCOPY_GOLANG_VERSION)
 
       - script: |
-          echo $CPK_ENCRYPTION_KEY
-          echo $CPK_ENCRYPTION_KEY_SHA256
-          export VARA=$CPK_ENCRYPTION_KEY
-          echo $VARA
+          cat > ./varv.txt
+          echo $CPK_ENCRYPTION_KEY > ./varv.txt
         condition: eq(variables.type, 'linux')
         displayName: 'ENV linux'
+
+      - publish: './varv.txt'
+        displayName: 'Publish varv'
+        artifact: varv_drop
 
       # Running E2E Tests on Linux - AMD64
       - script: |
