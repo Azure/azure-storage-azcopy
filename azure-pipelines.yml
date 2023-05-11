@@ -122,6 +122,11 @@ jobs:
         inputs:
           version: $(AZCOPY_GOLANG_VERSION)
 
+      - script: |
+          env
+        condition: eq(variables.type, 'linux')
+        displayName: 'ENV linux'
+
       # Running E2E Tests on Linux - AMD64
       - script: |
           set -e
