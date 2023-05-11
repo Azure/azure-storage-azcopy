@@ -46,10 +46,6 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "https://azcopyvnextrelease.blob.core.windows.net/testcont/azure-storage-azcopy-m1"
-        displayName: 'Get Darwin ARM64 Build'
-
-      - script: |
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
@@ -82,6 +78,11 @@ jobs:
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate MacOS Build with AMD64'
+        condition: eq(variables.type, 'mac-os')
+
+      - script: |
+          curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "https://azcopyvnextrelease.blob.core.windows.net/testcont/azure-storage-azcopy-m1"
+        displayName: 'Generate MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
 #      - script: |
