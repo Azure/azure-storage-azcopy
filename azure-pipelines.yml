@@ -123,7 +123,10 @@ jobs:
           version: $(AZCOPY_GOLANG_VERSION)
 
       - script: |
-          env
+          echo $CPK_ENCRYPTION_KEY
+          echo $CPK_ENCRYPTION_KEY_SHA256
+          export VARA=$CPK_ENCRYPTION_KEY
+          echo $VARA
         condition: eq(variables.type, 'linux')
         displayName: 'ENV linux'
 
