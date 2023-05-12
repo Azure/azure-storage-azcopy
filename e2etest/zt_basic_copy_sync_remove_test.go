@@ -21,7 +21,11 @@
 package e2etest
 
 import (
+	"crypto/md5"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -349,6 +353,7 @@ func TestBasic_HashBasedSync_Folders(t *testing.T) {
 		params{
 recursive:   true,
 			compareHash: common.ESyncHashType.MD5(),
+			hashStorageMode: common.EHashStorageMode.HiddenFiles(),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) { // set up source to overwrite dest
@@ -441,6 +446,7 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 		params{
 			recursive:   true,
 			compareHash: common.ESyncHashType.MD5(),
+			hashStorageMode: common.EHashStorageMode.HiddenFiles(),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
@@ -463,6 +469,145 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 			},
 			shouldSkip: []interface{}{
 				f("skipme-exists.txt"), // create at destination
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+// TestBasic_HashBasedSync_StorageModeOSSpecific validates AzCopy's ability to save and via the same adapter, read hash data from os-specific types
+func TestBasic_HashBasedSync_StorageModeOSSpecific(t *testing.T) {
+	body := []byte("foobar")
+	fileSum := md5.Sum(body)
+	textFile := f("asdf.txt", with{contentMD5: fileSum[:]})
+	textFile.body = body
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
+			hashStorageMode: common.HashStorageMode(11),
+		},
+		&hooks{
+			afterValidation: func(h hookHelper) {
+				fromTo := h.FromTo()
+				a := h.GetAsserter()
+
+				// get which location has the local traverser
+				var localLocation *resourceLocal
+				sen := h.(*scenario)
+				if fromTo.IsUpload() {
+					localLocation = sen.state.source.(*resourceLocal)
+				} else {
+					localLocation = sen.state.dest.(*resourceLocal)
+				}
+
+				// Ensure we got what we're looking for
+				a.Assert(localLocation, notEquals(), nil)
+
+				// create the hash adapter
+				dataPath := localLocation.dirPath
+				hashAdapter, err := common.NewHashDataAdapter("", dataPath, common.EHashStorageMode.Default())
+				a.AssertNoErr(err)
+				a.Assert(hashAdapter.GetMode(), equals(), common.HashStorageMode(11)) // 1 is currently either XAttr or ADS; both are the intent of this test.
+
+				hashData, err := hashAdapter.GetHashData("asdf.txt")
+				a.AssertNoErr(err)
+
+				a.Assert(hashData.Mode, equals(), common.ESyncHashType.MD5())
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				textFile,
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+// TestBasic_HashBasedSync_HashDir validates AzCopy's ability to save and via the same adapter, read hash data from an alternate directory
+func TestBasic_HashBasedSync_HashDir(t *testing.T) {
+	body := []byte("foobar")
+	fileSum := md5.Sum(body)
+	textFile := f("asdf.txt", with{contentMD5: fileSum[:]})
+	textFile.body = body
+
+	hashStorageDir, err := os.MkdirTemp("", "hashdir*")
+	if err != nil {
+		t.Fatal("failed to create temp dir:", err)
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
+			hashStorageMode: common.EHashStorageMode.HiddenFiles(), // must target hidden files
+			hashStorageDir: hashStorageDir,
+		},
+		&hooks{
+			afterValidation: func(h hookHelper) {
+				fromTo := h.FromTo()
+				a := h.GetAsserter()
+
+				// get which location has the local traverser
+				var localLocation *resourceLocal
+				sen := h.(*scenario)
+				if fromTo.IsUpload() {
+					localLocation = sen.state.source.(*resourceLocal)
+				} else {
+					localLocation = sen.state.dest.(*resourceLocal)
+				}
+
+				// Ensure we got what we're looking for
+				a.Assert(localLocation, notEquals(), nil)
+
+				// create the hash adapter
+				dataPath := localLocation.dirPath
+				hashAdapter, err := common.NewHashDataAdapter(hashStorageDir, dataPath, common.EHashStorageMode.HiddenFiles())
+				if err != nil || hashAdapter == nil {
+					a.Error(fmt.Sprintf("Could not create hash adapter: %s", err))
+					return
+				}
+				a.Assert(hashAdapter.GetMode(), equals(), common.HashStorageMode(11)) // 1 is currently either XAttr or ADS; both are the intent of this test.
+
+				hashData, err := hashAdapter.GetHashData("asdf.txt")
+				if err != nil || hashData == nil {
+					a.Error(fmt.Sprintf("Could not read hash data: %s", err))
+					return
+				}
+
+				a.Assert(hashData.Mode, equals(), common.ESyncHashType.MD5())
+
+				// Ensure the hash file actually exists in the right place
+				hashFile := filepath.Join(hashStorageDir, ".asdf.txt" + common.AzCopyHashDataStream)
+				_, err = os.Stat(hashFile)
+				a.AssertNoErr(err)
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				textFile,
 			},
 		},
 		EAccountType.Standard(),

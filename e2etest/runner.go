@@ -120,6 +120,8 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	} else if o == eOperation.Sync() {
 		set("preserve-posix-properties", p.preservePOSIXProperties, false)
 		set("compare-hash", p.compareHash.String(), "None")
+		set("local-hash-storage-mode", p.hashStorageMode.String(), common.EHashStorageMode.Default().String())
+		set("hash-meta-dir", p.hashStorageDir, "")
 	}
 }
 
