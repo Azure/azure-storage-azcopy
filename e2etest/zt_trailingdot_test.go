@@ -26,6 +26,8 @@ import (
 	"testing"
 )
 
+var enabled = common.ETrailingDotOption.Enable()
+
 func TestTrailingDot_Local(t *testing.T) {
 	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
 	if runtime.GOOS == "windows" {
@@ -34,7 +36,7 @@ func TestTrailingDot_Local(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
-			trailingDot: common.ETrailingDotOption.Enable(),
+			trailingDot: &enabled,
 		}, nil,
 		testFiles{
 			defaultSize: "1K",
@@ -84,7 +86,7 @@ func TestTrailingDot_Min(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
-			trailingDot: common.ETrailingDotOption.Enable(),
+			trailingDot: &enabled,
 		}, nil,
 		testFiles{
 			defaultSize: "1K",
@@ -115,7 +117,7 @@ func TestTrailingDot_S2S(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
-			trailingDot: common.ETrailingDotOption.Enable(),
+			trailingDot: &enabled,
 		}, nil,
 		testFiles{
 			defaultSize: "1K",
@@ -160,7 +162,7 @@ func TestTrailingDot_S2S(t *testing.T) {
 func TestTrailingDot_Remove(t *testing.T) {
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
-		trailingDot: common.ETrailingDotOption.Enable(),
+		trailingDot: &enabled,
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
