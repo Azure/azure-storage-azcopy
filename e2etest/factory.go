@@ -23,6 +23,7 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"net/url"
 	"os"
@@ -67,7 +68,7 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) azfile.Ser
 		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
 		azfile.NewUniqueRequestIDPolicyFactory(),
 		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
-		ste.NewTrailingDotPolicyFactory(true),
+		ste.NewTrailingDotPolicyFactory(common.ETrailingDotOption.Enable()),
 		credential,
 		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
@@ -164,7 +165,7 @@ func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType Account
 		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
 		azfile.NewUniqueRequestIDPolicyFactory(),
 		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
-		ste.NewTrailingDotPolicyFactory(true),
+		ste.NewTrailingDotPolicyFactory(common.ETrailingDotOption.Enable()),
 		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 	}

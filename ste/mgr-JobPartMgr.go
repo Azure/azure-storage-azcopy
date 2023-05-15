@@ -91,10 +91,10 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
-func NewTrailingDotPolicyFactory(trailingDot bool) pipeline.Factory {
+func NewTrailingDotPolicyFactory(trailingDot common.TrailingDotOption) pipeline.Factory {
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			if trailingDot {
+			if trailingDot == common.ETrailingDotOption.Enable() {
 				request.Header.Set("x-ms-allow-trailing-dot", "true")
 				request.Header.Set("x-ms-source-allow-trailing-dot", "true")
 				request.Header.Set("x-ms-version", "2022-11-02")
@@ -235,7 +235,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot bool) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}

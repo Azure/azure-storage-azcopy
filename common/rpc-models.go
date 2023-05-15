@@ -229,7 +229,7 @@ type BlobTransferAttributes struct {
 
 // This struct represents the optional attribute for file request header
 type FileTransferAttributes struct {
-	TrailingDot bool
+	TrailingDot TrailingDotOption
 }
 
 type JobIDDetails struct {

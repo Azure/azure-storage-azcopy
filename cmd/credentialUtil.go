@@ -722,7 +722,7 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, l
 }
 
 // TODO note: ctx and credInfo are ignored at the moment because we only support SAS for Azure File
-func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel, trailingDot bool) (pipeline.Pipeline, error) {
+func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel, trailingDot common.TrailingDotOption) (pipeline.Pipeline, error) {
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOption = pipeline.LogOptions{

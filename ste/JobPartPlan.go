@@ -334,7 +334,7 @@ type JobPartPlanDstBlob struct {
 
 // JobPartPlanDstFile holds additional settings required when the destination is a file
 type JobPartPlanDstFile struct {
-	TrailingDot bool
+	TrailingDot common.TrailingDotOption
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

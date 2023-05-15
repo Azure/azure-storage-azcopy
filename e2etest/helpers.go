@@ -263,7 +263,7 @@ func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
 		azfile.NewUniqueRequestIDPolicyFactory(),
 		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
-		ste.NewTrailingDotPolicyFactory(true),
+		ste.NewTrailingDotPolicyFactory(common.ETrailingDotOption.Enable()),
 		credential,
 		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked

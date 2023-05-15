@@ -120,10 +120,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
 	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
 
-	if !cca.trailingDot && (cca.fromTo.To() == common.ELocation.File() || cca.fromTo.From() == common.ELocation.File()) {
-		filters = append(filters, &TrailingDotFilter{})
-	}
-
 	// after making all filters, log any search prefix computed from them
 	if jobsAdmin.JobsAdmin != nil {
 		if prefixFilter := FilterSet(filters).GetEnumerationPreFilter(cca.recursive); prefixFilter != "" {

@@ -46,7 +46,7 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	trailingDot bool
+	trailingDot common.TrailingDotOption
 }
 
 func (t *fileTraverser) IsDirectory(bool) (bool, error) {
@@ -70,7 +70,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
-		if !t.trailingDot && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
+		if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
 			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 			return nil
 		}
@@ -202,7 +202,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 			for _, fileInfo := range lResp.FileItems {
 				// These conditions are to prevent a GetProperties from returning a 404 when trailing dot is turned off.
-				if !t.trailingDot && strings.HasSuffix(fileInfo.Name, ".") {
+				if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(fileInfo.Name, ".") {
 					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, fileInfo.Name))
 				} else {
 					enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
@@ -210,7 +210,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
 				// These conditions are to prevent a GetProperties from returning a 404 when trailing dot is turned off.
-				if !t.trailingDot && strings.HasSuffix(dirInfo.Name, ".") {
+				if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(dirInfo.Name, ".") {
 					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, dirInfo.Name))
 				} else {
 					enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
@@ -283,7 +283,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot bool) (t *fileTraverser) {
+func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption) (t *fileTraverser) {
 	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter, trailingDot: trailingDot}
 	return
 }

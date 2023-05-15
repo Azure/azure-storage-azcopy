@@ -92,7 +92,7 @@ type rawSyncCmdArgs struct {
 	cpkScopeInfo string
 	// dry run mode bool
 	dryrun bool
-	trailingDot bool
+	trailingDot string
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -157,10 +157,13 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		dstHNS = true
 	}
 
-	cooked.isHNSToHNS = srcHNS && dstHNS
-	cooked.trailingDot = raw.trailingDot
-
 	var err error
+	cooked.isHNSToHNS = srcHNS && dstHNS
+	err = cooked.trailingDot.Parse(raw.trailingDot)
+	if err != nil {
+		return cooked, err
+	}
+
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
@@ -172,13 +175,15 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		if cooked.fromTo.To() != common.ELocation.File() && cooked.trailingDot {
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.fromTo.To() != common.ELocation.File() && raw.trailingDot != "" {
 			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-		if cooked.fromTo.From() != common.ELocation.File() && cooked.trailingDot {
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.fromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
 			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob():
@@ -186,7 +191,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-		if cooked.fromTo.To() != common.ELocation.File() && cooked.fromTo.From() != common.ELocation.File() && cooked.trailingDot {
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.fromTo.To() != common.ELocation.File() && cooked.fromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
 			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	default:
@@ -455,7 +461,7 @@ type cookedSyncCmdArgs struct {
 	mirrorMode bool
 
 	dryrunMode bool
-	trailingDot bool
+	trailingDot common.TrailingDotOption
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -827,7 +833,7 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
-	syncCmd.PersistentFlags().BoolVar(&raw.trailingDot, "trailing-dot", false, "False by default. Adds support for trailing dot in file share.")
+	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Enabled by default. Options for trailing dot support in file share. Available options: Enable, Disable. Choose disable to go back to legacy (potentially unsafe) treatment of trailing dot files.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 
