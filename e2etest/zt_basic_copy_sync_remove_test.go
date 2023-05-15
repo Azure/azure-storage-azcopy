@@ -26,6 +26,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -479,6 +481,33 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 
 // TestBasic_HashBasedSync_StorageModeOSSpecific validates AzCopy's ability to save and via the same adapter, read hash data from os-specific types
 func TestBasic_HashBasedSync_StorageModeOSSpecific(t *testing.T) {
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		tmpDir, err := os.MkdirTemp("", "xattrtest*")
+		if err != nil {
+			t.Log("Failed to create xattr test dir:", err)
+			t.FailNow()
+		}
+
+		fileName := filepath.Join(tmpDir, "asdf.txt")
+		f, err := os.Create(fileName)
+		if err != nil {
+			t.Log("Failed to create xattr test file:", err)
+			t.FailNow()
+		}
+		err = f.Close()
+		if err != nil {
+			t.Log("Failed to close xattr test file:", err)
+			t.FailNow()
+		}
+
+		xAttrAdapter, _ := common.NewHashDataAdapter("", tmpDir, common.HashStorageMode(11)) // same as xattr; no errors on Linux
+		err = xAttrAdapter.SetHashData("asdf.txt", &common.SyncHashData{Mode: common.ESyncHashType.MD5(), Data: "test", LMT: time.Now()})
+		if err == syscall.Errno(0x5f) { // == ENOTSUP
+			t.Skip("XAttr not supported")
+			return
+		}
+	}
+
 	body := []byte("foobar")
 	fileSum := md5.Sum(body)
 	textFile := f("asdf.txt", with{contentMD5: fileSum[:]})
