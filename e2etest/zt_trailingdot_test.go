@@ -21,7 +21,9 @@
 package e2etest
 
 import (
+	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"runtime"
 	"testing"
 )
@@ -89,6 +91,33 @@ func TestTrailingDot_Min(t *testing.T) {
 			defaultSize: "1K",
 			shouldTransfer: []interface{}{
 				folder(""),
+				f("file."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_Disabled(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+			trailingDot: &disabled,
+		}, &hooks{
+			afterValidation: func(h hookHelper) {
+				shareURL := h.GetDestination().(*resourceAzureFileShare).shareURL
+				l, err := shareURL.NewRootDirectoryURL().ListFilesAndDirectoriesSegment(context.Background(), azfile.Marker{}, azfile.ListFilesAndDirectoriesOptions{})
+				if err != nil {
+					panic(err)
+				}
+				if len(l.FileItems) != 1 {
+					panic("expected 1 file named `file`")
+				}
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file"),
 				f("file."),
 			},
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
