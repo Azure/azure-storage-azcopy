@@ -204,21 +204,21 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				// These conditions are to prevent a GetProperties from returning a 404 when trailing dot is turned off.
 				if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(fileInfo.Name, ".") {
 					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, fileInfo.Name))
-				} else {
-					enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
 				}
+				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
+
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
 				// These conditions are to prevent a GetProperties from returning a 404 when trailing dot is turned off.
 				if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(dirInfo.Name, ".") {
 					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, dirInfo.Name))
-				} else {
-					enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
-					if t.recursive {
-						// If recursive is turned on, add sub directories to be processed
-						enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
-					}
 				}
+				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
+				if t.recursive {
+						// If recursive is turned on, add sub directories to be processed
+					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
+				}
+
 			}
 
 			// if debug mode is on, note down the result, this is not going to be fast

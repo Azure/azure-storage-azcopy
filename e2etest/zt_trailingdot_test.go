@@ -27,8 +27,34 @@ import (
 )
 
 var enabled = common.ETrailingDotOption.Enable()
+var disabled = common.ETrailingDotOption.Disable()
 
 func TestTrailingDot_Local(t *testing.T) {
+	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
+	if runtime.GOOS == "windows" {
+		return
+	}
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file"),
+				f("file."),
+				folder("directory."),
+				f("directory./file."),
+				f("directory./file"),
+				folder("directory"),
+				f("directory/file."),
+				f("directory/file"),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_LocalManual(t *testing.T) {
 	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
 	if runtime.GOOS == "windows" {
 		return
@@ -54,39 +80,33 @@ func TestTrailingDot_Local(t *testing.T) {
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-//func TestTrailingDot_LocalNegative(t *testing.T) {
-//	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
-//	if runtime.GOOS == "windows" {
-//		return
-//	}
-//	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
-//		params{
-//			recursive: true,
-//			trailingDot: common.ETrailingDotOption.Disable(),
-//		}, nil,
-//		testFiles{
-//			defaultSize: "1K",
-//			shouldTransfer: []interface{}{
-//				folder(""),
-//				f("file"),
-//				folder("directory"),
-//				f("directory/file"),
-//			},
-//			shouldIgnore: []interface{}{
-//				f("file."),
-//				folder("directory."),
-//				f("directory./file."),
-//				f("directory./file"),
-//				f("directory/file."),
-//			},
-//		}, EAccountType.Standard(), EAccountType.Standard(), "")
-//}
+func TestTrailingDot_LocalNegative(t *testing.T) {
+	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
+	if runtime.GOOS == "windows" {
+		return
+	}
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+			trailingDot: &disabled,
+		}, &hooks{
+			afterValidation: func(h hookHelper) {
+				//url := h.GetDestination().(*resourceAzureFileShare).rawSasURL.Path
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
 
 func TestTrailingDot_Min(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
-			trailingDot: &enabled,
 		}, nil,
 		testFiles{
 			defaultSize: "1K",
@@ -97,27 +117,10 @@ func TestTrailingDot_Min(t *testing.T) {
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-//func TestTrailingDot_MinNegative(t *testing.T) {
-//	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
-//		params{
-//			recursive: true,
-//			trailingDot: common.ETrailingDotOption.Disable(),
-//		}, nil,
-//		testFiles{
-//			defaultSize: "1K",shouldTransfer: []interface{}{
-//				folder(""),
-//			},
-//			shouldSkip: []interface{}{
-//				f("file."),
-//			},
-//		}, EAccountType.Standard(), EAccountType.Standard(), "")
-//}
-
 func TestTrailingDot_S2S(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
-			trailingDot: &enabled,
 		}, nil,
 		testFiles{
 			defaultSize: "1K",
@@ -135,34 +138,9 @@ func TestTrailingDot_S2S(t *testing.T) {
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-//func TestTrailingDot_S2SNegative(t *testing.T) {
-//	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
-//		params{
-//			recursive: true,
-//			trailingDot: common.ETrailingDotOption.Disable(),
-//		}, nil,
-//		testFiles{
-//			defaultSize: "1K",
-//			shouldTransfer: []interface{}{
-//				folder(""),
-//				f("file"),
-//				folder("directory"),
-//				f("directory/file"),
-//			},
-//			shouldIgnore: []interface{}{
-//				f("file."),
-//				folder("directory."),
-//				f("directory./file."),
-//				f("directory./file"),
-//				f("directory/file."),
-//			},
-//		}, EAccountType.Standard(), EAccountType.Standard(), "")
-//}
-
 func TestTrailingDot_Remove(t *testing.T) {
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
-		trailingDot: &enabled,
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -180,27 +158,3 @@ func TestTrailingDot_Remove(t *testing.T) {
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
-
-//func TestTrailingDot_RemoveNegative(t *testing.T) {
-//	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
-//		params{
-//			recursive: true,
-//			trailingDot: common.ETrailingDotOption.Disable(),
-//		}, nil,
-//		testFiles{
-//			defaultSize: "1K",
-//			shouldTransfer: []interface{}{
-//				folder(""),
-//				f("file"),
-//				folder("directory"),
-//				f("directory/file"),
-//			},
-//			shouldIgnore: []interface{}{
-//				f("file."),
-//				folder("directory."),
-//				f("directory./file."),
-//				f("directory./file"),
-//				f("directory/file."),
-//			},
-//		}, EAccountType.Standard(), EAccountType.Standard(), "")
-//}
