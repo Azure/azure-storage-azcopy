@@ -71,6 +71,11 @@ type scenarioState struct {
 
 // Run runs one test scenario
 func (s *scenario) Run() {
+	defer func() { // catch a test panicking
+		if err := recover(); err != nil {
+			s.a.Error(fmt.Sprintf("Test panicked: %v", err))
+		}
+	}()
 	defer s.cleanup()
 
 	// setup runner

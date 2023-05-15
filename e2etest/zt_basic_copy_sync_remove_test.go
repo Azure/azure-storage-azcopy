@@ -545,11 +545,17 @@ func TestBasic_HashBasedSync_StorageModeOSSpecific(t *testing.T) {
 				// create the hash adapter
 				dataPath := localLocation.dirPath
 				hashAdapter, err := common.NewHashDataAdapter("", dataPath, common.EHashStorageMode.Default())
-				a.AssertNoErr(err)
+				if err != nil || hashAdapter == nil {
+					a.Error(fmt.Sprintf("Could not create hash adapter: %s", err))
+					return
+				}
 				a.Assert(hashAdapter.GetMode(), equals(), common.HashStorageMode(11)) // 1 is currently either XAttr or ADS; both are the intent of this test.
 
 				hashData, err := hashAdapter.GetHashData("asdf.txt")
-				a.AssertNoErr(err)
+				if err != nil || hashData == nil {
+					a.Error(fmt.Sprintf("Could not read hash data: %s", err))
+					return
+				}
 
 				a.Assert(hashData.Mode, equals(), common.ESyncHashType.MD5())
 			},
