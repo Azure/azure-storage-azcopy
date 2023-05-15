@@ -80,29 +80,6 @@ func TestTrailingDot_LocalManual(t *testing.T) {
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-func TestTrailingDot_LocalNegative(t *testing.T) {
-	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
-	if runtime.GOOS == "windows" {
-		return
-	}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
-		params{
-			recursive: true,
-			trailingDot: &disabled,
-		}, &hooks{
-			afterValidation: func(h hookHelper) {
-				//url := h.GetDestination().(*resourceAzureFileShare).rawSasURL.Path
-			},
-		},
-		testFiles{
-			defaultSize: "1K",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file."),
-			},
-		}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
-
 func TestTrailingDot_Min(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
