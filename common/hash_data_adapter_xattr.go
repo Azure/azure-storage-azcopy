@@ -52,7 +52,7 @@ func (a *XAttrHashDataAdapter) GetHashData(relativePath string) (*SyncHashData, 
 
 	buf := make([]byte, 512) // 512 bytes should be plenty of space
 retry:
-	_, err := unix.Getxattr(metaFile, strings.TrimPrefix(AzCopyHashDataStream, "."), buf) // MacOS doesn't take well to the dot(?)
+	sz, err := unix.Getxattr(metaFile, strings.TrimPrefix(AzCopyHashDataStream, "."), buf) // MacOS doesn't take well to the dot(?)
 	if err != nil {
 		if err == unix.ERANGE { // But just in case, let's safeguard against it and re-call with a larger buffer.
 			buf = make([]byte, len(buf) * 2)
@@ -65,6 +65,8 @@ retry:
 
 		return nil, fmt.Errorf("failed to read xattr: %w; consider utilizing an OS-agnostic hash storage mode", err)
 	}
+
+	buf = buf[:sz] // trim the ending bytes off
 
 	var out SyncHashData
 	err = json.Unmarshal(buf, &out)
