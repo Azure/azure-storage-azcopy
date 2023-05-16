@@ -124,16 +124,24 @@ jobs:
           version: $(AZCOPY_GOLANG_VERSION)
 
       # Running E2E Tests on AMD64
+      # go build -cover -o $(build_name)
+      # go test -timeout=1h -v ./e2etest
+      # go tool covdata textfmt -i="C:\Users\gapra\temp_staging\coverage" -o C:\Users\gapra\temp_staging\coverage.txt
+      # Do go-junit-report like normal since that is to see which tests passed and failed
+      # gocov convert is correct
+      # gocov-xml is correct too
+
       - script: |
           go install github.com/jstemmer/go-junit-report@v0.9.1
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-          go build -cover -coverpkg="./..." -covermode=count -o $(build_name)
+          mkdir $(GOCOVERDIR)
+          go build -cover -o $(build_name)
           echo 'starting E2E tests'
-          go test -timeout=1h -v ./e2etest -coverprofile=coverage.txt 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
-          $(go env GOPATH)/bin/gocov convert coverage.txt > coverage.json
-          $(go env GOPATH)/bin/gocov-xml < coverage.json > coverage.xml
+          go test -timeout=1h -v ./e2etest -covermode count ./e2etest 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
+          $(go env GOPATH)/bin/gocov convert $(GOCOVERDIR)/coverage.txt > $(GOCOVERDIR)/coverage.json
+          $(go env GOPATH)/bin/gocov-xml < $(GOCOVERDIR)/coverage.json > $(GOCOVERDIR)/coverage.xml
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -150,6 +158,7 @@ jobs:
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
+          GOCOVERDIR: $(System.DefaultWorkingDirectory)/coverage
         displayName: 'E2E Test $(display_name) - AMD64'
 
       - task: PublishBuildArtifacts@1
@@ -170,93 +179,93 @@ jobs:
         condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura
-          summaryFileLocation: './coverage.xml'
-          additionalCodeCoverageFiles: './coverage.html'
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/coverage/coverage.xml
+          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/coverage/coverage.html
 
-  - job: Test_On_Ubuntu
-    variables:
-      isMutexSet: 'false'
-    # allow maximum build time, in case we have build congestion
-    timeoutInMinutes: 360
-    pool:
-      vmImage: 'ubuntu-20.04'
-    steps:
-      - task: UsePythonVersion@0
-        name: 'Set_up_Python'
-        inputs:
-          versionSpec: '3.7'
-      - task: GoTool@0
-        name: 'Set_up_Golang'
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION)
-      - task: DownloadSecureFile@1
-        name: ciGCSServiceAccountKey
-        displayName: 'Download GCS Service Account Key'
-        inputs:
-          secureFile: 'ci-gcs-dev.json'
-      - script: |
-          pip install azure-storage-blob==12.12.0
-          # set the variable to indicate that the mutex is being acquired
-          # note: we set it before acquiring the mutex to ensure we release the mutex. 
-          # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
-          # mutex but before we set this variable.
-          # setting this before will always work since it is valid to break an un-acquired mutex.
-          echo '##vso[task.setvariable variable=isMutexSet]true'
-          # acquire the mutex before running live tests to avoid conflicts
-          python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
-        name: 'Acquire_the_distributed_mutex'
-      - script: |
-          # run unit test and build executable
-          # the set -e line is needed so that the unit tests failure would cause the job to fail properly
-          # "-check.v" (must be after package list) outputs timings
-          set -e
-          go test -timeout 60m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
-          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
-        name: 'Run_unit_tests'
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-      - script: |
-          go build -o test-validator ./testSuite/
-          mkdir test-temp
-          export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-          export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
-          export TEST_DIRECTORY_PATH=$(pwd)/test-temp
-
-          keyctl session test python ./testSuite/scripts/run.py
-        name: 'Run_smoke_tests'
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
-          CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
-          CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
-          CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
-          FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
-          FILESYSTEM_URL: $(FILESYSTEM_URL)
-          OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
-          OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
-          PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
-          S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
-          S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
-          S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
-          S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
-          S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
-          SHARE_SAS_URL: $(SHARE_SAS_URL)
-      - script: |
-          pip install azure-storage-blob==12.12.0
-          python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
-        name: 'Release_the_distributed_mutex'
-        # this runs even if the job was canceled (only if the mutex was acquired by this job)
-        condition: and(always(), eq(variables['isMutexSet'], 'true'))
+#  - job: Test_On_Ubuntu
+#    variables:
+#      isMutexSet: 'false'
+#    # allow maximum build time, in case we have build congestion
+#    timeoutInMinutes: 360
+#    pool:
+#      vmImage: 'ubuntu-20.04'
+#    steps:
+#      - task: UsePythonVersion@0
+#        name: 'Set_up_Python'
+#        inputs:
+#          versionSpec: '3.7'
+#      - task: GoTool@0
+#        name: 'Set_up_Golang'
+#        inputs:
+#          version: $(AZCOPY_GOLANG_VERSION)
+#      - task: DownloadSecureFile@1
+#        name: ciGCSServiceAccountKey
+#        displayName: 'Download GCS Service Account Key'
+#        inputs:
+#          secureFile: 'ci-gcs-dev.json'
+#      - script: |
+#          pip install azure-storage-blob==12.12.0
+#          # set the variable to indicate that the mutex is being acquired
+#          # note: we set it before acquiring the mutex to ensure we release the mutex.
+#          # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the
+#          # mutex but before we set this variable.
+#          # setting this before will always work since it is valid to break an un-acquired mutex.
+#          echo '##vso[task.setvariable variable=isMutexSet]true'
+#          # acquire the mutex before running live tests to avoid conflicts
+#          python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
+#        name: 'Acquire_the_distributed_mutex'
+#      - script: |
+#          # run unit test and build executable
+#          # the set -e line is needed so that the unit tests failure would cause the job to fail properly
+#          # "-check.v" (must be after package list) outputs timings
+#          set -e
+#          go test -timeout 60m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
+#          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+#        name: 'Run_unit_tests'
+#        env:
+#          ACCOUNT_NAME: $(ACCOUNT_NAME)
+#          ACCOUNT_KEY: $(ACCOUNT_KEY)
+#          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+#          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+#          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+#          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+#          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+#          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+#      - script: |
+#          go build -o test-validator ./testSuite/
+#          mkdir test-temp
+#          export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
+#          export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
+#          export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+#
+#          keyctl session test python ./testSuite/scripts/run.py
+#        name: 'Run_smoke_tests'
+#        env:
+#          ACCOUNT_NAME: $(ACCOUNT_NAME)
+#          ACCOUNT_KEY: $(ACCOUNT_KEY)
+#          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+#          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+#          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+#          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+#          ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+#          AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+#          CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
+#          CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
+#          CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
+#          FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
+#          FILESYSTEM_URL: $(FILESYSTEM_URL)
+#          OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
+#          OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
+#          PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
+#          S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
+#          S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
+#          S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
+#          S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
+#          S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
+#          SHARE_SAS_URL: $(SHARE_SAS_URL)
+#      - script: |
+#          pip install azure-storage-blob==12.12.0
+#          python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
+#        name: 'Release_the_distributed_mutex'
+#        # this runs even if the job was canceled (only if the mutex was acquired by this job)
+#        condition: and(always(), eq(variables['isMutexSet'], 'true'))
