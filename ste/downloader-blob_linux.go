@@ -92,7 +92,7 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 
 func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (stage string, err error) {
 	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.
-	destination := bd.txInfo.getDownloadPath()
+	destination := bd.txInfo.Destination
 
 	// First, grab our file descriptor and such.
 	fi, err := os.Stat(destination)
