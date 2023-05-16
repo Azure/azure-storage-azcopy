@@ -102,7 +102,7 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.Unknown()
 	}
 
-	out := common.EFromTo.Unknown()
+	out := common.EFromTo.Unknown() // Check that the intended FromTo is in the list of valid FromTos; if it's not, return Unknown as usual and warn the user.
 	intent := (common.FromTo(srcLocation) << 8) | common.FromTo(dstLocation)
 	enum.GetSymbols(reflect.TypeOf(common.EFromTo), func(enumSymbolName string, enumSymbolValue interface{}) (stop bool) { // find if our fromto is a valid option
 		fromTo := enumSymbolValue.(common.FromTo)
