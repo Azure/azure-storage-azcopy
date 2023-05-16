@@ -69,7 +69,7 @@ retry:
 	var out SyncHashData
 	err = json.Unmarshal(buf, &out)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal xattr: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal xattr: %w; buffer contents: \"%s\"", err, buf)
 	}
 
 	return &out, nil
