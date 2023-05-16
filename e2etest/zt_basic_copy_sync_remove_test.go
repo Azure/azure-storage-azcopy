@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
@@ -502,7 +503,7 @@ func TestBasic_HashBasedSync_StorageModeOSSpecific(t *testing.T) {
 
 		xAttrAdapter, _ := common.NewHashDataAdapter("", tmpDir, common.HashStorageMode(11)) // same as xattr; no errors on Linux
 		err = xAttrAdapter.SetHashData("asdf.txt", &common.SyncHashData{Mode: common.ESyncHashType.MD5(), Data: "test", LMT: time.Now()})
-		if err == syscall.Errno(0x5f) { // == ENOTSUP
+		if errors.Is(err, syscall.Errno(0x5f)) { // == ENOTSUP
 			t.Skip("XAttr not supported")
 			return
 		}
