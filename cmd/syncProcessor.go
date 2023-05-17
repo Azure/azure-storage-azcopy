@@ -313,6 +313,10 @@ func (b *remoteResourceDeleter) getObjectURL(object StoredObject) (url url.URL) 
 		fileURLParts := azfile.NewFileURLParts(*b.rootURL)
 		fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
 		url = fileURLParts.URL()
+	case common.ELocation.BlobFS():
+		blobFSURLParts := azbfs.NewBfsURLParts(*b.rootURL)
+		blobFSURLParts.DirectoryOrFilePath = path.Join(blobFSURLParts.DirectoryOrFilePath, object.relativePath)
+		url = blobFSURLParts.URL()
 	default:
 		panic("unexpected location")
 	}
@@ -368,6 +372,9 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			case common.ELocation.File():
 				dirURL := azfile.NewDirectoryURL(objectURL, b.p)
 				_, err = dirURL.Delete(ctx)
+			case common.ELocation.BlobFS():
+				dirURL := azbfs.NewDirectoryURL(objectURL, b.p)
+				_, err = dirURL.Delete(ctx, nil, false)
 			default:
 				panic("not implemented, check your code")
 			}

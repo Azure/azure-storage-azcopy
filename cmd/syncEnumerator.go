@@ -195,7 +195,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			var deleteScheduler objectProcessor
 			switch cca.fromTo.To() {
 			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
-				deleter, err := newSyncDeleteProcessor(cca)
+				deleter, err := newSyncDeleteProcessor(cca, fpo)
 				if err != nil {
 					return err
 				}
