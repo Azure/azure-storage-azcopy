@@ -162,6 +162,14 @@ jobs:
           GOCOVERDIR: $(System.DefaultWorkingDirectory)/coverage
         displayName: 'E2E Test $(display_name) - AMD64'
 
+      - script: |
+          ls
+          ls coverage
+          go tool covdata textfmt -i=coverage -o coverage.txt
+          $(go env GOPATH)/bin/gocov convert coverage.txt > coverage.json
+          $(go env GOPATH)/bin/gocov-xml < coverage.json > coverage.xml
+        displayName: 'Coverage Conversion $(display_name) - AMD64'
+
       - task: PublishBuildArtifacts@1
         displayName: 'Publish logs'
         condition: succeededOrFailed()
