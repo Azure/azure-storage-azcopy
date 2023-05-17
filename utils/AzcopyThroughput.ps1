@@ -65,7 +65,8 @@ Write-Host "`n Loading Azcopy log ($path)......" -ForegroundColor Yellow
 $timer=[system.diagnostics.stopwatch]::StartNew()
 $logname = (Get-ChildItem $path).BaseName
 
-# Read log, and save into auxiliar file, with all the information about azcoy metrics
+# Read log, and save into auxiliary file, with all the information about azcoy metrics
+
 $reader = [IO.File]::OpenText($path)
 while ($reader.Peek() -ge 0) {
     $line = $reader.ReadLine()
