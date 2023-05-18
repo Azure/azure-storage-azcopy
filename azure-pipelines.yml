@@ -139,7 +139,7 @@ jobs:
           mkdir $(System.DefaultWorkingDirectory)/coverage
           go build -cover -o $(build_name)
           echo 'starting E2E tests'
-          echo $(GOCOVERDIR)
+          echo $GOCOVERDIR
           go test -timeout=1h -v ./e2etest -covermode count 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
