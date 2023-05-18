@@ -110,7 +110,7 @@ jobs:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
           display_name: "Windows"
-          go_path: '%GOPATH%\bin\'
+          go_path: '$(System.DefaultWorkingDirectory)\go\bin\'
           suffix: '.exe'
         MacOS:
           imageName: 'macos-11'
