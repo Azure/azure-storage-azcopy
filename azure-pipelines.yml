@@ -130,13 +130,13 @@ jobs:
           echo 'Building executable'
           go build -cover -o $(build_name)
           echo 'Running tests'
-          go test -timeout=1h -v ./e2etest 2>&1 | $(GOPATH)/bin/go-junit-report > report.xml
+          go test -timeout=1h -v ./e2etest 2>&1 | $GOPATH/bin/go-junit-report > report.xml
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o coverage.txt
           echo 'Formatting coverage to json format'
-          $(GOPATH)/bin/gocov convert coverage.txt > coverage.json
+          $GOPATH/bin/gocov convert coverage.txt > coverage.json
           echo 'Formatting coverage to xml format'
-          $(GOPATH)/bin/gocov-xml < coverage.json > coverage.xml
+          $GOPATH/bin/gocov-xml < coverage.json > coverage.xml
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
