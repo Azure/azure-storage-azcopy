@@ -224,7 +224,7 @@ jobs:
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-          go test -timeout 60m -race -short -v -coverprofile=coverage.txt -covermode count ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v" 2>&1 | $(go env GOPATH)/bin/go-junit-report > unit_report.xml
+          go test -timeout 60m -race -short -v -coverprofile=coverage.txt -covermode count ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v" 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
           $(go env GOPATH)/bin/gocov convert coverage.txt > coverage.json
           $(go env GOPATH)/bin/gocov-xml < coverage.json > coverage.xml
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
