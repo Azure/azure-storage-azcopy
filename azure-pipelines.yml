@@ -104,14 +104,17 @@ jobs:
           imageName: 'ubuntu-20.04'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
+          go_path: '$(go env GOPATH)/bin'
         Windows:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
           display_name: "Windows"
+          go_path: '%GOPATH%/bin'
         MacOS:
           imageName: 'macos-11'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
+          go_path: '$(go env GOPATH)/bin'
     pool:
       vmImage: $(imageName)
 
@@ -130,13 +133,13 @@ jobs:
           echo 'Building executable'
           go build -cover -o $(build_name)
           echo 'Running tests'
-          go test -timeout=1h -v ./e2etest 2>&1 | $GOPATH/bin/go-junit-report > report.xml
+          go test -timeout=1h -v ./e2etest 2>&1 | $(go_path)/go-junit-report > report.xml
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o coverage.txt
           echo 'Formatting coverage to json format'
-          $GOPATH/bin/gocov convert coverage.txt > coverage.json
+          $(go_path)/gocov convert coverage.txt > coverage.json
           echo 'Formatting coverage to xml format'
-          $GOPATH/bin/gocov-xml < coverage.json > coverage.xml
+          $(go_path)/gocov-xml < coverage.json > coverage.xml
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
