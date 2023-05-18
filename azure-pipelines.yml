@@ -226,9 +226,35 @@ jobs:
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout=60m -short -v -coverprofile=unit_coverage.txt -covermode count ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl 2>&1 | $(go env GOPATH)/bin/go-junit-report > unit_report.xml
-          $(go env GOPATH)/bin/gocov convert unit_coverage.txt > unit_coverage.json
-          $(go env GOPATH)/bin/gocov-xml < unit_coverage.json > unit_coverage.xml
+          echo "cmd tests"
+          go test -timeout=60m -short -v -coverprofile=cmd_coverage.txt -covermode count ./cmd 2>&1 | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
+          $(go env GOPATH)/bin/gocov convert cmd_coverage.txt > cmd_coverage.json
+          $(go env GOPATH)/bin/gocov-xml < cmd_coverage.json > cmd_coverage.xml
+          
+          echo "common tests"
+          go test -timeout=60m -short -v -coverprofile=common_coverage.txt -covermode count ./common 2>&1 | $(go env GOPATH)/bin/go-junit-report > common_report.xml
+          $(go env GOPATH)/bin/gocov convert common_coverage.txt > common_coverage.json
+          $(go env GOPATH)/bin/gocov-xml < common_coverage.json > common_coverage.xml
+          
+          echo "common/parallel tests"
+          go test -timeout=60m -short -v -coverprofile=parallel_coverage.txt -covermode count ./common/parallel 2>&1 | $(go env GOPATH)/bin/go-junit-report > parallel_report.xml
+          $(go env GOPATH)/bin/gocov convert parallel_coverage.txt > parallel_coverage.json
+          $(go env GOPATH)/bin/gocov-xml < parallel_coverage.json > parallel_coverage.xml
+          
+          echo "ste tests"
+          go test -timeout=60m -short -v -coverprofile=ste_coverage.txt -covermode count ./ste 2>&1 | $(go env GOPATH)/bin/go-junit-report > ste_report.xml
+          $(go env GOPATH)/bin/gocov convert ste_coverage.txt > ste_coverage.json
+          $(go env GOPATH)/bin/gocov-xml < ste_coverage.json > ste_coverage.xml
+          
+          echo "azbfs tests"
+          go test -timeout=60m -short -v -coverprofile=azbfs_coverage.txt -covermode count ./azbfs 2>&1 | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
+          $(go env GOPATH)/bin/gocov convert azbfs_coverage.txt > azbfs_coverage.json
+          $(go env GOPATH)/bin/gocov-xml < azbfs_coverage.json > azbfs_coverage.xml
+          
+          echo "sddl tests"
+          go test -timeout=60m -short -v -coverprofile=sddl_coverage.txt -covermode count ./sddl 2>&1 | $(go env GOPATH)/bin/go-junit-report > sddl_report.xml
+          $(go env GOPATH)/bin/gocov convert sddl_coverage.txt > sddl_coverage.json
+          $(go env GOPATH)/bin/gocov-xml < sddl_coverage.json > sddl_coverage.xml
         name: 'Run_unit_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
@@ -292,14 +318,14 @@ jobs:
         condition: succeededOrFailed()
         inputs:
           testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/unit_report.xml
-          testRunTitle: 'Unit Tests'
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/*_report.xml
+          testRunTitle: 'Unit and Smoke Tests'
       - task: PublishCodeCoverageResults@1
         condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/unit_coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/unit_coverage.html
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/*_coverage.xml
+          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/*_coverage.html
       # Smoke Test Publishing
 #      - task: PublishTestResults@2
 #        condition: succeededOrFailed()
@@ -307,9 +333,9 @@ jobs:
 #          testRunner: JUnit
 #          testResultsFiles: $(System.DefaultWorkingDirectory)/**/smoke_report.xml
 #          testRunTitle: 'Smoke Tests'
-      - task: PublishCodeCoverageResults@1
-        condition: succeededOrFailed()
-        inputs:
-          codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/smoke_coverage.html
+#      - task: PublishCodeCoverageResults@1
+#        condition: succeededOrFailed()
+#        inputs:
+#          codeCoverageTool: Cobertura
+#          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
+#          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/smoke_coverage.html
