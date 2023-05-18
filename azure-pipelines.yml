@@ -130,13 +130,13 @@ jobs:
           echo 'Building executable'
           go build -cover -o $(build_name)
           echo 'Running tests'
-          go test -timeout=1h -v ./e2etest 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
+          go test -timeout=1h -v ./e2etest 2>&1 | $(GOBIN)/go-junit-report > report.xml
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o coverage.txt
           echo 'Formatting coverage to json format'
-          $(go env GOPATH)/bin/gocov convert coverage.txt > coverage.json
+          $(GOBIN)/gocov convert coverage.txt > coverage.json
           echo 'Formatting coverage to xml format'
-          $(go env GOPATH)/bin/gocov-xml < coverage.json > coverage.xml
+          $(GOBIN)/gocov-xml < coverage.json > coverage.xml
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -154,45 +154,8 @@ jobs:
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+          GOBIN:  '$(GOPATH)/bin' # Go binaries path
         displayName: 'E2E Test $(display_name) - AMD64'
-        condition: ne(variables.display_name, 'Windows')
-
-      # Running E2E Tests on AMD64
-      - script: |
-          go install github.com/jstemmer/go-junit-report@v0.9.1
-          go install github.com/axw/gocov/gocov@v1.1.0
-          go install github.com/AlekSi/gocov-xml@v1.0.0
-          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-          mkdir $(System.DefaultWorkingDirectory)/coverage
-          echo 'Building executable'
-          go build -cover -o $(build_name)
-          echo 'Running tests'
-          go test -timeout=1h -v ./e2etest 2>&1 | %GOPATH%/bin/go-junit-report > report.xml
-          echo 'Formatting coverage directory to legacy txt format'
-          go tool covdata textfmt -i=coverage -o coverage.txt
-          echo 'Formatting coverage to json format'
-          %GOPATH%/bin/gocov convert coverage.txt > coverage.json
-          echo 'Formatting coverage to xml format'
-          %GOPATH%/bin/gocov-xml < coverage.json > coverage.xml
-        env:
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
-          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
-          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
-          AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
-          AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
-          AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
-          AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
-          AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
-          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-        displayName: 'E2E Test $(display_name) - AMD64'
-        condition: eq(variables.display_name, 'Windows')
 
       - task: PublishBuildArtifacts@1
         displayName: 'Publish logs'
