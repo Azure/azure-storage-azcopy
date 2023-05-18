@@ -209,7 +209,7 @@ jobs:
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-        name: 'Install dependencies'
+        name: 'Install_dependencies'
       - script: |
           pip install azure-storage-blob==12.12.0
           # set the variable to indicate that the mutex is being acquired
