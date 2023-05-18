@@ -99,7 +99,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				"",
 				common.EEntityType.File(),
-				fileProperties.LastModified(),
+				azfile.ToTime(fileProperties.FileLastWriteTime()),
 				fileProperties.ContentLength(),
 				fileProperties,
 				noBlobProps,
@@ -108,6 +108,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			)
 
 			storedObject.inode, err = strconv.ParseUint(fileProperties.FileID(), 10, 64)
+			storedObject.lastChangeTime = azfile.ToTime(fileProperties.FileChangeTime())
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
@@ -149,7 +150,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					relativePath: relativePath,
 				}, err
 			}
-			lmt = fullProperties.LastModified()
+			lmt = azfile.ToTime(fullProperties.FileLastWriteTime())
 			lct = azfile.ToTime(fullProperties.FileChangeTime())
 			if f.entityType == common.EEntityType.File() {
 				contentProps = fullProperties.(*azfile.FileGetPropertiesResponse) // only files have content props. Folders don't.
@@ -512,5 +513,6 @@ type azfilePropertiesAdapter interface {
 	NewMetadata() azfile.Metadata
 	LastModified() time.Time
 	FileChangeTime() string
+	FileLastWriteTime() string
 	FileID() string
 }
