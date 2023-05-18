@@ -248,8 +248,7 @@ jobs:
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
-          pip install pytest pytest-azurepipelines
-          keyctl session test python -m pytest ./testSuite/scripts/run.py --junitxml=smoke_report.xml
+          keyctl session test python ./testSuite/scripts/run.py
           
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o smoke_coverage.txt
@@ -302,12 +301,12 @@ jobs:
           summaryFileLocation: $(System.DefaultWorkingDirectory)/**/unit_coverage.xml
           additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/unit_coverage.html
       # Smoke Test Publishing
-      - task: PublishTestResults@2
-        condition: succeededOrFailed()
-        inputs:
-          testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/smoke_report.xml
-          testRunTitle: 'Smoke Tests'
+#      - task: PublishTestResults@2
+#        condition: succeededOrFailed()
+#        inputs:
+#          testRunner: JUnit
+#          testResultsFiles: $(System.DefaultWorkingDirectory)/**/smoke_report.xml
+#          testRunTitle: 'Smoke Tests'
       - task: PublishCodeCoverageResults@1
         condition: succeededOrFailed()
         inputs:
