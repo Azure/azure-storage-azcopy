@@ -72,7 +72,7 @@ $reader = [IO.File]::OpenText($path)
 while ($reader.Peek() -ge 0) {
     $line = $reader.ReadLine()
     if ($line -match 'Mb/s'){
-        $line | Out-File -FilePath C:\temp\auxiliarfile_$logname.log -Append
+        $line | Out-File -FilePath C:\temp\auxiliaryfile_$logname.log -Append
     }elseif($line -match 'Total Number of Transfers'){
         $totalfiles = $line
         break
@@ -82,9 +82,9 @@ $reader.Dispose()
 # Get the total files to transfer
 $tf=$totalfiles -split ':', 2
 
-# Convert the auxiliar file in a CSV to be imported in HTML report
+# Convert the auxiliary file in a CSV to be imported in HTML report
 $azcopyvalues = @()
-$azvalues = Get-Content -Path "C:\temp\auxiliarfile_$logname.log"
+$azvalues = Get-Content -Path "C:\temp\auxiliaryfile_$logname.log"
 foreach ($azvalue in $azvalues){
     $item = New-Object -TypeName PSObject
     $params=$azvalue -split ',', 7
@@ -106,7 +106,7 @@ foreach ($azvalue in $azvalues){
 }
 
 $azcopyvalues | Export-Csv -NoClobber -NoTypeInformation -Encoding Unicode -Path C:\temp\ReporAzCopy_$logname.csv -Delimiter ";"
-Remove-Item C:\temp\auxiliarfile_$logname.log
+Remove-Item C:\temp\auxiliaryfile_$logname.log
 
 $timer.Stop()
 Write-Host 'Duration:' $timer.Elapsed -ForegroundColor Green
