@@ -260,7 +260,8 @@ jobs:
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
-          keyctl session test python ./testSuite/scripts/run.py
+          pip install pytest pytest-azurepipelines
+          keyctl session test python -m pytest ./testSuite/scripts/run.py --junitxml=test-unit.xml
           
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o smoke_coverage.txt
