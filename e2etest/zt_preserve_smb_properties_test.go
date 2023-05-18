@@ -72,7 +72,7 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 		preserveSMBPermissions: true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -93,7 +93,7 @@ func TestProperties_SMBDates(t *testing.T) {
 		recursive:       true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
@@ -125,7 +125,7 @@ func TestProperties_SMBFlags(t *testing.T) {
 		recursive:       true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -152,7 +152,7 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 		recursive:       true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 		// includeAfter: SET LATER
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
@@ -201,7 +201,7 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 		recursive:       true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
@@ -257,7 +257,7 @@ func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
 			preserveSMBPermissions: true,
 
 			// default, but present for clarity
-			//preserveSMBInfo:        BoolPointer(true),
+			//preserveSMBInfo:        to.Ptr(true),
 		},
 		nil,
 		testFiles{
@@ -291,7 +291,7 @@ func TestProperties_SMBTimes(t *testing.T) {
 			recursive:       true,
 
 			// default, but present for clarity
-			//preserveSMBInfo:        BoolPointer(true),
+			//preserveSMBInfo:        to.Ptr(true),
 		},
 		nil,
 		testFiles{
