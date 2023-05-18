@@ -226,7 +226,7 @@ jobs:
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go test -timeout=60m -short -v -coverprofile=unit_coverage.txt -covermode count ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v" 2>&1 | $(go env GOPATH)/bin/go-junit-report > unit_report.xml
+          go test -timeout=60m -short -v -coverprofile=unit_coverage.txt -covermode count ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl 2>&1 | $(go env GOPATH)/bin/go-junit-report > unit_report.xml
           $(go env GOPATH)/bin/gocov convert unit_coverage.txt > unit_coverage.json
           $(go env GOPATH)/bin/gocov-xml < unit_coverage.json > unit_coverage.xml
         name: 'Run_unit_tests'
