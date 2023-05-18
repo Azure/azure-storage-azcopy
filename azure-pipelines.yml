@@ -239,18 +239,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-      - task: PublishTestResults@2
-        condition: succeededOrFailed()
-        inputs:
-          testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/unit_report.xml
-          testRunTitle: 'Unit Tests'
-      - task: PublishCodeCoverageResults@1
-        condition: succeededOrFailed()
-        inputs:
-          codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/unit_coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/unit_coverage.html
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64
           go build -o test-validator ./testSuite/
@@ -261,7 +249,7 @@ jobs:
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
           pip install pytest pytest-azurepipelines
-          keyctl session test python -m pytest ./testSuite/scripts/run.py --junitxml=test-unit.xml
+          keyctl session test python -m pytest ./testSuite/scripts/run.py --junitxml=smoke_report.xml
           
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o smoke_coverage.txt
@@ -300,6 +288,26 @@ jobs:
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
+      # Unit Tests Publishing
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/unit_report.xml
+          testRunTitle: 'Unit Tests'
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/unit_coverage.xml
+          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/unit_coverage.html
+      # Smoke Test Publishing
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/smoke_report.xml
+          testRunTitle: 'Smoke Tests'
       - task: PublishCodeCoverageResults@1
         condition: succeededOrFailed()
         inputs:
