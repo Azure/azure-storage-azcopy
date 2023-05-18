@@ -136,6 +136,7 @@ jobs:
           echo 'Building executable'
           go build -cover -o $(build_name)
           echo 'Running tests'
+          ls $(go_path)
           go test -timeout=1h -v ./e2etest 2>&1 | $(go_path)go-junit-report$(suffix) > report.xml
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o coverage.txt
