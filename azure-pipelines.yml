@@ -255,6 +255,7 @@ jobs:
           GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64
           go build -o test-validator ./testSuite/
           mkdir test-temp
+          mkdir coverage
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
