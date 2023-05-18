@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"net/url"
 	"os"
@@ -30,7 +31,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
@@ -47,8 +47,8 @@ type downloadContentOptions struct {
 }
 
 type downloadBlobContentOptions struct {
-	containerURL azblob.ContainerURL
-	cpkInfo      *blob.CPKInfo
+	containerClient *container.Client
+	cpkInfo         *blob.CPKInfo
 	cpkScopeInfo *blob.CPKScopeInfo
 }
 
@@ -205,15 +205,17 @@ func (r *resourceLocal) createSourceSnapshot(a asserter) {
 // /////
 
 type resourceBlobContainer struct {
-	accountType  AccountType
-	containerURL *azblob.ContainerURL
-	rawSasURL    *url.URL
+	accountType     AccountType
+	containerClient *container.Client
+	rawSasURL       *url.URL
 }
 
 func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, s.GetTestFiles().sourcePublic, r.accountType)
-	r.containerURL = &cu
-	r.rawSasURL = &rawSasURL
+	r.containerClient = cu
+	rawURL, err := url.Parse(rawSasURL)
+	a.AssertNoErr(err)
+	r.rawSasURL = rawURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
 		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
 	}
@@ -221,8 +223,8 @@ func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 
 func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bool) {
 	options := &generateBlobFromListOptions{
-		rawSASURL:    *r.rawSasURL,
-		containerURL: *r.containerURL,
+		rawSASURL:       *r.rawSasURL,
+		containerClient: r.containerClient,
 		generateFromListOptions: generateFromListOptions{
 			fs:          s.fs.allObjects(isSource),
 			defaultSize: s.fs.defaultSize,
@@ -240,7 +242,8 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 
 	// set root ACL
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
-		containerURLParts := azblob.NewBlobURLParts(r.containerURL.URL())
+		containerURLParts, err := blob.ParseURL(r.containerClient.URL())
+		a.AssertNoErr(err)
 
 		for _,v := range options.generateFromListOptions.fs {
 			if v.name == "" {
@@ -263,7 +266,7 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 
 func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
 	options := &generateBlobFromListOptions{
-		containerURL: *r.containerURL,
+		containerClient: r.containerClient,
 		generateFromListOptions: generateFromListOptions{
 			fs:          []*testObject{o},
 			defaultSize: s.fs.defaultSize,
@@ -279,28 +282,28 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 }
 
 func (r *resourceBlobContainer) cleanup(a asserter) {
-	if r.containerURL != nil {
-		deleteContainer(a, *r.containerURL)
+	if r.containerClient != nil {
+		deleteContainer(a, r.containerClient)
 	}
 }
 
 func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFile string) string {
-	var uri url.URL
+	var uri string
 	if withSas {
-		uri = *r.rawSasURL
+		uri = r.rawSasURL.String()
 	} else {
-		uri = r.containerURL.URL()
+		uri = r.containerClient.URL()
 	}
 
 	if withFile != "" {
-		bURLParts := azblob.NewBlobURLParts(uri)
+		bURLParts, _ := blob.ParseURL(uri)
 
 		bURLParts.BlobName = withFile
 
-		uri = bURLParts.URL()
+		uri = bURLParts.String()
 	}
 
-	return uri.String()
+	return uri
 }
 
 func (r *resourceBlobContainer) getSAS() string {
@@ -318,10 +321,11 @@ func (r *resourceBlobContainer) appendSourcePath(filePath string, useSas bool) {
 }
 
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
-	objects := scenarioHelper{}.enumerateContainerBlobProperties(a, *r.containerURL)
+	objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient)
 
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
-		urlParts := azblob.NewBlobURLParts(r.containerURL.URL())
+		urlParts, err := blob.ParseURL(r.containerClient.URL())
+		a.AssertNoErr(err)
 		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("/")
 
 		ACL, err := fsURL.GetAccessControl(ctx)
@@ -337,7 +341,7 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 }
 
 func (r *resourceBlobContainer) downloadContent(a asserter, options downloadContentOptions) []byte {
-	options.containerURL = *r.containerURL
+	options.containerClient = r.containerClient
 	return scenarioHelper{}.downloadBlobContent(a, options)
 }
 

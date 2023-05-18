@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"math"
 	"os"
 	"reflect"
@@ -1198,11 +1197,6 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 // BlobTags is a map of key-value pair
 type BlobTags map[string]string
 
-//// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-// func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
-//	return BlobTags(azbt)
-// }
-
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
 	for k, v := range bt {
@@ -1544,24 +1538,6 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	default:
 		panic("unknown permissions option")
 	}
-}
-
-// TODO : Remove after tests migrated
-////////////////////////////////////////////////////////////////
-func ToClientProvidedKeyOptions(cpkInfo *blob.CPKInfo, cpkScopeInfo *blob.CPKScopeInfo) azblob.ClientProvidedKeyOptions {
-	if cpkInfo != nil {
-		return azblob.ClientProvidedKeyOptions{
-			EncryptionKey:       cpkInfo.EncryptionKey,
-			EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
-			EncryptionKeySha256: cpkInfo.EncryptionKeySHA256,
-		}
-	}
-	if cpkScopeInfo != nil {
-		return azblob.ClientProvidedKeyOptions{
-			EncryptionScope: cpkScopeInfo.EncryptionScope,
-		}
-	}
-	return azblob.ClientProvidedKeyOptions{}
 }
 
 type CpkOptions struct {

@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
 	"time"
@@ -522,7 +523,7 @@ func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-      preserveSMBInfo: BoolPointer(false),
+      preserveSMBInfo: to.Ptr(false),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
@@ -570,7 +571,7 @@ func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
 		anonymousAuthOnly,
 		params{
 			// enforce for Linux/MacOS tests
-			preserveSMBInfo: BoolPointer(true),
+			preserveSMBInfo: to.Ptr(true),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {

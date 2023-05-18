@@ -23,7 +23,9 @@ package e2etest
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"math"
 	"reflect"
 	"strconv"
@@ -32,7 +34,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 ///////////////
@@ -93,7 +94,7 @@ type objectProperties struct {
 	posixProperties    *objectUnixStatContainer
 	size               *int64
 	contentHeaders     *contentHeaders
-	nameValueMetadata  map[string]string
+	nameValueMetadata  map[string]*string
 	blobTags           common.BlobTags
 	blobType           common.BlobType
 	creationTime       *time.Time
@@ -177,7 +178,7 @@ func (o *objectUnixStatContainer) EquivalentToStatAdapter(s common.UnixStatAdapt
 	return strings.Join(mismatched, ", ")
 }
 
-func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]string) {
+func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string) {
 	if o == nil {
 		return
 	}
@@ -186,29 +187,29 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]string) {
 
 	if o.mode != nil { // always overwrite; perhaps it got changed in one of the hooks.
 		mask |= common.STATX_MODE
-		metadata[common.POSIXModeMeta] = strconv.FormatUint(uint64(*o.mode), 10)
+		metadata[common.POSIXModeMeta] = to.Ptr(strconv.FormatUint(uint64(*o.mode), 10))
 
 		delete(metadata, common.POSIXFIFOMeta)
 		delete(metadata, common.POSIXSocketMeta)
 		switch {
 		case *o.mode & common.S_IFIFO == common.S_IFIFO:
-			metadata[common.POSIXFIFOMeta] = "true"
+			metadata[common.POSIXFIFOMeta] = to.Ptr("true")
 		case *o.mode & common.S_IFSOCK == common.S_IFSOCK:
-			metadata[common.POSIXSocketMeta] = "true"
+			metadata[common.POSIXSocketMeta] = to.Ptr("true")
 		}
 	}
 
 	if o.accessTime != nil {
 		mask |= common.STATX_ATIME
-		metadata[common.POSIXATimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
+		metadata[common.POSIXATimeMeta] = to.Ptr(strconv.FormatInt(o.accessTime.UnixNano(), 10))
 	}
 
 	if o.modTime != nil {
 		mask |= common.STATX_MTIME
-		metadata[common.POSIXModTimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
+		metadata[common.POSIXModTimeMeta] = to.Ptr(strconv.FormatInt(o.accessTime.UnixNano(), 10))
 	}
 
-	metadata[common.LINUXStatxMaskMeta] = strconv.FormatUint(uint64(mask), 10)
+	metadata[common.LINUXStatxMaskMeta] = to.Ptr(strconv.FormatUint(uint64(mask), 10))
 }
 
 // returns op.size, if present, else defaultSize
@@ -252,7 +253,7 @@ func (op objectProperties) DeepCopy() objectProperties {
 		ret.contentHeaders = op.contentHeaders.DeepCopy()
 	}
 
-	ret.nameValueMetadata = make(map[string]string)
+	ret.nameValueMetadata = make(map[string]*string)
 	for k, v := range op.nameValueMetadata {
 		ret.nameValueMetadata[k] = v
 	}
@@ -460,7 +461,7 @@ type testFiles struct {
 	defaultSize  string                  // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
 	objectTarget string                  // should we target only a single file/folder?
 	destTarget   string                  // do we want to copy under a folder or rename?
-	sourcePublic azblob.PublicAccessType // should the source blob container be public? (ONLY APPLIES TO BLOB.)
+	sourcePublic *container.PublicAccessType // should the source blob container be public? (ONLY APPLIES TO BLOB.)
 
 	// The files/folders that we expect to be transferred. Elements of the list must be strings or testObject's.
 	// A string can be used if no properties need to be specified.

@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
@@ -47,7 +48,7 @@ type with struct {
 	contentType        string
 	contentMD5         []byte
 
-	nameValueMetadata  map[string]string
+	nameValueMetadata  map[string]*string
 	blobTags           string
 	blobType           common.BlobType
 	lastWriteTime      time.Time
@@ -219,7 +220,7 @@ func (withDirStubMetadata) appliesToVerification() bool {
 }
 
 func (withDirStubMetadata) createObjectProperties() *objectProperties {
-	m := map[string]string{"hdi_isfolder": "true"} // special flag that says this file is a stub
+	m := map[string]*string{"hdi_isfolder": to.Ptr("true")} // special flag that says this file is a stub
 	size := int64(0)
 	return &objectProperties{
 		size:              &size,

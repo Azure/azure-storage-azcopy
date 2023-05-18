@@ -4,7 +4,6 @@ require (
 	cloud.google.com/go/storage v1.29.0
 	github.com/Azure/azure-pipeline-go v0.2.4-0.20220425205405-09e6f201e1e4
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 // TODO : Change this to latest release version
-	github.com/Azure/azure-storage-blob-go v0.15.0
 	github.com/Azure/azure-storage-file-go v0.6.1-0.20201111053559-3c1754dc00a5
 	github.com/Azure/go-autorest/autorest/adal v0.9.18
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
@@ -33,7 +32,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 )
 
-replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob => github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.1-0.20230419164103-5e4becb50868
+replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob => github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.1-0.20230420220645-f7bfabef3588
 
 require (
 	cloud.google.com/go v0.107.0 // indirect

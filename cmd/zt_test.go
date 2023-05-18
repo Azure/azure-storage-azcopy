@@ -34,7 +34,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"io"
 	"math/rand"
@@ -787,7 +787,7 @@ func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, c
 	client, err := container.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 
 	sasURL, err := client.GetSASURL(
-		sas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true}, // TODO : Add tag permissions when SDK supports it
+		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true},
 		time.Now().Add(48*time.Hour),
 		nil)
 	c.Assert(err, chk.IsNil)
@@ -804,8 +804,8 @@ func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential)
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 
 	sasURL, err := client.GetSASURL(
-		sas.AccountResourceTypes{Service: true, Container: true, Object: true},
-		sas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true},
+		blobsas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		blobsas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true},
 		time.Now().Add(48*time.Hour),
 		nil)
 	c.Assert(err, chk.IsNil)

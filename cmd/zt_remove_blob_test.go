@@ -26,7 +26,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
@@ -810,8 +810,8 @@ func setUpAccountPermDelete(c *chk.C) *blobservice.Client {
 	}
 
 	sasURL, err := client.GetSASURL(
-		sas.AccountResourceTypes{Service: true, Container: true, Object: true},
-		sas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, PermanentDelete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true},
+		blobsas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		blobsas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, PermanentDelete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true},
 		time.Now().Add(12*time.Hour),
 		nil)
 

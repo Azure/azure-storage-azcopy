@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"runtime"
 	"strings"
@@ -13,7 +14,7 @@ func TestSMB_FromShareSnapshot(t *testing.T) {
 		preserveSMBPermissions: true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, &hooks{
 		// create a snapshot for the source share
 		beforeRunJob: func(h hookHelper) {
@@ -41,7 +42,7 @@ func TestSMB_ToDevNull(t *testing.T) {
 		params{
 			recursive:              true,
 			preserveSMBPermissions: isWindows,
-			preserveSMBInfo:        BoolPointer(isWindows),
+			preserveSMBInfo:        to.Ptr(isWindows),
 			checkMd5:               common.EHashValidationOption.FailIfDifferent(),
 			destNull:               true,
 		},
