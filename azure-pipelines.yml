@@ -205,6 +205,12 @@ jobs:
         inputs:
           secureFile: 'ci-gcs-dev.json'
       - script: |
+          go install github.com/jstemmer/go-junit-report@v0.9.1
+          go install github.com/axw/gocov/gocov@v1.1.0
+          go install github.com/AlekSi/gocov-xml@v1.0.0
+          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
+        name: 'Install dependencies'
+      - script: |
           pip install azure-storage-blob==12.12.0
           # set the variable to indicate that the mutex is being acquired
           # note: we set it before acquiring the mutex to ensure we release the mutex.
@@ -220,14 +226,9 @@ jobs:
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
           # "-check.v" (must be after package list) outputs timings
           set -e
-          go install github.com/jstemmer/go-junit-report@v0.9.1
-          go install github.com/axw/gocov/gocov@v1.1.0
-          go install github.com/AlekSi/gocov-xml@v1.0.0
-          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-          go test -timeout=60m -short -v -coverprofile=coverage.txt -covermode count ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v" 2>&1 | $(go env GOPATH)/bin/go-junit-report > report.xml
-          $(go env GOPATH)/bin/gocov convert coverage.txt > coverage.json
-          $(go env GOPATH)/bin/gocov-xml < coverage.json > coverage.xml
-          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+          go test -timeout=60m -short -v -coverprofile=unit_coverage.txt -covermode count ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v" 2>&1 | $(go env GOPATH)/bin/go-junit-report > unit_report.xml
+          $(go env GOPATH)/bin/gocov convert unit_coverage.txt > unit_coverage.json
+          $(go env GOPATH)/bin/gocov-xml < unit_coverage.json > unit_coverage.xml
         name: 'Run_unit_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
@@ -238,7 +239,20 @@ jobs:
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/unit_report.xml
+          testRunTitle: 'Unit Tests'
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/unit_coverage.xml
+          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/unit_coverage.html
       - script: |
+          GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64
           go build -o test-validator ./testSuite/
           mkdir test-temp
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
@@ -246,6 +260,13 @@ jobs:
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
           keyctl session test python ./testSuite/scripts/run.py
+          
+          echo 'Formatting coverage directory to legacy txt format'
+          go tool covdata textfmt -i=coverage -o smoke_coverage.txt
+          echo 'Formatting coverage to json format'
+          $(go env GOPATH)/bin/gocov convert smoke_coverage.txt > smoke_coverage.json
+          echo 'Formatting coverage to xml format'
+          $(go env GOPATH)/bin/gocov-xml < smoke_coverage.json > smoke_coverage.xml
         name: 'Run_smoke_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
@@ -270,23 +291,16 @@ jobs:
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
+          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
       - script: |
           pip install azure-storage-blob==12.12.0
           python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
-
-      - task: PublishTestResults@2
-        condition: succeededOrFailed()
-        inputs:
-          testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/report.xml
-          testRunTitle: 'Go on $(display_name)'
-
       - task: PublishCodeCoverageResults@1
         condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/coverage.html
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
+          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/smoke_coverage.html
