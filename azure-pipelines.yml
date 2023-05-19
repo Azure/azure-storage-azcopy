@@ -223,7 +223,7 @@ jobs:
         name: 'Acquire_the_distributed_mutex'
       - script: |
           echo "azbfs tests"
-          go test -timeout=1h -v -coverprofile=azbfs_coverage.txt ./azbfs > azbfs.txt
+          go test -timeout=1h -v -coverprofile=azbfs_coverage.txt ./azbfs | tee azbfs.txt
           exit_code=$?
           azbfs.txt | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
           $(go env GOPATH)/bin/gocov convert azbfs_coverage.txt > azbfs_coverage.json
@@ -236,7 +236,7 @@ jobs:
 
       - script: |
           echo "cmd tests"
-          go test -timeout=1h -v -coverprofile=cmd_coverage.txt ./cmd > cmd.txt
+          go test -timeout=1h -v -coverprofile=cmd_coverage.txt ./cmd | tee cmd.txt
           exit_code=$?
           cmd.txt | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
           $(go env GOPATH)/bin/gocov convert cmd_coverage.txt > cmd_coverage.json
@@ -254,22 +254,22 @@ jobs:
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
       - script: |        
           echo "common tests"
-          go test -timeout=1h -v -coverprofile=common_coverage.txt ./common >&1 | $(go env GOPATH)/bin/go-junit-report > common_report.xml
+          go test -timeout=1h -v -coverprofile=common_coverage.txt ./common 2>&1 | $(go env GOPATH)/bin/go-junit-report > common_report.xml
           $(go env GOPATH)/bin/gocov convert common_coverage.txt > common_coverage.json
           $(go env GOPATH)/bin/gocov-xml < common_coverage.json > common_coverage.xml
 
           echo "common/parallel tests"
-          go test -timeout=1h -v -coverprofile=parallel_coverage.txt ./common/parallel >&1 | $(go env GOPATH)/bin/go-junit-report > parallel_report.xml
+          go test -timeout=1h -v -coverprofile=parallel_coverage.txt ./common/parallel 2>&1 | $(go env GOPATH)/bin/go-junit-report > parallel_report.xml
           $(go env GOPATH)/bin/gocov convert parallel_coverage.txt > parallel_coverage.json
           $(go env GOPATH)/bin/gocov-xml < parallel_coverage.json > parallel_coverage.xml
 
           echo "ste tests"
-          go test -timeout=1h -short -v -coverprofile=ste_coverage.txt ./ste >&1 | $(go env GOPATH)/bin/go-junit-report > ste_report.xml
+          go test -timeout=1h -short -v -coverprofile=ste_coverage.txt ./ste 2>&1 | $(go env GOPATH)/bin/go-junit-report > ste_report.xml
           $(go env GOPATH)/bin/gocov convert ste_coverage.txt > ste_coverage.json
           $(go env GOPATH)/bin/gocov-xml < ste_coverage.json > ste_coverage.xml
 
           echo "sddl tests"
-          go test -timeout=1h -v -coverprofile=sddl_coverage.txt ./sddl >&1 | $(go env GOPATH)/bin/go-junit-report > sddl_report.xml
+          go test -timeout=1h -v -coverprofile=sddl_coverage.txt ./sddl 2>&1 | $(go env GOPATH)/bin/go-junit-report > sddl_report.xml
           $(go env GOPATH)/bin/gocov convert sddl_coverage.txt > sddl_coverage.json
           $(go env GOPATH)/bin/gocov-xml < sddl_coverage.json > sddl_coverage.xml
         name: 'Run_unit_tests'
