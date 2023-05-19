@@ -53,7 +53,7 @@ func generateName(prefix string) string {
 	runtime.Callers(0, pc)
 	f := runtime.FuncForPC(pc[0])
 	name := f.Name()
-	for i := 0; !strings.HasPrefix(name, "Suite"); i++ { // The tests are all scoped to the suite, so this ensures getting the actual test name
+	for i := 0; !strings.HasPrefix(name, "Test"); i++ { // The tests are all scoped to the suite, so this ensures getting the actual test name
 		f = runtime.FuncForPC(pc[i])
 		name = f.Name()
 	}
