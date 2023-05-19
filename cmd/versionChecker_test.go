@@ -21,70 +21,70 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type versionCheckerTestSuite struct{}
-
-var _ = chk.Suite(&versionCheckerTestSuite{})
-
-func (s *versionCheckerTestSuite) TestVersionEquality(c *chk.C) {
+func TestVersionEquality(t *testing.T) {
+	a := assert.New(t)
 	// simple equal
 	v1, _ := NewVersion("10.0.0")
 	v2, _ := NewVersion("10.0.0")
-	c.Assert(v1.compare(*v2), chk.Equals, 0)
+	a.Zero(v1.compare(*v2))
 
 	// preview version equal
 	v1, _ = NewVersion("10.0.0-preview")
 	v2, _ = NewVersion("10.0.0-preview")
-	c.Assert(v1.compare(*v2), chk.Equals, 0)
+	a.Zero(v1.compare(*v2))
 
 	// future version equal
 	v1, _ = NewVersion("10.0.0-preview")
 	v2, _ = NewVersion("10.0.0-beta5")
-	c.Assert(v1.compare(*v2), chk.Equals, 0)
+	a.Zero(v1.compare(*v2))
 }
 
-func (s *versionCheckerTestSuite) TestVersionSuperiority(c *chk.C) {
+func TestVersionSuperiority(t *testing.T) {
+	a := assert.New(t)
 	// major version bigger
 	v1, _ := NewVersion("11.3.0")
 	v2, _ := NewVersion("10.8.3")
-	c.Assert(v1.compare(*v2), chk.Equals, 1)
+	a.Equal(1, v1.compare(*v2))
 
 	// minor version bigger
 	v1, _ = NewVersion("15.5.6")
 	v2, _ = NewVersion("15.3.5")
-	c.Assert(v1.compare(*v2), chk.Equals, 1)
+	a.Equal(1, v1.compare(*v2))
 
 	// patch version bigger
 	v1, _ = NewVersion("15.5.6")
 	v2, _ = NewVersion("15.5.5")
-	c.Assert(v1.compare(*v2), chk.Equals, 1)
+	a.Equal(1, v1.compare(*v2))
 
 	// preview bigger
 	v1, _ = NewVersion("15.5.5")
 	v2, _ = NewVersion("15.5.5-preview")
-	c.Assert(v1.compare(*v2), chk.Equals, 1)
+	a.Equal(1, v1.compare(*v2))
 }
 
-func (s *versionCheckerTestSuite) TestVersionInferiority(c *chk.C) {
+func TestVersionInferiority(t *testing.T) {
+	a := assert.New(t)
 	// major version smaller
 	v1, _ := NewVersion("10.5.6")
 	v2, _ := NewVersion("11.8.3")
-	c.Assert(v1.compare(*v2), chk.Equals, -1)
+	a.Equal(-1, v1.compare(*v2))
 
 	// minor version smaller
 	v1, _ = NewVersion("15.3.6")
 	v2, _ = NewVersion("15.5.5")
-	c.Assert(v1.compare(*v2), chk.Equals, -1)
+	a.Equal(-1, v1.compare(*v2))
 
 	// patch version smaller
 	v1, _ = NewVersion("15.5.5")
 	v2, _ = NewVersion("15.5.6")
-	c.Assert(v1.compare(*v2), chk.Equals, -1)
+	a.Equal(-1, v1.compare(*v2))
 
 	// preview smaller
 	v1, _ = NewVersion("15.5.5-preview")
 	v2, _ = NewVersion("15.5.5")
-	c.Assert(v1.compare(*v2), chk.Equals, -1)
+	a.Equal(-1, v1.compare(*v2))
 }

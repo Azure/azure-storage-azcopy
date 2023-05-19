@@ -21,50 +21,48 @@
 package cmd
 
 import (
+	"github.com/stretchr/testify/assert"
 	"strings"
+	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	chk "gopkg.in/check.v1"
 )
 
-// Hookup to the testing framework
-type s3NameResolverTestSuite struct{}
-
-var _ = chk.Suite(&s3NameResolverTestSuite{})
-
-func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverSingleBucketName(c *chk.C) {
+func TestS3BucketNameToAzureResourceResolverSingleBucketName(t *testing.T) {
+	a := assert.New(t)
 	r := NewS3BucketNameToAzureResourcesResolver([]string{"bucket.name.1"})
 	resolvedName, err := r.ResolveName("bucket.name.1")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-name-1")
+	a.Nil(err)
+	a.Equal("bucket-name-1", resolvedName)
 
 	r = NewS3BucketNameToAzureResourcesResolver([]string{"bucket-name"})
 	resolvedName, err = r.ResolveName("bucket-name")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-name")
+	a.Nil(err)
+	a.Equal("bucket-name", resolvedName)
 
 	r = NewS3BucketNameToAzureResourcesResolver([]string{"bucket--name"})
 	resolvedName, err = r.ResolveName("bucket--name")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-2-name")
+	a.Nil(err)
+	a.Equal("bucket-2-name", resolvedName)
 
 	r = NewS3BucketNameToAzureResourcesResolver([]string{"bucketvalidname"})
 	resolvedName, err = r.ResolveName("bucketvalidname")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucketvalidname")
+	a.Nil(err)
+	a.Equal("bucketvalidname", resolvedName)
 
 	r = NewS3BucketNameToAzureResourcesResolver([]string{"0123456789.0123456789.0123456789.012345678901234567890123456789"})
 	resolvedName, err = r.ResolveName("0123456789.0123456789.0123456789.012345678901234567890123456789")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "0123456789-0123456789-0123456789-012345678901234567890123456789")
+	a.Nil(err)
+	a.Equal("0123456789-0123456789-0123456789-012345678901234567890123456789", resolvedName)
 
 	r = NewS3BucketNameToAzureResourcesResolver([]string{"0123456789--01234567890123456789012345678901234567890123456789"})
 	resolvedName, err = r.ResolveName("0123456789--01234567890123456789012345678901234567890123456789")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "0123456789-2-01234567890123456789012345678901234567890123456789")
+	a.Nil(err)
+	a.Equal("0123456789-2-01234567890123456789012345678901234567890123456789", resolvedName)
 }
 
-func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverMultipleBucketNames(c *chk.C) {
+func TestS3BucketNameToAzureResourceResolverMultipleBucketNames(t *testing.T) {
+	a := assert.New(t)
 	r := NewS3BucketNameToAzureResourcesResolver(
 		[]string{"bucket.name", "bucket-name", "bucket-name-2", "bucket-name-3",
 			"bucket---name", "bucket-s--s---s", "abcdefghijklmnopqrstuvwxyz-s--s---s-s0123456789",
@@ -72,78 +70,73 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverMultipl
 			"a-b---c", "a.b---c"})
 	// Need resolve
 	resolvedName, err := r.ResolveName("bucket---name")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-3-name")
+	a.Nil(err)
+	a.Equal("bucket-3-name", resolvedName)
 
 	resolvedName, err = r.ResolveName("bucket-s--s---s")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-s-2-s-3-s")
+	a.Nil(err)
+	a.Equal("bucket-s-2-s-3-s", resolvedName)
 
 	resolvedName, err = r.ResolveName("abcdefghijklmnopqrstuvwxyz-s--s---s-s0123456789")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "abcdefghijklmnopqrstuvwxyz-s-2-s-3-s-s0123456789")
+	a.Nil(err)
+	a.Equal("abcdefghijklmnopqrstuvwxyz-s-2-s-3-s-s0123456789", resolvedName)
 
 	// Resolved, and need add further add suffix
 	resolvedName, err = r.ResolveName("bucket.name")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-name-4")
+	a.Nil(err)
+	a.Equal("bucket-name-4", resolvedName)
 
 	resolvedName, err = r.ResolveName("bucket--name")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-2-name-2")
+	a.Nil(err)
+	a.Equal("bucket-2-name-2", resolvedName)
 
 	// Names don't need resolve
 	resolvedName, err = r.ResolveName("bucket-name")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-name")
+	a.Nil(err)
+	a.Equal("bucket-name", resolvedName)
 
 	resolvedName, err = r.ResolveName("bucket-name-2")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-name-2")
+	a.Nil(err)
+	a.Equal("bucket-name-2", resolvedName)
 
 	resolvedName, err = r.ResolveName("bucket-name-3")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-name-3")
+	a.Nil(err)
+	a.Equal("bucket-name-3", resolvedName)
 
 	resolvedName, err = r.ResolveName("bucket-2-name")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-2-name")
+	a.Nil(err)
+	a.Equal("bucket-2-name", resolvedName)
 
 	resolvedName, err = r.ResolveName("bucket-2-name-3")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-2-name-3")
+	a.Nil(err)
+	a.Equal("bucket-2-name-3", resolvedName)
 
 	resolvedName, err = r.ResolveName("bucket.compose----name.1---hello")
-	c.Assert(err, chk.IsNil)
-	c.Assert(resolvedName, chk.Equals, "bucket-compose-4-name-1-3-hello")
+	a.Nil(err)
+	a.Equal("bucket-compose-4-name-1-3-hello", resolvedName)
 
 	resolvedNameCollision1, err := r.ResolveName("a.b---c")
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	resolvedNameCollision2, err := r.ResolveName("a-b---c")
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	c.Assert(common.Iffint8(resolvedNameCollision1 == "a-b-3-c", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c", 1, 0), chk.Equals, int8(1))
-	c.Assert(common.Iffint8(resolvedNameCollision1 == "a-b-3-c-2", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c-2", 1, 0), chk.Equals, int8(1))
+	a.EqualValues(1, common.Iffint8(resolvedNameCollision1 == "a-b-3-c", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c", 1, 0))
+	a.EqualValues(1, common.Iffint8(resolvedNameCollision1 == "a-b-3-c-2", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c-2", 1, 0))
 }
 
-func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverNegative(c *chk.C) {
+func TestS3BucketNameToAzureResourceResolverNegative(t *testing.T) {
+	a := assert.New(t)
 	r := NewS3BucketNameToAzureResourcesResolver([]string{"0123456789.0123456789.0123456789.012345678901234567890123456789", "0123456789-0123456789-0123456789-012345678901234567890123456789"}) // with length 64
 	_, err := r.ResolveName("0123456789.0123456789.0123456789.012345678901234567890123456789")
-	c.Assert(err, chk.NotNil)
-	c.Assert(
-		strings.Contains(err.Error(), "invalid for the destination"),
-		chk.Equals,
-		true)
+	a.NotNil(err)
+	a.True(strings.Contains(err.Error(), "invalid for the destination"))
 
 	r = NewS3BucketNameToAzureResourcesResolver([]string{"0123456789--0123456789-0123456789012345678901234567890123456789"})
 	_, err = r.ResolveName("0123456789--0123456789-0123456789012345678901234567890123456789")
-	c.Assert(err, chk.NotNil)
-	c.Assert(
-		strings.Contains(err.Error(), "invalid for the destination"),
-		chk.Equals,
-		true)
+	a.NotNil(err)
+	a.True(strings.Contains(err.Error(), "invalid for the destination"))
 
 	r = NewS3BucketNameToAzureResourcesResolver([]string{"namea"})
 	_, err = r.ResolveName("specialnewnameb")
-	c.Assert(err, chk.IsNil) // Bucket resolver now supports new names being injected
+	a.Nil(err) // Bucket resolver now supports new names being injected
 }
