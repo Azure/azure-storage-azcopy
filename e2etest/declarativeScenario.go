@@ -405,13 +405,7 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 
 func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool, addedDirAtDest string) {
 	srcRoot = s.state.source.getParam(false, false, "")
-	if s.srcAccountType == EAccountType.HierarchicalNamespaceEnabled() && s.fromTo.From() == common.ELocation.Blob() {
-		srcRoot = strings.Replace(srcRoot, "dfs", "blob", 1) // only replace first, translate like AzCopy
-	}
 	dstRoot = s.state.dest.getParam(false, false, "")
-	if s.destAccountType == EAccountType.HierarchicalNamespaceEnabled() && s.fromTo.To() == common.ELocation.Blob() {
-		dstRoot = strings.Replace(dstRoot, "dfs", "blob", 1) // ditto
-	}
 
 	srcBase := filepath.Base(srcRoot)
 	srcRootURL, err := url.Parse(srcRoot)
