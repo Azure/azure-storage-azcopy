@@ -136,7 +136,7 @@ jobs:
           echo 'Building executable'
           go build -cover -o $(build_name)
           echo 'Running tests'
-          go test -timeout=1h -v ./e2etest >&1 | $(go_path)go-junit-report$(suffix) > report.xml
+          go test -timeout=1h -v ./e2etest 2>&1 | $(go_path)go-junit-report$(suffix) > report.xml
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o coverage.txt
           echo 'Formatting coverage to json format'
@@ -222,20 +222,41 @@ jobs:
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
         name: 'Acquire_the_distributed_mutex'
       - script: |
-          # run unit test and build executable
-          # the set -e line is needed so that the unit tests failure would cause the job to fail properly
-          # "-check.v" (must be after package list) outputs timings
-          set -e
           echo "azbfs tests"
-          go test -timeout=1h -v -coverprofile=azbfs_coverage.txt ./azbfs >&1 | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
+          go test -timeout=1h -v -coverprofile=azbfs_coverage.txt ./azbfs > azbfs.txt
+          $exit_code = $?
+          azbfs.txt | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
           $(go env GOPATH)/bin/gocov convert azbfs_coverage.txt > azbfs_coverage.json
           $(go env GOPATH)/bin/gocov-xml < azbfs_coverage.json > azbfs_coverage.xml
-          
+          if $exit_code -neq 0
+          then exit $exit_code
+          fi
+        name: 'Run_azbfs_tests'
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+
+      - script: |
           echo "cmd tests"
-          go test -timeout=1h -v -coverprofile=cmd_coverage.txt ./cmd >&1 | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
+          go test -timeout=1h -v -coverprofile=cmd_coverage.txt ./cmd > cmd.txt
+          $exit_code = $?
+          cmd.txt | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
           $(go env GOPATH)/bin/gocov convert cmd_coverage.txt > cmd_coverage.json
           $(go env GOPATH)/bin/gocov-xml < cmd_coverage.json > cmd_coverage.xml
-          
+          if $exit_code -neq 0
+          then exit $exit_code
+          fi
+        name: 'Run_cmd_tests'
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+      - script: |        
           echo "common tests"
           go test -timeout=1h -v -coverprofile=common_coverage.txt ./common >&1 | $(go env GOPATH)/bin/go-junit-report > common_report.xml
           $(go env GOPATH)/bin/gocov convert common_coverage.txt > common_coverage.json
