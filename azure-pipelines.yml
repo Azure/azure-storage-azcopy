@@ -225,7 +225,7 @@ jobs:
           echo "azbfs tests"
           go test -timeout=1h -v -coverprofile=azbfs_coverage.txt ./azbfs | tee azbfs.txt
           exit_code=$?
-          azbfs.txt | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
+          cat azbfs.txt | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
           $(go env GOPATH)/bin/gocov convert azbfs_coverage.txt > azbfs_coverage.json
           $(go env GOPATH)/bin/gocov-xml < azbfs_coverage.json > azbfs_coverage.xml
           exit $exit_code
@@ -238,7 +238,7 @@ jobs:
           echo "cmd tests"
           go test -timeout=1h -v -coverprofile=cmd_coverage.txt ./cmd | tee cmd.txt
           exit_code=$?
-          cmd.txt | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
+          cat cmd.txt | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
           $(go env GOPATH)/bin/gocov convert cmd_coverage.txt > cmd_coverage.json
           $(go env GOPATH)/bin/gocov-xml < cmd_coverage.json > cmd_coverage.xml
           exit $exit_code
