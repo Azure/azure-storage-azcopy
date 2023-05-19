@@ -318,11 +318,65 @@ jobs:
         condition: succeededOrFailed()
         inputs:
           testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/*_report.xml
-          testRunTitle: 'Unit and Smoke Tests'
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/azbfs_report.xml
+          testRunTitle: 'Azbfs Tests'
       - task: PublishCodeCoverageResults@1
         condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/*_coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/*_coverage.html
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/azbfs_coverage.xml
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/cmd_report.xml
+          testRunTitle: 'Cmd Tests'
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/cmd_coverage.xml
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/common_report.xml
+          testRunTitle: 'Common Tests'
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/common_coverage.xml
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/parallel_report.xml
+          testRunTitle: 'Parallel Tests'
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/parallel_coverage.xml
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/sddl_report.xml
+          testRunTitle: 'Sddl Tests'
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/sddl_coverage.xml
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/ste_report.xml
+          testRunTitle: 'Ste Tests'
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/ste_coverage.xml
