@@ -223,10 +223,9 @@ jobs:
         name: 'Acquire_the_distributed_mutex'
       - script: |
           set -e
-          set -o pipefail
           echo "azbfs tests"
           go test -timeout=1h -v -coverprofile=azbfs_coverage.txt ./azbfs | tee azbfs.txt
-          exit_code=$?
+          exit_code=${PIPESTATUS[0]}
           echo "exit code: $exit_code"
           cat azbfs.txt | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
           $(go env GOPATH)/bin/gocov convert azbfs_coverage.txt > azbfs_coverage.json
@@ -239,10 +238,9 @@ jobs:
 
       - script: |
           set -e
-          set -o pipefail
           echo "cmd tests"
           go test -timeout=1h -v -coverprofile=cmd_coverage.txt ./cmd | tee cmd.txt
-          exit_code=$?
+          exit_code=${PIPESTATUS[0]}
           echo "exit code: $exit_code"
           cat cmd.txt | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
           $(go env GOPATH)/bin/gocov convert cmd_coverage.txt > cmd_coverage.json
