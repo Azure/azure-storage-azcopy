@@ -21,18 +21,14 @@
 package cmd
 
 import (
-	"time"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
+	"time"
 )
 
-type jobsListTestSuite struct{}
-
-var _ = chk.Suite(&jobsListTestSuite{})
-
-func (s *jobsListTestSuite) TestSortJobs(c *chk.C) {
+func TestSortJobs(t *testing.T) {
+	a := assert.New(t)
 	// setup
 	job2 := common.JobIDDetails{
 		JobId:         common.NewJobID(),
@@ -61,7 +57,7 @@ func (s *jobsListTestSuite) TestSortJobs(c *chk.C) {
 	sortJobs(jobsList)
 
 	// verify
-	c.Assert(jobsList[0], chk.DeepEquals, job0)
-	c.Assert(jobsList[1], chk.DeepEquals, job1)
-	c.Assert(jobsList[2], chk.DeepEquals, job2)
+	a.Equal(job0, jobsList[0])
+	a.Equal(job1, jobsList[1])
+	a.Equal(job2, jobsList[2])
 }
