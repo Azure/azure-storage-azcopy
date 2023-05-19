@@ -2,86 +2,82 @@ package azbfs_test
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"os"
+	"testing"
 
 	"net/http"
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	chk "gopkg.in/check.v1"
 )
 
-type FileSystemURLSuite struct{}
-
-var _ = chk.Suite(&FileSystemURLSuite{})
-
-func delFileSystem(c *chk.C, fs azbfs.FileSystemURL) {
-	resp, err := fs.Delete(context.Background())
-	c.Assert(err, chk.IsNil)
-	c.Assert(resp.Response().StatusCode, chk.Equals, http.StatusAccepted)
-}
-
-func (s *FileSystemURLSuite) TestFileSystemCreateRootDirectoryURL(c *chk.C) {
+func TestFileSystemCreateRootDirectoryURL(t *testing.T) {
+	a := assert.New(t)
 	fsu := getBfsServiceURL()
 	testURL := fsu.NewFileSystemURL(fileSystemPrefix).NewRootDirectoryURL()
 
 	correctURL := "https://" + os.Getenv("ACCOUNT_NAME") + ".dfs.core.windows.net/" + fileSystemPrefix
 	temp := testURL.URL()
-	c.Assert(temp.String(), chk.Equals, correctURL)
+	a.Equal(correctURL, temp.String())
 }
 
-func (s *FileSystemURLSuite) TestFileSystemCreateDirectoryURL(c *chk.C) {
+func TestFileSystemCreateDirectoryURL(t *testing.T) {
+	a := assert.New(t)
 	fsu := getBfsServiceURL()
 	testURL := fsu.NewFileSystemURL(fileSystemPrefix).NewDirectoryURL(directoryPrefix)
 
 	correctURL := "https://" + os.Getenv("ACCOUNT_NAME") + ".dfs.core.windows.net/" + fileSystemPrefix + "/" + directoryPrefix
 	temp := testURL.URL()
-	c.Assert(temp.String(), chk.Equals, correctURL)
-	c.Assert(testURL.String(), chk.Equals, correctURL)
+	a.Equal(correctURL, temp.String())
+	a.Equal(correctURL, testURL.String())
 }
 
-func (s *FileSystemURLSuite) TestFileSystemNewFileSystemURLNegative(c *chk.C) {
-	c.Assert(func() { azbfs.NewFileSystemURL(url.URL{}, nil) }, chk.Panics, "p can't be nil")
+func TestFileSystemNewFileSystemURLNegative(t *testing.T) {
+	a := assert.New(t)
+	a.Panics(func() { azbfs.NewFileSystemURL(url.URL{}, nil) }, "p can't be nil")
 }
 
-func (s *FileSystemURLSuite) TestFileSystemCreateDelete(c *chk.C) {
+func TestFileSystemCreateDelete(t *testing.T) {
+	a := assert.New(t)
 	fsu := getBfsServiceURL()
-	fileSystemURL, _ := getFileSystemURL(c, fsu)
+	fileSystemURL, _ := getFileSystemURL(a, fsu)
 
 	_, err := fileSystemURL.Create(ctx)
-	defer delFileSystem(c, fileSystemURL)
-	c.Assert(err, chk.IsNil)
+	defer deleteFileSystem(a, fileSystemURL)
+	a.Nil(err)
 
 	// Test get properties
 	resp, err := fileSystemURL.GetProperties(ctx)
-	c.Assert(resp.StatusCode(), chk.Equals, http.StatusOK)
-	c.Assert(err, chk.IsNil)
+	a.Equal(http.StatusOK, resp.StatusCode())
+	a.Nil(err)
 }
 
-func (s *FileSystemURLSuite) TestFileSystemList(c *chk.C) {
+func TestFileSystemList(t *testing.T) {
+	a := assert.New(t)
 	fsu := getBfsServiceURL()
-	fileSystemURL, _ := getFileSystemURL(c, fsu)
+	fileSystemURL, _ := getFileSystemURL(a, fsu)
 
 	_, err := fileSystemURL.Create(ctx)
-	defer delFileSystem(c, fileSystemURL)
-	c.Assert(err, chk.IsNil)
+	defer deleteFileSystem(a, fileSystemURL)
+	a.Nil(err)
 
 	// List Setup
-	dirUrl, dirName := getDirectoryURLFromFileSystem(c, fileSystemURL)
+	dirUrl, dirName := getDirectoryURLFromFileSystem(a, fileSystemURL)
 	dirUrl.Create(context.Background(), true)
 
-	fileUrl, fileName := getFileURLFromFileSystem(c, fileSystemURL)
+	fileUrl, fileName := getFileURLFromFileSystem(a, fileSystemURL)
 	fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
 
 	// List
 	paths, err := fileSystemURL.ListPaths(context.Background(), azbfs.ListPathsFilesystemOptions{Recursive: false})
-	c.Assert(err, chk.IsNil)
-	c.Assert(paths.Paths, chk.NotNil)
-	c.Assert(len(paths.Paths), chk.Equals, 2)
+	a.Nil(err)
+	a.NotNil(paths.Paths)
+	a.Len(paths.Paths, 2)
 	dirPath := paths.Paths[0]
-	c.Assert(*dirPath.Name, chk.Equals, dirName)
-	c.Assert(*dirPath.IsDirectory, chk.Equals, true)
+	a.Equal(dirName, *dirPath.Name)
+	a.True(*dirPath.IsDirectory)
 	filePath := paths.Paths[1]
-	c.Assert(*filePath.Name, chk.Equals, fileName)
-	c.Assert(filePath.IsDirectory, chk.IsNil)
+	a.Equal(fileName, *filePath.Name)
+	a.Nil(filePath.IsDirectory)
 }
