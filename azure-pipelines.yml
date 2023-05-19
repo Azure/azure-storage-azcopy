@@ -228,7 +228,7 @@ jobs:
           cat azbfs.txt | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
           $(go env GOPATH)/bin/gocov convert azbfs_coverage.txt > azbfs_coverage.json
           $(go env GOPATH)/bin/gocov-xml < azbfs_coverage.json > azbfs_coverage.xml
-          exit $exit_code
+          exit "$exit_code"
         name: 'Run_azbfs_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
@@ -241,7 +241,7 @@ jobs:
           cat cmd.txt | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
           $(go env GOPATH)/bin/gocov convert cmd_coverage.txt > cmd_coverage.json
           $(go env GOPATH)/bin/gocov-xml < cmd_coverage.json > cmd_coverage.xml
-          exit $exit_code
+          exit "$exit_code"
         name: 'Run_cmd_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
