@@ -95,7 +95,7 @@ func (u *blobFSUploader) Epilogue() {
 	// Write POSIX data
 	if jptm.IsLive() {
 		if jptm.Info().PreservePOSIXProperties {
-			err := u.SetPOSIXProperties()
+			err := u.SetPOSIXProperties(false) // set all posix properties
 			if err != nil {
 				jptm.FailActiveUpload("Setting POSIX Properties", err)
 			}
