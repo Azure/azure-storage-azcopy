@@ -21,19 +21,13 @@
 package ste
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 )
 
-// Hookup to the testing framework
-func Test(t *testing.T) { chk.TestingT(t) }
-
-type jobPartMgrTestSuite struct{}
-
-var _ = chk.Suite(&jobPartMgrTestSuite{})
-
-func (s *jobPartMgrTestSuite) TestInferContentType(c *chk.C) {
+func TestInferContentType(t *testing.T) {
+	a := assert.New(t)
 	// Arrange
 	partMgr := jobPartMgr{}
 
@@ -57,6 +51,6 @@ func (s *jobPartMgrTestSuite) TestInferContentType(c *chk.C) {
 
 		// make sure the inferred type is correct
 		// we use Contains to check because charset is also in contentType
-		c.Assert(strings.Contains(contentType, expectedType), chk.Equals, true)
+		a.True(strings.Contains(contentType, expectedType))
 	}
 }

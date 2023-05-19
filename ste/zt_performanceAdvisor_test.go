@@ -22,15 +22,13 @@ package ste
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
+	"testing"
 )
 
-type perfAdvisorSuite struct{}
-
-var _ = chk.Suite(&perfAdvisorSuite{})
-
-func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
-
+func TestPerfAdvisor(t *testing.T) {
+	a := assert.New(t)
 	none := AdviceType{"NoneUnitTestOnly", ""}
 
 	// abbreviated names for the various advice types, to make the test more concise
@@ -109,7 +107,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 
 	// Run the tests, asserting that for each case, the given inputs produces the expected output
 	for _, cs := range cases {
-		a := &PerformanceAdvisor{
+		pa := &PerformanceAdvisor{
 			networkErrorPercentage:         cs.networkErrorPercentage,
 			serverBusyPercentageIOPS:       cs.serverBusyPercentageIOPS,
 			serverBusyPercentageThroughput: cs.serverBusyPercentageThroughput,
@@ -124,7 +122,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 			avgBytesPerFile:                cs.fileSpec.avgFileSize,
 			isToAzureFiles:                 cs.fileSpec.isAzFiles,
 		}
-		obtained := a.GetAdvice()
+		obtained := pa.GetAdvice()
 		expectedCount := 1
 		if cs.expectedSecondary1 != none {
 			expectedCount++
@@ -135,23 +133,23 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		if cs.expectedSecondary3 != none {
 			expectedCount++
 		}
-		c.Assert(len(obtained), chk.Equals, expectedCount, chk.Commentf(cs.caseName))
+		a.Equal(expectedCount, len(obtained), chk.Commentf(cs.caseName))
 
-		s.assertAdviceMatches(c, cs.caseName, obtained, 0, cs.expectedPrimaryResult)
-		s.assertAdviceMatches(c, cs.caseName, obtained, 1, cs.expectedSecondary1)
-		s.assertAdviceMatches(c, cs.caseName, obtained, 2, cs.expectedSecondary2)
-		s.assertAdviceMatches(c, cs.caseName, obtained, 3, cs.expectedSecondary3)
+		assertAdviceMatches(a, cs.caseName, obtained, 0, cs.expectedPrimaryResult)
+		assertAdviceMatches(a, cs.caseName, obtained, 1, cs.expectedSecondary1)
+		assertAdviceMatches(a, cs.caseName, obtained, 2, cs.expectedSecondary2)
+		assertAdviceMatches(a, cs.caseName, obtained, 3, cs.expectedSecondary3)
 	}
 }
 
-func (s *perfAdvisorSuite) assertAdviceMatches(c *chk.C, caseName string, obtained []common.PerformanceAdvice, index int, expected AdviceType) {
+func assertAdviceMatches(a *assert.Assertions, caseName string, obtained []common.PerformanceAdvice, index int, expected AdviceType) {
 	if expected.code == "NoneUnitTestOnly" {
 		return
 	}
 	adv := obtained[index]
 	shouldBePrimary := index == 0
-	c.Assert(adv.PriorityAdvice, chk.Equals, shouldBePrimary, chk.Commentf(caseName))
-	c.Assert(adv.Code, chk.Equals, expected.code, chk.Commentf(caseName))
+	a.Equal(shouldBePrimary, adv.PriorityAdvice, chk.Commentf(caseName))
+	a.Equal(expected.code, adv.Code, chk.Commentf(caseName))
 }
 
 // TODO: for conciseness, we don't check the Title or Reason of the advice objects that are generated.

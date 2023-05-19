@@ -136,7 +136,7 @@ jobs:
           echo 'Building executable'
           go build -cover -o $(build_name)
           echo 'Running tests'
-          go test -timeout=1h -v ./e2etest 2>&1 | $(go_path)go-junit-report$(suffix) > report.xml
+          go test -timeout=1h -v ./e2etest >&1 | $(go_path)go-junit-report$(suffix) > report.xml
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o coverage.txt
           echo 'Formatting coverage to json format'
@@ -227,32 +227,32 @@ jobs:
           # "-check.v" (must be after package list) outputs timings
           set -e
           echo "azbfs tests"
-          go test -timeout=1h -v -coverprofile=azbfs_coverage.txt ./azbfs 2>&1 | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
+          go test -timeout=1h -v -coverprofile=azbfs_coverage.txt ./azbfs >&1 | $(go env GOPATH)/bin/go-junit-report > azbfs_report.xml
           $(go env GOPATH)/bin/gocov convert azbfs_coverage.txt > azbfs_coverage.json
           $(go env GOPATH)/bin/gocov-xml < azbfs_coverage.json > azbfs_coverage.xml
           
           echo "cmd tests"
-          go test -timeout=1h -v -coverprofile=cmd_coverage.txt ./cmd 2>&1 | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
+          go test -timeout=1h -v -coverprofile=cmd_coverage.txt ./cmd >&1 | $(go env GOPATH)/bin/go-junit-report > cmd_report.xml
           $(go env GOPATH)/bin/gocov convert cmd_coverage.txt > cmd_coverage.json
           $(go env GOPATH)/bin/gocov-xml < cmd_coverage.json > cmd_coverage.xml
           
           echo "common tests"
-          go test -timeout=1h -v -coverprofile=common_coverage.txt ./common 2>&1 | $(go env GOPATH)/bin/go-junit-report > common_report.xml
+          go test -timeout=1h -v -coverprofile=common_coverage.txt ./common >&1 | $(go env GOPATH)/bin/go-junit-report > common_report.xml
           $(go env GOPATH)/bin/gocov convert common_coverage.txt > common_coverage.json
           $(go env GOPATH)/bin/gocov-xml < common_coverage.json > common_coverage.xml
 
           echo "common/parallel tests"
-          go test -timeout=1h -v -coverprofile=parallel_coverage.txt ./common/parallel 2>&1 | $(go env GOPATH)/bin/go-junit-report > parallel_report.xml
+          go test -timeout=1h -v -coverprofile=parallel_coverage.txt ./common/parallel >&1 | $(go env GOPATH)/bin/go-junit-report > parallel_report.xml
           $(go env GOPATH)/bin/gocov convert parallel_coverage.txt > parallel_coverage.json
           $(go env GOPATH)/bin/gocov-xml < parallel_coverage.json > parallel_coverage.xml
 
           echo "ste tests"
-          go test -timeout=1h -short -v -coverprofile=ste_coverage.txt ./ste 2>&1 | $(go env GOPATH)/bin/go-junit-report > ste_report.xml
+          go test -timeout=1h -short -v -coverprofile=ste_coverage.txt ./ste >&1 | $(go env GOPATH)/bin/go-junit-report > ste_report.xml
           $(go env GOPATH)/bin/gocov convert ste_coverage.txt > ste_coverage.json
           $(go env GOPATH)/bin/gocov-xml < ste_coverage.json > ste_coverage.xml
 
           echo "sddl tests"
-          go test -timeout=1h -v -coverprofile=sddl_coverage.txt ./sddl 2>&1 | $(go env GOPATH)/bin/go-junit-report > sddl_report.xml
+          go test -timeout=1h -v -coverprofile=sddl_coverage.txt ./sddl >&1 | $(go env GOPATH)/bin/go-junit-report > sddl_report.xml
           $(go env GOPATH)/bin/gocov convert sddl_coverage.txt > sddl_coverage.json
           $(go env GOPATH)/bin/gocov-xml < sddl_coverage.json > sddl_coverage.xml
         name: 'Run_unit_tests'

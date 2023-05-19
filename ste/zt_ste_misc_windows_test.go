@@ -22,27 +22,25 @@
 package ste
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type steMiscSuite struct{}
-
-var _ = chk.Suite(&steMiscSuite{})
-
-func (s *concurrencyTunerSuite) Test_IsParentShareRoot(c *chk.C) {
+func Test_IsParentShareRoot(t *testing.T) {
+	a := assert.New(t)
 	d := azureFilesDownloader{}
 
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share"), chk.Equals, false) // THIS is the share root, not the parent of this
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/"), chk.Equals, false)
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share?aaa/bbb"), chk.Equals, false)
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/?aaa/bbb"), chk.Equals, false)
+	a.False(d.parentIsShareRoot("https://a.file.core.windows.net/share")) // THIS is the share root, not the parent of this
+	a.False(d.parentIsShareRoot("https://a.file.core.windows.net/share/"))
+	a.False(d.parentIsShareRoot("https://a.file.core.windows.net/share?aaa/bbb"))
+	a.False(d.parentIsShareRoot("https://a.file.core.windows.net/share/?aaa/bbb"))
 
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo"), chk.Equals, true)
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/"), chk.Equals, true)
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/?x/y"), chk.Equals, true)
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo?x/y"), chk.Equals, true)
+	a.True(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo"))
+	a.True(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/"))
+	a.True(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/?x/y"))
+	a.True(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo?x/y"))
 
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/bar"), chk.Equals, false)
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/bar/"), chk.Equals, false)
-	c.Assert(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/bar?nethe"), chk.Equals, false)
+	a.False(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/bar"))
+	a.False(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/bar/"))
+	a.False(d.parentIsShareRoot("https://a.file.core.windows.net/share/foo/bar?nethe"))
 }

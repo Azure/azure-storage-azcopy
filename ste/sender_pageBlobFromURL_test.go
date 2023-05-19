@@ -22,15 +22,12 @@ package ste
 
 import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
-
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type pageBlobFromURLSuite struct{}
-
-var _ = chk.Suite(&pageBlobFromURLSuite{})
-
-func (s *pageBlobFromURLSuite) TestRangeWorthTransferring(c *chk.C) {
+func TestRangeWorthTransferring(t *testing.T) {
+	a := assert.New(t)
 	// Arrange
 	copier := pageRangeOptimizer{}
 	copier.srcPageList = &azblob.PageList{
@@ -53,6 +50,6 @@ func (s *pageBlobFromURLSuite) TestRangeWorthTransferring(c *chk.C) {
 	// Action & Assert
 	for testRange, expectedResult := range testCases {
 		doesContainData := copier.doesRangeContainData(testRange)
-		c.Assert(doesContainData, chk.Equals, expectedResult)
+		a.Equal(expectedResult, doesContainData)
 	}
 }
