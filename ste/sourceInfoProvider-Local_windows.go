@@ -14,12 +14,12 @@ import (
 
 	"github.com/hillu/go-ntdll"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/sddl"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/sddl"
 )
 
 // This file os-triggers the ISMBPropertyBearingSourceInfoProvider and CustomLocalOpener interfaces on a local SIP.

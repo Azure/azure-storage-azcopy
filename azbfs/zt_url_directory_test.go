@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 	chk "gopkg.in/check.v1"
 )
 

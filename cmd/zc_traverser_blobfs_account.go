@@ -27,7 +27,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 )
 
 // We don't allow S2S from BlobFS, but what this gives us is the ability for users to download entire accounts at once.

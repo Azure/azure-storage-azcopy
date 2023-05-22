@@ -24,8 +24,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
-	"github.com/shubham808/azure-storage-azcopy/v10/ste"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
 )
 

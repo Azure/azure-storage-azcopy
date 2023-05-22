@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // the interceptor gathers/saves the job part orders for validation

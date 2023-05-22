@@ -12,7 +12,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	minio "github.com/minio/minio-go"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // validateString compares the two strings.

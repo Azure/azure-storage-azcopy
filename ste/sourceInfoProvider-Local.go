@@ -24,7 +24,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // Source info provider for local files

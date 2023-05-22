@@ -28,7 +28,7 @@ import (
 
 	"github.com/minio/minio-go"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // As we discussed, the general architecture is that this is going to search a list of buckets and spawn s3Traversers for each bucket.

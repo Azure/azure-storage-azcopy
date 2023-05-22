@@ -31,8 +31,8 @@ import (
 	"unsafe"
 
 	"github.com/hillu/go-ntdll"
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
-	"github.com/shubham808/azure-storage-azcopy/v10/ste"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/ste"
 	"golang.org/x/sys/windows"
 )
 

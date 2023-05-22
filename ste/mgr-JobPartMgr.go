@@ -16,8 +16,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -110,7 +110,7 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
-			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/shubham808/azure-storage-azcopy/issues/374
+			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/aymanjarrousms/azure-storage-azcopy/issues/374
 			MaxResponseHeaderBytes: 0,
 			// ResponseHeaderTimeout:  time.Duration{},
 			// ExpectContinueTimeout:  time.Duration{},

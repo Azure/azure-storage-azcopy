@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it

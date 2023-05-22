@@ -23,7 +23,7 @@ package cmd
 import (
 	"errors"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
 

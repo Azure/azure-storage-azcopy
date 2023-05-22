@@ -28,13 +28,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
-	"github.com/shubham808/azure-storage-azcopy/v10/ste"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/ste"
 )
 
 var NothingToRemoveError = errors.New("nothing found to remove")
