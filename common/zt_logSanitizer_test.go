@@ -21,14 +21,12 @@
 package common
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type logSanitizerSuite struct{}
-
-var _ = chk.Suite(&logSanitizerSuite{})
-
-func (s *logSanitizerSuite) TestLogSanitizer(c *chk.C) {
+func TestLogSanitizer(t *testing.T) {
+	a := assert.New(t)
 
 	cases := []struct {
 		raw               string
@@ -69,7 +67,7 @@ func (s *logSanitizerSuite) TestLogSanitizer(c *chk.C) {
 	san := NewAzCopyLogSanitizer()
 
 	for _, x := range cases {
-		c.Assert(san.SanitizeLogMessage(x.raw), chk.Equals, x.expectedSanitized)
+		a.Equal(x.expectedSanitized, san.SanitizeLogMessage(x.raw))
 	}
 
 }

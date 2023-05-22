@@ -22,152 +22,155 @@ package common
 
 import (
 	"context"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"net/url"
+	"testing"
 )
 
-type folderDeletionManagerSuite struct{}
-
-var _ = chk.Suite(&folderDeletionManagerSuite{})
-
-func (s *folderDeletionManagerSuite) u(str string) *url.URL {
+func u(str string) *url.URL {
 	u, _ := url.Parse("http://example.com/" + str)
 	return u
 }
 
-func (s *folderDeletionManagerSuite) TestFolderDeletion_BeforeChildrenSeen(c *chk.C) {
+func TestFolderDeletion_BeforeChildrenSeen(t *testing.T) {
+	a := assert.New(t)
 	f := NewFolderDeletionManager(context.Background(), EFolderPropertiesOption.AllFolders(), nil)
 
 	deletionCallCount := 0
 
 	// ask for deletion of folder first
-	f.RequestDeletion(s.u("foo/bar"), func(context.Context, ILogger) bool { deletionCallCount++; return false })
-	c.Assert(deletionCallCount, chk.Equals, 1)
+	f.RequestDeletion(u("foo/bar"), func(context.Context, ILogger) bool { deletionCallCount++; return false })
+	a.Equal(1, deletionCallCount)
 
 	// deletion should be attempted again after children seen and processed (if deletion returned false first time)
-	f.RecordChildExists(s.u("foo/bar/a"))
-	c.Assert(deletionCallCount, chk.Equals, 1)
-	f.RecordChildDeleted(s.u("foo/bar/a"))
-	c.Assert(deletionCallCount, chk.Equals, 2)
+	f.RecordChildExists(u("foo/bar/a"))
+	a.Equal(1, deletionCallCount)
+	f.RecordChildDeleted(u("foo/bar/a"))
+	a.Equal(2, deletionCallCount)
 
 }
 
-func (s *folderDeletionManagerSuite) TestFolderDeletion_WithChildren(c *chk.C) {
+func TestFolderDeletion_WithChildren(t *testing.T) {
+	a := assert.New(t)
 	f := NewFolderDeletionManager(context.Background(), EFolderPropertiesOption.AllFolders(), nil)
 
 	deletionCallCount := 0
 	lastDeletionFolder := ""
 
-	f.RecordChildExists(s.u("foo/bar/a"))
-	f.RecordChildExists(s.u("foo/bar/b"))
-	f.RecordChildExists(s.u("other/x"))
+	f.RecordChildExists(u("foo/bar/a"))
+	f.RecordChildExists(u("foo/bar/b"))
+	f.RecordChildExists(u("other/x"))
 
-	f.RequestDeletion(s.u("foo/bar"), func(context.Context, ILogger) bool { deletionCallCount++; lastDeletionFolder = "foo/bar"; return true })
-	f.RequestDeletion(s.u("other"), func(context.Context, ILogger) bool { deletionCallCount++; lastDeletionFolder = "other"; return true })
-	c.Assert(deletionCallCount, chk.Equals, 0) // deletion doesn't happen right now
+	f.RequestDeletion(u("foo/bar"), func(context.Context, ILogger) bool { deletionCallCount++; lastDeletionFolder = "foo/bar"; return true })
+	f.RequestDeletion(u("other"), func(context.Context, ILogger) bool { deletionCallCount++; lastDeletionFolder = "other"; return true })
+	a.Equal(0, deletionCallCount) // deletion doesn't happen right now
 
-	f.RecordChildDeleted(s.u("other/x")) // this is the last one in this parent, so deletion of that parent should happen now
-	c.Assert(deletionCallCount, chk.Equals, 1)
-	c.Assert(lastDeletionFolder, chk.Equals, "other")
+	f.RecordChildDeleted(u("other/x")) // this is the last one in this parent, so deletion of that parent should happen now
+	a.Equal(1, deletionCallCount)
+	a.Equal("other", lastDeletionFolder)
 
-	f.RecordChildDeleted(s.u("foo/bar/a"))
-	c.Assert(deletionCallCount, chk.Equals, 1) // no change
-	f.RecordChildDeleted(s.u("foo/bar/b"))     // last one in its parent
-	c.Assert(deletionCallCount, chk.Equals, 2) // now deletion happens, since last child gone
-	c.Assert(lastDeletionFolder, chk.Equals, "foo/bar")
+	f.RecordChildDeleted(u("foo/bar/a"))
+	a.Equal(1, deletionCallCount) // no change
+	f.RecordChildDeleted(u("foo/bar/b"))     // last one in its parent
+	a.Equal(2, deletionCallCount) // now deletion happens, since last child gone
+	a.Equal("foo/bar", lastDeletionFolder)
 }
 
-func (s *folderDeletionManagerSuite) TestFolderDeletion_IsUnaffectedByQueryStringsAndPathEscaping(c *chk.C) {
+func TestFolderDeletion_IsUnaffectedByQueryStringsAndPathEscaping(t *testing.T) {
+	a := assert.New(t)
 	f := NewFolderDeletionManager(context.Background(), EFolderPropertiesOption.AllFolders(), nil)
 
 	deletionCallCount := 0
 	lastDeletionFolder := ""
 
-	f.RecordChildExists(s.u("foo/bar%2Fa?SAS"))
-	f.RecordChildExists(s.u("foo/bar/b"))
-	f.RecordChildExists(s.u("other/x"))
+	f.RecordChildExists(u("foo/bar%2Fa?SAS"))
+	f.RecordChildExists(u("foo/bar/b"))
+	f.RecordChildExists(u("other/x"))
 
-	f.RequestDeletion(s.u("foo%2fbar"), func(context.Context, ILogger) bool { deletionCallCount++; lastDeletionFolder = "foo/bar"; return true })
-	f.RequestDeletion(s.u("other?SAS"), func(context.Context, ILogger) bool { deletionCallCount++; lastDeletionFolder = "other"; return true })
-	c.Assert(deletionCallCount, chk.Equals, 0) // deletion doesn't happen right now
+	f.RequestDeletion(u("foo%2fbar"), func(context.Context, ILogger) bool { deletionCallCount++; lastDeletionFolder = "foo/bar"; return true })
+	f.RequestDeletion(u("other?SAS"), func(context.Context, ILogger) bool { deletionCallCount++; lastDeletionFolder = "other"; return true })
+	a.Equal(0, deletionCallCount) // deletion doesn't happen right now
 
-	f.RecordChildDeleted(s.u("other%2fx")) // this is the last one in this parent, so deletion of that parent should happen now
-	c.Assert(deletionCallCount, chk.Equals, 1)
-	c.Assert(lastDeletionFolder, chk.Equals, "other")
+	f.RecordChildDeleted(u("other%2fx")) // this is the last one in this parent, so deletion of that parent should happen now
+	a.Equal(1, deletionCallCount)
+	a.Equal("other", lastDeletionFolder)
 
-	f.RecordChildDeleted(s.u("foo/bar/a"))
-	c.Assert(deletionCallCount, chk.Equals, 1) // no change
-	f.RecordChildDeleted(s.u("foo/bar/b?SAS")) // last one in its parent
-	c.Assert(deletionCallCount, chk.Equals, 2) // now deletion happens, since last child gone
-	c.Assert(lastDeletionFolder, chk.Equals, "foo/bar")
+	f.RecordChildDeleted(u("foo/bar/a"))
+	a.Equal(1, deletionCallCount) // no change
+	f.RecordChildDeleted(u("foo/bar/b?SAS")) // last one in its parent
+	a.Equal(2, deletionCallCount) // now deletion happens, since last child gone
+	a.Equal("foo/bar", lastDeletionFolder)
 }
 
-func (s *folderDeletionManagerSuite) TestFolderDeletion_WithMultipleDeletionCallsOnOneFolder(c *chk.C) {
+func TestFolderDeletion_WithMultipleDeletionCallsOnOneFolder(t *testing.T) {
+	a := assert.New(t)
 	f := NewFolderDeletionManager(context.Background(), EFolderPropertiesOption.AllFolders(), nil)
 
 	deletionResult := false
 	deletionCallCount := 0
 
 	// run a deletion that where the deletion func returns false
-	f.RecordChildExists(s.u("foo/bar/a"))
-	f.RequestDeletion(s.u("foo/bar"), func(context.Context, ILogger) bool { deletionCallCount++; return deletionResult })
-	c.Assert(deletionCallCount, chk.Equals, 0)
-	f.RecordChildDeleted(s.u("foo/bar/a"))
-	c.Assert(deletionCallCount, chk.Equals, 1)
+	f.RecordChildExists(u("foo/bar/a"))
+	f.RequestDeletion(u("foo/bar"), func(context.Context, ILogger) bool { deletionCallCount++; return deletionResult })
+	a.Equal(0, deletionCallCount)
+	f.RecordChildDeleted(u("foo/bar/a"))
+	a.Equal(1, deletionCallCount)
 
 	// Now find and process more children. When all are processed,
 	// deletion should be automatically retried, because it didn't
 	// succeed last time.
 	// (May happen in AzCopy due to highly asynchronous nature and
 	// fact that folders may be enumerated well before all their children)
-	f.RecordChildExists(s.u("foo/bar/b"))
-	c.Assert(deletionCallCount, chk.Equals, 1)
+	f.RecordChildExists(u("foo/bar/b"))
+	a.Equal(1, deletionCallCount)
 	deletionResult = true // our next deletion should work
-	f.RecordChildDeleted(s.u("foo/bar/b"))
-	c.Assert(deletionCallCount, chk.Equals, 2) // deletion was called again, when count again dropped to zero
+	f.RecordChildDeleted(u("foo/bar/b"))
+	a.Equal(2, deletionCallCount) // deletion was called again, when count again dropped to zero
 
 	// Now find and process even more children.
 	// This time, here should be no deletion, because the deletion func _succeeded_ last time.
 	// We don't expect ever to find another child after successful deletion, but may as well test it
-	f.RecordChildExists(s.u("foo/bar/c"))
-	f.RecordChildDeleted(s.u("foo/bar/c"))
-	c.Assert(deletionCallCount, chk.Equals, 2) // no change from above
+	f.RecordChildExists(u("foo/bar/c"))
+	f.RecordChildDeleted(u("foo/bar/c"))
+	a.Equal(2, deletionCallCount) // no change from above
 }
 
-func (s *folderDeletionManagerSuite) TestFolderDeletion_WithMultipleFolderLevels(c *chk.C) {
+func TestFolderDeletion_WithMultipleFolderLevels(t *testing.T) {
+	a := assert.New(t)
 	f := NewFolderDeletionManager(context.Background(), EFolderPropertiesOption.AllFolders(), nil)
 
 	deletionCallCount := 0
 
-	f.RecordChildExists(s.u("base/a.txt"))
-	f.RecordChildExists(s.u("base/childfolder"))
-	f.RecordChildExists(s.u("base/childfolder/grandchildfolder"))
-	f.RecordChildExists(s.u("base/childfolder/grandchildfolder/ggcf"))
-	f.RecordChildExists(s.u("base/childfolder/grandchildfolder/ggcf/b.txt"))
+	f.RecordChildExists(u("base/a.txt"))
+	f.RecordChildExists(u("base/childfolder"))
+	f.RecordChildExists(u("base/childfolder/grandchildfolder"))
+	f.RecordChildExists(u("base/childfolder/grandchildfolder/ggcf"))
+	f.RecordChildExists(u("base/childfolder/grandchildfolder/ggcf/b.txt"))
 
-	f.RequestDeletion(s.u("base"), func(context.Context, ILogger) bool { deletionCallCount++; return true })
-	f.RequestDeletion(s.u("base/childfolder"), func(context.Context, ILogger) bool { deletionCallCount++; return true })
-	f.RequestDeletion(s.u("base/childfolder/grandchildfolder"), func(context.Context, ILogger) bool { deletionCallCount++; return true })
-	f.RequestDeletion(s.u("base/childfolder/grandchildfolder/ggcf"), func(context.Context, ILogger) bool { deletionCallCount++; return true })
+	f.RequestDeletion(u("base"), func(context.Context, ILogger) bool { deletionCallCount++; return true })
+	f.RequestDeletion(u("base/childfolder"), func(context.Context, ILogger) bool { deletionCallCount++; return true })
+	f.RequestDeletion(u("base/childfolder/grandchildfolder"), func(context.Context, ILogger) bool { deletionCallCount++; return true })
+	f.RequestDeletion(u("base/childfolder/grandchildfolder/ggcf"), func(context.Context, ILogger) bool { deletionCallCount++; return true })
 
-	f.RecordChildDeleted(s.u("base/childfolder/grandchildfolder/ggcf/b.txt"))
-	c.Assert(deletionCallCount, chk.Equals, 3) // everything except base
+	f.RecordChildDeleted(u("base/childfolder/grandchildfolder/ggcf/b.txt"))
+	a.Equal(3, deletionCallCount) // everything except base
 
-	f.RecordChildDeleted(s.u("base/a.txt"))
-	c.Assert(deletionCallCount, chk.Equals, 4) // base is gone now too
+	f.RecordChildDeleted(u("base/a.txt"))
+	a.Equal(4, deletionCallCount) // base is gone now too
 }
 
-func (s *folderDeletionManagerSuite) TestGetParent(c *chk.C) {
+func TestGetParent(t *testing.T) {
+	a := assert.New(t)
 	f := NewFolderDeletionManager(context.Background(), EFolderPropertiesOption.AllFolders(), nil)
 
 	test := func(child string, expectedParent string) {
 		u, _ := url.Parse(child)
 		p, ok := f.(*standardFolderDeletionManager).getParent(u)
 		if expectedParent == "" {
-			c.Assert(ok, chk.Equals, false)
+			a.False(ok)
 		} else {
-			c.Assert(ok, chk.Equals, true)
-			c.Assert(p.String(), chk.Equals, expectedParent)
+			a.True(ok)
+			a.Equal(expectedParent, p.String())
 		}
 	}
 

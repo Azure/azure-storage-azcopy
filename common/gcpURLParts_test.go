@@ -1,68 +1,69 @@
 package common
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
+	"testing"
 )
 
-type gcpURLPartsTestSuite struct{}
-
 // This testsuite does not reach GCP service, and runs even with GCP_TESTS=FALSE
-var _ = chk.Suite(&gcpURLPartsTestSuite{})
 
-func (s *gcpURLPartsTestSuite) TestGCPURLParse(c *chk.C) {
+func TestGCPURLParse(t *testing.T) {
+	a := assert.New(t)
 	u, _ := url.Parse("http://storage.cloud.google.com/bucket")
 	p, err := NewGCPURLParts(*u)
-	c.Assert(err, chk.IsNil)
-	c.Assert(p.Host, chk.Equals, "storage.cloud.google.com")
-	c.Assert(p.BucketName, chk.Equals, "bucket")
-	c.Assert(p.ObjectKey, chk.Equals, "")
-	c.Assert(p.String(), chk.Equals, "http://storage.cloud.google.com/bucket")
+	a.Nil(err)
+	a.Equal("storage.cloud.google.com", p.Host)
+	a.Equal("bucket", p.BucketName)
+	a.Equal("", p.ObjectKey)
+	a.Equal("http://storage.cloud.google.com/bucket", p.String())
 
 	u, _ = url.Parse("https://storage.cloud.google.com")
 	p, err = NewGCPURLParts(*u)
-	c.Assert(err, chk.IsNil)
-	c.Assert(p.BucketName, chk.Equals, "")
-	c.Assert(p.ObjectKey, chk.Equals, "")
-	c.Assert(p.String(), chk.Equals, "https://storage.cloud.google.com")
+	a.Nil(err)
+	a.Equal("", p.BucketName)
+	a.Equal("", p.ObjectKey)
+	a.Equal("https://storage.cloud.google.com", p.String())
 
 	u, _ = url.Parse("http://storage.cloud.google.com/bucket/keyname/")
 	p, err = NewGCPURLParts(*u)
-	c.Assert(err, chk.IsNil)
-	c.Assert(p.BucketName, chk.Equals, "bucket")
-	c.Assert(p.ObjectKey, chk.Equals, "keyname/")
-	c.Assert(p.String(), chk.Equals, "http://storage.cloud.google.com/bucket/keyname/")
+	a.Nil(err)
+	a.Equal("bucket", p.BucketName)
+	a.Equal("keyname/", p.ObjectKey)
+	a.Equal("http://storage.cloud.google.com/bucket/keyname/", p.String())
 
 }
 
-func (s *gcpURLPartsTestSuite) TestGCPURLParseNegative(c *chk.C) {
+func TestGCPURLParseNegative(t *testing.T) {
+	a := assert.New(t)
 	u, _ := url.Parse("https://storage.cloud.googly.com/bucket")
 	_, err := NewGCPURLParts(*u)
-	c.Assert(err, chk.NotNil)
-	c.Assert(strings.Contains(err.Error(), invalidGCPURLErrorMessage), chk.Equals, true)
+	a.NotNil(err)
+	a.True(strings.Contains(err.Error(), invalidGCPURLErrorMessage))
 
 	u, _ = url.Parse("https://mcdheestorage.blob.core.windows.net")
 	_, err = NewGCPURLParts(*u)
-	c.Assert(err, chk.NotNil)
-	c.Assert(strings.Contains(err.Error(), invalidGCPURLErrorMessage), chk.Equals, true)
+	a.NotNil(err)
+	a.True(strings.Contains(err.Error(), invalidGCPURLErrorMessage))
 }
 
-func (s *gcpURLPartsTestSuite) TestIsGCPURL(c *chk.C) {
+func TestIsGCPURL(t *testing.T) {
+	a := assert.New(t)
 	u, _ := url.Parse("http://storage.cloud.google.com/bucket/keyname/")
 	isGCP := IsGCPURL(*u)
-	c.Assert(isGCP, chk.Equals, true)
+	a.True(isGCP)
 
 	// Negative Test Cases
 	u, _ = url.Parse("http://storage.cloudxgoogle.com/bucket/keyname/")
 	isGCP = IsGCPURL(*u)
-	c.Assert(isGCP, chk.Equals, false)
+	a.False(isGCP)
 
 	u, _ = url.Parse("http://storage.cloud.googlexcom/bucket/keyname/")
 	isGCP = IsGCPURL(*u)
-	c.Assert(isGCP, chk.Equals, false)
+	a.False(isGCP)
 
 	u, _ = url.Parse("http://storagexcloud.google.com/bucket/keyname/")
 	isGCP = IsGCPURL(*u)
-	c.Assert(isGCP, chk.Equals, false)
+	a.False(isGCP)
 }

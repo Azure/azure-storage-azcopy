@@ -1,0 +1,39 @@
+parameters:
+  - name: directory
+    type: string
+  - name: coverage_name
+    type: string
+steps:
+  - script: |
+      set -e
+      echo "Running tests in " ${directory}
+      go test -timeout=1h -v -coverprofile=${coverage_name}_coverage.txt ./${directory} | tee ${coverage_name}.txt
+      exit_code=${PIPESTATUS[0]}
+      echo "Generating junit report for " ${directory}
+      cat ${coverage_name}.txt | $(go env GOPATH)/bin/go-junit-report > ${coverage_name}_report.xml
+      echo "Generating json coverage report for " ${directory}
+      $(go env GOPATH)/bin/gocov convert ${coverage_name}_coverage.txt > ${coverage_name}_coverage.json
+      echo "Generating xml coverage report for " ${directory}
+      $(go env GOPATH)/bin/gocov-xml < ${coverage_name}_coverage.json > ${coverage_name}_coverage.xml
+      exit "$exit_code"
+    displayName: 'Run ${{ parameters.directory }} tests'
+    env:
+      directory: ${{ parameters.directory }}
+      coverage_name: ${{ parameters.coverage_name }}
+    condition: succeededOrFailed()
+
+  - task: PublishTestResults@2
+    condition: succeededOrFailed()
+    inputs:
+      testRunner: JUnit
+      testResultsFiles: $(System.DefaultWorkingDirectory)/**/${coverage_name}_report.xml
+      testRunTitle: '${{ parameters.directory }} Tests'
+    env:
+      coverage_name: ${{ parameters.coverage_name }}
+  - task: PublishCodeCoverageResults@1
+    condition: succeededOrFailed()
+    inputs:
+      codeCoverageTool: Cobertura
+      summaryFileLocation: $(System.DefaultWorkingDirectory)/**/${coverage_name}_coverage.xml
+    env:
+      coverage_name: ${{ parameters.coverage_name }}

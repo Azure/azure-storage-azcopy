@@ -24,13 +24,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
 	"sync/atomic"
+	"testing"
 )
-
-type decompressingWriterSuite struct{}
 
 type closeableBuffer struct {
 	atomicCloseWasCalled int32
@@ -46,9 +45,8 @@ func (c *closeableBuffer) closeWasCalled() bool {
 	return atomic.LoadInt32(&c.atomicCloseWasCalled) == 1
 }
 
-var _ = chk.Suite(&decompressingWriterSuite{})
-
-func (d *decompressingWriterSuite) TestDecompressingWriter_SuccessCases(c *chk.C) {
+func TestDecompressingWriter_SuccessCases(t *testing.T) {
+	a := assert.New(t)
 	cases := []struct {
 		desc            string
 		tp              CompressionType
@@ -69,7 +67,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_SuccessCases(c *chk.C
 
 	for _, cs := range cases {
 		// given:
-		originalData, compressedData := d.getTestData(c, cs.tp, cs.originalSize)
+		originalData, compressedData := getTestData(a, cs.tp, cs.originalSize)
 
 		// when:
 		// we decompress using a decompressing writer
@@ -77,21 +75,21 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_SuccessCases(c *chk.C
 		decWriter := NewDecompressingWriter(destFile, cs.tp)
 		copyBuf := make([]byte, cs.writeBufferSize)
 		_, err := io.CopyBuffer(decWriter, bytes.NewReader(compressedData), copyBuf) // write compressed data to decWriter
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 		err = decWriter.Close()
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// then:
 		// the data that was written to the underlying destination is correctly decompressed
 		dataWritten := destFile.Bytes()
-		c.Assert(dataWritten, chk.DeepEquals, originalData)
+		a.Equal(originalData, dataWritten)
 		// the dest is closed
-		c.Assert(destFile.closeWasCalled(), chk.Equals, true)
+		a.True(destFile.closeWasCalled())
 	}
 }
 
-func (d *decompressingWriterSuite) TestDecompressingWriter_EarlyClose(c *chk.C) {
-
+func TestDecompressingWriter_EarlyClose(t *testing.T) {
+	a := assert.New(t)
 	cases := []CompressionType{
 		ECompressionType.GZip(),
 		ECompressionType.ZLib(),
@@ -99,7 +97,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_EarlyClose(c *chk.C) 
 	for _, tp := range cases {
 		// given:
 		dataSize := int(rand.Int31n(1024*1024) + 100)
-		_, compressedData := d.getTestData(c, tp, dataSize)
+		_, compressedData := getTestData(a, tp, dataSize)
 		sizeBeforeEarlyClose := int64(len(compressedData) / 2)
 
 		// when:
@@ -107,20 +105,20 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_EarlyClose(c *chk.C) 
 		destFile := &closeableBuffer{Buffer: &bytes.Buffer{}} // will be a file in real usage, but just a buffer in this test
 		decWriter := NewDecompressingWriter(destFile, tp)
 		n, err := io.CopyN(decWriter, bytes.NewReader(compressedData), sizeBeforeEarlyClose) // process only some of the data
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 		err = decWriter.Close()
 
 		// then:
 		// the amount processed was as expected, the dest file is closed, and an error was returned from close (because decompressor never sees the expected footer)
-		c.Assert(n, chk.Equals, sizeBeforeEarlyClose)
-		c.Assert(destFile.closeWasCalled(), chk.Equals, true)
-		c.Assert(err, chk.NotNil)
+		a.Equal(sizeBeforeEarlyClose, n)
+		a.True(destFile.closeWasCalled())
+		a.NotNil(err)
 	}
 }
 
-func (d *decompressingWriterSuite) getTestData(c *chk.C, tp CompressionType, originalSize int) (original []byte, compressed []byte) {
+func getTestData(a *assert.Assertions, tp CompressionType, originalSize int) (original []byte, compressed []byte) {
 	// we have original uncompressed data
-	originalData := d.genCompressibleTestData(originalSize)
+	originalData := genCompressibleTestData(originalSize)
 	// and from that we have original compressed data
 	compBuf := &bytes.Buffer{}
 	var comp io.WriteCloser = zlib.NewWriter(compBuf)
@@ -129,8 +127,8 @@ func (d *decompressingWriterSuite) getTestData(c *chk.C, tp CompressionType, ori
 	}
 	_, err := io.Copy(comp, bytes.NewReader(originalData))
 	// write into buf by way of comp
-	c.Assert(err, chk.IsNil)
-	c.Assert(comp.Close(), chk.IsNil)
+	a.Nil(err)
+	a.Nil(comp.Close())
 	compressedData := compBuf.Bytes()
 	return originalData, compressedData
 }
@@ -143,7 +141,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_GenTestData(c *chk.C)
 	f.Close()
 }*/
 
-func (d *decompressingWriterSuite) genCompressibleTestData(size int) []byte {
+func genCompressibleTestData(size int) []byte {
 	phrases := make([][]byte, rand.Intn(50)+1)
 	for i := range phrases {
 		phrases[i] = make([]byte, rand.Intn(100)+1)

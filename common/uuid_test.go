@@ -21,24 +21,22 @@
 package common
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"strings"
+	"testing"
 )
 
-type uuidTestSuite struct{}
-
-var _ = chk.Suite(&uuidTestSuite{})
-
-func (s *uuidTestSuite) TestGUIDGenerationAndParsing(c *chk.C) {
+func TestGUIDGenerationAndParsing(t *testing.T) {
+	a := assert.New(t)
 	for i := 0; i < 100; i++ {
 		uuid := NewUUID()
 
 		// no space is allowed
 		containsSpace := strings.Contains(uuid.String(), " ")
-		c.Assert(containsSpace, chk.Equals, false)
+		a.False(containsSpace)
 
 		parsed, err := ParseUUID(uuid.String())
-		c.Assert(err, chk.IsNil)
-		c.Assert(parsed, chk.DeepEquals, uuid)
+		a.Nil(err)
+		a.Equal(uuid, parsed)
 	}
 }
