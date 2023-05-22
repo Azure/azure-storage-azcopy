@@ -246,10 +246,10 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		azfile.NewUniqueRequestIDPolicyFactory(),
 		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
 		newRetryNotificationPolicyFactory(), // record that a retry status was returned
-		c,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
 		NewTrailingDotPolicyFactory(trailingDot),
+		c,
+		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
 			SyslogDisabled:               common.IsForceLoggingDisabled(),

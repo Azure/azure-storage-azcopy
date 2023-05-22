@@ -34,7 +34,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-const trailingDotErrMsg = "File share contains file/directory %s with a trailing dot but the trailing dot flag was not set to true. AzCopy will automatically filter this file/directory out to prevent data corruption."
+const trailingDotErrMsg = "File share contains file/directory %s with a trailing dot but the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner."
 
 // allow us to iterate through a path pointing to the file endpoint
 type fileTraverser struct {
@@ -72,7 +72,6 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	if targetURLParts.DirectoryOrFilePath != "" {
 		if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
 			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
-			return nil
 		}
 		// check if the url points to a single file
 		fileProperties, isFile := t.getPropertiesIfSingleFile()

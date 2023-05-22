@@ -28,9 +28,6 @@ import (
 	"testing"
 )
 
-var enabled = common.ETrailingDotOption.Enable()
-var disabled = common.ETrailingDotOption.Disable()
-
 func TestTrailingDot_Local(t *testing.T) {
 	// Windows does not support trailing dot files, so we cannot test File->Local or Local->File
 	if runtime.GOOS == "windows" {
@@ -64,7 +61,7 @@ func TestTrailingDot_LocalManual(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
-			trailingDot: &enabled,
+			trailingDot: common.ETrailingDotOption.Enable(),
 		}, nil,
 		testFiles{
 			defaultSize: "1K",
@@ -86,6 +83,7 @@ func TestTrailingDot_Min(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
+			trailingDot: common.ETrailingDotOption.Enable(),
 		}, nil,
 		testFiles{
 			defaultSize: "1K",
@@ -100,7 +98,7 @@ func TestTrailingDot_Disabled(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
-			trailingDot: &disabled,
+			trailingDot: common.ETrailingDotOption.Disable(),
 		}, &hooks{
 			afterValidation: func(h hookHelper) {
 				shareURL := h.GetDestination().(*resourceAzureFileShare).shareURL

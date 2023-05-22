@@ -33,7 +33,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -63,17 +62,7 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) azfile.Ser
 	if err != nil {
 		panic(err)
 	}
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
-		azfile.NewUniqueRequestIDPolicyFactory(),
-		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
-		ste.NewTrailingDotPolicyFactory(common.ETrailingDotOption.Enable()),
-		credential,
-		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-	}
-	p := pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: pipeline.LogOptions{}})
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
 
 	return azfile.NewServiceURL(*u, p)
 }
@@ -160,17 +149,7 @@ func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType Account
 	fullURL, err := url.Parse(rawURL)
 	c.AssertNoErr(err)
 
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
-		azfile.NewUniqueRequestIDPolicyFactory(),
-		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
-		ste.NewTrailingDotPolicyFactory(common.ETrailingDotOption.Enable()),
-		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-	}
-	p := pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: pipeline.LogOptions{}})
-
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
 	return azfile.NewShareURL(*fullURL, p)
 }
 

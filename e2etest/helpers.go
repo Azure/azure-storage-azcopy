@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"math/rand"
 	"mime"
 	"net/url"
@@ -258,17 +257,7 @@ func newNullFolderCreationTracker() ste.FolderCreationTracker {
 func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azfile.NewTelemetryPolicyFactory(azfile.TelemetryOptions{}),
-		azfile.NewUniqueRequestIDPolicyFactory(),
-		azfile.NewRetryPolicyFactory(azfile.RetryOptions{}),
-		ste.NewTrailingDotPolicyFactory(common.ETrailingDotOption.Enable()),
-		credential,
-		azfile.NewRequestLogPolicyFactory(azfile.RequestLogOptions{}),
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-	}
-	p := pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: pipeline.LogOptions{}})
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, p, newNullFolderCreationTracker())
 	c.AssertNoErr(err)
 }
