@@ -21,21 +21,14 @@
 package sddl_test
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
-
-	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 )
 
-// Hookup to the testing framework
-func Test(t *testing.T) { chk.TestingT(t) }
-
-type sddlTestSuite struct{}
-
-var _ = chk.Suite(&sddlTestSuite{})
-
-func (*sddlTestSuite) TestSDDLSplitting(c *chk.C) {
+func TestSDDLSplitting(t *testing.T) {
+	a := assert.New(t)
 	tests := []struct {
 		input  string
 		result sddl.SDDLString
@@ -161,8 +154,8 @@ func (*sddlTestSuite) TestSDDLSplitting(c *chk.C) {
 	for _, v := range tests {
 		res, err := sddl.ParseSDDL(v.input)
 
-		c.Assert(err, chk.IsNil)
-		c.Log("Input: ", v.input, " Expected result: ", v.result.String(), " Actual result: ", res.String())
-		c.Assert(res, chk.DeepEquals, v.result)
+		a.Nil(err)
+		t.Log("Input: ", v.input, " Expected result: ", v.result.String(), " Actual result: ", res.String())
+		a.Equal(v.result, res)
 	}
 }

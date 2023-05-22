@@ -235,6 +235,7 @@ jobs:
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
+        condition: succeededOrFailed()
 
       - script: |
           set -e
@@ -256,6 +257,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+        condition: succeededOrFailed()
       - script: |        
           echo "common tests"
           go test -timeout=1h -v -coverprofile=common_coverage.txt ./common 2>&1 | $(go env GOPATH)/bin/go-junit-report > common_report.xml
@@ -286,6 +288,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+        condition: succeededOrFailed()
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64
           go build -o test-validator ./testSuite/
@@ -328,6 +331,7 @@ jobs:
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+        condition: succeededOrFailed()
       - script: |
           pip install azure-storage-blob==12.12.0
           python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"

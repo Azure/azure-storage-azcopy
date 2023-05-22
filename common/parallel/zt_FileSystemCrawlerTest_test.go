@@ -22,6 +22,7 @@ package parallel
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,20 +32,14 @@ import (
 	chk "gopkg.in/check.v1"
 )
 
-// Hookup to the testing framework
-func Test(t *testing.T) { chk.TestingT(t) }
-
-type fileSystemCrawlerSuite struct{}
-
-var _ = chk.Suite(&fileSystemCrawlerSuite{})
-
 var windowsSystemDirectory = ""
 
-func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *chk.C) {
+func TestParallelEnumerationFindsTheRightFiles(t *testing.T) {
+	a := assert.New(t)
 	dir := "/usr"
 	if runtime.GOOS == "windows" {
 		dir = windowsSystemDirectory
-		c.Assert(dir, chk.Not(chk.Equals), "")
+		a.NotEqual("", dir)
 	}
 
 	// standard (Go SDK) file walk
@@ -74,8 +69,8 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 		if _, ok := parallelResults[key]; ok {
 			delete(parallelResults, key)
 		} else {
-			c.Error("expected " + key)
-			c.Fail()
+			t.Error("expected " + key)
+			t.Fail()
 		}
 	}
 	// repeat for cases where access was denied in the standard enumeration (since we still pick up those dirs in the parallel enumeration (we just don't pick up their contents))
@@ -83,18 +78,18 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 		if _, ok := parallelResults[key]; ok {
 			delete(parallelResults, key)
 		} else {
-			c.Error("expected in access denied results" + key)
-			c.Fail()
+			t.Error("expected in access denied results" + key)
+			t.Fail()
 		}
 	}
 	// assert that everything has been removed now
 	for key := range parallelResults {
-		c.Error("unexpected extra " + key)
-		c.Fail()
+		t.Error("unexpected extra " + key)
+		t.Fail()
 	}
 }
 
-func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo_NormalStat(c *chk.C) {
+func TestParallelEnumerationGetsTheRightFileInfo_NormalStat(t *testing.T) {
 	s.doTestParallelEnumerationGetsTheRightFileInfo(false, c)
 }
 
