@@ -32,7 +32,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"

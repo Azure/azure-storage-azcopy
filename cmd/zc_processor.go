@@ -27,13 +27,13 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/jobsAdmin"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/pkg/errors"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 type copyTransferProcessor struct {

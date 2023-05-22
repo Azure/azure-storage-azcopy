@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // pacer is used by callers whose activity must be controlled to a certain pace

@@ -345,7 +345,7 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 		return 0, err
 	}
 
-	// extra checks to be safe (originally for https://github.com/shubham808/azure-storage-azcopy/issues/191)
+	// extra checks to be safe (originally for https://github.com/aymanjarrousms/azure-storage-azcopy/issues/191)
 	// No longer needed now that use/unuse lock with a mutex, but there's no harm in leaving them here
 	if cr.buffer == nil {
 		panic("unexpected nil buffer")

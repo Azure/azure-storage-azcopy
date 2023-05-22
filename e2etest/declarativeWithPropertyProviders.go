@@ -23,8 +23,8 @@ package e2etest
 import (
 	"time"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/cmd"
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/cmd"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // All the structs in this file have names starting with "with", to make the readability flow when they are used

@@ -36,11 +36,11 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 
 	"github.com/minio/minio-go"
-	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 )
 

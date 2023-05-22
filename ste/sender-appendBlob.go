@@ -29,7 +29,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 type appendBlobSenderBase struct {

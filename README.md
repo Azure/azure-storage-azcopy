@@ -55,7 +55,7 @@ For complete guidance, visit any of these articles on the docs.microsoft.com web
 
 :eight_spoked_asterisk: [Configure, optimize, and troubleshoot AzCopy](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-configure)
 
-:eight_spoked_asterisk: [AzCopy WiKi](https://github.com/shubham808/azure-storage-azcopy/wiki)
+:eight_spoked_asterisk: [AzCopy WiKi](https://github.com/aymanjarrousms/azure-storage-azcopy/wiki)
 
 ## Supported Operations
 

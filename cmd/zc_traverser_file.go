@@ -27,12 +27,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common/parallel"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common/parallel"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // allow us to iterate through a path pointing to the file endpoint

@@ -24,7 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
 	"log"
 	"net/url"

@@ -28,7 +28,7 @@ import (
 	"path"
 	"syscall"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // ProcessOSSpecificInitialization changes the soft limit for file descriptor for process

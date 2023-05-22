@@ -3,7 +3,7 @@ package e2etest
 import (
 	"testing"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 func TestResume_FolderState(t *testing.T) {

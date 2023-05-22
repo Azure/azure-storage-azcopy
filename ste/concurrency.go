@@ -26,7 +26,7 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // ConfiguredInt is an integer which may be optionally configured by user through an environment variable

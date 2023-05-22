@@ -8,8 +8,8 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 
-	"github.com/shubham808/azure-storage-azcopy/v10/azbfs"
-	"github.com/shubham808/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // Separated the ADLS tests from others as ADLS can't safely be tested on the same storage account
