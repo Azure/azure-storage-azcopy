@@ -351,6 +351,12 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			fileURL := azbfs.NewFileURL(bfsURLParts.URL(), b.p)
 			_, err := fileURL.Delete(b.ctx)
 			return err
+		case common.ELocation.BlobFS():
+			bfsURLParts := azbfs.NewBfsURLParts(*b.rootURL)
+			bfsURLParts.DirectoryOrFilePath = path.Join(bfsURLParts.DirectoryOrFilePath, object.relativePath)
+			fileURL := azbfs.NewFileURL(bfsURLParts.URL(), b.p)
+			_, err := fileURL.Delete(b.ctx)
+			return err
 		default:
 			panic("not implemented, check your code")
 		}
