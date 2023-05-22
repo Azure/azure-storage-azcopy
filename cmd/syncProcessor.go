@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -315,6 +316,12 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
 			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
 			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+			_, err := fileURL.Delete(b.ctx)
+			return err
+		case common.ELocation.BlobFS():
+			bfsURLParts := azbfs.NewBfsURLParts(*b.rootURL)
+			bfsURLParts.DirectoryOrFilePath = path.Join(bfsURLParts.DirectoryOrFilePath, object.relativePath)
+			fileURL := azbfs.NewFileURL(bfsURLParts.URL(), b.p)
 			_, err := fileURL.Delete(b.ctx)
 			return err
 		default:

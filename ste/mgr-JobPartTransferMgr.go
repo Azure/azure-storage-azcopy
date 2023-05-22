@@ -60,6 +60,7 @@ type IJobPartTransferMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 	SourceProviderPipeline() pipeline.Pipeline
+	SecondarySourceProviderPipeline() pipeline.Pipeline
 	SourceCredential() pipeline.Factory
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
@@ -966,6 +967,10 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
+}
+
+func (jptm *jobPartTransferMgr) SecondarySourceProviderPipeline() pipeline.Pipeline {
+	return jptm.jobPartMgr.SecondarySourceProviderPipeline()
 }
 
 func (jptm *jobPartTransferMgr) SourceCredential() pipeline.Factory {

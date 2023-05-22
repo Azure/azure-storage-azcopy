@@ -81,8 +81,6 @@ func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFacto
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 
-	const blobFSNotS2S = "blobFS not supported as S2S source"
-
 	//local helper functions
 
 	getDownloader := func(sourceType common.Location) downloaderFactory {
@@ -109,7 +107,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			case common.ELocation.File():
 				return newURLToAzureFileCopier
 			case common.ELocation.BlobFS():
-				panic(blobFSNotS2S)
+				return newURLToBlobCopier
 			default:
 				panic("unexpected target location type")
 			}
@@ -139,7 +137,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		case common.ELocation.File():
 			return newFileSourceInfoProvider
 		case common.ELocation.BlobFS():
-			panic(blobFSNotS2S)
+			return newBlobSourceInfoProvider
 		case common.ELocation.S3():
 			return newS3SourceInfoProvider
 		case common.ELocation.GCP():

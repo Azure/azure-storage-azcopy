@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 
@@ -91,10 +92,15 @@ func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int
 // RequestTrafficAllocation function is called by goroutines to request right to send a certain amount of bytes.
 // It controls their rate by blocking until they are allowed to proceed
 func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
+	targetBytes := p.targetBytesPerSecond()
 	//if targetBytesIsZero, we have a null pacer, we just track GrandTotal
-	if p.targetBytesPerSecond() == 0 {
+	if targetBytes == 0 {
 		atomic.AddInt64(&p.atomicGrandTotal, byteCount)
 		return nil
+	}
+
+	if targetBytes < byteCount {
+		return errors.New("request size greater than pacer target")
 	}
 
 	// block until tokens are available

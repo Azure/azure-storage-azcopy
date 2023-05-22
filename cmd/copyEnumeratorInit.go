@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"log"
 	"net/url"
 	"os"
@@ -229,7 +230,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -501,7 +502,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		fsu := azfile.NewServiceURL(*dstURL, dstPipeline)
 		shareURL := fsu.NewShareURL(containerName)
 		_, err = shareURL.GetProperties(ctx)
-
 		if err == nil {
 			return err
 		}
@@ -512,6 +512,33 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 		if stgErr, ok := err.(azfile.StorageError); ok {
 			if stgErr.ServiceCode() != azfile.ServiceCodeShareAlreadyExists {
+				return err
+			}
+		} else {
+			return err
+		}
+	case common.ELocation.BlobFS():
+		// TODO: Implement blobfs container creation
+		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())
+		if err != nil {
+			return err
+		}
+
+		dstURL, err := url.Parse(accountRoot)
+		if err != nil {
+			return err
+		}
+
+		serviceURL := azbfs.NewServiceURL(*dstURL, dstPipeline)
+		fsURL := serviceURL.NewFileSystemURL(containerName)
+		_, err = fsURL.GetProperties(ctx)
+		if err == nil {
+			return err
+		}
+
+		_, err = fsURL.Create(ctx)
+		if stgErr, ok := err.(azbfs.StorageError); ok {
+			if stgErr.ServiceCode() != azbfs.ServiceCodeFileSystemAlreadyExists {
 				return err
 			}
 		} else {
@@ -660,25 +687,25 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, preservePosixProperties, isDfsDfs, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
+func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
 
 		template := ". For the same reason, %s defined on folders %s"
 		switch {
-		case preserveSmbPermissions && preserveSmbInfo:
+		case preservePermissions && preserveSmbInfo:
 			return fmt.Sprintf(template, "properties and permissions", willProcessString)
 		case preserveSmbInfo:
 			return fmt.Sprintf(template, "properties", willProcessString)
-		case preserveSmbPermissions:
+		case preservePermissions:
 			return fmt.Sprintf(template, "permissions", willProcessString)
 		default:
 			return "" // no preserve flags set, so we have nothing to say about them
 		}
 	}
 
-	bothFolderAware := (fromTo.AreBothFolderAware() || isDfsDfs || preservePosixProperties || includeDirectoryStubs) && !isDstNull
+	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {

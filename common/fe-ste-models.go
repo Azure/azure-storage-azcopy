@@ -538,6 +538,10 @@ func (l Location) IsFolderAware() bool {
 	}
 }
 
+func (l Location) CanForwardOAuthTokens() bool {
+	return l == ELocation.Blob() || l == ELocation.BlobFS()
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -547,31 +551,34 @@ var EFromTo = FromTo(0)
 // represents the to location
 type FromTo uint16
 
-func (FromTo) Unknown() FromTo   { return FromTo(0) }
-func (FromTo) LocalBlob() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.Blob())) }
-func (FromTo) LocalFile() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.File())) }
-func (FromTo) BlobLocal() FromTo { return FromTo(fromToValue(ELocation.Blob(), ELocation.Local())) }
-func (FromTo) FileLocal() FromTo { return FromTo(fromToValue(ELocation.File(), ELocation.Local())) }
-func (FromTo) BlobPipe() FromTo  { return FromTo(fromToValue(ELocation.Blob(), ELocation.Pipe())) }
-func (FromTo) PipeBlob() FromTo  { return FromTo(fromToValue(ELocation.Pipe(), ELocation.Blob())) }
-func (FromTo) FilePipe() FromTo  { return FromTo(fromToValue(ELocation.File(), ELocation.Pipe())) }
-func (FromTo) PipeFile() FromTo  { return FromTo(fromToValue(ELocation.Pipe(), ELocation.File())) }
-func (FromTo) BlobTrash() FromTo { return FromTo(fromToValue(ELocation.Blob(), ELocation.Unknown())) }
-func (FromTo) FileTrash() FromTo { return FromTo(fromToValue(ELocation.File(), ELocation.Unknown())) }
-func (FromTo) BlobFSTrash() FromTo {
-	return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Unknown()))
-}
-func (FromTo) LocalBlobFS() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.BlobFS())) }
-func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Local())) }
-func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }
-func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Blob())) }
-func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.File())) }
-func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
-func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
-func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
-func (FromTo) BlobNone() FromTo    { return fromToValue(ELocation.Blob(), ELocation.None()) }
-func (FromTo) BlobFSNone() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
-func (FromTo) FileNone() FromTo    { return fromToValue(ELocation.File(), ELocation.None()) }
+func (FromTo) Unknown() FromTo      { return FromTo(0) }
+func (FromTo) LocalBlob() FromTo    { return fromToValue(ELocation.Local(), ELocation.Blob()) }
+func (FromTo) LocalFile() FromTo    { return fromToValue(ELocation.Local(), ELocation.File()) }
+func (FromTo) BlobLocal() FromTo    { return fromToValue(ELocation.Blob(), ELocation.Local()) }
+func (FromTo) FileLocal() FromTo    { return fromToValue(ELocation.File(), ELocation.Local()) }
+func (FromTo) BlobPipe() FromTo     { return fromToValue(ELocation.Blob(), ELocation.Pipe()) }
+func (FromTo) PipeBlob() FromTo     { return fromToValue(ELocation.Pipe(), ELocation.Blob()) }
+func (FromTo) FilePipe() FromTo     { return fromToValue(ELocation.File(), ELocation.Pipe()) }
+func (FromTo) PipeFile() FromTo     { return fromToValue(ELocation.Pipe(), ELocation.File()) }
+func (FromTo) BlobTrash() FromTo    { return fromToValue(ELocation.Blob(), ELocation.Unknown()) }
+func (FromTo) FileTrash() FromTo    { return fromToValue(ELocation.File(), ELocation.Unknown()) }
+func (FromTo) BlobFSTrash() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
+func (FromTo) LocalBlobFS() FromTo  { return fromToValue(ELocation.Local(), ELocation.BlobFS()) }
+func (FromTo) BlobFSLocal() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.Local()) }
+func (FromTo) BlobFSBlobFS() FromTo { return fromToValue(ELocation.BlobFS(), ELocation.BlobFS()) }
+func (FromTo) BlobFSBlob() FromTo   { return fromToValue(ELocation.BlobFS(), ELocation.Blob()) }
+func (FromTo) BlobFSFile() FromTo   { return fromToValue(ELocation.BlobFS(), ELocation.File()) }
+func (FromTo) BlobBlobFS() FromTo   { return fromToValue(ELocation.Blob(), ELocation.BlobFS()) }
+func (FromTo) FileBlobFS() FromTo   { return fromToValue(ELocation.File(), ELocation.BlobFS()) }
+func (FromTo) BlobBlob() FromTo     { return fromToValue(ELocation.Blob(), ELocation.Blob()) }
+func (FromTo) FileBlob() FromTo     { return fromToValue(ELocation.File(), ELocation.Blob()) }
+func (FromTo) BlobFile() FromTo     { return fromToValue(ELocation.Blob(), ELocation.File()) }
+func (FromTo) FileFile() FromTo     { return fromToValue(ELocation.File(), ELocation.File()) }
+func (FromTo) S3Blob() FromTo       { return fromToValue(ELocation.S3(), ELocation.Blob()) }
+func (FromTo) GCPBlob() FromTo      { return fromToValue(ELocation.GCP(), ELocation.Blob()) }
+func (FromTo) BlobNone() FromTo     { return fromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo   { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo     { return fromToValue(ELocation.File(), ELocation.None()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
@@ -617,15 +624,23 @@ func (ft *FromTo) From() Location {
 }
 
 func (ft *FromTo) IsDownload() bool {
-	return ft.From().IsRemote() && ft.To().IsLocal()
+	return ft.From().IsRemote() && ft.To().IsLocal() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
 func (ft *FromTo) IsS2S() bool {
-	return ft.From().IsRemote() && ft.To().IsRemote()
+	return ft.From().IsRemote() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
 func (ft *FromTo) IsUpload() bool {
-	return ft.From().IsLocal() && ft.To().IsRemote()
+	return ft.From().IsLocal() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
+}
+
+func (ft *FromTo) IsDelete() bool {
+	return ft.To() == ELocation.Unknown()
+}
+
+func (ft *FromTo) IsSetProperties() bool {
+	return ft.To() == ELocation.None()
 }
 
 func (ft *FromTo) AreBothFolderAware() bool {
