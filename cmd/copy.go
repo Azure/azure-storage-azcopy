@@ -271,29 +271,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		azcopyScanningLogger.CloseLog()
 	})
 
-	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
-	if src, dst := InferArgumentLocation(raw.src), InferArgumentLocation(raw.dst); src == common.ELocation.BlobFS() || dst == common.ELocation.BlobFS() {
-		srcDfs := src == common.ELocation.BlobFS() && dst != common.ELocation.Local()
-		if srcDfs {
-			raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
-			glcm.Info("Switching to use blob endpoint on source account.")
-
-		}
-
-		dstDfs := dst == common.ELocation.BlobFS() && src != common.ELocation.Local()
-		if dstDfs {
-			raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
-			msg := fmt.Sprintf("Switching to use blob endpoint on destination account. There are some limitations when switching endpoints. " +
-				"Please refer to https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-known-issues#blob-storage-apis")
-			glcm.Info(msg)
-			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(pipeline.LogInfo, msg)
-			}
-		}
-
-		cooked.isHNStoHNS = srcDfs && dstDfs
-	}
-
 	fromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
 		return cooked, err
@@ -652,7 +629,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	globalBlobFSMd5ValidationOption = cooked.md5ValidationOption // workaround, to avoid having to pass this all the way through the chain of methods in enumeration, just for one weird and (presumably) temporary workaround
 
 	cooked.CheckLength = raw.CheckLength
 	// length of devnull will be 0, thus this will always fail unless downloading an empty file
@@ -688,14 +664,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.FromTo)
-	if cooked.FromTo == common.EFromTo.BlobBlob() && cooked.preservePermissions.IsTruthy() {
-		cooked.isHNStoHNS = true // override HNS settings, since if a user is tx'ing blob->blob and copying permissions, it's DEFINITELY going to be HNS (since perms don't exist w/o HNS).
-	}
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.asSubdir = raw.asSubdir
 
-	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.preservePermissions.IsTruthy())
+	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs
 
 	if err = crossValidateSymlinksAndPermissions(cooked.SymlinkHandling, cooked.preservePermissions.IsTruthy()); err != nil {
 		return cooked, err
@@ -954,18 +927,24 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 }
 
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
-	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for BlobBlob.
-	return runtime.GOOS == "linux" && (
-    fromTo == common.EFromTo.BlobLocal() ||
-	  fromTo == common.EFromTo.LocalBlob()) ||
-		fromTo == common.EFromTo.BlobBlob()
+	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for S2S methods.
+	switch fromTo {
+	case common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
+		return runtime.GOOS == "linux"
+	case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobBlobFS():
+		return true
+	default:
+		return false
+	}
 }
 
 func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
-	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
+	if toPreserve && flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
+		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
+		return nil
+	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
-		fromTo == common.EFromTo.FileFile() ||
-		fromTo == common.EFromTo.BlobBlob()) {
+		fromTo == common.EFromTo.FileFile()) {
 		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.IffString(flagName == PreservePermissionsFlag, "permission", "SMB"))
 	}
 
@@ -990,9 +969,9 @@ func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
 func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fromTo common.FromTo) error {
 	if symlinkHandling.Preserve() {
 		switch fromTo {
-		case common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal():
+		case common.EFromTo.LocalBlob(), common.EFromTo.BlobLocal(), common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
 			return nil // Fine on all OSes that support symlink via the OS package. (Win, MacOS, and Linux do, and that's what we officially support.)
-		case common.EFromTo.BlobBlob():
+		case common.EFromTo.BlobBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobBlobFS(), common.EFromTo.BlobFSBlob():
 			return nil // Blob->Blob doesn't involve any local requirements
 		default:
 			return fmt.Errorf("flag --%s can only be used on Blob<->Blob or Local<->Blob", common.PreserveSymlinkFlagName)
@@ -1109,7 +1088,6 @@ type CookedCopyCmdArgs struct {
 	// from arguments
 	Source      common.ResourceString
 	Destination common.ResourceString
-	isHNStoHNS  bool // workaround to indicate that BlobBlob is actually HNS->HNS, since we shift to Blob instead of HNS.
 	FromTo      common.FromTo
 
 	// new include/exclude only apply to file names
@@ -1404,15 +1382,16 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 // get source credential - if there is a token it will be used to get passed along our pipeline
 func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialInfo, error) {
-
 	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions)
 	if err != nil {
 		return srcCredInfo, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
 	} else if cca.FromTo.IsS2S() &&
-		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && cca.FromTo.To() != common.ELocation.Blob()) || // Blob can forward OAuth tokens
+		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && !cca.FromTo.To().CanForwardOAuthTokens()) || // Blob can forward OAuth tokens; BlobFS inherits this.
 			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
-		return srcCredInfo, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource, or the destination is blob storage")
+		return srcCredInfo, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource. Blob and BlobFS additionally support OAuth on both source and destination")
+	} else if cca.FromTo.IsS2S() && (srcCredInfo.CredentialType == common.ECredentialType.SharedKey() || jpo.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
+		return srcCredInfo, errors.New("shared key auth is not supported for S2S operations")
 	}
 
 	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
@@ -1544,51 +1523,39 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.StripTopDir = true
 	}
 
-	// depending on the source and destination type, we process the cp command differently
-	// Create enumerator and do enumerating
-	switch cca.FromTo {
-	case common.EFromTo.LocalBlob(),
-		common.EFromTo.LocalBlobFS(),
-		common.EFromTo.LocalFile(),
-		common.EFromTo.BlobLocal(),
-		common.EFromTo.FileLocal(),
-		common.EFromTo.BlobFSLocal(),
-		common.EFromTo.BlobBlob(),
-		common.EFromTo.FileBlob(),
-		common.EFromTo.FileFile(),
-		common.EFromTo.BlobFile(),
-		common.EFromTo.S3Blob(),
-		common.EFromTo.GCPBlob(),
-		common.EFromTo.BenchmarkBlob(),
-		common.EFromTo.BenchmarkBlobFS(),
-		common.EFromTo.BenchmarkFile():
-
+	switch {
+	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
+		// Execute a standard copy command
 		var e *CopyEnumerator
-		srcCredInfo, _ := cca.getSrcCredential(ctx, &jobPartOrder)
+		var srcCredInfo common.CredentialInfo
+		srcCredInfo, err = cca.getSrcCredential(ctx, &jobPartOrder)
+		if err != nil {
+			return fmt.Errorf("failed to discern source credential type: %w", err)
+		}
 
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}
 		err = e.enumerate()
-	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
-		e, createErr := newRemoveEnumerator(cca)
-		if createErr != nil {
-			return fmt.Errorf("failed to initialize enumerator: %w", createErr)
+
+	case cca.FromTo.IsDelete():
+		// Delete gets ran through copy, so handle delete
+		if cca.FromTo.From() == common.ELocation.BlobFS() {
+			// TODO merge with BlobTrash case
+			// Currently, Blob Delete in STE does not appropriately handle folders. In addition, dfs delete is free-ish.
+			err = removeBfsResources(cca)
+		} else {
+			e, createErr := newRemoveEnumerator(cca)
+			if createErr != nil {
+				return fmt.Errorf("failed to initialize enumerator: %w", createErr)
+			}
+
+			err = e.enumerate()
 		}
 
-		err = e.enumerate()
-
-	case common.EFromTo.BlobFSTrash():
-		// TODO merge with BlobTrash case
-		err = removeBfsResources(cca)
-
-	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
-	// case common.EFromTo.FileBlob():
-	// 	e := copyFileToNEnumerator(jobPartOrder)
-	// 	err = e.enumerate(cca)
-
-	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
+	case cca.FromTo.IsSetProperties():
+		// Set properties as well
 		e, createErr := setPropertiesEnumerator(cca)
 		if createErr != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", createErr)

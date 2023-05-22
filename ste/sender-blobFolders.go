@@ -110,10 +110,10 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 
 func (b *blobFolderSender) SetContainerACL() error {
 	bURLParts := azblob.NewBlobURLParts(b.destination.URL())
-	bURLParts.BlobName = "/" // Container-level ACLs NEED a /
+	bURLParts.ContainerName += "/" // Container-level ACLs NEED a /
 	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
 	// todo: jank, and violates the principle of interfaces
-	fileURL := azbfs.NewFileSystemURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+	rootURL := azbfs.NewFileSystemURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
 
 	// We know for a fact our source is a "blob".
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
@@ -122,7 +122,7 @@ func (b *blobFolderSender) SetContainerACL() error {
 		return folderPropertiesSetInCreation{} // standard completion will detect failure
 	}
 	acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
-	_, err = fileURL.SetAccessControl(b.jptm.Context(), acl)
+	_, err = rootURL.SetAccessControl(b.jptm.Context(), acl)
 	if err != nil {
 		b.jptm.FailActiveSend("Putting ACLs", err)
 		return folderPropertiesSetInCreation{} // standard completion will detect failure
@@ -214,9 +214,10 @@ func (b *blobFolderSender) SetFolderProperties() error {
 }
 
 func (b *blobFolderSender) DirUrlToString() string {
-	url := b.destination.URL()
-	url.RawQuery = ""
-	return url.String()
+	uri, _ := url.Parse(b.jptm.Info().Destination)
+	uri.RawPath = ""
+	uri.RawQuery = ""
+	return uri.String()
 }
 
 // ===== Implement sender so that it can be returned in newBlobUploader. =====

@@ -646,15 +646,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
-	// are we getting dest token?
-	credential := credInfo.SourceBlobToken
-	if credential == nil {
-		credential = common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-			// LogInfo:  glcm.Info, //Comment out for debugging
-			LogError: glcm.Info,
-		})
-	}
+func createBlobPipelineFromCred(credential azblob.Credential, logLevel pipeline.LogLevel) pipeline.Pipeline {
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOption = pipeline.LogOptions{
@@ -681,7 +673,20 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, log
 		nil,
 		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
 		nil, // we don't gather network stats on the credential pipeline
-	), nil
+	)
+}
+
+func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
+	// are we getting dest token?
+	credential := credInfo.SourceBlobToken
+	if credential == nil {
+		credential = common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
+			// LogInfo:  glcm.Info, //Comment out for debugging
+			LogError: glcm.Info,
+		})
+	}
+
+	return createBlobPipelineFromCred(credential, logLevel), nil
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
