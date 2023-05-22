@@ -53,6 +53,7 @@ type IJobPartMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
+	SecondarySourceProviderPipeline() pipeline.Pipeline
 	SourceCredential() pipeline.Factory
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -563,20 +564,24 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy or download (in some cases).
-	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
-		var sourceCred azblob.Credential = azblob.NewAnonymousCredential()
+	// BlobFS and Blob will utilize the Blob source info provider, as they are the "same" resource, but provide different details on both endpoints
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
+		sourceCred := azblob.NewAnonymousCredential()
 		jobState := jpm.jobMgr.getInMemoryTransitJobState()
-		if fromTo.To() == common.ELocation.Blob() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			credOption := common.CredentialOpOptions{
-				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-				Panic:    jpm.Panic,
-				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-				Cancel:   jpm.jobMgr.Cancel,
-			}
+		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
 			if jpm.sourceCredential == nil {
 				sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
 				jpm.sourceCredential = sourceCred
+			}
+		} else if fromTo.IsDownload() && jobState.CredentialInfo.CredentialType.IsAzureOAuth() {
+			sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo, credOption)
+		} else if fromTo.IsDownload() && jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey() {
+			lcm := common.GetLifecycleMgr()
+			var err error
+			// Convert the shared key credential to a blob credential & re-use it
+			sourceCred, err = azblob.NewSharedKeyCredential(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName()), lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey()))
+			if err != nil {
+				jpm.Panic(fmt.Errorf("sanity check: failed to initialize shared key credential: %w", err))
 			}
 		}
 
@@ -593,8 +598,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			jpm.jobMgr.HttpClient(),
 			statsAccForSip)
 
-		// Consider the ADLSG2->ADLSG2 ACLs case
-		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+		// Prepare to pull dfs properties if we're working with BlobFS
+		if fromTo.From() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
 			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
 				credential,
@@ -610,8 +615,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 				statsAccForSip)
 		}
 	}
-	// Consider the file-local SDDL transfer case.
-	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
+	// Set up a source pipeline for files if necessary
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
 		jpm.sourceProviderPipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -632,10 +637,12 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			statsAccForSip)
 	}
 
-	// Create pipeline for data transfer.
-	switch fromTo {
-	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
-		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
+	switch {
+	case fromTo.IsS2S() && (fromTo.To() == common.ELocation.Blob() || fromTo.To() == common.ELocation.BlobFS()), // destination determines pipeline for S2S, blobfs uses blob for S2S
+		 fromTo.IsUpload() && fromTo.To() == common.ELocation.Blob(), // destination determines pipeline for upload
+		 fromTo.IsDownload() && fromTo.From() == common.ELocation.Blob(), // source determines pipeline for download
+		 fromTo.IsSetProperties() && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()), // source determines pipeline for set properties, blobfs uses blob for set properties
+		 fromTo.IsDelete() && fromTo.From() == common.ELocation.Blob(): // ditto for delete
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(
@@ -651,8 +658,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
 
-		// Consider the ADLSG2->ADLSG2 ACLs case
-		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+		// If we need to write specifically to the gen2 endpoint, we should have this available.
+		if fromTo.To() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
 			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 			jpm.secondaryPipeline = NewBlobFSPipeline(
 				credential,
@@ -667,8 +674,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 				jpm.jobMgr.HttpClient(),
 				statsAccForSip)
 		}
-	// Create pipeline for Azure BlobFS.
-	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
+	case fromTo.IsUpload() && fromTo.To() == common.ELocation.BlobFS(), // Blobfs up/down use the dfs endpoint
+		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
@@ -684,9 +691,11 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
-	// Create pipeline for Azure File.
-	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
-		common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileNone():
+	case fromTo.IsS2S() && fromTo.To() == common.ELocation.File(),
+	     fromTo.IsUpload() && fromTo.To() == common.ELocation.File(),
+		 fromTo.IsDownload() && fromTo.From() == common.ELocation.File(),
+		 fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File(),
+		 fromTo.IsDelete() && fromTo.From() == common.ELocation.File():
 		jpm.pipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -705,8 +714,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
-	default:
-		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}
 }
 
@@ -944,6 +951,10 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jpm.sourceProviderPipeline
+}
+
+func (jpm *jobPartMgr) SecondarySourceProviderPipeline() pipeline.Pipeline {
+	return jpm.secondarySourceProviderPipeline
 }
 
 func (jpm *jobPartMgr) SourceCredential() pipeline.Factory {

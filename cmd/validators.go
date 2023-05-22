@@ -102,41 +102,22 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.Unknown()
 	}
 
-	switch {
-	case srcLocation == common.ELocation.Local() && dstLocation == common.ELocation.Blob():
-		return common.EFromTo.LocalBlob()
-	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Local():
-		return common.EFromTo.BlobLocal()
-	case srcLocation == common.ELocation.Local() && dstLocation == common.ELocation.File():
-		return common.EFromTo.LocalFile()
-	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Local():
-		return common.EFromTo.FileLocal()
-	case srcLocation == common.ELocation.Pipe() && dstLocation == common.ELocation.Blob():
-		return common.EFromTo.PipeBlob()
-	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Pipe():
-		return common.EFromTo.BlobPipe()
-	case srcLocation == common.ELocation.Local() && dstLocation == common.ELocation.BlobFS():
-		return common.EFromTo.LocalBlobFS()
-	case srcLocation == common.ELocation.BlobFS() && dstLocation == common.ELocation.Local():
-		return common.EFromTo.BlobFSLocal()
-	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Blob():
-		return common.EFromTo.BlobBlob()
-	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Blob():
-		return common.EFromTo.FileBlob()
-	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.File():
-		return common.EFromTo.BlobFile()
-	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.File():
-		return common.EFromTo.FileFile()
-	case srcLocation == common.ELocation.S3() && dstLocation == common.ELocation.Blob():
-		return common.EFromTo.S3Blob()
-	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.Blob():
-		return common.EFromTo.BenchmarkBlob()
-	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.File():
-		return common.EFromTo.BenchmarkFile()
-	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.BlobFS():
-		return common.EFromTo.BenchmarkBlobFS()
-	case srcLocation == common.ELocation.GCP() && dstLocation == common.ELocation.Blob():
-		return common.EFromTo.GCPBlob()
+	out := common.EFromTo.Unknown() // Check that the intended FromTo is in the list of valid FromTos; if it's not, return Unknown as usual and warn the user.
+	intent := (common.FromTo(srcLocation) << 8) | common.FromTo(dstLocation)
+	enum.GetSymbols(reflect.TypeOf(common.EFromTo), func(enumSymbolName string, enumSymbolValue interface{}) (stop bool) { // find if our fromto is a valid option
+		fromTo := enumSymbolValue.(common.FromTo)
+		// none/unknown will never appear as valid outputs of the above functions
+		// If it's our intended fromto, we're good.
+		if fromTo == intent {
+			out = intent
+			return true
+		}
+
+		return false
+	})
+
+	if out != common.EFromTo.Unknown() {
+		return out
 	}
 
 	glcm.Info("The parameters you supplied were " +
@@ -146,7 +127,7 @@ func inferFromTo(src, dst string) common.FromTo {
 		"automatically be found. Please check the parameters you supplied.  If they are correct, please " +
 		"specify an exact source and destination type using the --from-to switch. " + fromToHelpText)
 
-	return common.EFromTo.Unknown()
+	return out
 }
 
 var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`) // simple regex

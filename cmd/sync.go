@@ -137,27 +137,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
 
-	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
-	srcHNS, dstHNS := false, false
-	if loc := InferArgumentLocation(raw.src); loc == common.ELocation.BlobFS() {
-		raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
-		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on source account.")
-		srcHNS = true
-	}
-
-	if loc := InferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
-		raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
-		msg := fmt.Sprintf("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account. There are some limitations when switching endpoints. " +
-			"Please refer to https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-known-issues#blob-storage-apis")
-		glcm.Info(msg)
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
-		}
-		dstHNS = true
-	}
-
-	cooked.isHNSToHNS = srcHNS && dstHNS
-
 	var err error
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
@@ -173,7 +152,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob():
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())

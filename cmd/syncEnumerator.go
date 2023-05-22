@@ -39,20 +39,21 @@ import (
 
 func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
-	srcCredInfo, srcIsPublic, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if cca.fromTo.IsS2S() {
-		if cca.fromTo.From() != common.ELocation.S3() && cca.fromTo.From() != common.ELocation.Blob() { // blob and S3 don't necessarily require SAS tokens (S3 w/ access key, blob w/ copysourceauthorization)
-			// Adding files here seems like an odd case, but since files can't be public
-			// the second half of this if statement does not hurt.
-
-			if srcCredInfo.CredentialType != common.ECredentialType.Anonymous() && !srcIsPublic {
-				return nil, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token", cca.fromTo.From(), cca.fromTo.To())
-			}
+	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType != common.ECredentialType.Anonymous()  {
+		if srcCredInfo.CredentialType.IsAzureOAuth() && cca.fromTo.To().CanForwardOAuthTokens() {
+			// no-op, this is OK
+		} else if srcCredInfo.CredentialType == common.ECredentialType.GoogleAppCredentials() || srcCredInfo.CredentialType == common.ECredentialType.S3AccessKey() || srcCredInfo.CredentialType == common.ECredentialType.S3PublicBucket() {
+			// this too, is OK
+		} else if srcCredInfo.CredentialType == common.ECredentialType.Anonymous() {
+			// this is OK
+		} else {
+			return nil, fmt.Errorf("the source of a %s->%s sync must either be public, or authorized with a SAS token; blob destinations can forward OAuth", cca.fromTo.From(), cca.fromTo.To())
 		}
 	}
 
@@ -131,7 +132,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, cca.isHNSToHNS, strings.EqualFold(cca.destination.Value, common.Dev_Null), false) // sync always acts like stripTopDir=true
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), false) // sync always acts like stripTopDir=true
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -193,7 +194,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			// since only then can we know which local files definitely don't exist remotely
 			var deleteScheduler objectProcessor
 			switch cca.fromTo.To() {
-			case common.ELocation.Blob(), common.ELocation.File():
+			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
 				deleter, err := newSyncDeleteProcessor(cca)
 				if err != nil {
 					return err

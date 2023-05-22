@@ -37,7 +37,6 @@ import (
 	"github.com/minio/minio-go"
 	chk "gopkg.in/check.v1"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
@@ -513,10 +512,6 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	shareURL, shareName := createNewAzureShare(c, fsu)
 	defer deleteShare(c, shareURL)
 
-	bfsu := GetBFSSU()
-	filesystemURL, _ := createNewFilesystem(c, bfsu)
-	defer deleteFilesystem(c, filesystemURL)
-
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	s3Enabled := err == nil && !isS3Disabled()
 	gcpClient, err := createGCPClientWithGCSSDK()
@@ -592,25 +587,6 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, fileDummyProcessor.record[0].relativePath)
 			c.Assert(localDummyProcessor.record[0].name, chk.Equals, fileDummyProcessor.record[0].name)
 		}
-
-		// set up the filesystem with a single file
-		bfsList := []string{storedObjectName}
-		scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, bfsList)
-
-		// construct a BlobFS traverser
-		accountName, accountKey := getAccountAndKey()
-		bfsPipeline := azbfs.NewPipeline(azbfs.NewSharedKeyCredential(accountName, accountKey), azbfs.PipelineOptions{})
-		rawFileURL := filesystemURL.NewRootDirectoryURL().NewFileURL(bfsList[0]).URL()
-		bfsTraverser := newBlobFSTraverser(&rawFileURL, bfsPipeline, ctx, false, func(common.EntityType) {})
-
-		// Construct and run a dummy processor for bfs
-		bfsDummyProcessor := dummyProcessor{}
-		err = bfsTraverser.Traverse(noPreProccessor, bfsDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-		c.Assert(len(bfsDummyProcessor.record), chk.Equals, 1)
-
-		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, bfsDummyProcessor.record[0].relativePath)
-		c.Assert(localDummyProcessor.record[0].name, chk.Equals, bfsDummyProcessor.record[0].name)
 
 		if s3Enabled {
 			// set up the bucket with a single file
@@ -734,17 +710,6 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		err = azureFileTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
-		// construct a directory URL and pipeline
-		accountName, accountKey := getAccountAndKey()
-		bfsPipeline := azbfs.NewPipeline(azbfs.NewSharedKeyCredential(accountName, accountKey), azbfs.PipelineOptions{})
-		rawFilesystemURL := filesystemURL.NewRootDirectoryURL().URL()
-
-		// construct and run a FS traverser
-		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func(common.EntityType) {})
-		bfsDummyProcessor := dummyProcessor{}
-		err = bfsTraverser.Traverse(noPreProccessor, bfsDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-
 		s3DummyProcessor := dummyProcessor{}
 		gcpDummyProcessor := dummyProcessor{}
 		if s3Enabled {
@@ -776,13 +741,11 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount)
 		if isRecursiveOn {
 			c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount)
-			c.Assert(len(bfsDummyProcessor.record), chk.Equals, localTotalCount)
 		} else {
 			// in real usage, folders get stripped out in ToNewCopyTransfer when non-recursive,
 			// but that doesn't run here in this test,
 			// so we have to count files only on the processor
 			c.Assert(fileDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
-			c.Assert(bfsDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
 		}
 
 		if s3Enabled {
@@ -793,7 +756,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		}
 
 		// if s3dummyprocessor is empty, it's A-OK because no records will be tested
-		for _, storedObject := range append(append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...), gcpDummyProcessor.record...) {
+		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), s3DummyProcessor.record...), gcpDummyProcessor.record...) {
 			if isRecursiveOn || storedObject.entityType == common.EEntityType.File() { // folder enumeration knowingly NOT consistent when non-recursive (since the folders get stripped out by ToNewCopyTransfer when non-recursive anyway)
 				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
@@ -819,10 +782,6 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	shareURL, shareName := createNewAzureShare(c, fsu)
 	defer deleteShare(c, shareURL)
 
-	bfsu := GetBFSSU()
-	filesystemURL, _ := createNewFilesystem(c, bfsu)
-	defer deleteFilesystem(c, filesystemURL)
-
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	s3Enabled := err == nil && !isS3Disabled()
 	gcpClient, err := createGCPClientWithGCSSDK()
@@ -844,9 +803,6 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 	// set up an Azure File Share with the same files
 	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
-
-	// set up the filesystem with the same files
-	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
 
 	if s3Enabled {
 		// Set up the bucket with the same files
@@ -895,16 +851,6 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		err = azureFileTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
-		// construct a filesystem URL & pipeline
-		accountName, accountKey := getAccountAndKey()
-		bfsPipeline := azbfs.NewPipeline(azbfs.NewSharedKeyCredential(accountName, accountKey), azbfs.PipelineOptions{})
-		rawFilesystemURL := filesystemURL.NewRootDirectoryURL().NewDirectoryURL(virDirName).URL()
-
-		// construct and run a FS traverser
-		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func(common.EntityType) {})
-		bfsDummyProcessor := dummyProcessor{}
-		err = bfsTraverser.Traverse(noPreProccessor, bfsDummyProcessor.process, nil)
-
 		localTotalCount := len(localIndexer.indexMap)
 		localFileOnlyCount := 0
 		for _, x := range localIndexer.indexMap {
@@ -942,14 +888,12 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount)
 		if isRecursiveOn {
 			c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount)
-			c.Assert(len(bfsDummyProcessor.record), chk.Equals, localTotalCount)
 		} else {
 			// only files matter when not recursive (since ToNewCopyTransfer strips out everything else when non-recursive)
 			c.Assert(fileDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
-			c.Assert(bfsDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
 		}
 		// if s3 testing is disabled the s3 dummy processors' records will be empty. This is OK for appending. Nothing will happen.
-		for _, storedObject := range append(append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...), gcpDummyProcessor.record...) {
+		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), s3DummyProcessor.record...), gcpDummyProcessor.record...) {
 			if isRecursiveOn || storedObject.entityType == common.EEntityType.File() { // folder enumeration knowingly NOT consistent when non-recursive (since the folders get stripped out by ToNewCopyTransfer when non-recursive anyway)
 
 				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
