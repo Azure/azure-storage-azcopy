@@ -225,22 +225,10 @@ jobs:
         parameters:
           directory: 'azbfs'
           coverage_name: 'azbfs'
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
       - template: ./run-ut.yml
         parameters:
           directory: 'cmd'
           coverage_name: 'cmd'
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
       - template: ./run-ut.yml
         parameters:
           directory: 'common'

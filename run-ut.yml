@@ -20,6 +20,14 @@ steps:
     env:
       directory: ${{ parameters.directory }}
       coverage_name: ${{ parameters.coverage_name }}
+      ACCOUNT_NAME: $(ACCOUNT_NAME)
+      ACCOUNT_KEY: $(ACCOUNT_KEY)
+      AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+      AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+      GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
     condition: succeededOrFailed()
 
   - task: PublishTestResults@2
