@@ -27,18 +27,6 @@ import (
 	"time"
 )
 
-// The percentage of a CacheLimiter's Limit that is considered
-// the strict limit.
-var cacheLimiterStrictLimitPercentage = float32(0.75)
-// Rationale for the level of the strict limit: as at Jan 2018, we are using 0.75 of the total as the strict
-// limit, leaving the other 0.25 of the total accessible under the "relaxed" limit.
-// That last 25% gets use for two things: in downloads it is used for things where we KNOW there's
-// no backlogging of new chunks behind slow ones (i.e. these "good" cases are allowed to proceed without
-// interruption) and for uploads its used for re-doing the prefetches when we do retries (i.e. so these are
-// not blocked by other chunks using up RAM).
-// TODO: now that cacheLimiter is used for multiple purposes, the hard-coding of the distinction between
-//   relaxed and strict limits is less appropriate. Refactor to make it a configuration param of the instance?
-
 type Predicate func() bool
 
 // Used to limit the amounts of things. E.g. amount of in-flight data in RAM, to keep it an an acceptable level.
@@ -51,7 +39,6 @@ type CacheLimiter interface {
 	WaitUntilAdd(ctx context.Context, count int64, useRelaxedLimit Predicate) error
 	Remove(count int64)
 	Limit() int64
-	StrictLimit() int64
 }
 
 type cacheLimiter struct {
@@ -71,7 +58,15 @@ func (c *cacheLimiter) TryAdd(count int64, useRelaxedLimit bool) (added bool) {
 	// for high-priority things (i.e. things we deem to be allowable under a relaxed (non-strict) limit)
 	strict := !useRelaxedLimit
 	if strict {
-		lim = c.StrictLimit()
+		lim = int64(float32(lim) * 0.75)
+		// Rationale for the level of the strict limit: as at Jan 2018, we are using 0.75 of the total as the strict
+		// limit, leaving the other 0.25 of the total accessible under the "relaxed" limit.
+		// That last 25% gets use for two things: in downloads it is used for things where we KNOW there's
+		// no backlogging of new chunks behind slow ones (i.e. these "good" cases are allowed to proceed without
+		// interruption) and for uploads its used for re-doing the prefetches when we do retries (i.e. so these are
+		// not blocked by other chunks using up RAM).
+		// TODO: now that cacheLimiter is used for multiple purposes, the hard-coding of the distinction between
+		//   relaxed and strict limits is less appropriate. Refactor to make it a configuration param of the instance?
 	}
 
 	if atomic.AddInt64(&c.value, count) <= lim {
@@ -113,8 +108,4 @@ func (c *cacheLimiter) Remove(count int64) {
 
 func (c *cacheLimiter) Limit() int64 {
 	return c.limit
-}
-
-func (c *cacheLimiter) StrictLimit() int64 {
-	return int64(float32(c.limit) * cacheLimiterStrictLimitPercentage)
 }
