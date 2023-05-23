@@ -150,7 +150,7 @@ func TestRetryReaderReadWithRetry(t *testing.T) {
 		}
 		// should return EOF
 		n, err = retryReader.Read(can)
-		a.Zero(err)
+		a.Zero(n)
 		a.Equal(io.EOF, err)
 	}
 }
