@@ -613,7 +613,7 @@ func (ft FromTo) IsDelete() bool {
 	return ft.To() == ELocation.Unknown()
 }
 
-func (ft *FromTo) IsSetProperties() bool {
+func (ft FromTo) IsSetProperties() bool {
 	return ft.To() == ELocation.None()
 }
 
