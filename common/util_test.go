@@ -1,18 +1,18 @@
 package common
 
-import chk "gopkg.in/check.v1"
+import (
+	"github.com/stretchr/testify/assert"
+	"testing"
+)
 
-type utilityFunctionsSuite struct{}
-
-var _ = chk.Suite(&utilityFunctionsSuite{})
-
-func (*utilityFunctionsSuite) Test_VerifyIsURLResolvable(c *chk.C) {
-	c.Skip("Disabled the check in mainline code")
+func Test_VerifyIsURLResolvable(t *testing.T) {
+	a := assert.New(t)
+	t.Skip("Disabled the check in mainline code")
 	valid_url := "https://github.com/"
 	invalidUrl := "someString"
 	invalidUrl2 := "https://$invalidAccount.blob.core.windows.net/"
 
-	c.Assert(VerifyIsURLResolvable(valid_url), chk.IsNil)
-	c.Assert(VerifyIsURLResolvable(invalidUrl), chk.NotNil)
-	c.Assert(VerifyIsURLResolvable(invalidUrl2), chk.NotNil)
+	a.Nil(VerifyIsURLResolvable(valid_url))
+	a.NotNil(VerifyIsURLResolvable(invalidUrl))
+	a.NotNil(VerifyIsURLResolvable(invalidUrl2))
 }
