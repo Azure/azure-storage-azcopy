@@ -207,6 +207,12 @@ jobs:
         inputs:
           secureFile: 'ci-gcs-dev.json'
       - script: |
+          go install github.com/jstemmer/go-junit-report@v0.9.1
+          go install github.com/axw/gocov/gocov@v1.1.0
+          go install github.com/AlekSi/gocov-xml@v1.0.0
+          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
+        displayName: 'Install dependencies'
+      - script: |
           pip install azure-storage-blob==12.12.0
           # set the variable to indicate that the mutex is being acquired
           # note: we set it before acquiring the mutex to ensure we release the mutex. 
@@ -217,23 +223,30 @@ jobs:
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
         name: 'Acquire_the_distributed_mutex'
-      - script: |
-          # run unit test and build executable
-          # the set -e line is needed so that the unit tests failure would cause the job to fail properly
-          # "-check.v" (must be after package list) outputs timings
-          set -e
-          go test -timeout 60m -race -short -cover ./cmd ./common ./common/parallel ./ste ./azbfs ./sddl "-check.v"
-          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
-        name: 'Run_unit_tests'
-        env:
-          ACCOUNT_NAME: $(ACCOUNT_NAME)
-          ACCOUNT_KEY: $(ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'azbfs'
+          coverage_name: 'azbfs'
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'cmd'
+          coverage_name: 'cmd'
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'common'
+          coverage_name: 'common'
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'common/parallel'
+          coverage_name: 'parallel'
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'ste'
+          coverage_name: 'ste'
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'sddl'
+          coverage_name: 'sddl'
       - script: |
           go build -o test-validator ./testSuite/
           mkdir test-temp
