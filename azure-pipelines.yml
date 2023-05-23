@@ -199,6 +199,7 @@ jobs:
           artifactName: logs
 
   - job: Test_On_Ubuntu
+    lockBehavior: sequential
     variables:
       isMutexSet: 'false'
     # allow maximum build time, in case we have build congestion
@@ -219,17 +220,6 @@ jobs:
         displayName: 'Download GCS Service Account Key'
         inputs:
           secureFile: 'ci-gcs-dev.json'
-      - script: |
-          pip install azure-storage-blob==12.12.0
-          # set the variable to indicate that the mutex is being acquired
-          # note: we set it before acquiring the mutex to ensure we release the mutex. 
-          # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
-          # mutex but before we set this variable.
-          # setting this before will always work since it is valid to break an un-acquired mutex.
-          echo '##vso[task.setvariable variable=isMutexSet]true'
-          # acquire the mutex before running live tests to avoid conflicts
-          python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
-        name: 'Acquire_the_distributed_mutex'
       - script: |
           # run unit test and build executable
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
@@ -279,9 +269,3 @@ jobs:
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
-      - script: |
-          pip install azure-storage-blob==12.12.0
-          python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
-        name: 'Release_the_distributed_mutex'
-        # this runs even if the job was canceled (only if the mutex was acquired by this job)
-        condition: and(always(), eq(variables['isMutexSet'], 'true'))
