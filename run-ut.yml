@@ -34,7 +34,7 @@ steps:
     condition: succeededOrFailed()
     inputs:
       testRunner: JUnit
-      testResultsFiles: $(System.DefaultWorkingDirectory)/**/${coverage_name}_report.xml
+      testResultsFiles: $(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_report.xml
       testRunTitle: '${{ parameters.directory }} Tests'
     env:
       coverage_name: ${{ parameters.coverage_name }}
@@ -42,6 +42,6 @@ steps:
     condition: succeededOrFailed()
     inputs:
       codeCoverageTool: Cobertura
-      summaryFileLocation: $(System.DefaultWorkingDirectory)/**/${coverage_name}_coverage.xml
+      summaryFileLocation: $(System.DefaultWorkingDirectory)/**/${{ parameters.coverage_name }}_coverage.xml
     env:
       coverage_name: ${{ parameters.coverage_name }}
