@@ -139,7 +139,7 @@ func TestS3URLParse(t *testing.T) {
 	a.Equal("", p.ObjectKey)
 	a.Equal("ap-southeast-1", p.Region)
 	a.Equal("", p.Version)
-	a.Equal("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/", p.String())
+	a.Equal("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01", p.String())
 
 	u, _ = url.Parse("https://s3-ap-southeast-1.amazonaws.com/jiac-art-awsbucket01/Test.pdf")
 	p, err = NewS3URLParts(*u)

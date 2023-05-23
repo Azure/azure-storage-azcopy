@@ -21,38 +21,41 @@
 package cmd
 
 import (
+	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
+	"testing"
 )
 
 type parseSizeSuite struct{}
 
 var _ = chk.Suite(&parseSizeSuite{})
 
-func (s *parseSizeSuite) TestParseSize(c *chk.C) {
+func TestParseSize(t *testing.T) {
+	a := assert.New(t)
 	b, _ := ParseSizeString("123K", "x")
-	c.Assert(b, chk.Equals, int64(123*1024))
+	a.Equal(int64(123*1024), b)
 
 	b, _ = ParseSizeString("456m", "x")
-	c.Assert(b, chk.Equals, int64(456*1024*1024))
+	a.Equal(int64(456*1024*1024), b)
 
 	b, _ = ParseSizeString("789G", "x")
-	c.Assert(b, chk.Equals, int64(789*1024*1024*1024))
+	a.Equal(int64(789*1024*1024*1024), b)
 
 	expectedError := "foo-bar must be a number immediately followed by K, M or G. E.g. 12k or 200G"
 
 	_, err := ParseSizeString("123", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
+	a.Equal(expectedError, err.Error())
 
 	_, err = ParseSizeString("123 K", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
+	a.Equal(expectedError, err.Error())
 
 	_, err = ParseSizeString("123KB", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
+	a.Equal(expectedError, err.Error())
 
 	_, err = ParseSizeString("123T", "foo-bar") // we don't support terabytes
-	c.Assert(err.Error(), chk.Equals, expectedError)
+	a.Equal(expectedError, err.Error())
 
 	_, err = ParseSizeString("abcK", "foo-bar")
-	c.Assert(err.Error(), chk.Equals, expectedError)
+	a.Equal(expectedError, err.Error())
 
 }

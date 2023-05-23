@@ -22,25 +22,27 @@ package cmd
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	chk "gopkg.in/check.v1"
 )
 
-func (s *cmdIntegrationSuite) TestOverwritePosixProperties(c *chk.C) {
+func TestOverwritePosixProperties(t *testing.T) {
+	a := assert.New(t)
 	if runtime.GOOS != "linux" {
-		c.Skip("This test will run only on linux")
+		t.Skip("This test will run only on linux")
 	}
 	
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	files := []string{
 		"filea",
@@ -48,24 +50,24 @@ func (s *cmdIntegrationSuite) TestOverwritePosixProperties(c *chk.C) {
 		"filec",
 	}
 
-	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	dirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dirPath)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+		a.Equal(3, len(mockedRPC.transfers))
 		// trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:], mockedRPC)
+		validateDownloadTransfersAreScheduled(a, "/", "/"+filepath.Base(dirPath)+"/", files[:], mockedRPC)
 	})
 
 	time.Sleep(10 * time.Second)
@@ -79,21 +81,21 @@ func (s *cmdIntegrationSuite) TestOverwritePosixProperties(c *chk.C) {
 	mockedRPC.reset()
 	raw.forceWrite = "posixproperties"
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+		a.Equal(3, len(mockedRPC.transfers))
 		// trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:], mockedRPC)
+		validateDownloadTransfersAreScheduled(a, "/", "/"+filepath.Base(dirPath)+"/", files[:], mockedRPC)
 	})
 
 	listBlob, err := containerURL.ListBlobsFlatSegment(context.TODO(), azblob.Marker{},
 			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true, Tags: true}, Prefix: filepath.Base(dirPath)})
 
-	c.Assert(err, chk.Equals, nil)
+	a.Nil(err)
 
 	for _, blob := range listBlob.Segment.BlobItems {
-		c.Assert(blob.Metadata[common.POSIXCTimeMeta], chk.Equals, strconv.FormatInt(newTimeStamp.UnixNano(), 10))
-		c.Assert(blob.Metadata[common.POSIXATimeMeta], chk.Equals, strconv.FormatInt(newTimeStamp.UnixNano(), 10))
+		a.Equal(strconv.FormatInt(newTimeStamp.UnixNano(), 10), blob.Metadata[common.POSIXCTimeMeta])
+		a.Equal(strconv.FormatInt(newTimeStamp.UnixNano(), 10), blob.Metadata[common.POSIXATimeMeta])
 	}
 }

@@ -22,11 +22,13 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 //Test dfs endpoints are cooked to blob endpoints
-func (s *cmdIntegrationSuite) TestSyncS2SWithDFS(c *chk.C) {
+func TestSyncS2SWithDFS(t *testing.T) {
+	a := assert.New(t)
 	src := "https://myaccount1.dfs.core.windows.net/container1/"
 	dst := "https://myaccount2.dfs.core.windows.net/container2/"
 
@@ -34,6 +36,6 @@ func (s *cmdIntegrationSuite) TestSyncS2SWithDFS(c *chk.C) {
 
 	cooked, err := raw.cook()
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(cooked.fromTo, chk.Equals, common.EFromTo.BlobBlob())
+	a.Nil(err)
+	a.Equal(common.EFromTo.BlobBlob(), cooked.fromTo)
 }

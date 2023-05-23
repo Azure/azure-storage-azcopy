@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	chk "gopkg.in/check.v1"
 )
 
 // Additional S2S migration cases, besides E2E smoke testing cases for S3/blob/file source contained in test_service_to_service_copy.py
@@ -50,22 +51,23 @@ const (
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
 
-func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
+func SetUpSuite(t *testing.T) {
+	a := assert.New(t)
 	if !isS3Disabled() {
 		if s3Client, err := createS3ClientWithMinio(createS3ResOptions{}); err == nil {
-			cleanS3Account(c, s3Client)
+			cleanS3Account(a, s3Client)
 		} else {
 			// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
 			// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
-			c.Log("S3 client could not be successfully initialised")
+			t.Log("S3 client could not be successfully initialised")
 		}
 	}
 
 	if !gcpTestsDisabled() {
 		if gcpClient, err := createGCPClientWithGCSSDK(); err == nil {
-			cleanGCPAccount(c, gcpClient)
+			cleanGCPAccount(t, a, gcpClient)
 		} else {
-			c.Log("GCP client could not be successfully initialised")
+			t.Log("GCP client could not be successfully initialised")
 		}
 	}
 }
@@ -91,9 +93,9 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 	}
 }
 
-func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
+func validateS2STransfersAreScheduled(a *assert.Assertions, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
-	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
+	a.Equal(len(expectedTransfers), len(mockedRPC.transfers))
 
 	if debugMode {
 		fmt.Println("expectedTransfers: ")
@@ -130,11 +132,11 @@ func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName st
 		}
 
 		// the relative paths should be equal
-		c.Assert(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
+		a.Equal(dstRelativeFilePath, srcRelativeFilePath)
 
 		// look up the transfer is expected
 		_, dstExist := lookupMap[dstRelativeFilePath]
-		c.Assert(dstExist, chk.Equals, true)
+		a.True(dstExist)
 	}
 }
 
@@ -144,11 +146,12 @@ func printTransfers(ts []string) {
 	}
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	invalidPrefix := "invalid---bucketname.for---azure"
@@ -156,11 +159,11 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
-	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
+	defer deleteBucket(a, s3Client, bucketName, true)
 
-	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
-	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName, "", false)
+	a.NotZero(len(objectList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -168,23 +171,23 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
-	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName) // Use default region
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(objectList))
+		a.Equal(len(objectList), len(mockedRPC.transfers))
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
+		blobServiceURL := scenarioHelper{}.getBlobServiceURL(a)
 		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
-		defer deleteContainer(c, containerURL)
+		a.True(scenarioHelper{}.containerExists(containerURL))
+		defer deleteContainer(a, containerURL)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -193,15 +196,16 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 		// transfer.Source by design be scheduled:  /tops3objects2scopyfroms3toblobwithbucketnameneedberesolved4243293354900
 		// transfer.Destination by design be scheduled:  /invalid-3-bucketname-for-3-azures2scopyfroms3toblobwithbucketna/tops3objects2scopyfroms3toblobwithbucketnameneedberesolved4243293354900
 		// Nothing should be replaced during matching for source, and resolved bucket name should be replaced for destination.
-		validateS2STransfersAreScheduled(c, "", common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
+		validateS2STransfersAreScheduled(a, "", common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	invalidPrefix := "invalid----bucketname.for-azure"
@@ -209,11 +213,11 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
-	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
+	defer deleteBucket(a, s3Client, bucketName, true)
 
-	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
-	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName, "", false)
+	a.NotZero(len(objectList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -221,24 +225,24 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
-	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName) // Use default region
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	rawSrcS3BucketStrWithWirdcard := strings.Replace(rawSrcS3BucketURL.String(), invalidPrefix, "invalid----*", 1)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketStrWithWirdcard, rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(objectList))
+		a.Equal(len(objectList), len(mockedRPC.transfers))
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
+		blobServiceURL := scenarioHelper{}.getBlobServiceURL(a)
 		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
-		defer deleteContainer(c, containerURL)
+		a.True(scenarioHelper{}.containerExists(containerURL))
+		defer deleteContainer(a, containerURL)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -247,17 +251,18 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 		// transfer.Source by design be scheduled:  /invalid----bucketname.for-azures2scopyfroms3toblobwithwildcardi/sub1/sub3/sub5/s3objects2scopyfroms3toblobwithwildcardinsrcandbucketnameneedberesolved435110281300
 		// transfer.Destination by design be scheduled:  /invalid-4-bucketname-for-azures2scopyfroms3toblobwithwildcardi/sub1/sub3/sub5/s3objects2scopyfroms3toblobwithwildcardinsrcandbucketnameneedberesolved435110281300
 		// org bucket name should be replaced during matching for source, and resolved bucket name should be replaced for destination.
-		validateS2STransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING+bucketName, common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
+		validateS2STransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING+bucketName, common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
 	})
 }
 
 // This is negative because generateBucketNameWithCustomizedPrefix will return a bucket name with length 63,
 // and resolving logic will resolve -- to -2- which means the length to be 64. This exceeds valid container name, so error will be returned.
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolvedNegative(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolvedNegative(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	invalidPrefix := "invalid.bucketname--for.azure"
@@ -265,12 +270,12 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
-	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
+	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
 
-	defer deleteBucket(c, s3Client, bucketName, true)
+	defer deleteBucket(a, s3Client, bucketName, true)
 
-	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
-	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName, "", false)
+	a.NotZero(len(objectList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -278,13 +283,13 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
-	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName) // Use default region
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should not be resolved, and objects should not be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.NotNil(err)
 
 		loggedError := false
 		log := glcm.(*mockedLifecycleManager).infoLog
@@ -297,27 +302,28 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 			count = len(log)
 		}
 
-		c.Assert(loggedError, chk.Equals, true)
+		a.True(loggedError)
 	})
 }
 
 // Copy from virtual directory to container, with normal encoding ' ' as ' '.
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
-	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
+	defer deleteBucket(a, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
 	objectList := []string{"space dir/space object"}
-	scenarioHelper{}.generateObjects(c, s3Client, bucketName, objectList)
+	scenarioHelper{}.generateObjects(a, s3Client, bucketName, objectList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -325,42 +331,43 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(c 
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
+	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName) // Use default region
 	rawSrcS3DirStr := rawSrcS3BucketURL.String() + "/space dir"
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcS3DirStr, rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 		// common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 		// The destination is URL encoded, as go's URL method do the encoding.
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/space%20dir/space%20object")
+		a.Equal("/space%20dir/space%20object", mockedRPC.transfers[0].Destination)
 	})
 }
 
 // Copy from virtual directory to container, with special encoding ' ' to '+' by S3 management portal.
 // '+' is handled in copy.go before extract the SourceRoot.
 // The scheduled transfer would be URL encoded no matter what's the raw source/destination provided by user.
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
-	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
+	defer deleteBucket(a, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
 	objectList := []string{"space dir/space object"}
-	scenarioHelper{}.generateObjects(c, s3Client, bucketName, objectList)
+	scenarioHelper{}.generateObjects(a, s3Client, bucketName, objectList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -368,40 +375,41 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
+	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName) // Use default region
 	rawSrcS3DirStr := rawSrcS3BucketURL.String() + "/space+dir"
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcS3DirStr, rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 		// common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 		// The destination is URL encoded, as go's URL method do the encoding.
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/space%20dir/space%20object")
+		a.Equal("/space%20dir/space%20object", mockedRPC.transfers[0].Destination)
 	})
 }
 
 // By design, when source directory contains objects with suffix ‘/’, objects with suffix ‘/’ should be ignored.
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffix(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
-	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
+	defer deleteBucket(a, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
 	objectList := []string{"fileConsiderdAsDirectory/", "file", "sub1/file"}
-	scenarioHelper{}.generateObjects(c, s3Client, bucketName, objectList)
+	scenarioHelper{}.generateObjects(a, s3Client, bucketName, objectList)
 
 	validateObjectList := []string{"/file", "/sub1/file"} // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
@@ -411,43 +419,44 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffi
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName) // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(validateObjectList))
+		a.Equal(len(validateObjectList), len(mockedRPC.transfers))
 
-		validateS2STransfersAreScheduled(c, "", "/"+bucketName, validateObjectList, mockedRPC)
+		validateS2STransfersAreScheduled(a, "", "/"+bucketName, validateObjectList, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseDefaultEndpoint(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseDefaultEndpoint(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
-	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName1, true)
+	createNewBucketWithName(a, s3Client, bucketName1, createS3ResOptions{})
+	defer deleteBucket(a, s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix("us-west-2-region")
 	bucketRegion2 := "us-west-1" // Use different region than other regional test to avoid conflicting
-	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: bucketRegion2})
-	defer deleteBucket(c, s3Client, bucketName2, true)
+	createNewBucketWithName(a, s3Client, bucketName2, createS3ResOptions{Location: bucketRegion2})
+	defer deleteBucket(a, s3Client, bucketName2, true)
 
-	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
-	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)
+	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName1, "", true)
+	a.NotZero(len(objectList1))
 
-	objectList2 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName2, "", true)
-	c.Assert(len(objectList2), chk.Not(chk.Equals), 0)
+	objectList2 := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName2, "", true)
+	a.NotZero(len(objectList2))
 
 	validateObjectList := append(objectList1, objectList2...)
 
@@ -457,42 +466,43 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3AccountURL := scenarioHelper{}.getRawS3AccountURL(c, "") // Use default region
-	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcS3AccountURL := scenarioHelper{}.getRawS3AccountURL(a, "") // Use default region
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	raw := getDefaultRawCopyInput(rawSrcS3AccountURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		validateS2STransfersAreScheduled(c, "", "", validateObjectList, mockedRPC)
+		validateS2STransfersAreScheduled(a, "", "", validateObjectList, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseSpecificRegion(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseSpecificRegion(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	specificRegion := "us-west-2"
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
-	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName1, true)
+	createNewBucketWithName(a, s3Client, bucketName1, createS3ResOptions{})
+	defer deleteBucket(a, s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix(specificRegion)
-	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
-	defer deleteBucket(c, s3Client, bucketName2, true)
+	createNewBucketWithName(a, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
+	defer deleteBucket(a, s3Client, bucketName2, true)
 
 	time.Sleep(30 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
 
-	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
-	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)
+	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName1, "", true)
+	a.NotZero(len(objectList1))
 
-	objectList2 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName2, "", true)
-	c.Assert(len(objectList2), chk.Not(chk.Equals), 0)
+	objectList2 := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName2, "", true)
+	a.NotZero(len(objectList2))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -500,34 +510,35 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3AccountURL := scenarioHelper{}.getRawS3AccountURL(c, specificRegion)
-	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcS3AccountURL := scenarioHelper{}.getRawS3AccountURL(a, specificRegion)
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	raw := getDefaultRawCopyInput(rawSrcS3AccountURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		validateS2STransfersAreScheduled(c, "", "", objectList2, mockedRPC)
+		validateS2STransfersAreScheduled(a, "", "", objectList2, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromS3ObjectToBlobContainer(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS2SCopyFromS3ObjectToBlobContainer(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err != nil {
-		c.Skip("S3 client credentials not supplied")
+		t.Skip("S3 client credentials not supplied")
 	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
-	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
+	defer deleteBucket(a, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateObjects(c, s3Client, bucketName, objectList)
+	scenarioHelper{}.generateObjects(a, s3Client, bucketName, objectList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -535,77 +546,78 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ObjectToBlobContainer(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcS3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, "file") // Use default region
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcS3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(a, "", bucketName, "file") // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	mockedRPC.reset()
 
-	rawSrcS3ObjectURL = scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, "sub/file2") // Use default region
-	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcS3ObjectURL = scenarioHelper{}.getRawS3ObjectURL(a, "", bucketName, "sub/file2") // Use default region
+	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		a.Equal("/file2", mockedRPC.transfers[0].Destination)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolved(c *chk.C) {
-	skipIfGCPDisabled(c)
+func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolved(t *testing.T) {
+	a := assert.New(t)
+	skipIfGCPDisabled(t)
 
 	gcpClient, err := createGCPClientWithGCSSDK()
 
 	if err != nil {
-		c.Skip("GCP credentials not supplied")
+		t.Skip("GCP credentials not supplied")
 	}
 
 	invalidPrefix := "invalid---bucket_name_for-azure"
 	resolvedPrefix := "invalid-3-bucket-name-for-azure"
 
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
-	createNewGCPBucketWithName(c, gcpClient, bucketName)
-	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+	createNewGCPBucketWithName(a, gcpClient, bucketName)
+	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
 
-	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(c, gcpClient, bucketName, "", false)
-	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(a, gcpClient, bucketName, "", false)
+	a.NotZero(len(objectList))
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName)
-	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName)
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(objectList))
+		a.Equal(len(objectList), len(mockedRPC.transfers))
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
+		blobServiceURL := scenarioHelper{}.getBlobServiceURL(a)
 		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
-		defer deleteContainer(c, containerURL)
+		a.True(scenarioHelper{}.containerExists(containerURL))
+		defer deleteContainer(a, containerURL)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -614,56 +626,58 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolv
 		// transfer.Source by design be scheduled:  /tops3objects2scopyfroms3toblobwithbucketnameneedberesolved4243293354900
 		// transfer.Destination by design be scheduled:  /invalid-3-bucketname-for-3-azures2scopyfroms3toblobwithbucketna/tops3objects2scopyfroms3toblobwithbucketnameneedberesolved4243293354900
 		// Nothing should be replaced during matching for source, and resolved bucket name should be replaced for destination.
-		validateS2STransfersAreScheduled(c, "", common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
+		validateS2STransfersAreScheduled(a, "", common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(c *chk.C) {
-	skipIfGCPDisabled(c)
+func TestS2SCopyFromGCPToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *testing.T) {
+	a := assert.New(t)
+	skipIfGCPDisabled(t)
 	gcpClient, err := createGCPClientWithGCSSDK()
 	if err != nil {
-		c.Skip("GCP Credentials not Supplied")
+		t.Skip("GCP Credentials not Supplied")
 	}
 	invalidPrefix := "invalid----bucketname_for-azure"
 	resolvedPrefix := "invalid-4-bucketname-for-azure"
 
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
-	createNewGCPBucketWithName(c, gcpClient, bucketName)
-	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+	createNewGCPBucketWithName(a, gcpClient, bucketName)
+	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
 
-	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(c, gcpClient, bucketName, "", false)
-	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(a, gcpClient, bucketName, "", false)
+	a.NotZero(len(objectList))
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName)
-	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName)
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	rawSrcGCPBucketStrWithWildcard := strings.Replace(rawSrcGCPBucketURL.String(), invalidPrefix, "invalid----*", 1)
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketStrWithWildcard, rawDstBlobServiceURLWithSAS.String())
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(objectList))
+		a.Equal(len(objectList), len(mockedRPC.transfers))
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
+		blobServiceURL := scenarioHelper{}.getBlobServiceURL(a)
 		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
-		defer deleteContainer(c, containerURL)
+		a.True(scenarioHelper{}.containerExists(containerURL))
+		defer deleteContainer(a, containerURL)
 
-		validateS2STransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING+bucketName, common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
+		validateS2STransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING+bucketName, common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolvedNegative(c *chk.C) {
-	skipIfGCPDisabled(c)
+func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolvedNegative(t *testing.T) {
+	a := assert.New(t)
+	skipIfGCPDisabled(t)
 	gcpClient, err := createGCPClientWithGCSSDK()
 	if err != nil {
-		c.Skip("GCP client credentials not supplied")
+		t.Skip("GCP client credentials not supplied")
 	}
 
 	invalidPrefix := "invalid_bucketname--for_azure"
@@ -671,11 +685,11 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolv
 
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
-	createNewGCPBucketWithName(c, gcpClient, bucketName)
-	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+	createNewGCPBucketWithName(a, gcpClient, bucketName)
+	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
 
-	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(c, gcpClient, bucketName, "", false)
-	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
+	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(a, gcpClient, bucketName, "", false)
+	a.NotZero(len(objectList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -683,13 +697,13 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolv
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName)
-	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
+	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName)
+	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should not be resolved, and objects should not be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.NotNil(err)
 
 		loggedError := false
 		log := glcm.(*mockedLifecycleManager).infoLog
@@ -702,26 +716,27 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolv
 			count = len(log)
 		}
 
-		c.Assert(loggedError, chk.Equals, true)
+		a.True(loggedError)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithObjectUsingSlashAsSuffix(c *chk.C) {
-	skipIfGCPDisabled(c)
+func TestS2SCopyFromGCPToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
+	a := assert.New(t)
+	skipIfGCPDisabled(t)
 	gcpClient, err := createGCPClientWithGCSSDK()
 	if err != nil {
-		c.Skip("GCP client credentials not supplied")
+		t.Skip("GCP client credentials not supplied")
 	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
-	createNewGCPBucketWithName(c, gcpClient, bucketName)
-	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+	createNewGCPBucketWithName(a, gcpClient, bucketName)
+	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
 	objectList := []string{"fileConsiderdAsDirectory/", "file", "sub1/file"}
-	scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketName, objectList)
+	scenarioHelper{}.generateGCPObjects(a, gcpClient, bucketName, objectList)
 
 	validateObjectList := []string{"/file", "/sub1/file"} // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
@@ -731,87 +746,89 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromGCPToBlobWithObjectUsingSlashAsSuff
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName) // Use default region
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcGCPBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName) // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcGCPBucketURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(validateObjectList))
+		a.Equal(len(validateObjectList), len(mockedRPC.transfers))
 
-		validateS2STransfersAreScheduled(c, "", "/"+bucketName, validateObjectList, mockedRPC)
+		validateS2STransfersAreScheduled(a, "", "/"+bucketName, validateObjectList, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromGCPObjectToBlobContainer(c *chk.C) {
-	skipIfGCPDisabled(c)
+func TestS2SCopyFromGCPObjectToBlobContainer(t *testing.T) {
+	a := assert.New(t)
+	skipIfGCPDisabled(t)
 	gcpClient, err := createGCPClientWithGCSSDK()
 	if err != nil {
-		c.Skip("GCP client credentials not supplied")
+		t.Skip("GCP client credentials not supplied")
 	}
 
 	bucketName := generateBucketName()
-	createNewGCPBucketWithName(c, gcpClient, bucketName)
-	defer deleteGCPBucket(c, gcpClient, bucketName, true)
+	createNewGCPBucketWithName(a, gcpClient, bucketName)
+	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketName, objectList)
+	scenarioHelper{}.generateGCPObjects(a, gcpClient, bucketName, objectList)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawSrcGCPObjectURL := scenarioHelper{}.getRawGCPObjectURL(c, bucketName, "file") // Use default region
+	rawSrcGCPObjectURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketName, "file") // Use default region
 
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcGCPObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	mockedRPC.reset()
 
-	rawSrcGCPObjectURL = scenarioHelper{}.getRawGCPObjectURL(c, bucketName, "sub/file2") // Use default region
-	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcGCPObjectURL = scenarioHelper{}.getRawGCPObjectURL(a, bucketName, "sub/file2") // Use default region
+	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcGCPObjectURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		a.Equal("/file2", mockedRPC.transfers[0].Destination)
 	})
 }
 
 // Copy from container to container, preserve blob tier.
-func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTier(c *chk.C) {
+func TestS2SCopyFromContainerToContainerPreserveBlobTier(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 
 	blobName := "blobWithCoolTier"
-	scenarioHelper{}.generateBlockBlobWithAccessTier(c, srcContainerURL, blobName, azblob.AccessTierCool)
+	scenarioHelper{}.generateBlockBlobWithAccessTier(a, srcContainerURL, blobName, azblob.AccessTierCool)
 
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -819,35 +836,35 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTie
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, srcContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcContainerURLWithSAS.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		validateS2STransfersAreScheduled(c,
-			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
-
-		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierCool)
+		validateS2STransfersAreScheduled(a,
+			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change. 
+		a.Equal(azblob.AccessTierCool, mockedRPC.transfers[0].BlobTier)
 	})
 }
 
 // Copy from container to container, and don't preserve blob tier.
-func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobTier(c *chk.C) {
+func TestS2SCopyFromContainerToContainerNoPreserveBlobTier(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 
 	blobName := "blobWithCoolTier"
-	scenarioHelper{}.generateBlockBlobWithAccessTier(c, srcContainerURL, blobName, azblob.AccessTierCool)
+	scenarioHelper{}.generateBlockBlobWithAccessTier(a, srcContainerURL, blobName, azblob.AccessTierCool)
 
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -855,38 +872,39 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, srcContainerName)
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, srcContainerName)
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcContainerURLWithSAS.String(), rawDstContainerURLWithSAS.String())
 	raw.s2sPreserveAccessTier = false
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		validateS2STransfersAreScheduled(c,
+		validateS2STransfersAreScheduled(a,
 			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
-		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierNone)
+		a.Equal(azblob.AccessTierNone, mockedRPC.transfers[0].BlobTier)
 	})
 }
 
 // Attempt to copy from a page blob to a block blob
-func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
-	c.Skip("Enable after setting Account to non-HNS")
+func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
+	a := assert.New(t)
+	t.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generatePageBlobsFromList(a, srcContainerURL, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -894,51 +912,52 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
-	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "BlockBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
-	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "BlockBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		a.Equal(2, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
+		a.Equal("/file2", mockedRPC.transfers[1].Destination)
 	})
 }
 
 // Attempt to copy from a block blob to a page blob
-func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
+func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -946,51 +965,52 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
-	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "PageBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
-	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "PageBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		a.Equal(2, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
+		a.Equal("file2/", mockedRPC.transfers[1].Destination)
 	})
 }
 
 // Attempt to copy from a block blob to an append blob
-func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
+func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, objectList, blockBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -998,52 +1018,53 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
-	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "AppendBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
-	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "AppendBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		a.Equal(2, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
+		a.Equal("file2/", mockedRPC.transfers[1].Destination)
 	})
 }
 
 // Attempt to copy from an append blob to a block blob
-func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
-	c.Skip("Enable after setting Account to non-HNS")
+func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
+	a := assert.New(t)
+	t.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerURL, objectList, appendBlobDefaultData)
+	scenarioHelper{}.generateAppendBlobsFromList(a, srcContainerURL, objectList, appendBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1051,52 +1072,53 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
-	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "BlockBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
-	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "BlockBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		a.Equal(2, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
+		a.Equal("file2/", mockedRPC.transfers[1].Destination)
 	})
 }
 
 // Attempt to copy from a page blob to an append blob
-func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
-	c.Skip("Enable after setting Account to non-HNS")
+func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
+	a := assert.New(t)
+	t.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generatePageBlobsFromList(a, srcContainerURL, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1104,52 +1126,53 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
-	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "AppendBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
-	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "AppendBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		a.Equal(2, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
+		a.Equal("file2/", mockedRPC.transfers[1].Destination)
 	})
 }
 
 // Attempt to copy from an append blob to a page blob
-func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
-	c.Skip("Enable after setting Account to non-HNS")
+func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
+	a := assert.New(t)
+	t.Skip("Enable after setting Account to non-HNS")
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generateAppendBlobsFromList(a, srcContainerURL, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1157,49 +1180,50 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 	mockedRPC.init()
 
 	// Prepare copy command
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
-	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "PageBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	// Prepare copy command
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
-	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
 	raw.blobType = "PageBlob"
 
 	// Run copy command
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		a.Equal(2, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
+		a.Equal("file2/", mockedRPC.transfers[1].Destination)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C) {
+func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
-	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, srcContainerURL)
-	c.Assert(srcContainerURL, chk.NotNil)
+	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, srcContainerURL)
+	a.NotNil(srcContainerURL)
 
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, objectList, blockBlobDefaultData)
 
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -1207,50 +1231,51 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file") // Use default region
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file") // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	mockedRPC.reset()
 
-	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2") // Use default region
-	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2") // Use default region
+	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		a.Equal("/file2", mockedRPC.transfers[0].Destination)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *chk.C) {
+func TestS2SCopyFromSingleAzureFileToBlobContainer(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 	fsu := getFSU()
 
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	c.Assert(srcShareURL, chk.NotNil)
+	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
+	defer deleteShare(a, srcShareURL)
+	a.NotNil(srcShareURL)
 
-	scenarioHelper{}.generateFlatFiles(c, srcShareURL, []string{"file"})
+	scenarioHelper{}.generateFlatFiles(a, srcShareURL, []string{"file"})
 
-	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, dstContainerURL)
-	c.Assert(dstContainerURL, chk.NotNil)
+	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, dstContainerURL)
+	a.NotNil(dstContainerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -1258,59 +1283,60 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *c
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcFileURL := scenarioHelper{}.getRawFileURLWithSAS(c, srcShareName, "file") // Use default region
-	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	rawSrcFileURL := scenarioHelper{}.getRawFileURLWithSAS(a, srcShareName, "file") // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcFileURL.String(), rawDstContainerURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
+func TestCopyWithDFSResource(t *testing.T) {
+	a := assert.New(t)
 	// invoke the interceptor so lifecycle manager does not shut down the tests
 	ctx := context.Background()
 
 	// get service SAS for raw input
-	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
 
 	// Set up source
 	// set up the file system
 	bfsServiceURLSource := GetBFSSU()
-	fsURLSource, fsNameSource := createNewFilesystem(c, bfsServiceURLSource)
-	defer deleteFilesystem(c, fsURLSource)
+	fsURLSource, fsNameSource := createNewFilesystem(a, bfsServiceURLSource)
+	defer deleteFilesystem(a, fsURLSource)
 
 	// set up the parent
 	parentDirNameSource := generateName("dir", 0)
 	parentDirURLSource := fsURLSource.NewDirectoryURL(parentDirNameSource)
 	_, err := parentDirURLSource.Create(ctx, true)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// set up the file
 	fileNameSource := generateName("file", 0)
 	fileURLSource := parentDirURLSource.NewFileURL(fileNameSource)
 	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	dirURLWithSASSource := serviceURLWithSAS.NewFileSystemURL(fsNameSource).NewDirectoryURL(parentDirNameSource)
 
 	// Set up destination
 	// set up the file system
 	bfsServiceURL := GetBFSSU()
-	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
-	defer deleteFilesystem(c, fsURL)
+	fsURL, fsName := createNewFilesystem(a, bfsServiceURL)
+	defer deleteFilesystem(a, fsURL)
 
 	// set up the parent
 	parentDirName := generateName("dir", 0)
 	parentDirURL := fsURL.NewDirectoryURL(parentDirName)
 	_, err = parentDirURL.Create(ctx, true)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	dirURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName).NewDirectoryURL(parentDirName)
 	// =====================================
@@ -1325,13 +1351,13 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	runCopyAndVerify(c, rawCopy, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, rawCopy, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		// c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+		// a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
 
 	// 2. Verify Sync between dfs and dfs works.
@@ -1340,14 +1366,14 @@ func (s *cmdIntegrationSuite) TestCopyWithDFSResource(c *chk.C) {
 	fileNameSource = generateName("file2", 0)
 	fileURLSource = parentDirURLSource.NewFileURL(fileNameSource)
 	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	rawSync := getDefaultSyncRawInput(dirURLWithSASSource.String(), dirURLWithSAS.String())
-	runSyncAndVerify(c, rawSync, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runSyncAndVerify(a, rawSync, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		a.Equal(2, len(mockedRPC.transfers))
 
 		// c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})

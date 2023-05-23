@@ -22,9 +22,11 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
 	"os"
 	"path/filepath"
+	"testing"
 	"time"
 )
 
@@ -60,12 +62,13 @@ func (processorTestSuiteHelper) getCopyJobTemplate() *common.CopyJobPartOrderReq
 	return &common.CopyJobPartOrderRequest{Fpo: common.EFolderPropertiesOption.NoFolders(), SymlinkHandlingType: common.ESymlinkHandlingType.Skip()}
 }
 
-func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C) {
+func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// set up source and destination
-	containerURL, _ := getContainerURL(c, bsu)
-	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	containerURL, _ := getContainerURL(a, bsu)
+	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
@@ -83,39 +86,40 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
 			err := copyProcessor.scheduleCopyTransfer(storedObject)
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 		}
 
 		// make sure everything has been dispatched apart from the final one
-		c.Assert(copyProcessor.copyJobTemplate.PartNum, chk.Equals, common.PartNumber(numOfParts-1))
+		a.Equal(common.PartNumber(numOfParts-1), copyProcessor.copyJobTemplate.PartNum)
 
 		// dispatch final part
 		jobInitiated, err := copyProcessor.dispatchFinalPart()
-		c.Assert(jobInitiated, chk.Equals, true)
-		c.Assert(err, chk.IsNil)
+		a.True(jobInitiated)
+		a.Nil(err)
 
 		// assert the right transfers were scheduled
-		validateCopyTransfersAreScheduled(c, false, false, "", "", processorTestSuiteHelper{}.getExpectedTransferFromStoredObjectList(sampleObjects), mockedRPC)
+		validateCopyTransfersAreScheduled(a, false, false, "", "", processorTestSuiteHelper{}.getExpectedTransferFromStoredObjectList(sampleObjects), mockedRPC)
 
 		mockedRPC.reset()
 	}
 }
 
-func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
+func TestCopyTransferProcessorSingleFile(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, _ := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, _ := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	// set up the container with a single blob
 	blobList := []string{"singlefile101"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
-	c.Assert(containerURL, chk.NotNil)
+	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobList, blockBlobDefaultData)
+	a.NotNil(containerURL)
 
 	// set up the directory with a single file
-	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dstDirName)
 	dstFileName := blobList[0]
-	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
+	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, blobList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -130,20 +134,20 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	// exercise the copy transfer processor
 	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetdata, "")
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// no part should have been dispatched
-	c.Assert(copyProcessor.copyJobTemplate.PartNum, chk.Equals, common.PartNumber(0))
+	a.Equal(common.PartNumber(0), copyProcessor.copyJobTemplate.PartNum)
 
 	// dispatch final part
 	jobInitiated, err := copyProcessor.dispatchFinalPart()
-	c.Assert(jobInitiated, chk.Equals, true)
+	a.True(jobInitiated)
 
 	// In cases of syncing file to file, the source and destination are empty because this info is already in the root
 	// path.
-	c.Assert(mockedRPC.transfers[0].Source, chk.Equals, "")
-	c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "")
+	a.Equal("", mockedRPC.transfers[0].Source)
+	a.Equal("", mockedRPC.transfers[0].Destination)
 
 	// assert the right transfers were scheduled
-	validateCopyTransfersAreScheduled(c, false, false, "", "", []string{""}, mockedRPC)
+	validateCopyTransfersAreScheduled(a, false, false, "", "", []string{""}, mockedRPC)
 }

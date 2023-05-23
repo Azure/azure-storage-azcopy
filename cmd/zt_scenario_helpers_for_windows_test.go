@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -54,9 +54,9 @@ func (scenarioHelper) setAttributesForLocalFile(filePath string, attrList []stri
 	return err
 }
 
-func (s scenarioHelper) setAttributesForLocalFiles(c *chk.C, dirPath string, fileList []string, attrList []string) {
+func (s scenarioHelper) setAttributesForLocalFiles(a *assert.Assertions, dirPath string, fileList []string, attrList []string) {
 	for _, fileName := range fileList {
 		err := s.setAttributesForLocalFile(filepath.Join(dirPath, fileName), attrList)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 }

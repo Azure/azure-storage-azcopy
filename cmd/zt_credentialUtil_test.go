@@ -22,7 +22,9 @@ package cmd
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"strings"
+	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	chk "gopkg.in/check.v1"
@@ -32,7 +34,8 @@ type credentialUtilSuite struct{}
 
 var _ = chk.Suite(&credentialUtilSuite{})
 
-func (s *credentialUtilSuite) TestCheckAuthSafeForTarget(c *chk.C) {
+func TestCheckAuthSafeForTarget(t *testing.T) {
+	a := assert.New(t)
 	tests := []struct {
 		ct               common.CredentialType
 		resourceType     common.Location
@@ -84,11 +87,12 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTarget(c *chk.C) {
 
 	for i, t := range tests {
 		err := checkAuthSafeForTarget(t.ct, t.resource, t.extraSuffixesAAD, t.resourceType)
-		c.Assert(err == nil, chk.Equals, t.expectedOK, chk.Commentf("Failed on test %d for resource %s", i, t.resource))
+		a.Equal(t.expectedOK, err == nil, chk.Commentf("Failed on test %d for resource %s", i, t.resource))
 	}
 }
 
-func (s *credentialUtilSuite) TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(c *chk.C) {
+func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
+	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.OAuthToken() // force it to OAuth, which is the case we want to test
 	}
@@ -97,12 +101,12 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTargetIsCalledWhenGettingAuthT
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
 	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), "http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
-	c.Assert(err, chk.NotNil)
-	c.Assert(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."),
-		chk.Equals, true)
+	a.NotNil(err)
+	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
 }
 
-func (s *credentialUtilSuite) TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(c *chk.C) {
+func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) {
+	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.MDOAuthToken() // force it to OAuth, which is the case we want to test
 	}
@@ -111,7 +115,6 @@ func (s *credentialUtilSuite) TestCheckAuthSafeForTargetIsCalledWhenGettingAuthT
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
 	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), "http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
-	c.Assert(err, chk.NotNil)
-	c.Assert(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."),
-		chk.Equals, true)
+	a.NotNil(err)
+	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
 }

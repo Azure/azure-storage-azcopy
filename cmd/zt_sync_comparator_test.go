@@ -22,15 +22,13 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 	"time"
 )
 
-type syncComparatorSuite struct{}
-
-var _ = chk.Suite(&syncComparatorSuite{})
-
-func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
+func TestSyncSourceComparator(t *testing.T) {
+	a := assert.New(t)
 	dummyCopyScheduler := dummyProcessor{}
 	srcMD5 := []byte{'s'}
 	destMD5 := []byte{'d'}
@@ -45,11 +43,12 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
 	compareErr := sourceComparator.processIfNecessary(StoredObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now(), md5: srcMD5})
-	c.Assert(compareErr, chk.Equals, nil)
+	a.Nil(compareErr)
 
 	// check the source object was indeed scheduled
-	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 1)
-	c.Assert(dummyCopyScheduler.record[0].md5, chk.DeepEquals, srcMD5)
+	a.Equal(1, len(dummyCopyScheduler.record))
+	
+	a.Equal(srcMD5, dummyCopyScheduler.record[0].md5)
 
 	// reset the processor so that it's empty
 	dummyCopyScheduler = dummyProcessor{}
@@ -57,14 +56,14 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	// test the comparator in case a given source object is present at the destination
 	// and it has a later modified time, so the comparator should pass the give object to schedule a transfer
 	err := indexer.store(sampleDestinationObject)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	compareErr = sourceComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: srcMD5})
-	c.Assert(compareErr, chk.Equals, nil)
+	a.Nil(compareErr)
 
 	// check the source object was indeed scheduled
-	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 1)
-	c.Assert(dummyCopyScheduler.record[0].md5, chk.DeepEquals, srcMD5)
-	c.Assert(len(indexer.indexMap), chk.Equals, 0)
+	a.Equal(1, len(dummyCopyScheduler.record))
+	a.Equal(srcMD5, dummyCopyScheduler.record[0].md5)
+	a.Zero(len(indexer.indexMap))
 
 	// reset the processor so that it's empty
 	dummyCopyScheduler = dummyProcessor{}
@@ -73,16 +72,17 @@ func (s *syncComparatorSuite) TestSyncSourceComparator(c *chk.C) {
 	// but is has an earlier modified time compared to the one at the destination
 	// meaning that the source object is considered stale, so no transfer should be scheduled
 	err = indexer.store(sampleDestinationObject)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	compareErr = sourceComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: srcMD5})
-	c.Assert(compareErr, chk.Equals, nil)
+	a.Nil(compareErr)
 
 	// check no source object was scheduled
-	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 0)
-	c.Assert(len(indexer.indexMap), chk.Equals, 0)
+	a.Zero(len(dummyCopyScheduler.record))
+	a.Zero(len(indexer.indexMap))
 }
 
-func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
+func TestSyncSrcCompDisableComparator(t *testing.T) {
+	a := assert.New(t)
 	dummyCopyScheduler := dummyProcessor{}
 	srcMD5 := []byte{'s'}
 	destMD5 := []byte{'d'}
@@ -94,11 +94,11 @@ func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
 	// test the comparator in case a given source object is not present at the destination
 	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
 	compareErr := sourceComparator.processIfNecessary(StoredObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now(), md5: srcMD5})
-	c.Assert(compareErr, chk.Equals, nil)
+	a.Nil(compareErr)
 
 	// check the source object was indeed scheduled
-	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 1)
-	c.Assert(dummyCopyScheduler.record[0].md5, chk.DeepEquals, srcMD5)
+	a.Equal(1, len(dummyCopyScheduler.record))
+	a.Equal(srcMD5, dummyCopyScheduler.record[0].md5)
 
 	// reset the processor so that it's empty
 	dummyCopyScheduler = dummyProcessor{}
@@ -122,15 +122,16 @@ func (s *syncComparatorSuite) TestSyncSrcCompDisableComparator(c *chk.C) {
 	// meaning that the source object is considered stale, so no transfer should be scheduled
 	for key, dstStoredObject := range destinationStoredObjects {
 		err := indexer.store(dstStoredObject)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 		compareErr = sourceComparator.processIfNecessary(sourceStoredObjects[key])
-		c.Assert(compareErr, chk.Equals, nil)
-		c.Assert(len(dummyCopyScheduler.record), chk.Equals, key+1)
-		c.Assert(len(indexer.indexMap), chk.Equals, 0)
+		a.Nil(compareErr)
+		a.Equal(key+1, len(dummyCopyScheduler.record))
+		a.Zero(len(indexer.indexMap))
 	}
 }
 
-func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
+func TestSyncDestinationComparator(t *testing.T) {
+	a := assert.New(t)
 	dummyCopyScheduler := dummyProcessor{}
 	dummyCleaner := dummyProcessor{}
 	srcMD5 := []byte{'s'}
@@ -146,12 +147,12 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 	// test the comparator in case a given destination object is not present at the source
 	// meaning it is an extra file that needs to be deleted, so the comparator should pass the given object to the destinationCleaner
 	compareErr := destinationComparator.processIfNecessary(StoredObject{name: "only_at_dst", relativePath: "only_at_dst", lastModifiedTime: time.Now(), md5: destMD5})
-	c.Assert(compareErr, chk.Equals, nil)
+	a.Nil(compareErr)
 
 	// verify that destination object is being deleted
-	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 0)
-	c.Assert(len(dummyCleaner.record), chk.Equals, 1)
-	c.Assert(dummyCleaner.record[0].md5, chk.DeepEquals, destMD5)
+	a.Zero(len(dummyCopyScheduler.record))
+	a.Equal(1, len(dummyCleaner.record))
+	a.Equal(destMD5, dummyCleaner.record[0].md5)
 
 	// reset dummy processors
 	dummyCopyScheduler = dummyProcessor{}
@@ -161,13 +162,13 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 	// and it has a later modified time, since the source data is stale,
 	// no transfer happens
 	err := indexer.store(sampleSourceObject)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	compareErr = destinationComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: destMD5})
-	c.Assert(compareErr, chk.Equals, nil)
+	a.Nil(compareErr)
 
 	// verify that the source object is scheduled for transfer
-	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 0)
-	c.Assert(len(dummyCleaner.record), chk.Equals, 0)
+	a.Zero(len(dummyCopyScheduler.record))
+	a.Zero(len(dummyCleaner.record))
 
 	// reset dummy processors
 	dummyCopyScheduler = dummyProcessor{}
@@ -177,17 +178,18 @@ func (s *syncComparatorSuite) TestSyncDestinationComparator(c *chk.C) {
 	// but is has an earlier modified time compared to the one at the source
 	// meaning that the source object should be transferred since the destination object is stale
 	err = indexer.store(sampleSourceObject)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	compareErr = destinationComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: destMD5})
-	c.Assert(compareErr, chk.Equals, nil)
+	a.Nil(compareErr)
 
 	// verify that there's no transfer & no deletes
-	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 1)
-	c.Assert(dummyCopyScheduler.record[0].md5, chk.DeepEquals, srcMD5)
-	c.Assert(len(dummyCleaner.record), chk.Equals, 0)
+	a.Equal(1, len(dummyCopyScheduler.record))
+	a.Equal(srcMD5, dummyCopyScheduler.record[0].md5)
+	a.Zero(len(dummyCleaner.record))
 }
 
-func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
+func TestSyncDestCompDisableComparison(t *testing.T) {
+	a := assert.New(t)
 	dummyCopyScheduler := dummyProcessor{}
 	dummyCleaner := dummyProcessor{}
 	srcMD5 := []byte{'s'}
@@ -216,12 +218,12 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 	// test the comparator in case a given destination object is not present at the source
 	// meaning it is an extra file that needs to be deleted, so the comparator should pass the given object to the destinationCleaner
 	compareErr := destinationComparator.processIfNecessary(StoredObject{name: "only_at_dst", relativePath: "only_at_dst", lastModifiedTime: currTime, md5: destMD5})
-	c.Assert(compareErr, chk.Equals, nil)
+	a.Nil(compareErr)
 
 	// verify that destination object is being deleted
-	c.Assert(len(dummyCopyScheduler.record), chk.Equals, 0)
-	c.Assert(len(dummyCleaner.record), chk.Equals, 1)
-	c.Assert(dummyCleaner.record[0].md5, chk.DeepEquals, destMD5)
+	a.Zero(len(dummyCopyScheduler.record))
+	a.Equal(1, len(dummyCleaner.record))
+	a.Equal(destMD5, dummyCleaner.record[0].md5)
 
 	// reset dummy processors
 	dummyCopyScheduler = dummyProcessor{}
@@ -232,9 +234,9 @@ func (s *syncComparatorSuite) TestSyncDestCompDisableComparison(c *chk.C) {
 	// no transfer happens
 	for key, srcStoredObject := range sourceStoredObjects {
 		err := indexer.store(srcStoredObject)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 		compareErr = destinationComparator.processIfNecessary(destinationStoredObjects[key])
-		c.Assert(compareErr, chk.Equals, nil)
-		c.Assert(len(dummyCopyScheduler.record), chk.Equals, key+1)
+		a.Nil(compareErr)
+		a.Equal(key+1, len(dummyCopyScheduler.record))
 	}
 }
