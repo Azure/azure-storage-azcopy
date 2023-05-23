@@ -67,7 +67,7 @@ func TestRemoveFilesUnderShare(t *testing.T) {
 	defer deleteShare(a, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	a.NotNil(shareURL)
-	a.Zero(len(fileList))
+	a.NotZero(len(fileList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -120,7 +120,7 @@ func TestRemoveFilesUnderDirectory(t *testing.T) {
 	defer deleteShare(a, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName)
 	a.NotNil(shareURL)
-	a.Zero(len(fileList))
+	a.NotZero(len(fileList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -176,7 +176,7 @@ func TestRemoveFilesWithIncludeFlag(t *testing.T) {
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	defer deleteShare(a, shareURL)
 	a.NotNil(shareURL)
-	a.Zero(len(fileList))
+	a.NotZero(len(fileList))
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
@@ -210,7 +210,7 @@ func TestRemoveFilesWithExcludeFlag(t *testing.T) {
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	defer deleteShare(a, shareURL)
 	a.NotNil(shareURL)
-	a.Zero(len(fileList))
+	a.NotZero(len(fileList))
 
 	// add special files that we wish to exclude
 	filesToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
@@ -244,7 +244,7 @@ func TestRemoveFilesWithIncludeAndExcludeFlag(t *testing.T) {
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	defer deleteShare(a, shareURL)
 	a.NotNil(shareURL)
-	a.Zero(len(fileList))
+	a.NotZero(len(fileList))
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
@@ -442,7 +442,7 @@ func TestRemoveFilesUnderShareWithFromTo(t *testing.T) {
 	defer deleteShare(a, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	a.NotNil(shareURL)
-	a.Zero(len(fileList))
+	a.NotZero(len(fileList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -496,7 +496,7 @@ func TestRemoveFilesUnderDirectoryWithFromTo(t *testing.T) {
 	defer deleteShare(a, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName)
 	a.NotNil(shareURL)
-	a.Zero(len(fileList))
+	a.NotZero(len(fileList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}

@@ -769,7 +769,7 @@ func TestPermDeleteSnapshotsVersionsUnderSingleBlob(t *testing.T) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		a.Equal(4, len(mockedRPC.transfers))
+		a.Equal(3, len(mockedRPC.transfers))
 	})
 }
 

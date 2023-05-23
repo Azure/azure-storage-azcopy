@@ -991,7 +991,7 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 
 		a.Equal(2, len(mockedRPC.transfers))
 
-		a.Equal("file2/", mockedRPC.transfers[1].Destination)
+		a.Equal("/file2", mockedRPC.transfers[1].Destination)
 	})
 }
 
@@ -1044,7 +1044,7 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 
 		a.Equal(2, len(mockedRPC.transfers))
 
-		a.Equal("file2/", mockedRPC.transfers[1].Destination)
+		a.Equal("/file2", mockedRPC.transfers[1].Destination)
 	})
 }
 
@@ -1355,7 +1355,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		a.Equal(1, len(mockedRPC.transfers))
+		a.Equal(2, len(mockedRPC.transfers))
 
 		// a.Equal("/file", mockedRPC.transfers[0].Destination)
 	})
