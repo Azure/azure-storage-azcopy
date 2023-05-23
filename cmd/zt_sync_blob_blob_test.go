@@ -90,7 +90,7 @@ func TestSyncS2SWithEmptyDestination(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -137,7 +137,7 @@ func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up the destination with the exact same files
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
@@ -181,7 +181,7 @@ func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 
 	// set up the container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up the destination with half of the blobs from source
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList[0:len(blobList)/2], blockBlobDefaultData)
@@ -234,7 +234,7 @@ func TestSyncS2SWithIncludePatternFlag(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
@@ -270,7 +270,7 @@ func TestSyncS2SWithExcludePatternFlag(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
@@ -306,7 +306,7 @@ func TestSyncS2SWithIncludeAndExcludePatternFlag(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
@@ -349,7 +349,7 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"excludeSub/notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
@@ -405,7 +405,7 @@ func TestSyncS2SWithMissingDestination(t *testing.T) {
 
 	// set up the container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -438,7 +438,7 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up the destination container with a single blob
 	singleBlobName := "single"
@@ -485,7 +485,7 @@ func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -534,7 +534,7 @@ func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 	// set up the source container with numerous blobs
 	vdirName := "vdir"
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up the destination with the exact same files
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
@@ -584,7 +584,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 	vdirName := "vdir"
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL,
 		vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up the destination with the exact same files
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
@@ -658,7 +658,7 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 	vdirName := "vdir"
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL,
 		vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// set up the destination with the exact same files
 	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
@@ -710,7 +710,7 @@ func TestSyncS2SWithIncludeRegexFlag(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
@@ -757,7 +757,7 @@ func TestSyncS2SWithExcludeRegexFlag(t *testing.T) {
 
 	// set up the source container with blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"tessssssssssssst.txt", "subOne/dogs.jpeg", "subOne/subTwo/tessssst.pdf"}
@@ -796,7 +796,7 @@ func TestSyncS2SWithIncludeAndExcludeRegexFlag(t *testing.T) {
 
 	// set up the source container with numerous blobs
 	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
-	a.Zero(len(blobList))
+	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg"}
