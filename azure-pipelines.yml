@@ -199,9 +199,8 @@ jobs:
           artifactName: logs
 
   - job: Test_On_Ubuntu
+    environment: 'CI'
     lockBehavior: sequential
-    variables:
-      - group: CI
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
     pool:
