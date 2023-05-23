@@ -149,6 +149,32 @@ func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapsh
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var ETrailingDotOption = TrailingDotOption(0)
+
+type TrailingDotOption uint8
+
+func (TrailingDotOption) Enable() TrailingDotOption    { return TrailingDotOption(0) }
+func (TrailingDotOption) Disable() TrailingDotOption { return TrailingDotOption(1) }
+
+func (d TrailingDotOption) String() string {
+	return enum.StringInt(d, reflect.TypeOf(d))
+}
+
+func (d *TrailingDotOption) Parse(s string) error {
+	// allow empty to mean "None"
+	if s == "" {
+		*d = ETrailingDotOption.Enable()
+		return nil
+	}
+
+	val, err := enum.ParseInt(reflect.TypeOf(d), s, true, true)
+	if err == nil {
+		*d = val.(TrailingDotOption)
+	}
+	return err
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
 
 type PermanentDeleteOption uint8

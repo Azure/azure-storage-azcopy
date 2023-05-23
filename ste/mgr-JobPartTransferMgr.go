@@ -101,6 +101,7 @@ type IJobPartTransferMgr interface {
 	RestartedTransfer() bool
 }
 
+// TransferInfo is a per path object that needs to be transferred
 type TransferInfo struct {
 	JobID                   common.JobID
 	BlockSize               int64

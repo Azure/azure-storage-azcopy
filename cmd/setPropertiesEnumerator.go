@@ -47,12 +47,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
-		common.ESymlinkHandlingType.Preserve(), // preserve because we want to index all blobs, including symlink blobs
-		cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
-		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(),
-        cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Preserve(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot)
 
 	// report failure to create traverser
 	if err != nil {

@@ -23,6 +23,8 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"net/url"
 	"os"
 	"path"
@@ -60,8 +62,9 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) azfile.Ser
 	if err != nil {
 		panic(err)
 	}
-	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{})
-	return azfile.NewServiceURL(*u, pipeline)
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
+
+	return azfile.NewServiceURL(*u, p)
 }
 
 func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.ServiceURL {
@@ -146,7 +149,8 @@ func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType Account
 	fullURL, err := url.Parse(rawURL)
 	c.AssertNoErr(err)
 
-	return azfile.NewShareURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
+	return azfile.NewShareURL(*fullURL, p)
 }
 
 func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType, containerName string, blobName string) azblob.BlobURL {
