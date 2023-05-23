@@ -13,8 +13,8 @@ pr:
       - dev
       - main
 
+environment: 'CI'
 jobs:
-
   - job: Build
     timeoutInMinutes: 360
     strategy:
@@ -199,7 +199,6 @@ jobs:
           artifactName: logs
 
   - job: Test_On_Ubuntu
-    environment: 'CI'
     lockBehavior: sequential
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
