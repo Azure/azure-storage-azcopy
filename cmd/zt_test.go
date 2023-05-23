@@ -523,7 +523,7 @@ func createNewGCPObject(a *assert.Assertions, client *gcpUtils.Client, bucketNam
 
 }
 
-func deleteBucket(a *assert.Assertions, client *minio.Client, bucketName string, waitQuarterMinute bool) {
+func deleteBucket(client *minio.Client, bucketName string, waitQuarterMinute bool) {
 	// If we error out in this function, simply just skip over deleting the bucket.
 	// Some of our buckets have become "ghost" buckets in the past.
 	// Ghost buckets show up in list calls but can't actually be interacted with.
@@ -567,7 +567,7 @@ func deleteBucket(a *assert.Assertions, client *minio.Client, bucketName string,
 	}
 }
 
-func deleteGCPBucket(t *testing.T, a *assert.Assertions, client *gcpUtils.Client, bucketName string, waitQuarterMinute bool) {
+func deleteGCPBucket(client *gcpUtils.Client, bucketName string, waitQuarterMinute bool) {
 	bucket := client.Bucket(bucketName)
 	ctx := context.Background()
 	it := bucket.Objects(ctx, &gcpUtils.Query{Prefix: ""})
@@ -577,23 +577,18 @@ func deleteGCPBucket(t *testing.T, a *assert.Assertions, client *gcpUtils.Client
 			if err == iterator.Done {
 				break
 			}
-
-			// Failure during listing
-			a.Nil(err)
 			return
 		}
 		if err == nil {
 			err = bucket.Object(attrs.Name).Delete(nil)
 			if err != nil {
-				// Failure cleaning bucket
-				a.Nil(err)
 				return
 			}
 		}
 	}
 	err := bucket.Delete(context.Background())
 	if err != nil {
-		t.Log(fmt.Sprintf("Failed to Delete GCS Bucket %v", bucketName))
+		fmt.Println(fmt.Sprintf("Failed to Delete GCS Bucket %v", bucketName))
 	}
 
 	if waitQuarterMinute {
@@ -601,7 +596,7 @@ func deleteGCPBucket(t *testing.T, a *assert.Assertions, client *gcpUtils.Client
 	}
 }
 
-func cleanS3Account(a *assert.Assertions, client *minio.Client) {
+func cleanS3Account(client *minio.Client) {
 	buckets, err := client.ListBuckets()
 	if err != nil {
 		return
@@ -611,16 +606,16 @@ func cleanS3Account(a *assert.Assertions, client *minio.Client) {
 		if strings.Contains(bucket.Name, "elastic") {
 			continue
 		}
-		deleteBucket(a, client, bucket.Name, false)
+		deleteBucket(client, bucket.Name, false)
 	}
 
 	time.Sleep(time.Minute)
 }
 
-func cleanGCPAccount(t *testing.T, a *assert.Assertions, client *gcpUtils.Client) {
+func cleanGCPAccount(client *gcpUtils.Client) {
 	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
 	if projectID == "" {
-		t.Log("GOOGLE_CLOUD_PROJECT env variable not set. GCP tests will not run")
+		fmt.Println("GOOGLE_CLOUD_PROJECT env variable not set. GCP tests will not run")
 		return
 	}
 	ctx := context.Background()
@@ -631,11 +626,9 @@ func cleanGCPAccount(t *testing.T, a *assert.Assertions, client *gcpUtils.Client
 			if err == iterator.Done {
 				break
 			}
-
-			a.Nil(err)
 			return
 		}
-		deleteGCPBucket(t, a, client, battrs.Name, false)
+		deleteGCPBucket(client, battrs.Name, false)
 	}
 }
 

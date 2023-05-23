@@ -33,10 +33,10 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 
 	// Clean the accounts to ensure that only the containers we create exist
 	if testS3 {
-		cleanS3Account(a, s3Client)
+		cleanS3Account(s3Client)
 	}
 	if testGCP {
-		cleanGCPAccount(t, a, gcpClient)
+		cleanGCPAccount(gcpClient)
 	}
 	// BlobFS is tested on the same account, therefore this is safe to clean up this way
 	cleanBlobAccount(a, bsu)
@@ -86,7 +86,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 				_ = s3Client.RemoveBucket(v)
 			}
 			if testGCP {
-				deleteGCPBucket(t, a, gcpClient, v, true)
+				deleteGCPBucket(gcpClient, v, true)
 			}
 			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
 			_, _ = fileShare.Delete(ctx, azfile.DeleteSnapshotsOptionNone)
@@ -203,10 +203,10 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 
 	// Clean the accounts to ensure that only the containers we create exist
 	if testS3 {
-		cleanS3Account(a, s3Client)
+		cleanS3Account(s3Client)
 	}
 	if testGCP {
-		cleanGCPAccount(t, a, gcpClient)
+		cleanGCPAccount(gcpClient)
 	}
 	cleanBlobAccount(a, bsu)
 	cleanFileAccount(a, fsu)
@@ -255,7 +255,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 				_ = s3Client.RemoveBucket(v)
 			}
 			if testGCP {
-				deleteGCPBucket(t, a, gcpClient, v, true)
+				deleteGCPBucket(gcpClient, v, true)
 			}
 			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
 			_, _ = fileShare.Delete(ctx, azfile.DeleteSnapshotsOptionNone)

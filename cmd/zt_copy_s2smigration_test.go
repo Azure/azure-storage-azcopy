@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -51,25 +52,25 @@ const (
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
 
-func SetUpSuite(t *testing.T) {
-	a := assert.New(t)
+func TestMain(m *testing.M) {
 	if !isS3Disabled() {
 		if s3Client, err := createS3ClientWithMinio(createS3ResOptions{}); err == nil {
-			cleanS3Account(a, s3Client)
+			cleanS3Account(s3Client)
 		} else {
 			// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
 			// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
-			t.Log("S3 client could not be successfully initialised")
+			fmt.Println("S3 client could not be successfully initialised")
 		}
 	}
 
 	if !gcpTestsDisabled() {
 		if gcpClient, err := createGCPClientWithGCSSDK(); err == nil {
-			cleanGCPAccount(t, a, gcpClient)
+			cleanGCPAccount(gcpClient)
 		} else {
-			t.Log("GCP client could not be successfully initialised")
+			fmt.Println("GCP client could not be successfully initialised")
 		}
 	}
+	os.Exit(m.Run())
 }
 
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
@@ -160,7 +161,7 @@ func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName, true)
+	defer deleteBucket(s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName, "", false)
 	a.NotZero(len(objectList))
@@ -214,7 +215,7 @@ func TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *test
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName, true)
+	defer deleteBucket(s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName, "", false)
 	a.NotZero(len(objectList))
@@ -272,7 +273,7 @@ func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolvedNegative(t *testing.T) {
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
 
-	defer deleteBucket(a, s3Client, bucketName, true)
+	defer deleteBucket(s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName, "", false)
 	a.NotZero(len(objectList))
@@ -318,7 +319,7 @@ func TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(t *testing.T) {
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName, true)
+	defer deleteBucket(s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -362,7 +363,7 @@ func TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(t *testing.T) {
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName, true)
+	defer deleteBucket(s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -404,7 +405,7 @@ func TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName, true)
+	defer deleteBucket(s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -445,12 +446,12 @@ func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseDefaultEndpoi
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(a, s3Client, bucketName1, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName1, true)
+	defer deleteBucket(s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix("us-west-2-region")
 	bucketRegion2 := "us-west-1" // Use different region than other regional test to avoid conflicting
 	createNewBucketWithName(a, s3Client, bucketName2, createS3ResOptions{Location: bucketRegion2})
-	defer deleteBucket(a, s3Client, bucketName2, true)
+	defer deleteBucket(s3Client, bucketName2, true)
 
 	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(a, s3Client, bucketName1, "", true)
 	a.NotZero(len(objectList1))
@@ -490,11 +491,11 @@ func TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseSpecificRegio
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(a, s3Client, bucketName1, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName1, true)
+	defer deleteBucket(s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix(specificRegion)
 	createNewBucketWithName(a, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
-	defer deleteBucket(a, s3Client, bucketName2, true)
+	defer deleteBucket(s3Client, bucketName2, true)
 
 	time.Sleep(30 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
 
@@ -533,7 +534,7 @@ func TestS2SCopyFromS3ObjectToBlobContainer(t *testing.T) {
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName, true)
+	defer deleteBucket(s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -592,7 +593,7 @@ func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewGCPBucketWithName(a, gcpClient, bucketName)
-	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
+	defer deleteGCPBucket(gcpClient, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(a, gcpClient, bucketName, "", false)
 	a.NotZero(len(objectList))
@@ -642,7 +643,7 @@ func TestS2SCopyFromGCPToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *tes
 
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewGCPBucketWithName(a, gcpClient, bucketName)
-	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
+	defer deleteGCPBucket(gcpClient, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(a, gcpClient, bucketName, "", false)
 	a.NotZero(len(objectList))
@@ -686,7 +687,7 @@ func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolvedNegative(t *testing.T) 
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewGCPBucketWithName(a, gcpClient, bucketName)
-	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
+	defer deleteGCPBucket(gcpClient, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForGCP(a, gcpClient, bucketName, "", false)
 	a.NotZero(len(objectList))
@@ -731,7 +732,7 @@ func TestS2SCopyFromGCPToBlobWithObjectUsingSlashAsSuffix(t *testing.T) {
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewGCPBucketWithName(a, gcpClient, bucketName)
-	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
+	defer deleteGCPBucket(gcpClient, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -771,7 +772,7 @@ func TestS2SCopyFromGCPObjectToBlobContainer(t *testing.T) {
 
 	bucketName := generateBucketName()
 	createNewGCPBucketWithName(a, gcpClient, bucketName)
-	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
+	defer deleteGCPBucket(gcpClient, bucketName, true)
 
 	dstContainerName := generateContainerName()
 

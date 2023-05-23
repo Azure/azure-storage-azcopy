@@ -506,17 +506,15 @@ func doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, a *assert.As
 
 func TestUploadDirectoryToContainerWithIncludeAfter_UTC(t *testing.T) {
 	a := assert.New(t)
-	cmdIntegrationSuite{}.doTestUploadDirectoryToContainerWithIncludeAfter(true, a)
+	doTestUploadDirectoryToContainerWithIncludeAfter(true, a)
 }
 
 func TestUploadDirectoryToContainerWithIncludeAfter_LocalTime(t *testing.T) {
 	a := assert.New(t)
-	cmdIntegrationSuite{}.doTestUploadDirectoryToContainerWithIncludeAfter(false, a)
+	doTestUploadDirectoryToContainerWithIncludeAfter(false, a)
 }
 
-type cmdIntegrationSuite struct{}
-
-func (s cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, a *assert.Assertions) {
+func doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, a *assert.Assertions) {
 	bsu := getBSU()
 
 	// set up the source with numerous files

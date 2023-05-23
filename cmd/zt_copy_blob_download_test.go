@@ -864,7 +864,7 @@ func TestDryrunCopyS3toBlob(t *testing.T) {
 	// set up src s3 bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(a, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(a, s3Client, bucketName, true)
+	defer deleteBucket(s3Client, bucketName, true)
 	objectList := []string{"AzURE2021.jpeg"}
 	scenarioHelper{}.generateObjects(a, s3Client, bucketName, objectList)
 
@@ -909,7 +909,7 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 	// set up src gcp bucket
 	bucketName := generateBucketName()
 	createNewGCPBucketWithName(a, gcpClient, bucketName)
-	defer deleteGCPBucket(t, a, gcpClient, bucketName, true)
+	defer deleteGCPBucket(gcpClient, bucketName, true)
 	blobsToInclude := []string{"AzURE2021.jpeg"}
 	scenarioHelper{}.generateGCPObjects(a, gcpClient, bucketName, blobsToInclude)
 	a.NotNil(gcpClient)

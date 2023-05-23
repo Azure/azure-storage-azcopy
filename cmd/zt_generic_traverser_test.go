@@ -199,7 +199,7 @@ func TestS3GetProperties(t *testing.T) {
 	bucketName := generateBucketName()
 	objectName := generateObjectName()
 	err = client.MakeBucket(bucketName, "")
-	defer deleteBucket(a, client, bucketName, false)
+	defer deleteBucket(client, bucketName, false)
 	a.Nil(err)
 
 	_, err = client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), int64(len(objectDefaultData)), headers)
@@ -263,7 +263,7 @@ func TestGCPGetProperties(t *testing.T) {
 	objectName := generateObjectName()
 	bkt := client.Bucket(bucketName)
 	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-	defer deleteGCPBucket(t, a, client, bucketName, false)
+	defer deleteGCPBucket(client, bucketName, false)
 	a.Nil(err)
 
 	reader := strings.NewReader(objectDefaultData)
@@ -538,11 +538,11 @@ func TestTraverserWithSingleObject(t *testing.T) {
 	var bucketNameGCP string
 	if s3Enabled {
 		bucketName = createNewBucket(a, s3Client, createS3ResOptions{})
-		defer deleteBucket(a, s3Client, bucketName, true)
+		defer deleteBucket(s3Client, bucketName, true)
 	}
 	if gcpEnabled {
 		bucketNameGCP = createNewGCPBucket(a, gcpClient)
-		defer deleteGCPBucket(t, a, gcpClient, bucketNameGCP, true)
+		defer deleteGCPBucket(gcpClient, bucketNameGCP, true)
 	}
 
 	// test two scenarios, either blob is at the root virtual dir, or inside sub virtual dirs
@@ -668,11 +668,11 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 	var bucketNameGCP string
 	if s3Enabled {
 		bucketName = createNewBucket(a, s3Client, createS3ResOptions{})
-		defer deleteBucket(a, s3Client, bucketName, true)
+		defer deleteBucket(s3Client, bucketName, true)
 	}
 	if gcpEnabled {
 		bucketNameGCP = createNewGCPBucket(a, gcpClient)
-		defer deleteGCPBucket(t, a, gcpClient, bucketNameGCP, true)
+		defer deleteGCPBucket(gcpClient, bucketNameGCP, true)
 	}
 
 	// set up the container with numerous blobs
@@ -813,11 +813,11 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 	var bucketName, bucketNameGCP string
 	if s3Enabled {
 		bucketName = createNewBucket(a, s3Client, createS3ResOptions{})
-		defer deleteBucket(a, s3Client, bucketName, true)
+		defer deleteBucket(s3Client, bucketName, true)
 	}
 	if gcpEnabled {
 		bucketNameGCP = createNewGCPBucket(a, gcpClient)
-		defer deleteGCPBucket(t, a, gcpClient, bucketNameGCP, true)
+		defer deleteGCPBucket(gcpClient, bucketNameGCP, true)
 	}
 
 	// set up the container with numerous blobs
