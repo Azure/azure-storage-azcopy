@@ -188,11 +188,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 	if isSASExisted := sas.Signature() != ""; isSASExisted {
 		if isMDAccount {
 			// Ping the account anyway, and discern if we need OAuth.
-			blobClient, err := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
-			if err != nil {
-				return common.ECredentialType.Unknown(), false, errors.New("blob client was unable to be created")
-			}
-
+			blobClient := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
 			_, err = blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
 
 			if err != nil {
@@ -236,10 +232,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		bURLParts.BlobName = ""
 		bURLParts.Snapshot = ""
 		bURLParts.VersionID = ""
-		containerClient, err := common.CreateContainerClient(bURLParts.String(), credInfo, nil, clientOptions)
-		if err != nil {
-			return false
-		}
+		containerClient := common.CreateContainerClient(bURLParts.String(), credInfo, nil, clientOptions)
 
 		if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
 			// Service level searches can't possibly be public.
@@ -252,10 +245,8 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 
 		if !isContainer {
 			// Scenario 3: When resourceURL points to a blob
-			blobClient, err := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
-			if err != nil {
-				return false
-			}
+			blobClient := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
+
 			if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
 				return true
 			}

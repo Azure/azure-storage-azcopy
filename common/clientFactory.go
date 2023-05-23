@@ -44,7 +44,8 @@ type newClientCallbacks[T, U any] struct {
 }
 
 // createClient is a generic method to allow client creation error handling to live in a single place
-func createClient[T, U any](callbacks newClientCallbacks[T, U], u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*T, error) {
+func createClient[T, U any](callbacks newClientCallbacks[T, U], u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (client *T) {
+	var err error
 	if credOpOptions == nil {
 		credOpOptions = &CredentialOpOptions{
 			LogError: glcm.Info,
@@ -53,25 +54,31 @@ func createClient[T, U any](callbacks newClientCallbacks[T, U], u string, credIn
 	switch credInfo.CredentialType {
 	case ECredentialType.OAuthToken():
 		if credInfo.OAuthTokenInfo.IsEmpty() {
-			credOpOptions.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
+			err = errors.New("invalid state, cannot get valid OAuth token information")
+			break
 		}
-		tc, err := credInfo.OAuthTokenInfo.GetTokenCredential()
+		var tc azcore.TokenCredential
+		tc, err = credInfo.OAuthTokenInfo.GetTokenCredential()
 		if err != nil {
-			credOpOptions.panicError(fmt.Errorf("unable to get token credential due to reason (%s)", err.Error()))
+			err = fmt.Errorf("unable to get token credential due to reason (%s)", err.Error())
+			break
 		}
-		return callbacks.TokenCredential(u, tc, options)
+		client, err = callbacks.TokenCredential(u, tc, options)
 	case ECredentialType.Anonymous():
-		return callbacks.NoCredential(u, options)
+		client, err = callbacks.NoCredential(u, options)
 	default:
-		credOpOptions.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
-		return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+		err = fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
 	}
+	if err != nil {
+		credOpOptions.panicError(err)
+	}
+	return client
 }
 
 ///////////////////////////////////////////////// BLOB FUNCTIONS /////////////////////////////////////////////////
 
 // CreateBlobServiceClient creates a blob service client with credentials specified by credInfo
-func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*blobservice.Client, error) {
+func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *blobservice.Client {
 	callbacks := newClientCallbacks[blobservice.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blobservice.Client, error) {
 			return blobservice.NewClient(u, tc, &blobservice.ClientOptions{ClientOptions: options})
@@ -84,7 +91,7 @@ func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions *C
 	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
-func CreateContainerClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*container.Client, error) {
+func CreateContainerClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *container.Client {
 	callbacks := newClientCallbacks[container.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*container.Client, error) {
 			return container.NewClient(u, tc, &container.ClientOptions{ClientOptions: options})
@@ -97,7 +104,7 @@ func CreateContainerClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
-func CreateBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*blob.Client, error) {
+func CreateBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *blob.Client {
 	callbacks := newClientCallbacks[blob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blob.Client, error) {
 			return blob.NewClient(u, tc, &blob.ClientOptions{ClientOptions: options})
@@ -110,7 +117,7 @@ func CreateBlobClient(u string, credInfo CredentialInfo, credOpOptions *Credenti
 	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
-func CreateAppendBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*appendblob.Client, error) {
+func CreateAppendBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *appendblob.Client {
 	callbacks := newClientCallbacks[appendblob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*appendblob.Client, error) {
 			return appendblob.NewClient(u, tc, &appendblob.ClientOptions{ClientOptions: options})
@@ -123,7 +130,7 @@ func CreateAppendBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cr
 	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
-func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*blockblob.Client, error) {
+func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *blockblob.Client {
 	callbacks := newClientCallbacks[blockblob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blockblob.Client, error) {
 			return blockblob.NewClient(u, tc, &blockblob.ClientOptions{ClientOptions: options})
@@ -136,7 +143,7 @@ func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
-func CreatePageBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) (*pageblob.Client, error) {
+func CreatePageBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *pageblob.Client {
 	callbacks := newClientCallbacks[pageblob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*pageblob.Client, error) {
 			return pageblob.NewClient(u, tc, &pageblob.ClientOptions{ClientOptions: options})

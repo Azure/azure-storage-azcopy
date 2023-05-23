@@ -468,10 +468,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		bsc, err := common.CreateBlobServiceClient(accountRoot, dstCredInfo, nil, options)
-		if err != nil {
-			return err
-		}
+		bsc := common.CreateBlobServiceClient(accountRoot, dstCredInfo, nil, options)
 		bcc := bsc.NewContainerClient(containerName)
 
 		_, err = bcc.GetProperties(ctx, nil)

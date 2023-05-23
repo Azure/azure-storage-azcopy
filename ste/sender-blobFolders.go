@@ -26,10 +26,8 @@ type blobFolderSender struct {
 }
 
 func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
-	destinationClient, err := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-	if err != nil {
-		return nil, err
-	}
+	destinationClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+
 
 	props, err := sip.Properties()
 	if err != nil {

@@ -1317,10 +1317,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 3: start download
-	blobClient, err := common.CreateBlobClient(u.String(), credInfo, nil, options)
-	if err != nil {
-		return fmt.Errorf("fatal: cannot create blob client due to error: %s", err.Error())
-	}
+	blobClient := common.CreateBlobClient(u.String(), credInfo, nil, options)
 
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
 		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
@@ -1367,10 +1364,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobClient, err := common.CreateBlockBlobClient(u.String(), credInfo, nil, options)
-	if err != nil {
-		return fmt.Errorf("fatal: cannot create block blob client due to error: %s", err.Error())
-	}
+	blockBlobClient := common.CreateBlockBlobClient(u.String(), credInfo, nil, options)
+
 	metadataString := cca.metadata
 	metadataMap := common.Metadata{}
 	if len(metadataString) > 0 {

@@ -432,8 +432,8 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 		recommendHttpsIfNecessary(*resourceURL)
 
-		if ctx == nil || p == nil {
-			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a blob traverser")
 		}
 		r := resourceURL.String()
 
@@ -447,10 +447,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc, err := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
-		if err != nil {
-			return nil, err
-		}
+		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
 
 		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {

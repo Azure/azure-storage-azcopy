@@ -126,10 +126,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		return nil, err
 	}
 
-	destBlockBlobClient, err := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-	if err != nil {
-		return nil, err
-	}
+	destBlockBlobClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {

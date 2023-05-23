@@ -23,7 +23,9 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"net/http"
 )
 
 type serviceAPIVersionOverride struct{}
@@ -49,4 +51,34 @@ func NewVersionPolicyFactory() pipeline.Factory {
 			return resp, err
 		}
 	})
+}
+
+type versionPolicy struct {
+}
+
+func newVersionPolicy() policy.Policy {
+	return &versionPolicy{}
+}
+
+func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
+	// get the service api version value using the ServiceAPIVersionOverride set in the context.
+	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
+		req.Raw().Header["x-ms-version"] = []string{value.(string)}
+	}
+	return req.Next()
+}
+
+// TODO: Delete me when bumping the service version is no longer relevant.
+type coldTierPolicy struct {
+}
+
+func newColdTierPolicy() policy.Policy {
+	return &coldTierPolicy{}
+}
+
+func (r *coldTierPolicy) Do(req *policy.Request) (*http.Response, error) {
+	if req.Raw().Header.Get("x-ms-access-tier") == common.EBlockBlobTier.Cold().String() {
+		req.Raw().Header["x-ms-version"] = []string{"2021-12-02"}
+	}
+	return req.Next()
 }
