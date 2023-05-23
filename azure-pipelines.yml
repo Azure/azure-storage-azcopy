@@ -201,7 +201,7 @@ jobs:
   - job: Test_On_Ubuntu
     lockBehavior: sequential
     variables:
-      isMutexSet: 'false'
+      - group: CI
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
     pool:
