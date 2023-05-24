@@ -380,8 +380,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			bfsURLParts := azbfs.NewBfsURLParts(*b.rootURL)
 			bfsURLParts.DirectoryOrFilePath = path.Join(bfsURLParts.DirectoryOrFilePath, object.relativePath)
 			fileURL := azbfs.NewFileURL(bfsURLParts.URL(), b.p)
-			_, err := fileURL.Delete(b.ctx)
-			return err
+			_, err = fileURL.Delete(b.ctx)
 		default:
 			panic("not implemented, check your code")
 		}
@@ -413,6 +412,26 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			case common.ELocation.File():
 				dirURL := azfile.NewDirectoryURL(objectURL, b.p)
 				_, err = dirURL.Delete(ctx)
+
+				if stgErr, ok := err.(azfile.StorageError); b.forceIfReadOnly && ok && stgErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+					msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+					}
+
+					// if the file is read-only, we need to remove the read-only attribute before we can delete it
+					noAttrib := azfile.FileAttributeNone
+					_, err = dirURL.SetProperties(b.ctx, azfile.SMBProperties{FileAttributes: &noAttrib})
+					if err == nil {
+						_, err = dirURL.Delete(b.ctx)
+					} else {
+						msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
+						glcm.Info(msg + "; check the scanning log file for more details")
+						if azcopyScanningLogger != nil {
+							azcopyScanningLogger.Log(pipeline.LogError, msg + ": " + err.Error())
+						}
+					}
+				}
 			case common.ELocation.BlobFS():
 				dirURL := azbfs.NewDirectoryURL(objectURL, b.p)
 				_, err = dirURL.Delete(ctx, nil, false)
