@@ -605,6 +605,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 				"Assuming source is encrypted.")
 			cpkOptions.IsSourceEncrypted = true
 		}
+		if cooked.FromTo.IsDelete() {
+			cpkOptions.IsSourceEncrypted = true
+		}
 
 		// TODO: Remove these warnings once service starts supporting it
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None() {
