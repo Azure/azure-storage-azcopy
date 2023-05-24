@@ -26,8 +26,8 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common/parallel"
 	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
-	"github.com/shyaler/azure-storage-azcopy/v10/common/parallel"
 )
 
 // Enumerates an entire files account, looking into each matching share as it goes

@@ -343,7 +343,9 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		//
 
 		// Add this transfer to job order.
-		f.copyTransferScheduler(so)
+		if !isTargetCompare {
+			f.copyTransferScheduler(so)
+		}
 	} else {
 		//
 		// finalizeAll will be false (and we will come here) for only CtimeMtime when the directory on the source has changed since the last sync.
@@ -446,8 +448,10 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		panic(fmt.Sprintf("Folder with relativePath[%s] not present in ObjectIndexerMap", lcRelativePath))
 	}
 
-	// Folder Case.
-	if destinationObject.entityType == common.EEntityType.Folder() {
+	isTargetCompare := f.cfdMode == common.CFDModeFlags.TargetCompare()
+
+	// Folder Case in CTime or CTimeMtime CFDModes.
+	if !isTargetCompare && destinationObject.entityType == common.EEntityType.Folder() {
 		sourceObjectInMap, present = foldermap.indexMap[lcFileName]
 
 		//
@@ -530,7 +534,10 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		} else if metadataChanged {
 			f.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("File(%s) scheduled for file property transfer only", sourceObjectInMap.relativePath))
 
-			sourceObjectInMap.entityType = common.EEntityType.FileProperties()
+			// Folder is actualy a folder properties transfer.
+			if sourceObjectInMap.entityType == common.EEntityType.File() {
+				sourceObjectInMap.entityType = common.EEntityType.FileProperties()
+			}
 
 			// This is only file properties transfer, we don't want it to be accounted in bytes transferred.
 			sourceObjectInMap.size = 0
@@ -573,7 +580,9 @@ func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingTargetCompar
 	// If mtime or size of target file is different from source file it means the file data (and metadata) has changed,
 	// else only metadata has changed.
 	//
-	if to.size != so.size || so.lastModifiedTime.UnixNano() != to.lastModifiedTime.UnixNano() {
+	folder := to.entityType == common.EEntityType.Folder()
+	// For folders we want to know only if the metadata changed as there is no 'data' change for folders.
+	if !folder && (to.size != so.size || so.lastModifiedTime.UnixNano() != to.lastModifiedTime.UnixNano()) {
 		return true, true
 	} else {
 		//

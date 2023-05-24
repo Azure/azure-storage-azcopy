@@ -204,20 +204,17 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// get the directory URL so that we can list the files
 	directoryURL := azfile.NewDirectoryURL(targetURLParts.URL(), t.p)
 
-	if !isTargetSync {
-		// In case of target sync the root directory will be enqueued by the source traverser -> to be enumerated by the target traverer
-		// // Our rule is that enumerators of folder-aware sources should include the root folder's properties.
-		// So include the root dir/share in the enumeration results, if it exists or is just the share root.
-		_, err = directoryURL.GetProperties(t.ctx)
-		if err == nil || targetURLParts.DirectoryOrFilePath == "" {
-			s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, "", true, false, false))
-			if err != nil {
-				return err
-			}
-			err = processStoredObject(s.(StoredObject))
-			if err != nil {
-				return err
-			}
+	// // Our rule is that enumerators of folder-aware sources should include the root folder's properties.
+	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
+	_, err = directoryURL.GetProperties(t.ctx)
+	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
+		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, "", true, false, false))
+		if err != nil {
+			return err
+		}
+		err = processStoredObject(s.(StoredObject))
+		if err != nil {
+			return err
 		}
 	}
 
