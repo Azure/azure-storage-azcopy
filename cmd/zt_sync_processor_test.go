@@ -48,7 +48,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 	}
 
 	// set up local deleter
-	deleter := newSyncLocalDeleteProcessor(cca)
+	deleter := newSyncLocalDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
 
 	// validate that the file still exists
 	_, err := os.Stat(filepath.Join(dstDirName, dstFileName))
@@ -87,7 +87,7 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	}
 
 	// set up the blob deleter
-	deleter, err := newSyncDeleteProcessor(cca)
+	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
@@ -123,7 +123,7 @@ func (s *syncProcessorSuite) TestFileDeleter(c *chk.C) {
 	}
 
 	// set up the file deleter
-	deleter, err := newSyncDeleteProcessor(cca)
+	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter

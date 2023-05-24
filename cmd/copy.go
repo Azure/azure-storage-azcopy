@@ -179,6 +179,7 @@ type rawCopyCmdArgs struct {
 	// Optional. Indicates the priority with which to rehydrate an archived blob. Valid values are High/Standard.
 	rehydratePriority string
 	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
+	trailingDot string
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -551,6 +552,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
+	err = cooked.trailingDot.Parse(raw.trailingDot)
+	if err != nil {
+		return cooked, err
+	}
+
 	if !(cooked.FromTo.To() == common.ELocation.Blob() || cooked.FromTo == common.EFromTo.BlobNone() || cooked.FromTo != common.EFromTo.BlobFSNone()) && raw.blobTags != "" {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
 	}
@@ -715,6 +721,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if raw.trailingDot != "" {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
+		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
@@ -730,6 +740,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
+		}
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if raw.trailingDot != "" {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -782,6 +796,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.FromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
+		}
 	case common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
@@ -809,6 +827,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
 			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while copying from service to service")
+		}
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.FromTo.To() != common.ELocation.File() && raw.trailingDot != "" {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	}
 	if err = validatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
@@ -1221,6 +1243,8 @@ type CookedCopyCmdArgs struct {
 
 	// Bitmasked uint checking which properties to transfer
 	propertiesToTransfer common.SetPropertiesFlags
+
+	trailingDot common.TrailingDotOption
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1501,6 +1525,9 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
+		FileAttributes: common.FileTransferAttributes{
+			TrailingDot: cca.trailingDot,
+		},
 	}
 
 	from := cca.FromTo.From()
@@ -1980,8 +2007,8 @@ func init() {
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
 		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
-	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
-	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None').")
+	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier. (default 'None'). Valid options are Hot, Cold, Cool, Archive")
+	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None'). Valid options are P10, P15, P20, P30, P4, P40, P50, P6")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies the content type of the file. Implies no-guess-mime-type. Returned on download.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Set the content-encoding header. Returned on download.")
@@ -2025,6 +2052,7 @@ func init() {
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
+	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Enabled by default. Options for trailing dot support in file share. Available options: Enable, Disable. Choose disable to go back to legacy (potentially unsafe) treatment of trailing dot files.")
 
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.

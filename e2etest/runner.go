@@ -107,6 +107,8 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("is-object-dir", p.isObjectDir, false)
 	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
 	set("check-md5", p.checkMd5.String(), "FailIfDifferent")
+	set("trailing-dot", p.trailingDot.String(), "Enable")
+
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
 		set("preserve-posix-properties", p.preservePOSIXProperties, "")
@@ -118,6 +120,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 			set("preserve-symlinks", true, nil)
 		}
 	} else if o == eOperation.Sync() {
+		set("delete-destination", p.deleteDestination.String(), "False")
 		set("preserve-posix-properties", p.preservePOSIXProperties, false)
 		set("compare-hash", p.compareHash.String(), "None")
 		set("local-hash-storage-mode", p.hashStorageMode.String(), common.EHashStorageMode.Default().String())

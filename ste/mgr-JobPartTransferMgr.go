@@ -101,6 +101,7 @@ type IJobPartTransferMgr interface {
 	RestartedTransfer() bool
 }
 
+// TransferInfo is a per path object that needs to be transferred
 type TransferInfo struct {
 	JobID                   common.JobID
 	BlockSize               int64
@@ -111,6 +112,7 @@ type TransferInfo struct {
 	PreserveSMBPermissions  common.PreservePermissionsOption
 	PreserveSMBInfo         bool
 	PreservePOSIXProperties bool
+	BlobFSRecursiveDelete   bool
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -389,6 +391,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
+		BlobFSRecursiveDelete: 			plan.BlobFSRecursiveDelete,
 		DestLengthValidation:           DestLengthValidation,
 		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,

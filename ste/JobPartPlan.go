@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 17
+const DataSchemaVersion common.Version = 18
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -62,6 +62,7 @@ type JobPartPlanHeader struct {
 	LogLevel               common.LogLevel     // This Job Part's minimal log level
 	DstBlobData            JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData           JobPartPlanDstLocal // Additional data for local destinations
+	DstFileData			   JobPartPlanDstFile  // Additional data for file destinations
 
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveSMBInfo         bool
@@ -74,6 +75,8 @@ type JobPartPlanHeader struct {
 	DestLengthValidation bool
 	// S2SInvalidMetadataHandleOption represents how user wants to handle invalid metadata.
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
+	// BlobFSRecursiveDelete represents whether the user wants to make a recursive call to the DFS endpoint or not
+	BlobFSRecursiveDelete bool
 
 	// Any fields below this comment are NOT constants; they may change over as the job part is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
@@ -337,6 +340,11 @@ type JobPartPlanDstBlob struct {
 	BlockSize int64
 
 	SetPropertiesFlags common.SetPropertiesFlags
+}
+
+// JobPartPlanDstFile holds additional settings required when the destination is a file
+type JobPartPlanDstFile struct {
+	TrailingDot common.TrailingDotOption
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

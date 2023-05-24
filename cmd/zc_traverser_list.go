@@ -92,7 +92,7 @@ func (l *listTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 func newListTraverser(parent common.ResourceString, parentType common.Location, credential *common.CredentialInfo,
 	ctx *context.Context, recursive bool, handleSymlinks common.SymlinkHandlingType, getProperties bool, listChan chan string,
 	includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveBlobTags bool,
-	logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption) ResourceTraverser {
+	logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, trailingDot common.TrailingDotOption) ResourceTraverser {
 	traverserGenerator := func(relativeChildPath string) (ResourceTraverser, error) {
 		source := parent.Clone()
 		if parentType != common.ELocation.Local() {
@@ -106,9 +106,7 @@ func newListTraverser(parent common.ResourceString, parentType common.Location, 
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, handleSymlinks,
-			nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter,
-			nil, s2sPreserveBlobTags, syncHashType, preservePermissions, logLevel, cpkOptions, nil /* errorChannel */, false)
+		traverser, err := InitResourceTraverser(source, parentType, ctx, credential, handleSymlinks, nil, recursive, getProperties, includeDirectoryStubs, common.EPermanentDeleteOption.None(), incrementEnumerationCounter, nil, s2sPreserveBlobTags, syncHashType, preservePermissions, logLevel, cpkOptions, nil, false, trailingDot)
 		if err != nil {
 			return nil, err
 		}

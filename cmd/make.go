@@ -127,7 +127,8 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.File():
-		p, err := createFilePipeline(ctx, credentialInfo, pipeline2.LogNone)
+		// Note: trailing dot does not apply to share level operations, so we just set it to false always
+		p, err := createFilePipeline(ctx, credentialInfo, pipeline2.LogNone, common.ETrailingDotOption.Enable())
 		if err != nil {
 			return err
 		}

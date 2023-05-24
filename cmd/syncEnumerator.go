@@ -61,13 +61,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(),
-		nil, cca.recursive, true, cca.isHNSToHNS, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
-			if entityType == common.EEntityType.File() {
-				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
-			}
-		}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(),
-        cca.cpkOptions, nil /* errorChannel */, false)
+	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, cca.isHNSToHNS, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
+		if entityType == common.EEntityType.File() {
+			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+		}
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil, false, cca.trailingDot)
 
 	if err != nil {
 		return nil, err
@@ -88,8 +86,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(),
-    cca.cpkOptions, nil /* errorChannel */, false)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), cca.cpkOptions, nil, false, cca.trailingDot)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +149,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		// Upload implies transferring from a local disk to a remote resource.
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
 		// Then the destination is scanned and filtered based on what the destination contains
-		destinationCleaner, err := newSyncDeleteProcessor(cca)
+		destinationCleaner, err := newSyncDeleteProcessor(cca, fpo)
 		if err != nil {
 			return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
 		}
@@ -195,13 +192,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			var deleteScheduler objectProcessor
 			switch cca.fromTo.To() {
 			case common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS():
-				deleter, err := newSyncDeleteProcessor(cca)
+				deleter, err := newSyncDeleteProcessor(cca, fpo)
 				if err != nil {
 					return err
 				}
 				deleteScheduler = newFpoAwareProcessor(fpo, deleter.removeImmediately)
 			default:
-				deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca).removeImmediately)
+				deleteScheduler = newFpoAwareProcessor(fpo, newSyncLocalDeleteProcessor(cca, fpo).removeImmediately)
 			}
 
 			err = indexer.traverse(deleteScheduler, nil)

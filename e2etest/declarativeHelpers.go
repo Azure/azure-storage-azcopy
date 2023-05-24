@@ -178,6 +178,7 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
+	trailingDot common.TrailingDotOption
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt

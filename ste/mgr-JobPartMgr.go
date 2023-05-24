@@ -92,6 +92,19 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
+func NewTrailingDotPolicyFactory(trailingDot common.TrailingDotOption) pipeline.Factory {
+	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
+		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+			if trailingDot == common.ETrailingDotOption.Enable() {
+				request.Header.Set("x-ms-allow-trailing-dot", "true")
+				request.Header.Set("x-ms-source-allow-trailing-dot", "true")
+				request.Header.Set("x-ms-version", "2022-11-02")
+			}
+			return next.Do(ctx, request)
+		}
+	})
+}
+
 // NewAzcopyHTTPClient creates a new HTTP client.
 // We must minimize use of this, and instead maximize re-use of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
@@ -223,7 +236,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -233,9 +246,10 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		azfile.NewUniqueRequestIDPolicyFactory(),
 		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
 		newRetryNotificationPolicyFactory(), // record that a retry status was returned
+		NewVersionPolicyFactory(),
+		NewTrailingDotPolicyFactory(trailingDot),
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewVersionPolicyFactory(),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
 			SyslogDisabled:               common.IsForceLoggingDisabled(),
@@ -624,17 +638,13 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 				Telemetry: azfile.TelemetryOptions{
 					Value: userAgent,
 				},
-			},
-			azfile.RetryOptions{
-				Policy:        azfile.RetryPolicyExponential,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay,
-			},
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			statsAccForSip)
+			}, azfile.RetryOptions{
+			Policy:        azfile.RetryPolicyExponential,
+			MaxTries:      UploadMaxTries,
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay,
+		}, jpm.pacer, jpm.jobMgr.HttpClient(), statsAccForSip, jpm.planMMF.Plan().DstFileData.TrailingDot)
 	}
 
 	switch {
@@ -674,8 +684,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 				jpm.jobMgr.HttpClient(),
 				statsAccForSip)
 		}
-	case fromTo.IsUpload() && fromTo.To() == common.ELocation.BlobFS(), // Blobfs up/down use the dfs endpoint
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS():
+	case fromTo.IsUpload() && fromTo.To() == common.ELocation.BlobFS(), // Blobfs up/down/delete use the dfs endpoint
+		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS(),
+		 fromTo.IsDelete() && fromTo.From() == common.ELocation.BlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
@@ -713,7 +724,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			},
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats())
+			jpm.jobMgr.PipelineNetworkStats(),
+			jpm.planMMF.Plan().DstFileData.TrailingDot)
 	}
 }
 
