@@ -21,7 +21,9 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"testing"
 	"time"
 )
@@ -214,6 +216,31 @@ func TestBasic_CopyRemoveFile(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestBasic_CopyRemoveFileHNS(t *testing.T) {
+	bfsRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+
+	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
+	}, nil, testFiles{
+		objectTarget: "file1.txt",
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			"file1.txt",
+		},
+	},
+	EAccountType.Standard(), // dest is OK to ignore
+	EAccountType.HierarchicalNamespaceEnabled(), // mark source as HNS
+	"")
+}
+
 func TestBasic_CopyRemoveLargeFile(t *testing.T) {
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
@@ -251,6 +278,61 @@ func TestBasic_CopyRemoveFolder(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestBasic_CopyRemoveFolderHNS(t *testing.T) {
+	bfsRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+
+	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), allCredentialTypes, anonymousAuthOnly,
+	params{
+		recursive: true,
+	},
+	&hooks{
+		beforeRunJob: func(h hookHelper) {
+			h.CreateFiles(testFiles{
+				defaultSize: "1K",
+				shouldTransfer: []interface{}{
+					folder("foo"),
+					"foo/bar.txt",
+					folder("foo/bar"),
+					"foo/bar/baz.txt",
+				},
+			}, true, false, false)
+		},
+		afterValidation: func(h hookHelper) {
+			a := h.GetAsserter()
+			s := h.(*scenario)
+			container := s.state.source.(*resourceBlobContainer)
+
+			props := container.getAllProperties(a)
+
+			_, ok := props["foo"]
+			a.Assert(ok, equals(), false)
+			_, ok = props["foo/bar.txt"]
+			a.Assert(ok, equals(), false)
+			_, ok = props["foo/bar/baz.txt"]
+			a.Assert(ok, equals(), false)
+		},
+	},
+	testFiles{
+		objectTarget: "foo",
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""), // really only should target root
+		},
+	},
+		EAccountType.Standard(), // dest is OK to ignore
+		EAccountType.HierarchicalNamespaceEnabled(), // mark source as HNS
+		"")
+}
+
 func TestBasic_CopyRemoveContainer(t *testing.T) {
 
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
@@ -264,6 +346,61 @@ func TestBasic_CopyRemoveContainer(t *testing.T) {
 			"folder1/file12.txt",
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
+	bfsRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+
+	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), oAuthOnly, oAuthOnly, // do it over OAuth because our SAS tokens don't have appropriate perms (because they're FS-level?)
+		params{
+			recursive: true,
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(testFiles{
+					defaultSize: "1K",
+					shouldTransfer: []interface{}{
+						folder("foo"),
+						"foo/bar.txt",
+						folder("foo/bar"),
+						"foo/bar/baz.txt",
+					},
+				}, true, false, false)
+			},
+			afterValidation: func(h hookHelper) {
+				a := h.GetAsserter()
+				s := h.(*scenario)
+				r := s.state.source.(*resourceBlobContainer)
+				urlParts := azblob.NewBlobURLParts(r.containerURL.URL())
+				fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("")
+
+				_, err := fsURL.GetAccessControl(ctx)
+				a.Assert(err, notEquals(), nil)
+				stgErr, ok := err.(azbfs.StorageError)
+				a.Assert(ok, equals(), true)
+				if ok {
+					a.Assert(stgErr.ServiceCode(), equals(), azbfs.ServiceCodeType("FilesystemNotFound"))
+				}
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""), // really only should target root
+			},
+		},
+		EAccountType.Standard(), // dest is OK to ignore
+		EAccountType.HierarchicalNamespaceEnabled(), // mark source as HNS
+		"")
 }
 
 func TestBasic_CopyToWrongBlobType(t *testing.T) {

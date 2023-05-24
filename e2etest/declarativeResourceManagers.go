@@ -325,9 +325,14 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
 		urlParts := azblob.NewBlobURLParts(r.containerURL.URL())
-		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("/")
+		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("")
 
 		ACL, err := fsURL.GetAccessControl(ctx)
+		if stgErr, ok := err.(azbfs.StorageError); ok {
+			if stgErr.ServiceCode() == "FilesystemNotFound" { // skip grabbing ACLs
+				return objects
+			}
+		}
 		a.AssertNoErr(err)
 
 		objects[""] = &objectProperties{

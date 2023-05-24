@@ -35,6 +35,7 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		SourceRoot:          cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
 		CredentialInfo:      cca.credentialInfo,
 		ForceIfReadOnly:     cca.ForceIfReadOnly,
+		BlobFSRecursiveDelete: cca.Recursive,
 
 		// flags
 		LogLevel:       azcopyLogVerbosity,

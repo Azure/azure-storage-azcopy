@@ -43,10 +43,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		panic("sanity check: HNS source URI did not parse.")
 	}
 
-	recursive := false // TODO: Tremendous hack to carry recursion into the STE.
-	if strings.EqualFold(u.Query().Get("recursive"), "true") {
-		recursive = true
-	}
+	recursive := info.BlobFSRecursiveDelete
 
 	transferDone := func(err error) {
 		status := common.ETransferStatus.Success()

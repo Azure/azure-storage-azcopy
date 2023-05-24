@@ -216,6 +216,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		S2SSourceChangeValidation:      order.S2SSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: order.S2SInvalidMetadataHandleOption,
 		DestLengthValidation:           order.DestLengthValidation,
+		BlobFSRecursiveDelete: 			order.BlobFSRecursiveDelete,
 		atomicJobStatus:                common.EJobStatus.InProgress(), // We default to InProgress
 		DeleteSnapshotsOption:          order.BlobAttributes.DeleteSnapshotsOption,
 		PermanentDeleteOption:          order.BlobAttributes.PermanentDeleteOption,

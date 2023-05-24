@@ -1542,17 +1542,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case cca.FromTo.IsDelete():
 		// Delete gets ran through copy, so handle delete
 		if cca.FromTo.From() == common.ELocation.BlobFS() {
-			if cca.Recursive { // Extra hacky hack: Carrying recursive into STE temporarily to enable cancel of delete job
-				query, err := url.ParseQuery(jobPartOrder.SourceRoot.ExtraQuery)
-				if err != nil {
-					return fmt.Errorf("sanity check: failed to parse extra query for source: %w", err)
-				}
-
-				query.Set("recursive", "true")
-
-				cca.Source.ExtraQuery = query.Encode()
-			}
-
 			// TODO merge with BlobTrash case
 			// Currently, Blob Delete in STE does not appropriately handle folders. In addition, dfs delete is free-ish.
 			err = removeBfsResources(cca)
