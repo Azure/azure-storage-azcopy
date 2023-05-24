@@ -223,48 +223,53 @@ func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination co
 	}
 }
 
-func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs) *interactiveDeleteProcessor {
-	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal()}
+func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption) *interactiveDeleteProcessor {
+	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, azcopyScanningLogger)}
 	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local file", cca.destination, cca.incrementDeletionCount, cca.dryrunMode)
 }
 
 type localFileDeleter struct {
 	rootPath string
+	fpo common.FolderPropertyOption
+	folderManager common.FolderDeletionManager
 }
 
-// As at version 10.4.0, we intentionally don't delete directories in sync,
-// even if our folder properties option suggests we should.
-// Why? The key difficulties are as follows, and its the third one that we don't currently have a solution for.
-//  1. Timing (solvable in theory with FolderDeletionManager)
-//  2. Identifying which should be removed when source does not have concept of folders (e.g. BLob)
-//     Probably solution is to just respect the folder properties option setting (which we already do in our delete processors)
-//  3. In Azure Files case (and to a lesser extent on local disks) users may have ACLS or other properties
-//     set on the directories, and wish to retain those even tho the directories are empty. (Perhaps less of an issue
-//     when syncing from folder-aware sources that DOES NOT HAVE the directory. But still an issue when syncing from
-//     blob. E.g. we delete a folder because there's nothing in it right now, but really user wanted it there,
-//     and have set up custom ACLs on it for future use.  If we delete, they lose the custom ACL setup.
-//
-// TODO: shall we add folder deletion support at some stage? (In cases where folderPropertiesOption says that folders should be processed)
-func shouldSyncRemoveFolders() bool {
-	return false
+func (l *localFileDeleter) getObjectURL(object StoredObject) *url.URL {
+	return &url.URL{
+		Scheme: "local",
+		Path:   "/" + strings.ReplaceAll(object.relativePath, "\\", "/"), // consolidate to forward slashes
+	}
 }
 
 func (l *localFileDeleter) deleteFile(object StoredObject) error {
+	objectURI := l.getObjectURL(object)
+	l.folderManager.RecordChildExists(objectURI)
+
 	if object.entityType == common.EEntityType.File() {
 		msg := "Deleting extra file: " + object.relativePath
 		glcm.Info(msg)
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
 		}
-		return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
+		err := os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
+		l.folderManager.RecordChildDeleted(objectURI)
+		return err
+	} else if object.entityType == common.EEntityType.Folder() && l.fpo != common.EFolderPropertiesOption.NoFolders() {
+		msg := "Deleting extra folder: " + object.relativePath
+		glcm.Info(msg)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
+
+		l.folderManager.RequestDeletion(objectURI, func(ctx context.Context, logger common.ILogger) bool {
+			return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath)) == nil
+		})
 	}
-	if shouldSyncRemoveFolders() {
-		panic("folder deletion enabled but not implemented")
-	}
+
 	return nil
 }
 
-func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
+func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption) (*interactiveDeleteProcessor, error) {
 	rawURL, err := cca.destination.FullURL()
 	if err != nil {
 		return nil, err
@@ -277,7 +282,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To()).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To(), fpo).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
@@ -286,15 +291,39 @@ type remoteResourceDeleter struct {
 	p              pipeline.Pipeline
 	ctx            context.Context
 	targetLocation common.Location
+	folderManager common.FolderDeletionManager
+	folderOption  common.FolderPropertyOption
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location) *remoteResourceDeleter {
+func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location, fpo common.FolderPropertyOption) *remoteResourceDeleter {
 	return &remoteResourceDeleter{
 		rootURL:        rawRootURL,
 		p:              p,
 		ctx:            ctx,
 		targetLocation: targetLocation,
+		folderManager:  common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger),
+		folderOption: fpo,
 	}
+}
+
+func (b *remoteResourceDeleter) getObjectURL(object StoredObject) (url url.URL) {
+	switch b.targetLocation {
+	case common.ELocation.Blob():
+		blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+		blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
+		url = blobURLParts.URL()
+	case common.ELocation.File():
+		fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+		fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
+		url = fileURLParts.URL()
+	case common.ELocation.BlobFS():
+		blobFSURLParts := azbfs.NewBfsURLParts(*b.rootURL)
+		blobFSURLParts.DirectoryOrFilePath = path.Join(blobFSURLParts.DirectoryOrFilePath, object.relativePath)
+		url = blobFSURLParts.URL()
+	default:
+		panic("unexpected location")
+	}
+	return
 }
 
 func (b *remoteResourceDeleter) delete(object StoredObject) error {
@@ -305,17 +334,24 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
 		}
+
+		objectURL := b.getObjectURL(object)
+		b.folderManager.RecordChildExists(&objectURL)
+		defer b.folderManager.RecordChildDeleted(&objectURL)
+
 		switch b.targetLocation {
 		case common.ELocation.Blob():
-			blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
-			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
-			blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
+			blobURL := azblob.NewBlobURL(objectURL, b.p)
 			_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
 			return err
 		case common.ELocation.File():
-			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
-			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
-			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+			fileURL := azfile.NewFileURL(objectURL, b.p)
+			_, err := fileURL.Delete(b.ctx)
+			return err
+		case common.ELocation.BlobFS():
+			bfsURLParts := azbfs.NewBfsURLParts(*b.rootURL)
+			bfsURLParts.DirectoryOrFilePath = path.Join(bfsURLParts.DirectoryOrFilePath, object.relativePath)
+			fileURL := azbfs.NewFileURL(bfsURLParts.URL(), b.p)
 			_, err := fileURL.Delete(b.ctx)
 			return err
 		case common.ELocation.BlobFS():
@@ -328,9 +364,33 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			panic("not implemented, check your code")
 		}
 	} else {
-		if shouldSyncRemoveFolders() {
-			panic("folder deletion enabled but not implemented")
+		if b.folderOption == common.EFolderPropertiesOption.NoFolders() {
+			return nil
 		}
+
+		objectURL := b.getObjectURL(object)
+		b.folderManager.RecordChildExists(&objectURL)
+
+		b.folderManager.RequestDeletion(&objectURL, func(ctx context.Context, logger common.ILogger) bool {
+			var err error
+			switch b.targetLocation {
+			case common.ELocation.Blob():
+				blobURL := azblob.NewBlobURL(objectURL, b.p)
+				// HNS endpoint doesn't like delete snapshots on a directory
+				_, err = blobURL.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			case common.ELocation.File():
+				dirURL := azfile.NewDirectoryURL(objectURL, b.p)
+				_, err = dirURL.Delete(ctx)
+			case common.ELocation.BlobFS():
+				dirURL := azbfs.NewDirectoryURL(objectURL, b.p)
+				_, err = dirURL.Delete(ctx, nil, false)
+			default:
+				panic("not implemented, check your code")
+			}
+
+			return err == nil
+		})
+
 		return nil
 	}
 }

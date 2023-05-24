@@ -612,3 +612,97 @@ func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
 		"",
 	)
 }
+
+func TestBasic_SyncRemoveFolders(t *testing.T) {
+	destExisting := testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder("asdf"), // validate the folder is deleted
+			f("asdf/a"),
+		},
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive: true,
+			deleteDestination: common.EDeleteDestination.True(),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(destExisting, false, false, true)
+			},
+			afterValidation: func(h hookHelper) {
+				c := h.GetAsserter()
+
+				objects := h.GetDestination().getAllProperties(c)
+				_, ok := objects["asdf"]
+				c.Assert(ok, equals(), false, "asdf should not exist")
+				_, ok = objects["asdf/a"]
+				c.Assert(ok, equals(), false, "asdf/a should not exist")
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("a"),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+func TestBasic_SyncRemoveFoldersHNS(t *testing.T) {
+	destExisting := testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder("asdf"), // validate the folder is deleted
+			f("asdf/a"),
+		},
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive: true,
+			deleteDestination: common.EDeleteDestination.True(),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(destExisting, false, false, true)
+			},
+			afterValidation: func(h hookHelper) {
+				c := h.GetAsserter()
+
+				objects := h.GetDestination().getAllProperties(c)
+				_, ok := objects["asdf"]
+				c.Assert(ok, equals(), false, "asdf should not exist")
+				_, ok = objects["asdf/a"]
+				c.Assert(ok, equals(), false, "asdf/a should not exist")
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("a"),
+			},
+		},
+		EAccountType.HierarchicalNamespaceEnabled(),
+		EAccountType.HierarchicalNamespaceEnabled(),
+		"",
+	)
+}

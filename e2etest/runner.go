@@ -120,6 +120,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 			set("preserve-symlinks", true, nil)
 		}
 	} else if o == eOperation.Sync() {
+		set("delete-destination", p.deleteDestination.String(), "False")
 		set("preserve-posix-properties", p.preservePOSIXProperties, false)
 		set("compare-hash", p.compareHash.String(), "None")
 	}
