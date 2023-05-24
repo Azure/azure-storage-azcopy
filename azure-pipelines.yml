@@ -251,11 +251,19 @@ jobs:
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
           go build -o test-validator ./testSuite/
           mkdir test-temp
+          mkdir coverage
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
           export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
           export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
           keyctl session test python ./testSuite/scripts/run.py
+          
+          echo 'Formatting coverage directory to legacy txt format'
+          go tool covdata textfmt -i=coverage -o smoke_coverage.txt
+          echo 'Formatting coverage to json format'
+          $(go env GOPATH)/bin/gocov convert smoke_coverage.txt > smoke_coverage.json
+          echo 'Formatting coverage to xml format'
+          $(go env GOPATH)/bin/gocov-xml < smoke_coverage.json > smoke_coverage.xml
         name: 'Run_smoke_tests'
         env:
           ACCOUNT_NAME: $(ACCOUNT_NAME)
@@ -280,6 +288,8 @@ jobs:
           S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
+          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+        condition: succeededOrFailed()
       - script: |
           pip install azure-storage-blob==12.12.0
           python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
