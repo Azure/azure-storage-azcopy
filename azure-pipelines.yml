@@ -290,6 +290,12 @@ jobs:
           SHARE_SAS_URL: $(SHARE_SAS_URL)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
         condition: succeededOrFailed()
+      # Smoke Tests Publishing
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
       - script: |
           pip install azure-storage-blob==12.12.0
           python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
