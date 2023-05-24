@@ -11,7 +11,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/google/uuid v1.3.0
 	github.com/hillu/go-ntdll v0.0.0-20220217145204-be7b5318100d
-	github.com/mattn/go-ieproxy v0.0.3
+	github.com/mattn/go-ieproxy v0.0.11
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/xattr v0.4.6
