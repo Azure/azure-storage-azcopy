@@ -248,7 +248,7 @@ jobs:
           directory: 'sddl'
           coverage_name: 'sddl'
       - script: |
-          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+          GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64 
           go build -o test-validator ./testSuite/
           mkdir test-temp
           mkdir coverage
