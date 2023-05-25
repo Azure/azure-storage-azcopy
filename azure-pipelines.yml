@@ -287,3 +287,9 @@ jobs:
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish logs'
+        condition: succeededOrFailed()
+        inputs:
+          pathToPublish: '/home/vsts/.azcopy'
+          artifactName: smokelogs
