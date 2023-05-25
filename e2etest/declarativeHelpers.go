@@ -147,10 +147,11 @@ type params struct {
 	includeAttributes         string
 	excludePath               string
 	excludePattern            string
-	excludeAttributes         string
-	capMbps                   float32
+	excludeAttributes 		  string
+	forceIfReadOnly   		  bool
+	capMbps           		  float32
 	blockSizeMB               float32
-	deleteDestination         common.DeleteDestination
+	deleteDestination         common.DeleteDestination // Manual validation is needed.
 	s2sSourceChangeValidation bool
 	metadata                  string
 	cancelFromStdin           bool
