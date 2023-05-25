@@ -38,8 +38,7 @@ type blobSourceInfoProvider struct {
 }
 
 func (p *blobSourceInfoProvider) IsDFSSource() bool {
-	fromTo := p.jptm.FromTo()
-	return fromTo.From() == common.ELocation.BlobFS()
+	return p.jptm.FromTo().From() == common.ELocation.BlobFS()
 }
 
 func (p *blobSourceInfoProvider) internalPresignedURL(useHNS bool) (*url.URL, error) {

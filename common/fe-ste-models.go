@@ -602,7 +602,7 @@ func (ft *FromTo) Parse(s string) error {
 	return err
 }
 
-func (ft *FromTo) FromAndTo(s string) (srcLocation, dstLocation Location, err error) {
+func (ft FromTo) FromAndTo(s string) (srcLocation, dstLocation Location, err error) {
 	srcLocation = ELocation.Unknown()
 	dstLocation = ELocation.Unknown()
 	val, err := enum.ParseInt(reflect.TypeOf(ft), s, true, true)
@@ -615,40 +615,40 @@ func (ft *FromTo) FromAndTo(s string) (srcLocation, dstLocation Location, err er
 	return
 }
 
-func (ft *FromTo) To() Location {
-	return Location(((1 << 8) - 1) & *ft)
+func (ft FromTo) To() Location {
+	return Location(((1 << 8) - 1) & ft)
 }
 
-func (ft *FromTo) From() Location {
-	return Location((((1 << 16) - 1) & *ft) >> 8)
+func (ft FromTo) From() Location {
+	return Location((((1 << 16) - 1) & ft) >> 8)
 }
 
-func (ft *FromTo) IsDownload() bool {
+func (ft FromTo) IsDownload() bool {
 	return ft.From().IsRemote() && ft.To().IsLocal() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
-func (ft *FromTo) IsS2S() bool {
+func (ft FromTo) IsS2S() bool {
 	return ft.From().IsRemote() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
-func (ft *FromTo) IsUpload() bool {
+func (ft FromTo) IsUpload() bool {
 	return ft.From().IsLocal() && ft.To().IsRemote() && ft.To() != ELocation.None() && ft.To() != ELocation.Unknown()
 }
 
-func (ft *FromTo) IsDelete() bool {
+func (ft FromTo) IsDelete() bool {
 	return ft.To() == ELocation.Unknown()
 }
 
-func (ft *FromTo) IsSetProperties() bool {
+func (ft FromTo) IsSetProperties() bool {
 	return ft.To() == ELocation.None()
 }
 
-func (ft *FromTo) AreBothFolderAware() bool {
+func (ft FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
 }
 
-func (ft *FromTo) IsPropertyOnlyTransfer() bool {
-	return *ft == EFromTo.BlobNone() || *ft == EFromTo.BlobFSNone() || *ft == EFromTo.FileNone()
+func (ft FromTo) IsPropertyOnlyTransfer() bool {
+	return ft == EFromTo.BlobNone() || ft == EFromTo.BlobFSNone() || ft == EFromTo.FileNone()
 }
 
 // TODO: deletes are not covered by the above Is* routines
