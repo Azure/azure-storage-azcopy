@@ -10,7 +10,7 @@ import unittest
 
 class Blob_Download_User_Scenario(unittest.TestCase):
     def setUp(self):
-        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']).add_flags("tenant-id", os.environ['OAUTH_TENANT_ID'])
+        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID'])
         cmd.execute_azcopy_copy_command()
 
     def tearDown(self):
