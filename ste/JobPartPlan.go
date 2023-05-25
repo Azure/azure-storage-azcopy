@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 17
+const DataSchemaVersion common.Version = 18
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -75,6 +75,8 @@ type JobPartPlanHeader struct {
 	DestLengthValidation bool
 	// S2SInvalidMetadataHandleOption represents how user wants to handle invalid metadata.
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
+	// BlobFSRecursiveDelete represents whether the user wants to make a recursive call to the DFS endpoint or not
+	BlobFSRecursiveDelete bool
 
 	// Any fields below this comment are NOT constants; they may change over as the job part is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
@@ -156,16 +158,8 @@ func (jpph *JobPartPlanHeader) TransferSrcDstRelatives(transferIndex uint32) (re
 	return srcRelative, dstRelative
 }
 
-// TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
-// Also indication of entity type since that's often necessary to avoid ambiguity about what the source and dest are
-func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string, isFolder bool) {
-	srcRoot := string(jpph.SourceRoot[:jpph.SourceRootLength])
-	srcExtraQuery := string(jpph.SourceExtraQuery[:jpph.SourceExtraQueryLength])
-	dstRoot := string(jpph.DestinationRoot[:jpph.DestinationRootLength])
-	dstExtraQuery := string(jpph.DestExtraQuery[:jpph.DestExtraQueryLength])
-
+func (jpph *JobPartPlanHeader) GetRelativeSrcDstStrings(transferIndex uint32) (source, destination string) {
 	jppt := jpph.Transfer(transferIndex)
-	isFolder = jppt.EntityType == common.EEntityType.Folder()
 
 	srcSlice := []byte{}
 	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
@@ -180,6 +174,22 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Len = int(jppt.DstLength)
 	sh.Cap = sh.Len
 	dstRelative := string(dstSlice)
+
+	return srcRelative, dstRelative
+}
+
+// TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
+// Also indication of entity type since that's often necessary to avoid ambiguity about what the source and dest are
+func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string, isFolder bool) {
+	srcRoot := string(jpph.SourceRoot[:jpph.SourceRootLength])
+	srcExtraQuery := string(jpph.SourceExtraQuery[:jpph.SourceExtraQueryLength])
+	dstRoot := string(jpph.DestinationRoot[:jpph.DestinationRootLength])
+	dstExtraQuery := string(jpph.DestExtraQuery[:jpph.DestExtraQueryLength])
+
+	jppt := jpph.Transfer(transferIndex)
+	isFolder = jppt.EntityType == common.EEntityType.Folder()
+
+	srcRelative, dstRelative := jpph.GetRelativeSrcDstStrings(transferIndex)
 
 	return common.GenerateFullPathWithQuery(srcRoot, srcRelative, srcExtraQuery),
 		common.GenerateFullPathWithQuery(dstRoot, dstRelative, dstExtraQuery),

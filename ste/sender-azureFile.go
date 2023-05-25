@@ -314,6 +314,22 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 			return "Obtaining SMB properties", err
 		}
 
+		fromTo := u.jptm.FromTo()
+		if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
+			defer func() { // recover from potential panics and output raw properties for debug purposes
+				if panicerr := recover(); panicerr != nil {
+					stage = "Reading SMB properties"
+					pAdapt := smbProps.(*azfile.SMBPropertyAdapter)
+
+					attr := pAdapt.PropertySource.FileAttributes()
+					lwt := pAdapt.PropertySource.FileLastWriteTime()
+					fct := pAdapt.PropertySource.FileCreationTime()
+
+					err = fmt.Errorf("failed to read SMB properties (%w)! Raw data: attr: `%s` lwt: `%s`, fct: `%s`", err, attr, lwt, fct)
+				}
+			}()
+		}
+
 		attribs := smbProps.FileAttributes()
 		u.headersToApply.FileAttributes = &attribs
 

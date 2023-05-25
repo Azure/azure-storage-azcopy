@@ -490,7 +490,15 @@ redoCompletion:
 				goto redoCompletion // let fail as expected
 			}
 
-			err = common.PutHashData(info.Destination, common.SyncHashData{
+			plan := jptm.(*jobPartTransferMgr).jobPartMgr.Plan()
+			dataRoot := string(plan.DestinationRoot[:plan.DestinationRootLength])
+			_, idx := jptm.TransferIndex()
+			_, relDest := plan.TransferSrcDstRelatives(idx)
+			adapter, err := common.NewHashDataAdapter(common.LocalHashDir, dataRoot, common.LocalHashStorageMode)
+			if err != nil {
+				jptm.FailActiveDownload("initializing hash adapter", err)
+			}
+			err = adapter.SetHashData(relDest, &common.SyncHashData{
 				Mode: common.ESyncHashType.MD5(),
 				LMT:  fi.ModTime(),
 				Data: base64.StdEncoding.EncodeToString(info.SrcHTTPHeaders.ContentMD5),

@@ -46,7 +46,7 @@ func TestLocalDeleter(t *testing.T) {
 	}
 
 	// set up local deleter
-	deleter := newSyncLocalDeleteProcessor(cca)
+	deleter := newSyncLocalDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
 
 	// validate that the file still exists
 	_, err := os.Stat(filepath.Join(dstDirName, dstFileName))
@@ -86,7 +86,7 @@ func TestBlobDeleter(t *testing.T) {
 	}
 
 	// set up the blob deleter
-	deleter, err := newSyncDeleteProcessor(cca)
+	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
 	a.Nil(err)
 
 	// exercise the deleter
@@ -123,7 +123,7 @@ func TestFileDeleter(t *testing.T) {
 	}
 
 	// set up the file deleter
-	deleter, err := newSyncDeleteProcessor(cca)
+	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
 	a.Nil(err)
 
 	// exercise the deleter

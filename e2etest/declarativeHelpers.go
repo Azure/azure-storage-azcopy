@@ -147,10 +147,11 @@ type params struct {
 	includeAttributes         string
 	excludePath               string
 	excludePattern            string
-	excludeAttributes         string
-	capMbps                   float32
+	excludeAttributes 		  string
+	forceIfReadOnly   		  bool
+	capMbps           		  float32
 	blockSizeMB               float32
-	deleteDestination         common.DeleteDestination
+	deleteDestination         common.DeleteDestination // Manual validation is needed.
 	s2sSourceChangeValidation bool
 	metadata                  string
 	cancelFromStdin           bool
@@ -171,6 +172,8 @@ type params struct {
 	accessTier                azblob.AccessTierType
 	checkMd5                  common.HashValidationOption
 	compareHash               common.SyncHashType
+	hashStorageMode           common.HashStorageMode
+	hashStorageDir            string
 	symlinkHandling           common.SymlinkHandlingType
 
 	destNull bool

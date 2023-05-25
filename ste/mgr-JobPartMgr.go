@@ -684,8 +684,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 				jpm.jobMgr.HttpClient(),
 				statsAccForSip)
 		}
-	case fromTo.IsUpload() && fromTo.To() == common.ELocation.BlobFS(), // Blobfs up/down use the dfs endpoint
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS():
+	case fromTo.IsUpload() && fromTo.To() == common.ELocation.BlobFS(), // Blobfs up/down/delete use the dfs endpoint
+		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS(),
+		 fromTo.IsDelete() && fromTo.From() == common.ELocation.BlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 

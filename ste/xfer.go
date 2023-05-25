@@ -153,6 +153,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		return DeleteBlob
 	case common.EFromTo.FileTrash():
 		return DeleteFile
+	case common.EFromTo.BlobFSTrash():
+		return DeleteHNSResource
 	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
 		return SetProperties
 	default:
