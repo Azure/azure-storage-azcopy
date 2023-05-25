@@ -137,7 +137,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		case common.ELocation.File():
 			return newFileSourceInfoProvider
 		case common.ELocation.BlobFS():
-			return newBlobSourceInfoProvider
+			return newBlobSourceInfoProvider // Blob source info provider pulls info from blob and dfs
 		case common.ELocation.S3():
 			return newS3SourceInfoProvider
 		case common.ELocation.GCP():

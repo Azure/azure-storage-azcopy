@@ -702,6 +702,33 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
+
+		// Just in case we need to talk to blob while we're at it
+		var blobCred = azblob.NewAnonymousCredential()
+		if credInfo.CredentialType == common.ECredentialType.SharedKey() {
+			lcm := common.GetLifecycleMgr()
+			var err error
+			// Convert the shared key credential to a blob credential & re-use it
+			blobCred, err = azblob.NewSharedKeyCredential(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName()), lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey()))
+			if err != nil {
+				jpm.Panic(fmt.Errorf("sanity check: failed to initialize shared key credential: %w", err))
+			}
+		} else if credInfo.CredentialType != common.ECredentialType.Anonymous() {
+			blobCred = common.CreateBlobCredential(ctx, credInfo, credOption)
+		}
+
+		jpm.secondaryPipeline = NewBlobPipeline(
+			blobCred,
+			azblob.PipelineOptions{
+				Log: jpm.jobMgr.PipelineLogInfo(),
+				Telemetry: azblob.TelemetryOptions{
+					Value: userAgent,
+				},
+			},
+			xferRetryOption,
+			jpm.pacer,
+			jpm.jobMgr.HttpClient(),
+			jpm.jobMgr.PipelineNetworkStats())
 	case fromTo.IsS2S() && fromTo.To() == common.ELocation.File(),
 	     fromTo.IsUpload() && fromTo.To() == common.ELocation.File(),
 		 fromTo.IsDownload() && fromTo.From() == common.ELocation.File(),

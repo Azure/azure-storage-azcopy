@@ -23,7 +23,9 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -34,6 +36,7 @@ import (
 
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
+	sip                 ISourceInfoProvider
 	fileOrDirURL        URLHolder
 	chunkSize           int64
 	numChunks           uint32
@@ -71,6 +74,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 	return &blobFSSenderBase{
 		jptm:                jptm,
+		sip: 				 sip,
 		fileOrDirURL:        h,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
@@ -212,9 +216,45 @@ func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
 	return err
 }
 
+func (u *blobFSSenderBase) GetBlobURL() azblob.BlobURL{
+	blobPipeline := u.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline // pull the secondary (blob) pipeline
+	bURLParts := azblob.NewBlobURLParts(u.fileOrDirURL.URL())
+	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".dfs", ".blob") // switch back to blob
+
+	return azblob.NewBlobURL(bURLParts.URL(), blobPipeline)
+}
+
+func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, error) {
+	if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+		statAdapter, err := unixSIP.GetUNIXProperties()
+		if err != nil {
+			return nil, err
+		}
+
+		return statAdapter, nil
+	} else {
+		return nil, nil // no properties present!
+	}
+}
+
+func (u *blobFSSenderBase) SetPOSIXProperties() error {
+	adapter, err := u.GetSourcePOSIXProperties()
+	if err != nil {
+		return fmt.Errorf("failed to get POSIX properties")
+	} else if adapter == nil {
+		return nil
+	}
+
+	meta := azblob.Metadata{}
+	common.AddStatToBlobMetadata(adapter, meta)
+	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
+
+	_, err = u.GetBlobURL().SetMetadata(u.jptm.Context(), meta, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	return err
+}
+
 func (u *blobFSSenderBase) SetFolderProperties() error {
-	// we don't currently preserve any properties for BlobFS folders
-	return nil
+	return u.SetPOSIXProperties()
 }
 
 func (u *blobFSSenderBase) DirUrlToString() string {
@@ -224,4 +264,37 @@ func (u *blobFSSenderBase) DirUrlToString() string {
 	// To avoid SAS token
 	dirUrl.RawQuery = ""
 	return dirUrl.String()
+}
+
+func (u *blobFSSenderBase) SendSymlink(linkData string) error {
+	meta := azblob.Metadata{} // meta isn't traditionally supported for dfs, but still exists
+	adapter, err := u.GetSourcePOSIXProperties()
+	if err != nil {
+		return fmt.Errorf("when polling for POSIX properties: %w", err)
+	} else if adapter == nil {
+		return nil // No-op
+	}
+
+	common.AddStatToBlobMetadata(adapter, meta)
+	meta[common.POSIXSymlinkMeta] = "true" // just in case there isn't any metadata
+	blobHeaders := azblob.BlobHTTPHeaders{ // translate headers, since those still apply
+		ContentType: u.creationTimeHeaders.ContentType,
+		ContentEncoding: u.creationTimeHeaders.ContentEncoding,
+		ContentLanguage: u.creationTimeHeaders.ContentLanguage,
+		ContentDisposition: u.creationTimeHeaders.ContentDisposition,
+		CacheControl: u.creationTimeHeaders.CacheControl,
+	}
+
+	_, err = u.GetBlobURL().ToBlockBlobURL().Upload(
+		u.jptm.Context(),
+		strings.NewReader(linkData),
+		blobHeaders,
+		meta,
+		azblob.BlobAccessConditions{},
+		azblob.AccessTierNone, // dfs uses default tier
+		nil, // dfs doesn't support tags
+		azblob.ClientProvidedKeyOptions{}, // cpk isn't used for dfs
+		azblob.ImmutabilityPolicyOptions{}) // dfs doesn't support immutability policy
+
+	return err
 }

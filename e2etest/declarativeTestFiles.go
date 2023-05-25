@@ -114,6 +114,10 @@ type objectUnixStatContainer struct {
 	modTime    *time.Time
 }
 
+func (o *objectUnixStatContainer) HasTimes() bool {
+	return o != nil && (o.accessTime != nil || o.modTime != nil)
+}
+
 func (o *objectUnixStatContainer) Empty() bool {
 	if o == nil {
 		return true
@@ -204,7 +208,7 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]string) {
 
 	if o.modTime != nil {
 		mask |= common.STATX_MTIME
-		metadata[common.POSIXModTimeMeta] = strconv.FormatInt(o.accessTime.UnixNano(), 10)
+		metadata[common.POSIXModTimeMeta] = strconv.FormatInt(o.modTime.UnixNano(), 10)
 	}
 
 	metadata[common.LINUXStatxMaskMeta] = strconv.FormatUint(uint64(mask), 10)
