@@ -21,7 +21,6 @@
 package common
 
 import (
-	"bufio"
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
@@ -32,17 +31,14 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"golang.org/x/crypto/pkcs12"
@@ -804,119 +800,7 @@ func fixupTokenJson(bytes []byte) []byte {
 // Without this change, if some router is configured to not return "ICMP unreachable" then it will take 30 secs to timeout and increase the response time.
 // We are additionally checking Arc first, and then Azure VM because Arc endpoint is local so as to further reduce the response time of the Azure VM IMDS endpoint.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
-	targetResource := Resource
-	if credInfo.Token.Resource != "" && credInfo.Token.Resource != targetResource {
-		targetResource = credInfo.Token.Resource
-	}
-
-	// Try Arc VM
-	req, resp, errArcVM := credInfo.queryIMDS(ctx, MSIEndpointArcVM, targetResource, IMDSAPIVersionArcVM)
-	if errArcVM != nil {
-		// Try Azure VM since there was an error in trying Arc VM
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM) //nolint:staticcheck
-		if errAzureVM != nil {
-			var serr syscall.Errno
-			if errors.As(errArcVM, &serr) {
-				econnrefusedValue := -1
-				switch runtime.GOOS {
-				case "linux":
-					econnrefusedValue = int(syscall.ECONNREFUSED)
-				case "windows":
-					econnrefusedValue = WSAECONNREFUSED
-				}
-
-				if int(serr) == econnrefusedValue {
-					// If connection to Arc endpoint was refused
-					return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", errAzureVM)
-				}
-
-				// A syscall error other than ECONNREFUSED, implies we could not get the HTTP response
-				return nil, fmt.Errorf("error communicating with Arc IMDS endpoint (%s): %v", MSIEndpointArcVM, errArcVM)
-			}
-
-			// queryIMDS failed, but not with a syscall error
-			// 1. Either it is an HTTP error, or
-			// 2. The HTTP request timed out
-			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening: %v", MSIEndpointArcVM, errArcVM)
-		}
-
-		// Arc IMDS failed with error, but Azure IMDS succeeded
-		req, resp = reqAzureVM, respAzureVM //nolint:staticcheck
-	} else if !isValidArcResponse(resp) {
-		// Not valid response from ARC IMDS endpoint. Perhaps some other process listening on it. Try Azure IMDS endpoint as fallback option.
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM) //nolint:staticcheck
-		if errAzureVM != nil {
-			// Neither Arc nor Azure VM IMDS endpoint available. Can't use MSI.
-			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening. If this an Azure VM, please check whether MSI is enabled, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", MSIEndpointArcVM, errAzureVM)
-		}
-
-		// Azure VM IMDS endpoint ok!
-		req, resp = reqAzureVM, respAzureVM //nolint:staticcheck
-	} else {
-		// Valid response received from ARC IMDS endpoint. Proceed with the next step.
-		challengeTokenPath := strings.Split(resp.Header["Www-Authenticate"][0], "=")[1]
-		// Open the file.
-		challengeTokenFile, fileErr := os.Open(challengeTokenPath)
-		if os.IsPermission(fileErr) {
-			switch runtime.GOOS {
-			case "linux":
-				return nil, fmt.Errorf("permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"himds\" group or is superuser.", challengeTokenPath)
-			case "windows":
-				return nil, fmt.Errorf("permission level inadequate to read Arc challenge token file %s. Make sure you are running AzCopy as a user who is a member of the \"local Administrators\" group or the \"Hybrid Agent Extension Applications\" group.", challengeTokenPath)
-			default:
-				return nil, fmt.Errorf("error occurred while opening file %s in unsupported GOOS %s: %v", challengeTokenPath, runtime.GOOS, fileErr)
-			}
-		} else if fileErr != nil {
-			return nil, fmt.Errorf("error occurred while opening file %s: %v", challengeTokenPath, fileErr)
-		}
-
-		defer challengeTokenFile.Close()
-
-		// Create a new Reader for the file.
-		reader := bufio.NewReader(challengeTokenFile)
-		challengeToken, fileErr := reader.ReadString('\n')
-		if fileErr != nil && fileErr != io.EOF {
-			return nil, fmt.Errorf("error occurred while reading file %s: %v", challengeTokenPath, fileErr)
-		}
-
-		req.Header.Set("Authorization", "Basic "+challengeToken)
-
-		resp, errArcVM = msiTokenHTTPClient.Do(req)
-		if errArcVM != nil {
-			return nil, fmt.Errorf("failed to query token from Arc IMDS endpoint: %v", errArcVM)
-		}
-	}
-
-	defer func() { // resp and Body should not be nil
-		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}()
-
-	// Check if the status code indicates success
-	// The request returns 200 currently, add 201 and 202 as well for possible extension.
-	if !(HTTPResponseExtension{Response: resp}).IsSuccessStatusCode(http.StatusOK, http.StatusCreated, http.StatusAccepted) {
-		return nil, fmt.Errorf("failed to get token from msi, status code: %v", resp.StatusCode)
-	}
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	result := &adal.Token{}
-	if len(b) > 0 {
-		b = ByteSliceExtension{ByteSlice: b}.RemoveBOM()
-		// Unmarshal will give an error for Go version >= 1.14 for a field with blank values. Arc-server endpoint API returns blank for "not_before" field.
-		// TODO: Remove fixup once Arc team fixes the issue.
-		b = fixupTokenJson(b)
-		if err := json.Unmarshal(b, result); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal response body: %v", err)
-		}
-	} else {
-		return nil, errors.New("failed to get token from msi")
-	}
-
-	return result, nil
+	return nil, nil
 }
 
 // RefreshTokenWithUserCredential gets new token with user credential through refresh.
