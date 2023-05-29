@@ -7,7 +7,7 @@
 ### New Features
 
 1. Support for new Cold Tier feature for Azure Blobs
-2. Support preserving a traling dot ('.') in names of files and directories in Azure Files
+2. Support preserving a trailing dot ('.') in names of files and directories in Azure Files
 3. Alternate modes to preserve hash for hash-based sync ([#2214](https://github.com/Azure/azure-storage-azcopy/issues/2214))
 4. Support 'force-if-readonly' flag for Sync.
 5. Preserve posix properties while uploading or downloading from HNS enabled accounts
