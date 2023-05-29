@@ -1,6 +1,23 @@
 
 # Change Log
 
+
+## Version 10.19.0
+
+### New Features
+
+1. Support for new Cold Tier feature for Azure Blobs
+2. Support preserving a traling dot ('.') in names of files and directories in Azure Files
+3. Alternate modes to preserve hash for hash-based sync ([#2214](https://github.com/Azure/azure-storage-azcopy/issues/2214))
+4. Support 'force-if-readonly' flag for Sync.
+5. Preserve posix properties while uploading or downloading from HNS enabled accounts
+### Bug Fixes
+
+1. Fix situation where large-files would hang infinitely with low value for 'cap-mbps'
+2. Issue [#2074](https://github.com/Azure/azure-storage-azcopy/issues/2074) where AzCopy would hang after cancelling
+3. Issue [#1888](https://github.com/Azure/azure-storage-azcopy/issues/1888) where directories with empty name are incorrectly handled.
+4. Cancel HNS delete jobs [#2117](https://github.com/Azure/azure-storage-azcopy/issues/2117)
+5. Fix issue where large chunks could not be scheduled ([#2228](https://github.com/Azure/azure-storage-azcopy/issues/2228))
 ## Version 10.18.1
 
 ### Bug fixes
