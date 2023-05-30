@@ -23,3 +23,21 @@
 
 ## sync smb -> file
 1. simple sync without changes
+2. Sync with changes in the source (added / delted files, added folders)
+3. Sync with changes in the target (added / deleted files or folders)
+For 2 and 3 test with the flags:
+
+	a. --cfd-mode=TargetCompare
+	b. --preserve-smb-info=true
+	c. --delete-destination=true
+	d. --recursive=true
+	e. --preserve-permissions=true
+
+## copy smb -> file
+simple copy from smb -> files with the below flags:
+
+	a. --recursive=true
+	b. --preserve-smb-info=true
+
+## comp file -> local \ file
+simple copy with --recursive=true flag

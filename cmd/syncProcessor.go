@@ -277,7 +277,7 @@ type remoteResourceDeleter struct {
 	targetLocation           common.Location
 	blobDeleteChan           chan interface{}
 	enumerationDone          chan struct{}
-	deleteDirEnumerationChan chan string
+	deleteDirEnumerationChan chan StoredObject
 	incrementDeletionCount   func()
 }
 
@@ -289,7 +289,7 @@ func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx cont
 		targetLocation: targetLocation,
 		// This channel keep the blobURL to be deleted.
 		blobDeleteChan:           make(chan interface{}, 1000*1000),
-		deleteDirEnumerationChan: make(chan string, 1000),
+		deleteDirEnumerationChan: make(chan StoredObject, 1000),
 
 		// Function for incrementing count of files deleted under this folder.
 		incrementDeletionCount: incrementDeletionCount,
@@ -335,13 +335,13 @@ func (b *remoteResourceDeleter) deleteDirEnumerationWorker(ctx context.Context, 
 	defer wg.Done()
 	for {
 		select {
-		case dirPath, ok := <-b.deleteDirEnumerationChan:
+		case so, ok := <-b.deleteDirEnumerationChan:
 			if !ok {
 				// DeleteDirEnumeration workers exit when deleteDirEnumChan is closed by startDeleteWorkers(), which it does when it receives the "exit signal" on the enumerationDone channel,
 				// queued by finalize() after target traversal is done.
 				return
 			}
-			b.deleteFolder(dirPath)
+			b.deleteFolderRecursively(so)
 		case <-ctx.Done():
 			return
 		}
@@ -391,37 +391,47 @@ func (b *remoteResourceDeleter) startDeleteWorkers(ctx context.Context) {
 	close(b.enumerationDone)
 }
 
-// deleteFolder list the files and add them to deleteChan for deletion.
-func (b *remoteResourceDeleter) deleteFolder(dirPath string) error {
+func (b *remoteResourceDeleter) deleteFolderRecursively(object StoredObject) error {
 	// sanity check on dirPath.
-	if dirPath == "" {
+	if object.relativePath == "" {
 		err := fmt.Errorf("cmd::deleteFolder called with empty directory path.")
 		panic(err.Error())
-		return err
 	}
 
-	blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
-	containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
-	containerURL := azblob.NewContainerURL(containerRawURL, b.p)
+	switch b.targetLocation {
+	case common.ELocation.Blob():
+		// list the folder files and add them to deleteChan for deletion.
+		blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+		containerRawURL := copyHandlerUtil{}.getContainerUrl(blobURLParts)
+		containerURL := azblob.NewContainerURL(containerRawURL, b.p)
 
-	for marker := (azblob.Marker{}); marker.NotDone(); {
-		resp, err := containerURL.ListBlobsHierarchySegment(context.TODO(), marker, "", azblob.ListBlobsSegmentOptions{Prefix: dirPath, Details: azblob.BlobListingDetails{
-			Metadata: false,
-			Deleted:  false,
-		}})
+		for marker := (azblob.Marker{}); marker.NotDone(); {
+			resp, err := containerURL.ListBlobsHierarchySegment(context.TODO(), marker, "", azblob.ListBlobsSegmentOptions{Prefix: object.relativePath, Details: azblob.BlobListingDetails{
+				Metadata: false,
+				Deleted:  false,
+			}})
 
+			if err != nil {
+				fmt.Printf("Folder [%s] Delete failed with error: %v", object.relativePath, err)
+				return err
+			}
+
+			for _, blobInfo := range resp.Segment.BlobItems {
+				// Deleting the blobs underneath the folder, once there is no blob. Folder will be deleted automatically.
+				blobURL := containerURL.NewBlobURL(blobInfo.Name)
+				b.blobDeleteChan <- blobURL
+			}
+			marker = resp.NextMarker
+		}
+		return nil
+	case common.ELocation.File():
+		err := b.enumerateFileDirectoryDeletion(object) // recursivly delete the sub folder items
 		if err != nil {
-			fmt.Printf("Folder[%s] Delete failed with error: %v", dirPath, err)
+			fmt.Printf("Object [%s] Deletion failed with error: %v", object.relativePath, err)
 			return err
 		}
-
-		for _, blobInfo := range resp.Segment.BlobItems {
-			// Deleting the blobs underneath the folder, once there is no blob. Folder will be deleted automatically.
-			blobURL := containerURL.NewBlobURL(blobInfo.Name)
-			b.blobDeleteChan <- blobURL
-		}
-		marker = resp.NextMarker
 	}
+
 	return nil
 }
 
@@ -478,7 +488,13 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			// This is the prefix we should use to list files and directories underneath this folder.
 			//
 			dirPath := blobURLParts.BlobName + "/"
-			b.deleteDirEnumerationChan <- dirPath
+			b.deleteDirEnumerationChan <- StoredObject{
+				relativePath: dirPath,
+			}
+			return nil
+
+		case common.ELocation.File():
+			b.deleteDirEnumerationChan <- object
 			return nil
 		default:
 			if shouldSyncRemoveFolders() {
@@ -487,4 +503,52 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			return nil
 		}
 	}
+}
+
+func (b *remoteResourceDeleter) enumerateFileDirectoryDeletion(object StoredObject) error {
+	fileUrlParts := azfile.NewFileURLParts(*b.rootURL)
+	fileUrlParts.DirectoryOrFilePath = path.Join(fileUrlParts.DirectoryOrFilePath, object.relativePath)
+	dirUrl := azfile.NewDirectoryURL(fileUrlParts.URL(), b.p)
+
+	for marker := (azfile.Marker{}); marker.NotDone(); {
+		lResp, err := dirUrl.ListFilesAndDirectoriesSegment(b.ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
+		if err != nil {
+			fmt.Printf("List folder [%s] failed with error: %v", object.relativePath, err)
+		}
+
+		for _, fileInfo := range lResp.FileItems {
+			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath, fileInfo.Name)
+			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+			_, err := fileURL.Delete(b.ctx)
+			if err != nil {
+				// TODO: we are not checking error as of now. We can enqueue those error to errChan.
+				// errChan can be plunbed to error channel for sync. Like we done for copy to know errors at time of enumeration.
+				fmt.Printf("Deletion of file [%s] failed with error: %v", object.relativePath, err)
+			} else if b.incrementDeletionCount != nil {
+				b.incrementDeletionCount()
+			}
+		}
+		for _, dirInfo := range lResp.DirectoryItems {
+			so := StoredObject{
+				relativePath: object.relativePath + "/" + dirInfo.Name,
+				entityType:   common.EEntityType.Folder(),
+			}
+
+			err := b.enumerateFileDirectoryDeletion(so)
+			if err == nil && b.incrementDeletionCount != nil {
+				b.incrementDeletionCount()
+			}
+		}
+
+		marker = lResp.NextMarker
+	}
+	_, err := dirUrl.Delete(b.ctx)
+	if err != nil {
+		// TODO: we are not checking error as of now. We can enqueue those error to errChan.
+		// errChan can be plunbed to error channel for sync. Like we done for copy to know errors at time of enumeration.
+		fmt.Printf("Deletion of folder [%s] failed with error: %v", object.relativePath, err)
+	}
+
+	return nil
 }

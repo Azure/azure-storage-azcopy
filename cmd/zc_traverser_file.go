@@ -269,10 +269,15 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				if t.recursive {
 					// If recursive is turned on, add sub directories to be
 					// in case of target sync, we will not enqueue this dir using enqueue dir, since the enumerateOneDir should enumerates only folders that exists in the source
-					// So we will not enumerate delstination directories that was deleted in the source
-					// TODO: fix delete directories case https://msazure.visualstudio.com/One/_workitems/edit/19110607
+					// So we will not enumerate destination directories that was deleted in the source
 					if !isTargetSync {
 						enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
+					} else {
+						// In case of folder that exist only in the destination, the folder should enumerate by the target traveres
+						// So that the comparere will be able to know that this directory should be treated
+						entity := newAzFileChildFolderEntity(currentDirURL, dirInfo.Name, false, false)
+						output, err := convertToOutput(entity)
+						enqueueOutput(output, err)
 					}
 				}
 			}

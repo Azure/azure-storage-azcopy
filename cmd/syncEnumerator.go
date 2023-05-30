@@ -284,17 +284,14 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	orderedTqueue := &orderedTqueue{}
 	var possiblyRenamedMap *possiblyRenamedMap
 
-	if !cca.ShouldConsultPossiblyRenamedMap() {
-		orderedTqueue.tqueue = make(chan interface{}, 1000*1000)
-		orderedTqueue.doNotEnforceChildAfterParent = true
-	} else {
-		orderedTqueue.tqueue = make(chan interface{}, 1000*1000)
-		orderedTqueue.size = 100 * 1000
-		orderedTqueue.dir = make([]parallel.DirectoryEntry, orderedTqueue.size)
-
+	if cca.ShouldConsultPossiblyRenamedMap() {
 		// set up the rename map, so that the rename can be detected.
 		possiblyRenamedMap = newPossiblyRenamedMap()
 	}
+
+	orderedTqueue.tqueue = make(chan interface{}, 1000*1000)
+	orderedTqueue.size = 100 * 1000
+	orderedTqueue.dir = make([]parallel.DirectoryEntry, orderedTqueue.size)
 
 	// set up the map, so that the source/destination can be compared
 	objectIndexerMap := newfolderIndexer()
