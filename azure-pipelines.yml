@@ -93,8 +93,15 @@ jobs:
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
 
+      # uncomment below when manually releasing for m1
+#      - script: |
+#          curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
+#        displayName: 'Generate MacOS Build with ARM64'
+#        condition: eq(variables.type, 'mac-os')
+
+      # cross compile to make sure nothing broke
       - script: |
-          GOARCH=arm64 CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64"
+          GOARCH=arm64 CGO_ENABLED=1 go build
         displayName: 'Generate MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
