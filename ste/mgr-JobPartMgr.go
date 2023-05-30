@@ -15,9 +15,9 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -602,8 +602,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	}
 	// Consider the file-local SDDL transfer case.
 	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
+		jobState := jpm.jobMgr.getInMemoryTransitJobState()
+		sourceCred := common.CreateFileCredential(ctx, jobState.CredentialInfo, credOption)
 		jpm.sourceProviderPipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
+			sourceCred,
 			azfile.PipelineOptions{
 				Log: jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azfile.TelemetryOptions{
@@ -677,8 +679,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	// Create pipeline for Azure File.
 	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
 		common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileNone():
+		credential := common.CreateFileCredential(ctx, credInfo, credOption)
 		jpm.pipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
+			credential,
 			azfile.PipelineOptions{
 				Log: jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azfile.TelemetryOptions{

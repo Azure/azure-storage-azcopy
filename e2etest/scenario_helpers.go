@@ -35,13 +35,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/minio-go"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/sddl"
+	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 )
 
 const defaultFileSize = 1024

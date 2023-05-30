@@ -36,8 +36,8 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 )
 
 const (

@@ -31,9 +31,9 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 )
 
 const (
@@ -204,7 +204,7 @@ func startsWith(s string, t string) bool {
 	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////
 type s3URLPartsExtension struct {
 	common.S3URLParts
 }

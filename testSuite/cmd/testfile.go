@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 

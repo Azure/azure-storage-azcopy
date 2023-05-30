@@ -46,7 +46,7 @@ import (
 	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 )
 
 // Hookup to the testing framework

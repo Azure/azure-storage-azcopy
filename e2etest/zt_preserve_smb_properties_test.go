@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 )
 
@@ -83,8 +83,8 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 }
 
 // TODO: add some tests (or modify the above) to make assertions about case preservation (or not) in metadata
-//    See https://github.com/aymanjarrousms/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 //
+//	See https://github.com/aymanjarrousms/azure-storage-azcopy/issues/113 (which incidentally, I'm not observing in the tests above, for reasons unknown)
 func TestProperties_SMBDates(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalFile(), common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:       true,

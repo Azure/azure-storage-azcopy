@@ -25,7 +25,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 

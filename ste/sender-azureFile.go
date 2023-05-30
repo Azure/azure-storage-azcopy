@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )

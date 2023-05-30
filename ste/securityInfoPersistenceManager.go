@@ -2,11 +2,12 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/url"
 	"sync"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 	"github.com/golang/groupcache/lru"
 )
 

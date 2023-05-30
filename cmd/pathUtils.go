@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 	"github.com/pkg/errors"
 
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
@@ -256,12 +256,6 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 
 		fURLParts := azfile.NewFileURLParts(*baseURL)
 		resourceToken = fURLParts.SAS.Encode()
-		if resourceToken == "" {
-			// Azure Files only supports the use of SAS tokens currently
-			// Azure Files ALSO can't be a public resource
-			// Therefore, it is safe to error here if no SAS token is present, as neither a source nor a destination could safely not have a SAS token.
-			return resource, "", errors.New("azure files only supports the use of SAS token authentication")
-		}
 		fURLParts.SAS = azfile.SASQueryParameters{} // clear the SAS token and drop the raw, base URL
 		fileURL := fURLParts.URL()                  // Can't call .String() on .URL() because Go can't take the pointer of a function's return
 		resourceBase = fileURL.String()

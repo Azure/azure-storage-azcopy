@@ -22,8 +22,8 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/sddl"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 )
 
 func sval(s *string) string {

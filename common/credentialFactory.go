@@ -31,6 +31,7 @@ import (
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -111,6 +112,26 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 	return credential
 }
 
+// CreateFileCredential creates File credential according to credential info.
+func CreateFileCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) azfile.Credential {
+	credential := azfile.NewAnonymousCredential()
+
+	if credInfo.CredentialType == ECredentialType.OAuthToken() {
+		if credInfo.OAuthTokenInfo.IsEmpty() {
+			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
+		}
+
+		// Create TokenCredential with refresher.
+		return azfile.NewTokenCredential(
+			credInfo.OAuthTokenInfo.AccessToken,
+			func(credential azfile.TokenCredential) time.Duration {
+				return refreshFileToken(ctx, credInfo.OAuthTokenInfo, credential, options)
+			})
+	}
+
+	return credential
+}
+
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,
 // it checkes how long it will be before the token get expired, and use half of the value as
 // duration to wait.
@@ -138,6 +159,27 @@ func refreshPolicyHalfOfExpiryWithin(token *adal.Token, options CredentialOpOpti
 }
 
 func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azblob.TokenCredential, options CredentialOpOptions) time.Duration {
+	newToken, err := tokenInfo.Refresh(ctx)
+	if err != nil {
+		// Fail to get new token.
+		if _, ok := err.(adal.TokenRefreshError); ok && strings.Contains(err.Error(), "refresh token has expired") {
+			options.logError(fmt.Sprintf("failed to refresh token, OAuth refresh token has expired, please log in with azcopy login command again. (Error details: %v)", err))
+		} else {
+			options.logError(fmt.Sprintf("failed to refresh token, please check error details and try to log in with azcopy login command again. (Error details: %v)", err))
+		}
+		// Try to refresh again according to original token's info.
+		return refreshPolicyHalfOfExpiryWithin(&(tokenInfo.Token), options)
+	}
+
+	// Token has been refreshed successfully.
+	tokenCredential.SetToken(newToken.AccessToken)
+	options.logInfo(fmt.Sprintf("%v token refreshed successfully", time.Now().UTC()))
+
+	// Calculate wait duration, and schedule next refresh.
+	return refreshPolicyHalfOfExpiryWithin(newToken, options)
+}
+
+func refreshFileToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azfile.TokenCredential, options CredentialOpOptions) time.Duration {
 	newToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
 		// Fail to get new token.

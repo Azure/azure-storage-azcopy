@@ -37,7 +37,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
@@ -294,9 +294,25 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 }
 
 // getAzureFileCredentialType is used to get Azure file's credential type
-func getAzureFileCredentialType() (common.CredentialType, error) {
-	// Azure file only support anonymous credential currently.
-	return common.ECredentialType.Anonymous(), nil
+func getAzureFileCredentialType(fileResourceURL string) (common.CredentialType, error) {
+	resourceURL, err := url.Parse(fileResourceURL)
+	if err != nil {
+		return common.ECredentialType.Unknown(), errors.New("provided file resource string is not in URL format")
+	}
+
+	sas := azfile.NewFileURLParts(*resourceURL).SAS
+
+	// If SAS existed, return anonymous credential type.
+	if sas.Signature() != "" {
+		return common.ECredentialType.Anonymous(), nil
+	}
+
+	// If OAuth existed, return OAuth credential type.
+	if oAuthTokenExists() {
+		return common.ECredentialType.OAuthToken(), nil
+	}
+
+	return common.ECredentialType.Unknown(), common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present")
 }
 
 // envVarCredentialType used for passing credential type into AzCopy through environment variable.
@@ -500,7 +516,15 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 				return common.ECredentialType.Unknown(), false, err
 			}
 		case common.ELocation.File():
-			if credType, err = getAzureFileCredentialType(); err != nil {
+			credType, err = getAzureFileCredentialType(resource)
+			if azErr, ok := err.(common.AzError); ok && azErr.Equals(common.EAzError.LoginCredMissing()) {
+				_, autoLoginErr := GetOAuthTokenManagerInstance()
+				if autoLoginErr == nil {
+					err = nil // Autologin succeeded, reset original error
+					credType, isPublic = common.ECredentialType.OAuthToken(), false
+				}
+			}
+			if err != nil {
 				return common.ECredentialType.Unknown(), false, err
 			}
 		case common.ELocation.BlobFS():
@@ -666,8 +690,12 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, l
 	), nil
 }
 
-// TODO note: ctx and credInfo are ignored at the moment because we only support SAS for Azure File
 func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
+	credential := common.CreateFileCredential(ctx, credInfo, common.CredentialOpOptions{
+		// LogInfo:  glcm.Info, //Comment out for debugging
+		LogError: glcm.Info,
+	})
+
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOption = pipeline.LogOptions{
