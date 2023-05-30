@@ -39,7 +39,6 @@ import (
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-//
 // orderedTqueue is an ordered tqueue which implements strict child-after-parent ordering of directory
 // entries added to tqueue (communication channel source traverser uses to communicate to-be-traversed
 // directories to the target traverser). Note that it is crucial for target traverser to always process
@@ -48,32 +47,31 @@ import (
 // It contains the raw tqueue and other stuff needed to facilitate ordered addition of directory entries
 // to the raw tqueue.
 //
-// - What exactly do we want to achieve?
-//   Scanner threads (default count 16) process directories and add then to any of the 4 channels which
-//   are processed by Walk(). Though scanner threads will only scan a child after fully scanning its parent,
-//   but since the scanner threads after scanning, add the directories to one of he 4 channels the directories
-//   may get picked from these 4 channels in such a way that child is picked before the parent. This may cause
-//   child directory to be added to tqueue before its parent directory. This is what we want to avoid.
+//   - What exactly do we want to achieve?
+//     Scanner threads (default count 16) process directories and add then to any of the 4 channels which
+//     are processed by Walk(). Though scanner threads will only scan a child after fully scanning its parent,
+//     but since the scanner threads after scanning, add the directories to one of he 4 channels the directories
+//     may get picked from these 4 channels in such a way that child is picked before the parent. This may cause
+//     child directory to be added to tqueue before its parent directory. This is what we want to avoid.
 //
-// - How does orderedTqueue help in that?
-//   Since scanner threads always add directories correctly in strict child-after-parent order to the 4 channels,
-//   but they get reordered since the threads processing those 4 channels may pick them in arbitrary order, we
-//   have the scanner threads, apart from adding the scanned directories to the 4 channels, also add an entry to
-//   orderedTqueue.dir in a serialized fashion so that entries in orderedTqueue.dir are added strictly in
-//   child-after-parent order. Now when the threads process entries from the 4 channels they just mark the
-//   corresponding entry in orderedTqueue.dir as "processed". A separate thread just goes over orderedTqueue.dir
-//   and takes out entries from the head which are "processed" and adds them to orderedTqueue.tqueue.
-//   It stops and waits when it encounters an head entry which is not marked "processed". This ensures that we add
-//   entries to orderedTqueue.tqueue only in strict child-after-parent order.
+//   - How does orderedTqueue help in that?
+//     Since scanner threads always add directories correctly in strict child-after-parent order to the 4 channels,
+//     but they get reordered since the threads processing those 4 channels may pick them in arbitrary order, we
+//     have the scanner threads, apart from adding the scanned directories to the 4 channels, also add an entry to
+//     orderedTqueue.dir in a serialized fashion so that entries in orderedTqueue.dir are added strictly in
+//     child-after-parent order. Now when the threads process entries from the 4 channels they just mark the
+//     corresponding entry in orderedTqueue.dir as "processed". A separate thread just goes over orderedTqueue.dir
+//     and takes out entries from the head which are "processed" and adds them to orderedTqueue.tqueue.
+//     It stops and waits when it encounters an head entry which is not marked "processed". This ensures that we add
+//     entries to orderedTqueue.tqueue only in strict child-after-parent order.
 //
-// - How does Source Traverser interact with orderedTqueue?
-//   Source traverser MUST call orderedTqueue.Enqueue() in strict child-after-parent order.
-//   Multiple parallel source traverser threads can safely call orderedTqueue.Enqueue() in parallel.
+//   - How does Source Traverser interact with orderedTqueue?
+//     Source traverser MUST call orderedTqueue.Enqueue() in strict child-after-parent order.
+//     Multiple parallel source traverser threads can safely call orderedTqueue.Enqueue() in parallel.
 //
-// - How does Target Traverser interact with orderedTqueue?
-//   Target traverser can simply dequeue directory entries from the raw orderedTqueue.tqueue.
-//   The entries in tqueue are guaranteed to be in strict child-after-parent order.
-//
+//   - How does Target Traverser interact with orderedTqueue?
+//     Target traverser can simply dequeue directory entries from the raw orderedTqueue.tqueue.
+//     The entries in tqueue are guaranteed to be in strict child-after-parent order.
 type orderedTqueue struct {
 	// Index in circular buffer where the reader should read the next entry from.
 	readIdx int32
@@ -100,11 +98,9 @@ type orderedTqueue struct {
 	doNotEnforceChildAfterParent bool
 }
 
-//
 // Source traverser MUST call Enqueue() in strict child-after-parent order to add entries to tqueue.
 // It returns the index in the circular buffer where the directory entry is added. This index must be
 // conveyed along with the CrawlResult so that MarkProcessed() can mark the appropriate entry as processed.
-//
 func (t *orderedTqueue) Enqueue(dir parallel.DirectoryEntry) int32 {
 	for {
 
@@ -284,17 +280,14 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	orderedTqueue := &orderedTqueue{}
 	var possiblyRenamedMap *possiblyRenamedMap
 
-	if !cca.ShouldConsultPossiblyRenamedMap() {
-		orderedTqueue.tqueue = make(chan interface{}, 1000*1000)
-		orderedTqueue.doNotEnforceChildAfterParent = true
-	} else {
-		orderedTqueue.tqueue = make(chan interface{}, 1000*1000)
-		orderedTqueue.size = 100 * 1000
-		orderedTqueue.dir = make([]parallel.DirectoryEntry, orderedTqueue.size)
-
+	if cca.ShouldConsultPossiblyRenamedMap() {
 		// set up the rename map, so that the rename can be detected.
 		possiblyRenamedMap = newPossiblyRenamedMap()
 	}
+
+	orderedTqueue.tqueue = make(chan interface{}, 1000*1000)
+	orderedTqueue.size = 100 * 1000
+	orderedTqueue.dir = make([]parallel.DirectoryEntry, orderedTqueue.size)
 
 	// set up the map, so that the source/destination can be compared
 	objectIndexerMap := newfolderIndexer()

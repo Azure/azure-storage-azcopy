@@ -103,6 +103,7 @@ type StoredObject struct {
 	isFolderEndMarker bool
 	isFinalizeAll     bool
 	isSingleFile      bool
+	isRootDirectory   bool
 }
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject) bool {
@@ -477,9 +478,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newFileAccountTraverser(resourceURL, *p, *ctx, getProperties, incrementEnumerationCounter)
+			output = newFileAccountTraverser(resourceURL, *p, *ctx, getProperties, incrementEnumerationCounter, isSync, isSource, indexerMap, orderedTqueue, maxObjectIndexerSizeInGB)
 		} else {
-			output = newFileTraverser(resourceURL, *p, *ctx, recursive, getProperties, incrementEnumerationCounter)
+			output = newFileTraverser(resourceURL, *p, *ctx, recursive, getProperties, incrementEnumerationCounter, isSync, isSource, indexerMap, orderedTqueue, maxObjectIndexerSizeInGB)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()
@@ -592,7 +593,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 type objectProcessor func(storedObject StoredObject) error
 
 // TODO: consider making objectMorpher an interface, not a func, and having newStoredObject take an array of them, instead of just one
-//   Might be easier to debug
+//
+//	Might be easier to debug
+//
 // modifies a StoredObject, but does NOT process it.  Used for modifications, such as pre-pending a parent path
 type objectMorpher func(storedObject *StoredObject)
 

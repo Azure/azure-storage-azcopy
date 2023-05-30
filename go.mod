@@ -6,7 +6,7 @@ require (
 	github.com/Azure/azure-storage-blob-go v0.15.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.22
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
-	github.com/aymanjarrousms/azure-storage-file-go v0.0.0-20230222074813-15d50c6861ff
+	github.com/aymanjarrousms/azure-storage-file-go v0.0.0-20230517115026-d2f71b77a1c6
 	github.com/danieljoos/wincred v1.1.2
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/google/uuid v1.3.0

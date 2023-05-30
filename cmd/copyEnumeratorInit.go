@@ -64,8 +64,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	jobPartOrder.CpkOptions = cca.CpkOptions
-	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
-	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
+	jobPartOrder.PreserveSMBPermissions = cca.PreservePermissions
+	jobPartOrder.PreserveSMBInfo = cca.PreserveSMBInfo
 	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
 	jobPartOrder.PreservePOSIXProperties = cca.PreservePOSIXProperties || (cca.ForceWrite == common.EOverwriteOption.PosixProperties())
 
@@ -240,7 +240,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.PreservePOSIXProperties, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = newFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.PreserveSMBInfo, cca.PreservePermissions.IsTruthy(), cca.PreservePOSIXProperties, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}

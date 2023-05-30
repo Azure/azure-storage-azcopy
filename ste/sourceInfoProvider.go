@@ -81,6 +81,7 @@ type IBlobSourceInfoProvider interface {
 type TypedSMBPropertyHolder interface {
 	FileCreationTime() time.Time
 	FileLastWriteTime() time.Time
+	FileChangeTime() time.Time
 	FileAttributes() azfile.FileAttributeFlags
 }
 

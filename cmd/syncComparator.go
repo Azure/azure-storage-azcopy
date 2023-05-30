@@ -92,24 +92,25 @@ func newSyncDestinationComparator(i *folderIndexer, possiblyRenamedMap *possibly
 	}
 }
 
-//
 // Given a file and the corresponding scanned source object, find out if we need to copy data+metadata, only metadata, or nothing.
 // This is called by TargetTraverser. It honours various sync qualifiers to make the decision, f.e., if sync
 // qualifiers allow ctime/mtime to be used for CFD it may not need to query file attributes from target.
 //
 // Note: Caller will use the returned information to decide whether to copy the storedObject to target and whether to copy only metadata,
-//       or both metadata+data.
+//
+//	or both metadata+data.
 //
 // Note: This SHOULD NOT be called for children of "changed" directories, since for changed directories we cannot safely check for
-//       changed files purely by doing local-time based comparison. Use HasFileChangedSinceLastSyncUsingTargetCompare() for children
-//       of changed directories. This means it will NEVER BE CALLED for cfdMode==TargetCompare, since for that HasDirectoryChangedSinceLastSync()
-//       always returns true, i.e., all directories are treated as “changed”.
+//
+//	changed files purely by doing local-time based comparison. Use HasFileChangedSinceLastSyncUsingTargetCompare() for children
+//	of changed directories. This means it will NEVER BE CALLED for cfdMode==TargetCompare, since for that HasDirectoryChangedSinceLastSync()
+//	always returns true, i.e., all directories are treated as “changed”.
 //
 // Return: (dataChanged, metadataChanged)
 //
 // Note: Since data change usually causes metadata change too (LMT is updated at the least), caller should check dataChanged first and if that is true, sync
-//       both data+metadata, if dataChanged is not true then it should check metadataChanged and if that is true, sync only metadata, else sync nothing.
 //
+//	both data+metadata, if dataChanged is not true then it should check metadataChanged and if that is true, sync only metadata, else sync nothing.
 func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingLocalChecks(so StoredObject) (dataChange bool, metadataChange bool) {
 	// CFDMode==TargetCompare always treats target directories as “changed”, so we should never be called for that
 	if f.cfdMode == common.CFDModeFlags.TargetCompare() {
@@ -155,7 +156,6 @@ func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingLocalChecks(
 	}
 }
 
-//
 // This is called for two distinct scenarios:
 // For target directories that are enumerated (because the source directory was seen to have changed), it's called after all the enumerated children
 // are processed. In this case the files still present in ObjectIndexer map are the ones newly created in the source since last sync and *all* of them
@@ -196,6 +196,8 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 
 	f.sourceFolderIndex.lock.Unlock()
 	f.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("Finalizing directory %s (FinalizeAll=%v)\n", relativeDir, finalizeAll))
+
+	isTargetCompare := f.cfdMode == common.CFDModeFlags.TargetCompare()
 
 	//
 	// Go over all objects in the source directory, enumerated by SourceTraverser, and check each object for following:
@@ -265,10 +267,10 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		}
 
 		// If finalizeAll==true we need to blindly copy *all* files/folders present in folderMap.indexMap.
-		dataChange, metaDataChange := true, true
+		dataChange, metaDataChange := true, !isTargetCompare
 
 		// else, we need to find out if the file/folder has changed since last sync.
-		if finalizeAll == false {
+		if finalizeAll == false && !isTargetCompare {
 			dataChange, metaDataChange = f.HasFileChangedSinceLastSyncUsingLocalChecks(storedObject)
 		}
 
@@ -321,14 +323,14 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 	}
 
 	// last thing need to do the folder metaData updation incase of the finalizeAll true.
-	// TODO: We need to take care cfdMode == TargetCompare, as for it finalizer will be true. It cause each folder properties updation.
+	// in case of target compare, since the order is not enforced, the root directory may be already processed before the current directory finalization
 	so, ok := folderMap.indexMap["."]
-	if !ok {
+	if !ok && !isTargetCompare {
 		panic(fmt.Sprintf("Folder stored map not present"))
+	} else if ok {
+		size += storedObjectSize(so)
+		delete(folderMap.indexMap, ".")
 	}
-
-	size += storedObjectSize(so)
-	delete(folderMap.indexMap, ".")
 
 	if finalizeAll && !so.isSingleFile {
 		//
@@ -341,7 +343,9 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		//
 
 		// Add this transfer to job order.
-		f.copyTransferScheduler(so)
+		if !isTargetCompare {
+			f.copyTransferScheduler(so)
+		}
 	} else {
 		//
 		// finalizeAll will be false (and we will come here) for only CtimeMtime when the directory on the source has changed since the last sync.
@@ -444,8 +448,10 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		panic(fmt.Sprintf("Folder with relativePath[%s] not present in ObjectIndexerMap", lcRelativePath))
 	}
 
-	// Folder Case.
-	if destinationObject.entityType == common.EEntityType.Folder() {
+	isTargetCompare := f.cfdMode == common.CFDModeFlags.TargetCompare()
+
+	// Folder Case in CTime or CTimeMtime CFDModes.
+	if !isTargetCompare && destinationObject.entityType == common.EEntityType.Folder() {
 		sourceObjectInMap, present = foldermap.indexMap[lcFileName]
 
 		//
@@ -469,7 +475,8 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			//
 
 			// Inode should be set for both source and destination.
-			if destinationObject.inode == 0 || sourceObjectInMap.inode == 0 {
+			// Root directory doesnt have an ID
+			if !destinationObject.isRootDirectory && (destinationObject.inode == 0 || sourceObjectInMap.inode == 0) {
 				panic(fmt.Sprintf("Either destinationObject inode(%v) or sourceObjectInMap inode(%v) is not set for relativePath(%s)\n",
 					destinationObject.inode, sourceObjectInMap.inode, destinationObject.relativePath))
 			}
@@ -527,7 +534,10 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		} else if metadataChanged {
 			f.scannerLogger.Log(pipeline.LogInfo, fmt.Sprintf("File(%s) scheduled for file property transfer only", sourceObjectInMap.relativePath))
 
-			sourceObjectInMap.entityType = common.EEntityType.FileProperties()
+			// Folder is actualy a folder properties transfer.
+			if sourceObjectInMap.entityType == common.EEntityType.File() {
+				sourceObjectInMap.entityType = common.EEntityType.FileProperties()
+			}
 
 			// This is only file properties transfer, we don't want it to be accounted in bytes transferred.
 			sourceObjectInMap.size = 0
@@ -555,7 +565,6 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	return nil
 }
 
-//
 // Given both the local and target attributes of the file, find out if we need to copy data+metadata, only metadata, or none.
 // This is called by TargetTraverser for children of directories that may have "changed" as detected by
 // HasDirectoryChangedSinceLastSync(). For children of "changed" directories we cannot safely do local ctime
@@ -571,7 +580,9 @@ func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingTargetCompar
 	// If mtime or size of target file is different from source file it means the file data (and metadata) has changed,
 	// else only metadata has changed.
 	//
-	if to.size != so.size || so.lastModifiedTime.UnixNano() != to.lastModifiedTime.UnixNano() {
+	folder := to.entityType == common.EEntityType.Folder()
+	// For folders we want to know only if the metadata changed as there is no 'data' change for folders.
+	if !folder && (to.size != so.size || so.lastModifiedTime.UnixNano() != to.lastModifiedTime.UnixNano()) {
 		return true, true
 	} else {
 		//
@@ -631,8 +642,9 @@ func newSyncSourceComparator(i *folderIndexer, copyScheduler objectProcessor, di
 }
 
 // it will only transfer source items that are:
-//	1. not present in the map
+//  1. not present in the map
 //  2. present but is more recent than the entry in the map
+//
 // note: we remove the StoredObject if it is present so that when we have finished
 // the index will contain all objects which exist at the destination but were NOT seen at the source
 func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) error {

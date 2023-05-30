@@ -24,7 +24,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common/parallel"
@@ -45,6 +47,22 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+
+	// Fields applicable only to sync operation.
+	// isSync boolean tells whether its copy operation or sync operation.
+	isSync bool
+
+	// For sync operation this flag tells whether this is source or target.
+	isSource bool
+
+	// Hierarchical map of files and folders seen on source side.
+	indexerMap *folderIndexer
+
+	// child-after-parent ordered communication channel between source and destination traverser.
+	orderedTqueue parallel.OrderedTqueueInterface
+
+	// see cookedSyncCmdArgs.maxObjectIndexerSizeInGB for details.
+	maxObjectIndexerSizeInGB uint32
 }
 
 func (t *fileTraverser) IsDirectory(bool) bool {
@@ -65,6 +83,7 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesRe
 
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	targetURLParts := azfile.NewFileURLParts(*t.rawURL)
+	isTargetSync := t.isSync && !t.isSource
 
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
@@ -80,13 +99,16 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				"",
 				common.EEntityType.File(),
-				fileProperties.LastModified(),
+				azfile.ToTime(fileProperties.FileLastWriteTime()),
 				fileProperties.ContentLength(),
 				fileProperties,
 				noBlobProps,
 				common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata()), // .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
 				targetURLParts.ShareName,
 			)
+
+			storedObject.inode, err = strconv.ParseUint(fileProperties.FileID(), 10, 64)
+			storedObject.lastChangeTime = azfile.ToTime(fileProperties.FileChangeTime())
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
@@ -112,7 +134,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		// We need to omit some properties if we don't get properties
 		lmt := time.Time{}
+		lct := time.Time{}
+
+		var fileId string
 		var contentProps contentPropsProvider = noContentProps
+
 		var meta common.Metadata = nil
 
 		// Only get the properties if we're told to
@@ -124,7 +150,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					relativePath: relativePath,
 				}, err
 			}
-			lmt = fullProperties.LastModified()
+			lmt = azfile.ToTime(fullProperties.FileLastWriteTime())
+			lct = azfile.ToTime(fullProperties.FileChangeTime())
 			if f.entityType == common.EEntityType.File() {
 				contentProps = fullProperties.(*azfile.FileGetPropertiesResponse) // only files have content props. Folders don't.
 				// Get an up-to-date size, because it's documented that the size returned by the listing might not be up-to-date,
@@ -134,9 +161,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
 				size = fullProperties.(*azfile.FileGetPropertiesResponse).ContentLength()
 			}
+
+			fileId = fullProperties.FileID()
 			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 		}
-		return newStoredObject(
+
+		so := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(f.name),
 			relativePath,
@@ -147,7 +177,19 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			noBlobProps,
 			meta,
 			targetURLParts.ShareName,
-		), nil
+		)
+
+		if isTargetSync {
+			// inode is not requiered for copy / source sync
+			so.inode, err = strconv.ParseUint(fileId, 10, 64)
+		}
+
+		so.lastChangeTime = lct
+		so.isRootDirectory = f.rootDirectory
+		so.isFolderEndMarker = f.isDirectoryEndMarker
+		so.isFinalizeAll = f.finalizeAll
+
+		return so, err
 	}
 
 	processStoredObject := func(s StoredObject) error {
@@ -162,11 +204,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// get the directory URL so that we can list the files
 	directoryURL := azfile.NewDirectoryURL(targetURLParts.URL(), t.p)
 
-	// Our rule is that enumerators of folder-aware sources should include the root folder's properties.
+	// // Our rule is that enumerators of folder-aware sources should include the root folder's properties.
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	_, err = directoryURL.GetProperties(t.ctx)
 	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
-		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, ""))
+		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, "", true, false, false))
 		if err != nil {
 			return err
 		}
@@ -176,23 +218,70 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 	}
 
+	convertToOutput := func(entity azfileEntity) (parallel.DirectoryEntry, error) {
+		if isTargetSync {
+			return convertToStoredObject(entity)
+		}
+
+		return entity, nil
+	}
+
 	// Define how to enumerate its contents
 	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
-		currentDirURL := dir.(azfile.DirectoryURL)
+		var currentDirURL azfile.DirectoryURL
+		fileUrlParts := azfile.NewFileURLParts(*t.rawURL)
+		if isTargetSync {
+			// in case of target sync, we are getting only relative path, so we should generate the full dir path
+			currentDirURL = t.generateDirUrl(fileUrlParts, dir.(string))
+		} else {
+			currentDirURL = dir.(azfile.DirectoryURL)
+		}
+
 		for marker := (azfile.Marker{}); marker.NotDone(); {
 			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(t.ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
 			if err != nil {
+				// in case the source traverser found a directory that doesnt exist in the target, we want to enqueue it.
+				if isTargetSync && err.(azfile.StorageError).Response().StatusCode == 404 {
+					storedObject := StoredObject{
+						name:              getObjectNameOnly(strings.TrimSuffix(dir.(string), common.AZCOPY_PATH_SEPARATOR_STRING)),
+						relativePath:      strings.TrimSuffix(dir.(string), common.AZCOPY_PATH_SEPARATOR_STRING),
+						entityType:        common.EEntityType.Folder(),
+						ContainerName:     fileUrlParts.ShareName,
+						isFolderEndMarker: true,
+						isFinalizeAll:     true,
+					}
+
+					enqueueOutput(storedObject, nil)
+					return nil
+				}
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			for _, fileInfo := range lResp.FileItems {
-				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
+				entity := newAzFileFileEntity(currentDirURL, fileInfo)
+				output, err := convertToOutput(entity)
+				enqueueOutput(output, err)
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
-				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
+				if !isTargetSync {
+					entity := newAzFileChildFolderEntity(currentDirURL, dirInfo.Name, false, false)
+					output, err := convertToOutput(entity)
+					enqueueOutput(output, err)
+				}
+
 				if t.recursive {
-					// If recursive is turned on, add sub directories to be processed
-					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
+					// If recursive is turned on, add sub directories to be
+					// in case of target sync, we will not enqueue this dir using enqueue dir, since the enumerateOneDir should enumerates only folders that exists in the source
+					// So we will not enumerate destination directories that was deleted in the source
+					if !isTargetSync {
+						enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
+					} else {
+						// In case of folder that exist only in the destination, the folder should enumerate by the target traveres
+						// So that the comparere will be able to know that this directory should be treated
+						entity := newAzFileChildFolderEntity(currentDirURL, dirInfo.Name, false, false)
+						output, err := convertToOutput(entity)
+						enqueueOutput(output, err)
+					}
 				}
 			}
 
@@ -220,7 +309,28 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 			marker = lResp.NextMarker
 		}
+
+		if isTargetSync {
+			// Enqueue the current directory with isFolderEndMarker = true, to trigger FinalizeDirectory
+
+			entity := newAzFileRootFolderEntity(
+				currentDirURL,
+				strings.TrimSuffix(currentDirURL.URL().Path,
+					common.AZCOPY_PATH_SEPARATOR_STRING),
+				false, /*isRoot*/
+				true,  /*isFolderEndMarker*/
+				true,
+			)
+
+			output, err := convertToOutput(entity)
+			enqueueOutput(output, err)
+		}
+
 		return nil
+	}
+
+	if isTargetSync {
+		return t.parallelSyncTargetEnumeration(directoryURL, enumerateOneDir, processor, filters)
 	}
 
 	// run the actual enumeration.
@@ -259,18 +369,108 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileTraverser) {
-	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
+func (t *fileTraverser) parallelSyncTargetEnumeration(directoryURL azfile.DirectoryURL, enumerateOneDir parallel.EnumerateOneDirFunc, processor objectProcessor, filters []ObjectFilter) error {
+	// initiate parallel scanning, starting at the root path
+	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+	channels := parallel.Crawl(workerContext, directoryURL, "" /* relBase */, enumerateOneDir, EnumerationParallelism, func() int64 {
+		if t.indexerMap != nil {
+			return t.indexerMap.getObjectIndexerMapSize()
+		}
+		panic("ObjectIndexerMap is nil")
+	}, t.orderedTqueue, t.isSource, t.isSync, t.maxObjectIndexerSizeInGB)
+
+	errChan := make(chan error, len(channels))
+	var wg sync.WaitGroup
+	processFunc := func(index int) {
+		defer wg.Done()
+		for {
+			select {
+			case x, ok := <-channels[index]:
+				if !ok {
+					return
+				}
+
+				item, workerError := x.Item()
+				if workerError != nil {
+					errChan <- workerError
+					cancelWorkers()
+					return
+				}
+
+				object := item.(StoredObject)
+
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter(object.entityType)
+				}
+
+				processErr := processIfPassedFilters(filters, object, processor)
+				_, processErr = getProcessingError(processErr)
+				if processErr != nil {
+					fmt.Printf("Traverser failed with error: %v", processErr)
+					errChan <- processErr
+					cancelWorkers()
+					return
+				}
+			case err := <-errChan:
+				fmt.Printf("Some other thread received error, so coming out.")
+				// Requeue the error for other go routines to read.
+				errChan <- err
+				return
+			}
+		}
+	}
+
+	for i := 0; i < len(channels); i++ {
+		wg.Add(1)
+		go processFunc(i)
+	}
+	wg.Wait()
+
+	fmt.Printf("Done processing of file traverser channels")
+	if len(errChan) > 0 {
+		err := <-errChan
+		return err
+	}
+	return nil
+}
+
+func (t *fileTraverser) generateDirUrl(fileUrlParts azfile.FileURLParts, relativePath string) azfile.DirectoryURL {
+	fileUrl := fileUrlParts.URL()
+	if relativePath != "" && !strings.HasPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) {
+		relativePath = common.AZCOPY_PATH_SEPARATOR_STRING + relativePath
+	}
+
+	fileUrl.Path = fileUrl.Path + relativePath
+	return azfile.NewDirectoryURL(fileUrl, t.p)
+}
+
+func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, isSync, isSource bool, indexerMap *folderIndexer, orderedTqueue parallel.OrderedTqueueInterface, maxObjectIndexerSizeInGB uint32) (t *fileTraverser) {
+	t = &fileTraverser{
+		rawURL:                      rawURL,
+		p:                           p,
+		ctx:                         ctx,
+		recursive:                   recursive,
+		getProperties:               getProperties,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		isSync:                      isSync,
+		isSource:                    isSource,
+		orderedTqueue:               orderedTqueue,
+		indexerMap:                  indexerMap,
+		maxObjectIndexerSizeInGB:    maxObjectIndexerSizeInGB,
+	}
 	return
 }
 
 //  allows polymorphic treatment of folders and files
 type azfileEntity struct {
-	name           string
-	contentLength  int64
-	url            url.URL
-	propertyGetter func(ctx context.Context) (azfilePropertiesAdapter, error)
-	entityType     common.EntityType
+	name                 string
+	contentLength        int64
+	url                  url.URL
+	propertyGetter       func(ctx context.Context) (azfilePropertiesAdapter, error)
+	entityType           common.EntityType
+	rootDirectory        bool
+	isDirectoryEndMarker bool
+	finalizeAll          bool
 }
 
 func newAzFileFileEntity(containingDir azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
@@ -281,21 +481,27 @@ func newAzFileFileEntity(containingDir azfile.DirectoryURL, fileInfo azfile.File
 		fu.URL(),
 		func(ctx context.Context) (azfilePropertiesAdapter, error) { return fu.GetProperties(ctx) },
 		common.EEntityType.File(),
+		false,
+		false, /*isFolderEndMarker*/
+		false, /*finalizeAll*/
 	}
 }
 
-func newAzFileChildFolderEntity(containingDir azfile.DirectoryURL, dirName string) azfileEntity {
+func newAzFileChildFolderEntity(containingDir azfile.DirectoryURL, dirName string, isDirectoryEndMarker, finalizeAll bool) azfileEntity {
 	du := containingDir.NewDirectoryURL(dirName)
-	return newAzFileRootFolderEntity(du, dirName) // now that we have du, the logic is same as if it was the root
+	return newAzFileRootFolderEntity(du, dirName /*isRoot*/, false, isDirectoryEndMarker, finalizeAll) // now that we have du, the logic is same as if it was the root
 }
 
-func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string) azfileEntity {
+func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string, isRoot, isDirectoryEndMarker, finalizeAll bool) azfileEntity {
 	return azfileEntity{
 		name,
 		0,
 		rootDir.URL(),
 		func(ctx context.Context) (azfilePropertiesAdapter, error) { return rootDir.GetProperties(ctx) },
 		common.EEntityType.Folder(),
+		isRoot,
+		isDirectoryEndMarker,
+		finalizeAll,
 	}
 }
 
@@ -303,4 +509,7 @@ func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string) azfileE
 type azfilePropertiesAdapter interface {
 	NewMetadata() azfile.Metadata
 	LastModified() time.Time
+	FileChangeTime() string
+	FileLastWriteTime() string
+	FileID() string
 }
