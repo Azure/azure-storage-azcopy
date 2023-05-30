@@ -162,6 +162,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		so.inode, err = strconv.ParseUint(fileId, 10, 64)
 		so.isRootDirectory = f.rootDirectory
+		so.isFolderEndMarker = f.isDirectoryEndMarker
 
 		return so, err
 	}
@@ -182,7 +183,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	_, err = directoryURL.GetProperties(t.ctx)
 	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
-		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, "", true))
+		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, "", true, false))
 		if err != nil {
 			return err
 		}
@@ -205,7 +206,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
-				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
+				if !t.isSync {
+					enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name, false), nil)
+				}
+
 				if t.recursive {
 					// If recursive is turned on, add sub directories to be processed
 					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
@@ -236,6 +240,19 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 			marker = lResp.NextMarker
 		}
+
+		if t.isSync {
+			// Enqueue the current directory with isFolderEndMarker = true, to trigger FinalizeDirectory
+			enqueueOutput(
+				newAzFileRootFolderEntity(
+					currentDirURL,
+					strings.TrimSuffix(currentDirURL.URL().Path,
+						common.AZCOPY_PATH_SEPARATOR_STRING),
+					false, /*isRoot*/
+					true /*isFolderEndMarker*/),
+				nil)
+		}
+
 		return nil
 	}
 
@@ -282,12 +299,13 @@ func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 
 //  allows polymorphic treatment of folders and files
 type azfileEntity struct {
-	name           string
-	contentLength  int64
-	url            url.URL
-	propertyGetter func(ctx context.Context) (azfilePropertiesAdapter, error)
-	entityType     common.EntityType
-	rootDirectory  bool
+	name                 string
+	contentLength        int64
+	url                  url.URL
+	propertyGetter       func(ctx context.Context) (azfilePropertiesAdapter, error)
+	entityType           common.EntityType
+	rootDirectory        bool
+	isDirectoryEndMarker bool
 }
 
 func newAzFileFileEntity(containingDir azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
@@ -299,15 +317,16 @@ func newAzFileFileEntity(containingDir azfile.DirectoryURL, fileInfo azfile.File
 		func(ctx context.Context) (azfilePropertiesAdapter, error) { return fu.GetProperties(ctx) },
 		common.EEntityType.File(),
 		false,
+		false, /*isFolderEndMarker*/
 	}
 }
 
-func newAzFileChildFolderEntity(containingDir azfile.DirectoryURL, dirName string) azfileEntity {
+func newAzFileChildFolderEntity(containingDir azfile.DirectoryURL, dirName string, isDirectoryEndMarker bool) azfileEntity {
 	du := containingDir.NewDirectoryURL(dirName)
-	return newAzFileRootFolderEntity(du, dirName /*isRoot*/, false) // now that we have du, the logic is same as if it was the root
+	return newAzFileRootFolderEntity(du, dirName /*isRoot*/, false, isDirectoryEndMarker) // now that we have du, the logic is same as if it was the root
 }
 
-func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string, isRoot bool) azfileEntity {
+func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string, isRoot, isDirectoryEndMarker bool) azfileEntity {
 	return azfileEntity{
 		name,
 		0,
@@ -315,6 +334,7 @@ func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string, isRoot 
 		func(ctx context.Context) (azfilePropertiesAdapter, error) { return rootDir.GetProperties(ctx) },
 		common.EEntityType.Folder(),
 		isRoot,
+		isDirectoryEndMarker,
 	}
 }
 

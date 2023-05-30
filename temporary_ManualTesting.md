@@ -11,8 +11,8 @@
 1. Simple sync without changes
 2. Rename source dierctory and sync after with all of the options (one at a time):
 
-		a. --cfd-mode=CtimeMtime
-		b. --cfd-mode=Ctime
+		a. --cfd-mode=CtimeMtime (--last-sync-time=YYYY-MM-DDTHH:MM:SS.0000000Z)
+		b. --cfd-mode=Ctime (--last-sync-time=YYYY-MM-DDTHH:MM:SS.0000000Z)
 		c. --cfd-mode=TargetCompare  //Currently broken
 		d. --metadata-only-sync=true
 
@@ -22,4 +22,4 @@
 
 
 ## sync smb -> file
-1. simple sync without changes // Should fail in i.totalSize != 0
+1. simple sync without changes
