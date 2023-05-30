@@ -705,7 +705,7 @@ func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, log
 	}
 
 	return ste.NewFilePipeline(
-		azfile.NewAnonymousCredential(),
+		credential,
 		azfile.PipelineOptions{
 			Telemetry: azfile.TelemetryOptions{
 				Value: glcm.AddUserAgentPrefix(common.UserAgent),
