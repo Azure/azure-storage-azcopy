@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,10 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+
+	// Fields applicable only to sync operation.
+	// isSync boolean tells whether its copy operation or sync operation.
+	isSync bool
 }
 
 func (t *fileTraverser) IsDirectory(bool) bool {
@@ -88,6 +93,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				targetURLParts.ShareName,
 			)
 
+			storedObject.inode, err = strconv.ParseUint(fileProperties.FileID(), 10, 64)
+
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
 			}
@@ -112,6 +119,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		// We need to omit some properties if we don't get properties
 		lmt := time.Time{}
+		var fileId string
 		var contentProps contentPropsProvider = noContentProps
 		var meta common.Metadata = nil
 
@@ -134,9 +142,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
 				size = fullProperties.(*azfile.FileGetPropertiesResponse).ContentLength()
 			}
+
+			fileId = fullProperties.FileID()
 			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
 		}
-		return newStoredObject(
+
+		so := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(f.name),
 			relativePath,
@@ -147,7 +158,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			noBlobProps,
 			meta,
 			targetURLParts.ShareName,
-		), nil
+		)
+
+		so.inode, err = strconv.ParseUint(fileId, 10, 64)
+		so.isRootDirectory = f.rootDirectory
+
+		return so, err
 	}
 
 	processStoredObject := func(s StoredObject) error {
@@ -166,7 +182,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	_, err = directoryURL.GetProperties(t.ctx)
 	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
-		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, ""))
+		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, "", true))
 		if err != nil {
 			return err
 		}
@@ -259,8 +275,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileTraverser) {
-	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
+func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, isSync bool) (t *fileTraverser) {
+	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter, isSync: isSync}
 	return
 }
 
@@ -271,6 +287,7 @@ type azfileEntity struct {
 	url            url.URL
 	propertyGetter func(ctx context.Context) (azfilePropertiesAdapter, error)
 	entityType     common.EntityType
+	rootDirectory  bool
 }
 
 func newAzFileFileEntity(containingDir azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
@@ -281,21 +298,23 @@ func newAzFileFileEntity(containingDir azfile.DirectoryURL, fileInfo azfile.File
 		fu.URL(),
 		func(ctx context.Context) (azfilePropertiesAdapter, error) { return fu.GetProperties(ctx) },
 		common.EEntityType.File(),
+		false,
 	}
 }
 
 func newAzFileChildFolderEntity(containingDir azfile.DirectoryURL, dirName string) azfileEntity {
 	du := containingDir.NewDirectoryURL(dirName)
-	return newAzFileRootFolderEntity(du, dirName) // now that we have du, the logic is same as if it was the root
+	return newAzFileRootFolderEntity(du, dirName /*isRoot*/, false) // now that we have du, the logic is same as if it was the root
 }
 
-func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string) azfileEntity {
+func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string, isRoot bool) azfileEntity {
 	return azfileEntity{
 		name,
 		0,
 		rootDir.URL(),
 		func(ctx context.Context) (azfilePropertiesAdapter, error) { return rootDir.GetProperties(ctx) },
 		common.EEntityType.Folder(),
+		isRoot,
 	}
 }
 
@@ -303,4 +322,5 @@ func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string) azfileE
 type azfilePropertiesAdapter interface {
 	NewMetadata() azfile.Metadata
 	LastModified() time.Time
+	FileID() string
 }

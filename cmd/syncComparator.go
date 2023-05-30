@@ -469,7 +469,8 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			//
 
 			// Inode should be set for both source and destination.
-			if destinationObject.inode == 0 || sourceObjectInMap.inode == 0 {
+			// Root directory doesnt have an ID
+			if !destinationObject.isRootDirectory && (destinationObject.inode == 0 || sourceObjectInMap.inode == 0) {
 				panic(fmt.Sprintf("Either destinationObject inode(%v) or sourceObjectInMap inode(%v) is not set for relativePath(%s)\n",
 					destinationObject.inode, sourceObjectInMap.inode, destinationObject.relativePath))
 			}

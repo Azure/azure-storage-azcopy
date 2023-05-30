@@ -18,6 +18,16 @@ this will create the azCopy execution file, If you want to run some manual tests
     azcopy_linux_amd64 cp "SourcePath" "destinaltionPath" --flag1 --flag2
 
 
+## Debug your changes
+To run azCopy in debug mode, debug using Debug azCopy configurations.
+
+Before debugging - edit the configurations: just add the copy / sync commands and its args to configurations.args in the launch.json file.
+
+For example:
+
+     "args": ["sync", "/mnt/nfs_share/", "<Path_to_blob>", "<flag1>", "<flag2>"...]
+
+
 
 ## Before running the tests:
 multiple tests use an azure storage account while running, in order to support that, you should create a storage account with the below configuration:
