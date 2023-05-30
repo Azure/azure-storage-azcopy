@@ -6,18 +6,24 @@
 
 ### New Features
 
-1. Support for new Cold Tier feature for Azure Blobs
-2. Support preserving a trailing dot ('.') in names of files and directories in Azure Files
-3. Alternate modes to preserve hash for hash-based sync ([#2214](https://github.com/Azure/azure-storage-azcopy/issues/2214))
-4. Support 'force-if-readonly' flag for Sync.
-5. Preserve posix properties while uploading or downloading from HNS enabled accounts
+1. Support for new Cold Tier feature for Azure Blobs (--block-blob-tier=Cold)
+2. Support preserving a trailing dot ('.') in names of files and directories in Azure Files (default is `--trailing-dot=Enable`)
+3. Alternate modes to preserve hash for hash-based sync ([#2214](https://github.com/Azure/azure-storage-azcopy/issues/2214)) (default is OS-dependent, either `--local-hash-storage-mode=XAttr` on MacOS/Linux or `--local-hash-storage-mode=AlternateDataStreams` on Windows)
+   - OS-specific hashing modes are expected to be available on all filesystems the source would traverse. (`user_xattr` enabled on filesystems on Unix systems, `FILE_NAMED_STREAMS` flag expected on Windows volumes)
+   - HiddenFiles provides an OS-agnostic method to store hash data; to prevent "dirtying" the source, also specify `--hash-meta-dir` directing AzCopy to store & read hidden hash metadata files elsewhere.
+4. Support 'force-if-readonly' flag for Sync. (`false` by default)
+5. Preserve posix properties while uploading or downloading from HNS enabled accounts (`--preserve-posix-properties`, `false` by default.)
+
 ### Bug Fixes
 
 1. Fix situation where large-files would hang infinitely with low value for 'cap-mbps'
 2. Issue [#2074](https://github.com/Azure/azure-storage-azcopy/issues/2074) where AzCopy would hang after cancelling
 3. Issue [#1888](https://github.com/Azure/azure-storage-azcopy/issues/1888) where directories with empty name are incorrectly handled.
 4. Cancel HNS delete jobs [#2117](https://github.com/Azure/azure-storage-azcopy/issues/2117)
-5. Fix issue where large chunks could not be scheduled ([#2228](https://github.com/Azure/azure-storage-azcopy/issues/2228))
+5. Fix issue where large chunks could not be scheduled [#2228](https://github.com/Azure/azure-storage-azcopy/issues/2228)
+6. Fixed segfault on MacOS [#1790](https://github.com/Azure/azure-storage-azcopy/issues/1790)
+7. Fixed panic on attempt to create AzCopy dir [#2191](https://github.com/Azure/azure-storage-azcopy/issues/2191)
+
 ## Version 10.18.1
 
 ### Bug fixes
