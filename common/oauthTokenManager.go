@@ -429,7 +429,7 @@ const TokenRefreshSourceTokenStore = "tokenstore"
 
 // OAuthTokenInfo contains info necessary for refresh OAuth credentials.
 type OAuthTokenInfo struct {
-	azcore.TokenCredential
+	azcore.TokenCredential `json:",omitempty"`
 	adal.Token
 	Resource 				string `json:"_resource"`
 	Tenant                  string `json:"_tenant"`
