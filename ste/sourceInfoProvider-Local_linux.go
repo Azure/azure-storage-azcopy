@@ -223,6 +223,11 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
 }
 
+func (hi HandleInfo) FileChangeTime() time.Time {
+	// This returns nanoseconds since Unix Epoch.
+	return time.Unix(0, hi.LastChangeTime.Nanoseconds())
+}
+
 func (hi HandleInfo) FileAttributes() azfile.FileAttributeFlags {
 	// Can't shorthand it because the function name overrides.
 	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes)

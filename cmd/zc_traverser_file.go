@@ -133,8 +133,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 		// We need to omit some properties if we don't get properties
 		lmt := time.Time{}
+		lct := time.Time{}
+
 		var fileId string
 		var contentProps contentPropsProvider = noContentProps
+
 		var meta common.Metadata = nil
 
 		// Only get the properties if we're told to
@@ -147,6 +150,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				}, err
 			}
 			lmt = fullProperties.LastModified()
+			lct = azfile.ToTime(fullProperties.FileChangeTime())
 			if f.entityType == common.EEntityType.File() {
 				contentProps = fullProperties.(*azfile.FileGetPropertiesResponse) // only files have content props. Folders don't.
 				// Get an up-to-date size, because it's documented that the size returned by the listing might not be up-to-date,
@@ -179,6 +183,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			so.inode, err = strconv.ParseUint(fileId, 10, 64)
 		}
 
+		so.lastChangeTime = lct
 		so.isRootDirectory = f.rootDirectory
 		so.isFolderEndMarker = f.isDirectoryEndMarker
 		so.isFinalizeAll = f.finalizeAll
@@ -506,5 +511,6 @@ func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string, isRoot,
 type azfilePropertiesAdapter interface {
 	NewMetadata() azfile.Metadata
 	LastModified() time.Time
+	FileChangeTime() string
 	FileID() string
 }
