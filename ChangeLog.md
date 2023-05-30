@@ -1,6 +1,11 @@
 
 # Change Log
 
+## Version 10.19.0-Preview
+
+### New Features
+
+***Mac M1/ARM64 Support***
 
 ## Version 10.19.0
 
