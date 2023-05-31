@@ -102,7 +102,7 @@ jobs:
       # cross compile to make sure nothing broke
       - script: |
           GOARCH=arm64 CGO_ENABLED=1 go build
-        displayName: 'Generate MacOS Build with ARM64'
+        displayName: 'Test Cross-compiled MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
       - task: PublishBuildArtifacts@1
