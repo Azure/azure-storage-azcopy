@@ -484,21 +484,28 @@ func (identityInfo *IdentityInfo) Validate() error {
 
 // Refresh gets new token with token info.
 func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error) {
-	// TODO: This method is only necessary until datalake is migrated.
+	// TODO: I think this method is only necessary until datalake is migrated.
 	// Returns cached TokenCredential or creates a new one if it hasn't been created yet.
 	tc, err := credInfo.GetTokenCredential()
 	if err != nil {
 		return nil, err
 	}
-	scopes := []string{credInfo.Resource}
-	token, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
-	if err != nil {
-		return nil, err
+	if credInfo.TokenRefreshSource == "tokenstore" || credInfo.Identity || credInfo.ServicePrincipalName {
+		scopes := []string{credInfo.Resource}
+		t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
+		if err != nil {
+			return nil, err
+		}
+		return &adal.Token{
+			AccessToken:  t.Token,
+			ExpiresOn: json.Number(strconv.FormatInt(int64(t.ExpiresOn.Sub(date.UnixEpoch())/time.Second), 10)),
+		}, nil
+	} else {
+		if dcc, ok := tc.(*DeviceCodeCredential); ok {
+			return dcc.RefreshTokenWithUserCredential(ctx)
+		}
 	}
-	return &adal.Token{
-		AccessToken:  token.Token,
-		ExpiresOn: json.Number(strconv.FormatInt(int64(token.ExpiresOn.Sub(date.UnixEpoch())/time.Second), 10)),
-	}, nil
+	return nil, errors.New("invalid token info")
 }
 
 // Single instance token store credential cache shared by entire azcopy process.
@@ -532,6 +539,7 @@ func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error)
 
 type TokenStoreCredential struct {
 }
+
 func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
 	hasToken, err := tokenStoreCredCache.HasCachedToken()
 	if err != nil || !hasToken {
@@ -616,41 +624,58 @@ func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredent
 	return tc, nil
 }
 
-type DeviceCodeCredential struct {
-	*OAuthTokenInfo
-}
-func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
+// RefreshTokenWithUserCredential gets new token with user credential through refresh.
+func (dcc *DeviceCodeCredential) RefreshTokenWithUserCredential(ctx context.Context) (*adal.Token, error) {
+	targetResource := Resource
+	if dcc.token.Resource != "" && dcc.token.Resource != targetResource {
+		targetResource = dcc.token.Resource
+	}
 
-	resource := strings.Trim(options.Scopes[0], "/.default")
-	oauthConfig, err := adal.NewOAuthConfig(dcc.ActiveDirectoryEndpoint, dcc.Tenant)
+	oauthConfig, err := adal.NewOAuthConfig(dcc.aadEndpoint, dcc.tenantID)
 	if err != nil {
-		return azcore.AccessToken{}, err
+		return nil, err
 	}
 
 	// ClientID in credInfo is optional which is used for internal integration only.
 	// Use AzCopy's 1st party applicationID for refresh by default.
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
-		Iff(dcc.ClientID != "", dcc.ClientID, ApplicationID),
-		resource,
-		dcc.Token)
+		Iff(dcc.clientID != "", dcc.clientID, ApplicationID),
+		targetResource,
+		dcc.token)
 	if err != nil {
-		return azcore.AccessToken{}, err
+		return nil, err
 	}
 
 	if err := spt.RefreshWithContext(ctx); err != nil {
-		return azcore.AccessToken{}, err
+		return nil, err
 	}
 
-	tokenInfo := spt.Token()
-	return azcore.AccessToken{
-		Token: tokenInfo.AccessToken,
-		ExpiresOn: tokenInfo.Expires(),
-	}, nil
+	newToken := spt.Token()
+	return &newToken, nil
+}
+
+var _ azcore.TokenCredential = &DeviceCodeCredential{}
+type DeviceCodeCredential struct {
+	token adal.Token
+	aadEndpoint string
+	tenantID string
+	clientID string
+}
+func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	waitDuration := dcc.token.Expires().Sub(time.Now().UTC()) / 2
+	if dcc.token.WillExpireIn(waitDuration) {
+		token, err := dcc.RefreshTokenWithUserCredential(ctx)
+		if err != nil {
+			return azcore.AccessToken{}, err
+		}
+		dcc.token = *token
+	}
+	return azcore.AccessToken{Token: dcc.token.AccessToken, ExpiresOn: dcc.token.Expires()}, nil
 }
 
 func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredential, error) {
-	tc := &DeviceCodeCredential{credInfo}
+	tc := &DeviceCodeCredential{token: credInfo.Token, aadEndpoint: credInfo.ActiveDirectoryEndpoint, tenantID: credInfo.Tenant, clientID: credInfo.ApplicationID}
 	credInfo.TokenCredential = tc
 	return tc, nil
 }
