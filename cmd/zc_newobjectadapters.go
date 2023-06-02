@@ -83,17 +83,6 @@ func (e emptyPropertiesAdapter) LeaseStatus() lease.StatusType {
 	return ""
 }
 
-// md5OnlyAdapter is like emptyProperties adapter, except for the ContentMD5
-// method, for which it returns a real value
-type md5OnlyAdapter struct {
-	emptyPropertiesAdapter
-	md5 []byte
-}
-
-func (m md5OnlyAdapter) ContentMD5() []byte {
-	return m.md5
-}
-
 // blobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to the blobPropsProvider interface
 type blobPropertiesResponseAdapter struct {
 	*blob.GetPropertiesResponse

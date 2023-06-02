@@ -57,6 +57,7 @@ type rawSyncCmdArgs struct {
 	includeRegex          string
 	excludeRegex          string
 	compareHash           string
+	localHashStorageMode  string
 
 	preservePermissions     bool
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
@@ -92,6 +93,7 @@ type rawSyncCmdArgs struct {
 	cpkScopeInfo string
 	// dry run mode bool
 	dryrun bool
+	trailingDot string
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -137,28 +139,12 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
 
-	/* We support DFS by using blob end-point of the account. We replace dfs by blob in src and dst */
-	srcHNS, dstHNS := false, false
-	if loc := InferArgumentLocation(raw.src); loc == common.ELocation.BlobFS() {
-		raw.src = strings.Replace(raw.src, ".dfs", ".blob", 1)
-		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on source account.")
-		srcHNS = true
-	}
-
-	if loc := InferArgumentLocation(raw.dst); loc == common.ELocation.BlobFS() {
-		raw.dst = strings.Replace(raw.dst, ".dfs", ".blob", 1)
-		msg := fmt.Sprintf("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account. There are some limitations when switching endpoints. " +
-			"Please refer to https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-known-issues#blob-storage-apis")
-		glcm.Info(msg)
-		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
-		}
-		dstHNS = true
-	}
-
-	cooked.isHNSToHNS = srcHNS && dstHNS
-
 	var err error
+	err = cooked.trailingDot.Parse(raw.trailingDot)
+	if err != nil {
+		return cooked, err
+	}
+
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
@@ -170,14 +156,26 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.fromTo.To() != common.ELocation.File() && raw.trailingDot != "" {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
+		}
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob():
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.fromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
+		}
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.fromTo.To() != common.ELocation.File() && cooked.fromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
+		}
 	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}
@@ -287,6 +285,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 			raw.putMd5 = true
 		default: // no need to put a hash of any kind.
 		}
+	}
+
+	if err = common.LocalHashStorageMode.Parse(raw.localHashStorageMode); err != nil {
+		return cooked, err
 	}
 
 	cooked.putMd5 = raw.putMd5
@@ -444,6 +446,7 @@ type cookedSyncCmdArgs struct {
 	mirrorMode bool
 
 	dryrunMode bool
+	trailingDot common.TrailingDotOption
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -786,7 +789,7 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "'Preserves' property info gleaned from stat or statx into object metadata.")
 
 	// TODO: enable when we support local <-> File
-	// syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
+	syncCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
 	// syncCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 	// syncCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")
 
@@ -815,8 +818,11 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
+	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Enabled by default. Options for trailing dot support in file share. Available options: Enable, Disable. Choose disable to go back to legacy (potentially unsafe) treatment of trailing dot files.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
+	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "", "When using `--local-hash-storage-mode=HiddenFiles` you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
+	syncCmd.PersistentFlags().StringVar(&raw.localHashStorageMode, "local-hash-storage-mode", common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; valid options are: HiddenFiles (OS Agnostic), XAttr (Linux/MacOS only; requires user_xattr on all filesystems traversed @ source), AlternateDataStreams (Windows only; requires named streams on target volume)")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

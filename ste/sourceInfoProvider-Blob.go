@@ -36,8 +36,43 @@ type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
 }
 
+func (p *blobSourceInfoProvider) IsDFSSource() bool {
+	return p.jptm.FromTo().From() == common.ELocation.BlobFS()
+}
+
+func (p *blobSourceInfoProvider) internalPresignedURL(useHNS bool) (string, error) {
+	uri, err := p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
+	if err != nil {
+		return "", err
+	}
+
+	// This will have no real effect on non-standard endpoints (e.g. emulator, stack), and *may* work, but probably won't.
+	// However, Stack/Emulator don't support HNS, so, this won't get use.
+	bURLParts, err := blob.ParseURL(uri)
+	if err != nil {
+		return "", err
+	}
+	if useHNS {
+		bURLParts.Host = strings.Replace(bURLParts.Host, ".blob", ".dfs", 1)
+
+		if bURLParts.BlobName != "" {
+			bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
+		} else {
+			bURLParts.ContainerName += "/" // container level perms MUST have a /
+		}
+	} else {
+		bURLParts.Host = strings.Replace(bURLParts.Host, ".dfs", ".blob", 1)
+	}
+
+	return bURLParts.String(), nil
+}
+
+func (p *blobSourceInfoProvider) PreSignedSourceURL() (string, error) {
+	return p.internalPresignedURL(false) // prefer to return the blob URL; data can be read from either endpoint.
+}
+
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
-	source, err := p.PreSignedSourceURL()
+	source, err := p.internalPresignedURL(false)
 	if err != nil {
 		return "", err
 	}
@@ -98,10 +133,9 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
 }
 
-// AccessControl should ONLY get called when we know for a fact it is a blobFS->blobFS tranfser.
-// It *assumes* that the source is actually a HNS account.
 func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, error) {
-	presignedURL, err := p.PreSignedSourceURL()
+	// We can only get access control via HNS, so we MUST switch here.
+	presignedURL, err := p.internalPresignedURL(true)
 	if err != nil {
 		return azbfs.BlobFSAccessControl{}, err
 	}
@@ -133,7 +167,8 @@ func (p *blobSourceInfoProvider) BlobType() blob.BlobType {
 }
 
 func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	source, err := p.PreSignedSourceURL()
+	// We can't set a custom LMT on HNS, so it doesn't make sense to swap here.
+	source, err := p.internalPresignedURL(false)
 	if err != nil {
 		return time.Time{}, err
 	}

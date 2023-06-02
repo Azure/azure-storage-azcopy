@@ -11,7 +11,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/google/uuid v1.3.0
 	github.com/hillu/go-ntdll v0.0.0-20220217145204-be7b5318100d
-	github.com/mattn/go-ieproxy v0.0.3
+	github.com/mattn/go-ieproxy v0.0.11
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/xattr v0.4.6
@@ -30,6 +30,7 @@ require (
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.4.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
+	github.com/Azure/azure-storage-blob-go v0.15.0
 )
 
 replace github.com/Azure/azure-sdk-for-go/sdk/storage/azblob => github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.1-0.20230420220645-f7bfabef3588
@@ -72,4 +73,4 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-go 1.18
+go 1.19

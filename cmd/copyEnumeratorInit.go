@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"log"
 	"net/url"
 	"os"
@@ -49,6 +50,9 @@ func (cca *CookedCopyCmdArgs) validateSourceDir(traverser ResourceTraverser) err
 func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, srcCredInfo common.CredentialInfo, ctx context.Context) (*CopyEnumerator, error) {
 	var traverser ResourceTraverser
 	var err error
+	jobPartOrder.FileAttributes = common.FileTransferAttributes{
+		TrailingDot: cca.trailingDot,
+	}
 	jobPartOrder.CpkOptions = cca.CpkOptions
 	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
 	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
@@ -69,11 +73,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo,
-		cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties,
-		cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs,
-		cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), 
-        cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
 
 	if err != nil {
 		return nil, err
@@ -231,7 +231,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, cca.isHNStoHNS, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -344,10 +344,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(),
-		nil, false, false, false, common.EPermanentDeleteOption.None(),
-		func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, 
-        cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
 
 	if err != nil {
 		return false
@@ -450,7 +447,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 	options := createClientOptions(logLevel.ToPipelineLogLevel())
 	// TODO: we can pass cred here as well
-	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel())
+	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel(), cca.trailingDot)
 	if err != nil {
 		return
 	}
@@ -499,7 +496,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		fsu := azfile.NewServiceURL(*dstURL, dstPipeline)
 		shareURL := fsu.NewShareURL(containerName)
 		_, err = shareURL.GetProperties(ctx)
-
 		if err == nil {
 			return err
 		}
@@ -510,6 +506,33 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 		if stgErr, ok := err.(azfile.StorageError); ok {
 			if stgErr.ServiceCode() != azfile.ServiceCodeShareAlreadyExists {
+				return err
+			}
+		} else {
+			return err
+		}
+	case common.ELocation.BlobFS():
+		// TODO: Implement blobfs container creation
+		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())
+		if err != nil {
+			return err
+		}
+
+		dstURL, err := url.Parse(accountRoot)
+		if err != nil {
+			return err
+		}
+
+		serviceURL := azbfs.NewServiceURL(*dstURL, dstPipeline)
+		fsURL := serviceURL.NewFileSystemURL(containerName)
+		_, err = fsURL.GetProperties(ctx)
+		if err == nil {
+			return err
+		}
+
+		_, err = fsURL.Create(ctx)
+		if stgErr, ok := err.(azbfs.StorageError); ok {
+			if stgErr.ServiceCode() != azbfs.ServiceCodeFileSystemAlreadyExists {
 				return err
 			}
 		} else {
@@ -658,25 +681,25 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 }
 
 // we assume that preserveSmbPermissions and preserveSmbInfo have already been validated, such that they are only true if both resource types support them
-func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preserveSmbPermissions, preservePosixProperties, isDfsDfs, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
+func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
 		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
 
 		template := ". For the same reason, %s defined on folders %s"
 		switch {
-		case preserveSmbPermissions && preserveSmbInfo:
+		case preservePermissions && preserveSmbInfo:
 			return fmt.Sprintf(template, "properties and permissions", willProcessString)
 		case preserveSmbInfo:
 			return fmt.Sprintf(template, "properties", willProcessString)
-		case preserveSmbPermissions:
+		case preservePermissions:
 			return fmt.Sprintf(template, "permissions", willProcessString)
 		default:
 			return "" // no preserve flags set, so we have nothing to say about them
 		}
 	}
 
-	bothFolderAware := (fromTo.AreBothFolderAware() || isDfsDfs || preservePosixProperties || includeDirectoryStubs) && !isDstNull
+	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {

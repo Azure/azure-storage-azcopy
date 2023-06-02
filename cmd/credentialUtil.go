@@ -701,7 +701,7 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, l
 }
 
 // TODO note: ctx and credInfo are ignored at the moment because we only support SAS for Azure File
-func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
+func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel, trailingDot common.TrailingDotOption) (pipeline.Pipeline, error) {
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOption = pipeline.LogOptions{
@@ -710,23 +710,16 @@ func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, log
 		}
 	}
 
-	return ste.NewFilePipeline(
-		azfile.NewAnonymousCredential(),
-		azfile.PipelineOptions{
-			Telemetry: azfile.TelemetryOptions{
-				Value: glcm.AddUserAgentPrefix(common.UserAgent),
-			},
-			Log: logOption,
+	return ste.NewFilePipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{
+		Telemetry: azfile.TelemetryOptions{
+			Value: glcm.AddUserAgentPrefix(common.UserAgent),
 		},
-		azfile.RetryOptions{
-			Policy:        azfile.RetryPolicyExponential,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		},
-		nil,
-		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
-		nil, // we don't gather network stats on the credential pipeline
-	), nil
+		Log: logOption,
+	}, azfile.RetryOptions{
+		Policy:        azfile.RetryPolicyExponential,
+		MaxTries:      ste.UploadMaxTries,
+		TryTimeout:    ste.UploadTryTimeout,
+		RetryDelay:    ste.UploadRetryDelay,
+		MaxRetryDelay: ste.UploadMaxRetryDelay,
+	}, nil, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, trailingDot), nil
 }

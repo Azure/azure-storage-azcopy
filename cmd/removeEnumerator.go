@@ -22,10 +22,11 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -48,11 +49,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo,
-		common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs,
-		cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false,
-		common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(),
-        cca.CpkOptions, nil /* errorChannel */, cca.StripTopDir)
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
 
 	// report failure to create traverser
 	if err != nil {
@@ -80,7 +77,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	// (Must enumerate folders when deleting from a folder-aware location. Can't do folder deletion just based on file
 	// deletion, because that would not handle folders that were empty at the start of the job).
 	// isHNStoHNS is IGNORED here, because BlobFS locations don't take this route currently.
-	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, false, cca.IncludeDirectoryStubs)
+	fpo, message := NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, false, false, false, false, cca.IncludeDirectoryStubs)
 	// do not print Info message if in dry run mode
 	if !cca.dryrunMode {
 		glcm.Info(message)
@@ -124,6 +121,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 // Ultimately, this code can be merged into the newRemoveEnumerator
 func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders())
 
 	// return an error if the unsupported options are passed in
 	if len(cca.InitModularFilters()) > 0 {
@@ -152,109 +150,70 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	urlParts := azbfs.NewBfsURLParts(*sourceURL)
 
 	if cca.ListOfFilesChannel == nil {
-		successMsg, err := removeSingleBfsResource(ctx, urlParts, p, cca.Recursive, cca.dryrunMode)
-		if err != nil {
-			return err
-		}
-		if !cca.dryrunMode {
-			glcm.Exit(func(format common.OutputFormat) string {
-				if format == common.EOutputFormat.Json() {
-					summary := common.ListJobSummaryResponse{
-						JobStatus:      common.EJobStatus.Completed(),
-						TotalTransfers: 1,
-						// It's not meaningful to set FileTransfers or FolderPropertyTransfers because even if its a folder, its not really folder _properties_ which is what the name is
-						TransfersCompleted: 1,
-						PercentComplete:    100,
-					}
-					jsonOutput, err := json.Marshal(summary)
-					common.PanicIfErr(err)
-					return string(jsonOutput)
-				}
-				return successMsg
-			}, common.EExitCode.Success())
-
+		if cca.dryrunMode {
+			return dryrunRemoveSingleDFSResource(ctx, urlParts, p, cca.Recursive)
 		} else {
-			glcm.Exit(nil, common.EExitCode.Success())
-		}
-		// explicitly exit, since in our tests Exit might be mocked away
-		return nil
-	}
+			err := transferProcessor.scheduleCopyTransfer(newStoredObject(
+				nil,
+				path.Base(urlParts.DirectoryOrFilePath),
+				"",
+				common.EEntityType.File(), // blobfs deleter doesn't differentiate
+				time.Now(),
+				0,
+				noContentProps,
+				noContentProps,
+				nil,
+				"",
+			))
 
-	// list of files is given, record the parent path
-	parentPath := urlParts.DirectoryOrFilePath
-	successCount := uint32(0)
-	failedTransfers := make([]common.TransferDetail, 0)
-
-	// read from the list of files channel to find out what needs to be deleted.
-	childPath, ok := <-cca.ListOfFilesChannel
-	for ; ok; childPath, ok = <-cca.ListOfFilesChannel {
-		// remove the child path
-		urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
-		successMessage, err := removeSingleBfsResource(ctx, urlParts, p, cca.Recursive, cca.dryrunMode)
-		if err != nil {
-			// the specific error is not included in the details, since it doesn't have a field for full error message
-			failedTransfers = append(failedTransfers, common.TransferDetail{Src: childPath, TransferStatus: common.ETransferStatus.Failed()})
-			glcm.Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
-		} else {
-			glcm.Info(successMessage)
-			successCount += 1
-		}
-	}
-
-	if cca.dryrunMode {
-		glcm.Exit(nil, common.EExitCode.Success())
-	} else {
-		glcm.Exit(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				status := common.EJobStatus.Completed()
-				if len(failedTransfers) > 0 {
-					status = common.EJobStatus.CompletedWithErrors()
-
-					// if nothing got deleted
-					if successCount == 0 {
-						status = common.EJobStatus.Failed()
-					}
-				}
-
-				summary := common.ListJobSummaryResponse{
-					JobStatus:          status,
-					TotalTransfers:     successCount + uint32(len(failedTransfers)),
-					TransfersCompleted: successCount,
-					TransfersFailed:    uint32(len(failedTransfers)),
-					PercentComplete:    100,
-					FailedTransfers:    failedTransfers,
-				}
-				jsonOutput, err := json.Marshal(summary)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
+			if err != nil {
+				return err
 			}
+		}
+	} else {
+		// list of files is given, record the parent path
+		parentPath := urlParts.DirectoryOrFilePath
 
-			return fmt.Sprintf("Successfully removed %v entities.", successCount)
-		}, common.EExitCode.Success())
+		// read from the list of files channel to find out what needs to be deleted.
+		childPath, ok := <-cca.ListOfFilesChannel
+		for ; ok; childPath, ok = <-cca.ListOfFilesChannel {
+			//remove the child path
+			urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
+			if cca.dryrunMode {
+				return dryrunRemoveSingleDFSResource(ctx, urlParts, p, cca.Recursive)
+			} else {
+				err := transferProcessor.scheduleCopyTransfer(newStoredObject(
+					nil,
+					path.Base(urlParts.DirectoryOrFilePath),
+					childPath,
+					common.EEntityType.File(), // blobfs deleter doesn't differentiate
+					time.Now(),
+					0,
+					noContentProps,
+					noContentProps,
+					nil,
+					"",
+				))
+
+				if err != nil {
+					return err
+				}
+			}
+		}
 	}
 
-	return nil
+	_, err = transferProcessor.dispatchFinalPart()
+	return err
 }
 
-// TODO move after ADLS/Blob interop goes public
-// TODO this simple remove command is only here to support the scenario temporarily
-func removeSingleBfsResource(ctx context.Context, urlParts azbfs.BfsURLParts, p pipeline.Pipeline, recursive bool, dryrunMode bool) (successMessage string, err error) {
-	// deleting a filesystem
+func dryrunRemoveSingleDFSResource(ctx context.Context, urlParts azbfs.BfsURLParts, p pipeline.Pipeline, recursive bool) error {
+	//deleting a filesystem
 	if urlParts.DirectoryOrFilePath == "" {
-		fsURL := azbfs.NewFileSystemURL(urlParts.URL(), p)
-		if !dryrunMode {
-			_, err = fsURL.Delete(ctx)
-			if err == nil {
-				return "Successfully removed the filesystem " + urlParts.FileSystemName, nil
-			}
-			return "", err
-		} else {
-			glcm.Dryrun(func(_ common.OutputFormat) string {
-				return fmt.Sprintf("DRYRUN: remove filesystem %s", urlParts.FileSystemName)
-			})
-			return "", nil
-		}
 
+		glcm.Dryrun(func(_ common.OutputFormat) string {
+			return fmt.Sprintf("DRYRUN: remove filesystem %s", urlParts.FileSystemName)
+		})
+		return nil
 	}
 
 	// we do not know if the source is a file or a directory
@@ -262,76 +221,44 @@ func removeSingleBfsResource(ctx context.Context, urlParts azbfs.BfsURLParts, p 
 	directoryURL := azbfs.NewDirectoryURL(urlParts.URL(), p)
 	props, err := directoryURL.GetProperties(ctx)
 	if err != nil {
-		return "", fmt.Errorf("cannot verify resource due to error: %s", err)
+		return fmt.Errorf("cannot verify resource due to error: %s", err)
 	}
 
 	// if the source URL is actually a file
 	// then we should short-circuit and simply remove that file
 	if strings.EqualFold(props.XMsResourceType(), "file") {
-		fileURL := directoryURL.NewFileUrl()
-
-		if !dryrunMode {
-			_, err := fileURL.Delete(ctx)
-			if err == nil {
-				return "Successfully removed file: " + urlParts.DirectoryOrFilePath, nil
-			}
-
-			return "", err
-		} else {
-			glcm.Dryrun(func(_ common.OutputFormat) string {
-				return fmt.Sprintf("DRYRUN: remove file %s", urlParts.DirectoryOrFilePath)
-			})
-			return "", nil
-		}
+		glcm.Dryrun(func(_ common.OutputFormat) string {
+			return fmt.Sprintf("DRYRUN: remove file %s", urlParts.DirectoryOrFilePath)
+		})
+		return nil
 	}
 
 	// otherwise, remove the directory and follow the continuation token if necessary
 	// initialize an empty continuation marker
 	marker := ""
 
-	if !dryrunMode {
-		// remove the directory
-		// loop will continue until the marker received in the response is empty
-		for {
-			removeResp, err := directoryURL.Delete(ctx, &marker, recursive)
-			if err != nil {
-				return "", fmt.Errorf("cannot remove the given resource due to error: %s", err)
-			}
+	for {
+		listResp, err := directoryURL.ListDirectorySegment(ctx, &marker, recursive)
 
-			// update the continuation token for the next call
-			marker = removeResp.XMsContinuation()
-
-			// determine whether listing should be done
-			if marker == "" {
-				break
-			}
+		if err != nil {
+			return err
 		}
 
-		return "Successfully removed directory: " + urlParts.DirectoryOrFilePath, nil
-	} else {
-		for {
-			listResp, err := directoryURL.ListDirectorySegment(ctx, &marker, recursive)
-
-			if err != nil {
-				return "Could not list files", err
+		for _, v := range listResp.Paths {
+			entityType := "directory"
+			if v.IsDirectory == nil || !*v.IsDirectory {
+				entityType = "file"
 			}
 
-			for _, v := range listResp.Paths {
-				entityType := "directory"
-				if v.IsDirectory == nil || !*v.IsDirectory {
-					entityType = "file"
-				}
-
-				glcm.Dryrun(func(_ common.OutputFormat) string {
-					return fmt.Sprintf("DRYRUN: remove %s %s", entityType, *v.Name)
-				})
-			}
-
-			marker = listResp.XMsContinuation()
-			if marker == "" { // do-while pattern
-				break
-			}
+			glcm.Dryrun(func(_ common.OutputFormat) string {
+				return fmt.Sprintf("DRYRUN: remove %s %s", entityType, *v.Name)
+			})
 		}
-		return "", nil
+
+		marker = listResp.XMsContinuation()
+		if marker == "" { // do-while pattern
+			break
+		}
 	}
+	return nil
 }

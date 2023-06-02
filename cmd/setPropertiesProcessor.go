@@ -45,6 +45,9 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 			RehydratePriority: cca.rehydratePriority,
 		},
 		SetPropertiesFlags: cca.propertiesToTransfer,
+		FileAttributes: common.FileTransferAttributes{
+			TrailingDot: cca.trailingDot,
+		},
 	}
 
 	reportFirstPart := func(jobStarted bool) {

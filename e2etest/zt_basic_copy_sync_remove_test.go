@@ -21,8 +21,17 @@
 package e2etest
 
 import (
+	"crypto/md5"
+	"errors"
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"os"
+	"path/filepath"
+	"runtime"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -215,6 +224,31 @@ func TestBasic_CopyRemoveFile(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestBasic_CopyRemoveFileHNS(t *testing.T) {
+	bfsRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+
+	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
+	}, nil, testFiles{
+		objectTarget: "file1.txt",
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			"file1.txt",
+		},
+	},
+	EAccountType.Standard(), // dest is OK to ignore
+	EAccountType.HierarchicalNamespaceEnabled(), // mark source as HNS
+	"")
+}
+
 func TestBasic_CopyRemoveLargeFile(t *testing.T) {
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
@@ -252,6 +286,61 @@ func TestBasic_CopyRemoveFolder(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestBasic_CopyRemoveFolderHNS(t *testing.T) {
+	bfsRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+
+	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), allCredentialTypes, anonymousAuthOnly,
+	params{
+		recursive: true,
+	},
+	&hooks{
+		beforeRunJob: func(h hookHelper) {
+			h.CreateFiles(testFiles{
+				defaultSize: "1K",
+				shouldTransfer: []interface{}{
+					folder("foo"),
+					"foo/bar.txt",
+					folder("foo/bar"),
+					"foo/bar/baz.txt",
+				},
+			}, true, false, false)
+		},
+		afterValidation: func(h hookHelper) {
+			a := h.GetAsserter()
+			s := h.(*scenario)
+			container := s.state.source.(*resourceBlobContainer)
+
+			props := container.getAllProperties(a)
+
+			_, ok := props["foo"]
+			a.Assert(ok, equals(), false)
+			_, ok = props["foo/bar.txt"]
+			a.Assert(ok, equals(), false)
+			_, ok = props["foo/bar/baz.txt"]
+			a.Assert(ok, equals(), false)
+		},
+	},
+	testFiles{
+		objectTarget: "foo",
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""), // really only should target root
+		},
+	},
+		EAccountType.Standard(), // dest is OK to ignore
+		EAccountType.HierarchicalNamespaceEnabled(), // mark source as HNS
+		"")
+}
+
 func TestBasic_CopyRemoveContainer(t *testing.T) {
 
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
@@ -265,6 +354,62 @@ func TestBasic_CopyRemoveContainer(t *testing.T) {
 			"folder1/file12.txt",
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
+	bfsRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+
+	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), oAuthOnly, oAuthOnly, // do it over OAuth because our SAS tokens don't have appropriate perms (because they're FS-level?)
+		params{
+			recursive: true,
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(testFiles{
+					defaultSize: "1K",
+					shouldTransfer: []interface{}{
+						folder("foo"),
+						"foo/bar.txt",
+						folder("foo/bar"),
+						"foo/bar/baz.txt",
+					},
+				}, true, false, false)
+			},
+			afterValidation: func(h hookHelper) {
+				a := h.GetAsserter()
+				s := h.(*scenario)
+				r := s.state.source.(*resourceBlobContainer)
+				urlParts, err := blob.ParseURL(r.containerClient.URL())
+				a.Assert(err, equals(), nil)
+				fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("")
+
+				_, err = fsURL.GetAccessControl(ctx)
+				a.Assert(err, notEquals(), nil)
+				stgErr, ok := err.(azbfs.StorageError)
+				a.Assert(ok, equals(), true)
+				if ok {
+					a.Assert(stgErr.ServiceCode(), equals(), azbfs.ServiceCodeType("FilesystemNotFound"))
+				}
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""), // really only should target root
+			},
+		},
+		EAccountType.Standard(), // dest is OK to ignore
+		EAccountType.HierarchicalNamespaceEnabled(), // mark source as HNS
+		"")
 }
 
 func TestBasic_CopyToWrongBlobType(t *testing.T) {
@@ -350,6 +495,7 @@ func TestBasic_HashBasedSync_Folders(t *testing.T) {
 		params{
 recursive:   true,
 			compareHash: common.ESyncHashType.MD5(),
+			hashStorageMode: common.EHashStorageMode.HiddenFiles(),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) { // set up source to overwrite dest
@@ -442,6 +588,7 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 		params{
 			recursive:   true,
 			compareHash: common.ESyncHashType.MD5(),
+			hashStorageMode: common.EHashStorageMode.HiddenFiles(),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
@@ -464,6 +611,178 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 			},
 			shouldSkip: []interface{}{
 				f("skipme-exists.txt"), // create at destination
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+// TestBasic_HashBasedSync_StorageModeOSSpecific validates AzCopy's ability to save and via the same adapter, read hash data from os-specific types
+func TestBasic_HashBasedSync_StorageModeOSSpecific(t *testing.T) {
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		tmpDir, err := os.MkdirTemp("", "xattrtest*")
+		if err != nil {
+			t.Log("Failed to create xattr test dir:", err)
+			t.FailNow()
+		}
+
+		fileName := filepath.Join(tmpDir, "asdf.txt")
+		f, err := os.Create(fileName)
+		if err != nil {
+			t.Log("Failed to create xattr test file:", err)
+			t.FailNow()
+		}
+		err = f.Close()
+		if err != nil {
+			t.Log("Failed to close xattr test file:", err)
+			t.FailNow()
+		}
+
+		xAttrAdapter, _ := common.NewHashDataAdapter("", tmpDir, common.HashStorageMode(11)) // same as xattr; no errors on Linux
+		err = xAttrAdapter.SetHashData("asdf.txt", &common.SyncHashData{Mode: common.ESyncHashType.MD5(), Data: "test", LMT: time.Now()})
+		if errors.Is(err, syscall.Errno(0x5f)) { // == ENOTSUP
+			t.Skip("XAttr not supported")
+			return
+		}
+	}
+
+	body := []byte("foobar")
+	fileSum := md5.Sum(body)
+	textFile := f("asdf.txt", with{contentMD5: fileSum[:]})
+	textFile.body = body
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
+			hashStorageMode: common.HashStorageMode(11),
+		},
+		&hooks{
+			afterValidation: func(h hookHelper) {
+				fromTo := h.FromTo()
+				a := h.GetAsserter()
+
+				// get which location has the local traverser
+				var localLocation *resourceLocal
+				sen := h.(*scenario)
+				if fromTo.IsUpload() {
+					localLocation = sen.state.source.(*resourceLocal)
+				} else {
+					localLocation = sen.state.dest.(*resourceLocal)
+				}
+
+				// Ensure we got what we're looking for
+				a.Assert(localLocation, notEquals(), nil)
+
+				// create the hash adapter
+				dataPath := localLocation.dirPath
+				hashAdapter, err := common.NewHashDataAdapter("", dataPath, common.EHashStorageMode.Default())
+				if err != nil || hashAdapter == nil {
+					a.Error(fmt.Sprintf("Could not create hash adapter: %s", err))
+					return
+				}
+				a.Assert(hashAdapter.GetMode(), equals(), common.HashStorageMode(11)) // 1 is currently either XAttr or ADS; both are the intent of this test.
+
+				hashData, err := hashAdapter.GetHashData("asdf.txt")
+				if err != nil || hashData == nil {
+					a.Error(fmt.Sprintf("Could not read hash data: %s", err))
+					return
+				}
+
+				a.Assert(hashData.Mode, equals(), common.ESyncHashType.MD5())
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				textFile,
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+// TestBasic_HashBasedSync_HashDir validates AzCopy's ability to save and via the same adapter, read hash data from an alternate directory
+func TestBasic_HashBasedSync_HashDir(t *testing.T) {
+	body := []byte("foobar")
+	fileSum := md5.Sum(body)
+	textFile := f("asdf.txt", with{contentMD5: fileSum[:]})
+	textFile.body = body
+
+	hashStorageDir, err := os.MkdirTemp("", "hashdir*")
+	if err != nil {
+		t.Fatal("failed to create temp dir:", err)
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:   true,
+			compareHash: common.ESyncHashType.MD5(),
+			hashStorageMode: common.EHashStorageMode.HiddenFiles(), // must target hidden files
+			hashStorageDir: hashStorageDir,
+		},
+		&hooks{
+			afterValidation: func(h hookHelper) {
+				fromTo := h.FromTo()
+				a := h.GetAsserter()
+
+				// get which location has the local traverser
+				var localLocation *resourceLocal
+				sen := h.(*scenario)
+				if fromTo.IsUpload() {
+					localLocation = sen.state.source.(*resourceLocal)
+				} else {
+					localLocation = sen.state.dest.(*resourceLocal)
+				}
+
+				// Ensure we got what we're looking for
+				a.Assert(localLocation, notEquals(), nil)
+
+				// create the hash adapter
+				dataPath := localLocation.dirPath
+				hashAdapter, err := common.NewHashDataAdapter(hashStorageDir, dataPath, common.EHashStorageMode.HiddenFiles())
+				if err != nil || hashAdapter == nil {
+					a.Error(fmt.Sprintf("Could not create hash adapter: %s", err))
+					return
+				}
+				a.Assert(hashAdapter.GetMode(), equals(), common.HashStorageMode(11)) // 1 is currently either XAttr or ADS; both are the intent of this test.
+
+				hashData, err := hashAdapter.GetHashData("asdf.txt")
+				if err != nil || hashData == nil {
+					a.Error(fmt.Sprintf("Could not read hash data: %s", err))
+					return
+				}
+
+				a.Assert(hashData.Mode, equals(), common.ESyncHashType.MD5())
+
+				// Ensure the hash file actually exists in the right place
+				hashFile := filepath.Join(hashStorageDir, ".asdf.txt" + common.AzCopyHashDataStream)
+				_, err = os.Stat(hashFile)
+				a.AssertNoErr(err)
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				textFile,
 			},
 		},
 		EAccountType.Standard(),
@@ -610,6 +929,100 @@ func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
 		},
 		EAccountType.Standard(),
 		EAccountType.Standard(),
+		"",
+	)
+}
+
+func TestBasic_SyncRemoveFolders(t *testing.T) {
+	destExisting := testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder("asdf"), // validate the folder is deleted
+			f("asdf/a"),
+		},
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.FileLocal(), common.EFromTo.LocalFile()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive: true,
+			deleteDestination: common.EDeleteDestination.True(),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(destExisting, false, false, true)
+			},
+			afterValidation: func(h hookHelper) {
+				c := h.GetAsserter()
+
+				objects := h.GetDestination().getAllProperties(c)
+				_, ok := objects["asdf"]
+				c.Assert(ok, equals(), false, "asdf should not exist")
+				_, ok = objects["asdf/a"]
+				c.Assert(ok, equals(), false, "asdf/a should not exist")
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("a"),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
+		"",
+	)
+}
+
+func TestBasic_SyncRemoveFoldersHNS(t *testing.T) {
+	destExisting := testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder("asdf"), // validate the folder is deleted
+			f("asdf/a"),
+		},
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Sync(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive: true,
+			deleteDestination: common.EDeleteDestination.True(),
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				h.CreateFiles(destExisting, false, false, true)
+			},
+			afterValidation: func(h hookHelper) {
+				c := h.GetAsserter()
+
+				objects := h.GetDestination().getAllProperties(c)
+				_, ok := objects["asdf"]
+				c.Assert(ok, equals(), false, "asdf should not exist")
+				_, ok = objects["asdf/a"]
+				c.Assert(ok, equals(), false, "asdf/a should not exist")
+			},
+		},
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("a"),
+			},
+		},
+		EAccountType.HierarchicalNamespaceEnabled(),
+		EAccountType.HierarchicalNamespaceEnabled(),
 		"",
 	)
 }
