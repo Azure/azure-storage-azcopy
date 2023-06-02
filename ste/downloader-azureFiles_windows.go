@@ -23,7 +23,7 @@ import (
 // This file implements the windows-triggered smbPropertyAwareDownloader interface.
 
 // works for both folders and files
-func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
 	if txInfo.Destination == common.Dev_Null {
 		return nil // Do nothing.
 	}
@@ -36,6 +36,21 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 	destPtr, err := syscall.UTF16PtrFromString(txInfo.Destination)
 	if err != nil {
 		return fmt.Errorf("failed convert destination string to UTF16 pointer: %w", err)
+	}
+
+	fromTo := bd.jptm.FromTo()
+	if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
+		defer func() { // recover from potential panics and output raw properties for debug purposes; will cover the return call to setAttributes
+			if panicerr := recover(); panicerr != nil {
+				pAdapt := propHolder.(*azfile.SMBPropertyAdapter)
+
+				attr := pAdapt.PropertySource.FileAttributes()
+				lwt := pAdapt.PropertySource.FileLastWriteTime()
+				fct := pAdapt.PropertySource.FileCreationTime()
+
+				err = fmt.Errorf("failed to read SMB properties (%w)! Raw data: attr: `%s` lwt: `%s`, fct: `%s`", err, attr, lwt, fct)
+			}
+		}()
 	}
 
 	setAttributes := func() error {

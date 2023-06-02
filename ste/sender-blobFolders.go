@@ -124,14 +124,14 @@ func (b *blobFolderSender) SetContainerACL() error {
 	if err != nil {
 		b.jptm.FailActiveSend("Parsing blob URL", err)
 	}
-	blobURLParts.BlobName = "/" // container level perms MUST have a /
+	blobURLParts.ContainerName += "/" // container level perms MUST have a /
 	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
 	dfsURL, err := url.Parse(blobURLParts.String())
 	if err != nil {
 		b.jptm.FailActiveSend("Parsing datalake URL", err)
 	}
 	// todo: jank, and violates the principle of interfaces
-	fileURL := azbfs.NewFileSystemURL(*dfsURL, b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+	rootURL := azbfs.NewFileSystemURL(*dfsURL, b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
 
 	// We know for a fact our source is a "blob".
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
@@ -140,7 +140,7 @@ func (b *blobFolderSender) SetContainerACL() error {
 		return folderPropertiesSetInCreation{} // standard completion will detect failure
 	}
 	acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
-	_, err = fileURL.SetAccessControl(b.jptm.Context(), acl)
+	_, err = rootURL.SetAccessControl(b.jptm.Context(), acl)
 	if err != nil {
 		b.jptm.FailActiveSend("Putting ACLs", err)
 		return folderPropertiesSetInCreation{} // standard completion will detect failure
@@ -237,11 +237,12 @@ func (b *blobFolderSender) SetFolderProperties() error {
 }
 
 func (b *blobFolderSender) DirUrlToString() string {
-	rawURL := b.destinationClient.URL()
+	rawURL := b.jptm.Info().Destination
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
 	}
+	parsedURL.RawPath = ""
 	parsedURL.RawQuery = ""
 	return parsedURL.String()
 }

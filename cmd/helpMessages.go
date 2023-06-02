@@ -547,6 +547,9 @@ const setPropertiesCmdExample = `
 Change tier of blob to hot:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=hot
 
+Change tier of blob to Cold:
+	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cold
+
 Change tier of blob from archive to cool with rehydrate priority set to high:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cool --rehydrate-priority=high
 

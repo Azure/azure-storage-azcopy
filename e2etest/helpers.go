@@ -72,6 +72,10 @@ const (
 	defaultBlobFSFileSizeInBytes = 1000
 )
 
+func pointerTo[T any](in T) *T {
+	return &in
+}
+
 // if S3_TESTS_OFF is set at all, S3 tests are disabled.
 func isS3Disabled() bool {
 	return strings.ToLower(os.Getenv("S3_TESTS_OFF")) != ""
@@ -253,7 +257,8 @@ func newNullFolderCreationTracker() ste.FolderCreationTracker {
 func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), newNullFolderCreationTracker())
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, p, newNullFolderCreationTracker())
 	c.AssertNoErr(err)
 }
 

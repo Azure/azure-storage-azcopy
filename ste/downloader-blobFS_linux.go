@@ -14,7 +14,8 @@ import (
 
 // CreateFile covers the following UNIX properties:
 // File Mode, File Type
-func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool, t FolderCreationTracker) (file io.WriteCloser, needChunks bool, err error) {
+// TODO: Consolidate and reduce duplication later
+func (bd *blobFSDownloader) CreateFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool, t FolderCreationTracker) (file io.WriteCloser, needChunks bool, err error) {
 	var sip ISourceInfoProvider
 	sip, err = newBlobSourceInfoProvider(jptm)
 	if err != nil {
@@ -90,7 +91,7 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 	return
 }
 
-func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (stage string, err error) {
+func (bd *blobFSDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (stage string, err error) {
 	// At this point, mode has already been applied. Let's work out what we need to apply, and apply the rest.
 	destination := bd.txInfo.Destination
 
@@ -165,13 +166,14 @@ func (bd *blobDownloader) ApplyUnixProperties(adapter common.UnixStatAdapter) (s
 	return
 }
 
-func (bd *blobDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
+func (bd *blobFSDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
 	sip, err := newBlobSourceInfoProvider(jptm)
 	if err != nil {
 		return err
 	}
 
-	bd.txInfo = jptm.Info() // inform our blobDownloader a bit.
+	// inform the downloader
+	bd.txInfo = jptm.Info()
 
 	usip := sip.(IUNIXPropertyBearingSourceInfoProvider)
 	if usip.HasUNIXProperties() {

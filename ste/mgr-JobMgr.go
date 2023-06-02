@@ -644,7 +644,8 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			haveFinalPart = atomic.LoadInt32(&jm.atomicFinalPartOrderedIndicator) == 1
 			allKnownPartsDone := partsDone == jm.jobPartMgrs.Count()
 			isCancelling := jobStatus == common.EJobStatus.Cancelling()
-			shouldComplete := allKnownPartsDone && (haveFinalPart || isCancelling)
+			shouldComplete := (haveFinalPart && allKnownPartsDone) || // If we have all of the parts, they should all exit cleanly, so the job can be resumed properly.
+				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
 			if shouldComplete {
 				// Inform StatusManager that all parts are done.
 				close(jm.jstm.xferDone)
@@ -654,7 +655,11 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				jm.waitToDrainXferDone()
 				partDescription := "all parts of entire Job"
 				if !haveFinalPart {
-					partDescription = "known parts of incomplete Job"
+					if allKnownPartsDone {
+						partDescription = "known parts of incomplete Job"
+					} else {
+						partDescription = "incomplete Job"
+					}
 				}
 				if shouldLog {
 					jm.Log(pipeline.LogInfo, fmt.Sprintf("%s %s successfully completed, cancelled or paused", partDescription, jm.jobID.String()))
@@ -698,7 +703,10 @@ func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
 }
 
 func (jm *jobMgr) Context() context.Context                { return jm.ctx }
-func (jm *jobMgr) Cancel()                                 { jm.cancel() }
+func (jm *jobMgr) Cancel() {
+	jm.cancel()
+	jm.jobPartProgress <- jobPartProgressInfo{} // in case we're waiting on another job part; we can just shoot in a zeroed out version & achieve a cancel immediately
+}
 func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level pipeline.LogLevel, msg string) { jm.logger.Log(level, msg) }
 func (jm *jobMgr) PipelineLogInfo() pipeline.LogOptions {

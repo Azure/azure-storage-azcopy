@@ -30,7 +30,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
@@ -125,24 +124,6 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 		s.WriteString(" ")
 	}
 	return s.String()
-}
-
-func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
-	if util.urlIsContainerOrVirtualDirectory(url.String()) {
-
-		return true
-	}
-	// Need to get the resource properties and verify if it is a file or directory
-	dirURL := azbfs.NewDirectoryURL(*url, p)
-	isDir, err := dirURL.IsDirectory(ctx)
-
-	if err != nil {
-		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to check if destination is a folder or a file (ADLSg2). Assuming the destination is a file: %s", err), pipeline.LogWarning)
-		}
-	}
-
-	return isDir
 }
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {

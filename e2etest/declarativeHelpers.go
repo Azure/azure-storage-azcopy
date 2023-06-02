@@ -147,10 +147,11 @@ type params struct {
 	includeAttributes         string
 	excludePath               string
 	excludePattern            string
-	excludeAttributes         string
-	capMbps                   float32
+	excludeAttributes 		  string
+	forceIfReadOnly   		  bool
+	capMbps           		  float32
 	blockSizeMB               float32
-	deleteDestination         common.DeleteDestination
+	deleteDestination         common.DeleteDestination // Manual validation is needed.
 	s2sSourceChangeValidation bool
 	metadata                  string
 	cancelFromStdin           bool
@@ -171,11 +172,14 @@ type params struct {
 	accessTier                *blob.AccessTier
 	checkMd5                  common.HashValidationOption
 	compareHash               common.SyncHashType
+	hashStorageMode           common.HashStorageMode
+	hashStorageDir            string
 	symlinkHandling           common.SymlinkHandlingType
 
 	destNull bool
 
 	disableParallelTesting bool
+	trailingDot common.TrailingDotOption
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt

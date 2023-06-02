@@ -23,6 +23,7 @@ package ste
 import (
 	"errors"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -30,18 +31,41 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type blobFSDownloader struct{}
+type blobFSDownloader struct {
+	jptm IJobPartTransferMgr
+	txInfo TransferInfo
+}
 
 func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
 func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
-	// noop
+	bd.jptm = jptm
+	bd.txInfo = jptm.Info() // Inform the downloader
 }
 
 func (bd *blobFSDownloader) Epilogue() {
-	//noop
+	if bd.jptm != nil {
+		if bd.jptm.IsLive() && bd.jptm.Info().PreservePOSIXProperties {
+			bsip, err := newBlobSourceInfoProvider(bd.jptm)
+			if err != nil {
+				bd.jptm.FailActiveDownload("get blob source info provider", err)
+			}
+			unixstat, _ := bsip.(IUNIXPropertyBearingSourceInfoProvider)
+			if ubd, ok := (interface{})(bd).(unixPropertyAwareDownloader); ok && unixstat.HasUNIXProperties() {
+				adapter, err := unixstat.GetUNIXProperties()
+				if err != nil {
+					bd.jptm.FailActiveDownload("get unix properties", err)
+				}
+
+				stage, err := ubd.ApplyUnixProperties(adapter)
+				if err != nil {
+					bd.jptm.FailActiveDownload("set unix properties: "+stage, err)
+				}
+			}
+		}
+	}
 }
 
 // Returns a chunk-func for ADLS gen2 downloads
@@ -90,7 +114,16 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 	})
 }
 
-func (bd *blobFSDownloader) SetFolderProperties(jptm IJobPartTransferMgr) error {
-	// no-op (BlobFS is folder aware, but we don't currently preserve properties from its folders)
-	return nil
+func (bd *blobFSDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
+	sip, err := newBlobSourceInfoProvider(jptm)
+	if err != nil {
+		return err
+	}
+	symsip := sip.(ISymlinkBearingSourceInfoProvider) // blob always implements this
+	symlinkInfo, _ := symsip.ReadLink()
+
+	// create the link
+	err = os.Symlink(symlinkInfo, jptm.Info().Destination)
+
+	return err
 }

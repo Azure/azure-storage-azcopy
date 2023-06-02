@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -40,6 +41,7 @@ type fileAccountTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
+	trailingDot common.TrailingDotOption
 }
 
 func (t *fileAccountTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -93,7 +95,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range shareList {
 		shareURL := t.accountURL.NewShareURL(v).URL()
-		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
+		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.trailingDot)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -108,7 +110,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (t *fileAccountTraverser) {
+func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption) (t *fileAccountTraverser) {
 	fURLparts := azfile.NewFileURLParts(*rawURL)
 	sPattern := fURLparts.ShareName
 
@@ -116,6 +118,6 @@ func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 		fURLparts.ShareName = ""
 	}
 
-	t = &fileAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern, getProperties: getProperties}
+	t = &fileAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern, getProperties: getProperties, trailingDot: trailingDot}
 	return
 }

@@ -23,7 +23,12 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -34,6 +39,7 @@ import (
 
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
+	sip                 ISourceInfoProvider
 	fileOrDirURL        URLHolder
 	chunkSize           int64
 	numChunks           uint32
@@ -71,6 +77,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 	return &blobFSSenderBase{
 		jptm:                jptm,
+		sip: 				 sip,
 		fileOrDirURL:        h,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
@@ -212,9 +219,52 @@ func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
 	return err
 }
 
+func (u *blobFSSenderBase) GetBlobURL() (*blockblob.Client, error) {
+	blobURLParts, err := blob.ParseURL(u.fileOrDirURL.String())
+	if err != nil {
+		return nil, err
+	}
+	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".dfs", ".blob") // switch back to blob
+
+	client := common.CreateBlockBlobClient(blobURLParts.String(), u.jptm.CredentialInfo(), u.jptm.CredentialOpOptions(), u.jptm.ClientOptions())
+	return client, nil
+}
+
+func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, error) {
+	if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
+		statAdapter, err := unixSIP.GetUNIXProperties()
+		if err != nil {
+			return nil, err
+		}
+
+		return statAdapter, nil
+	} else {
+		return nil, nil // no properties present!
+	}
+}
+
+func (u *blobFSSenderBase) SetPOSIXProperties() error {
+	adapter, err := u.GetSourcePOSIXProperties()
+	if err != nil {
+		return fmt.Errorf("failed to get POSIX properties")
+	} else if adapter == nil {
+		return nil
+	}
+
+	meta := common.Metadata{}
+	common.AddStatToBlobMetadata(adapter, meta)
+	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
+
+	client, err := u.GetBlobURL()
+	if err != nil {
+		return err
+	}
+	_, err = client.SetMetadata(u.jptm.Context(), meta, nil)
+	return err
+}
+
 func (u *blobFSSenderBase) SetFolderProperties() error {
-	// we don't currently preserve any properties for BlobFS folders
-	return nil
+	return u.SetPOSIXProperties()
 }
 
 func (u *blobFSSenderBase) DirUrlToString() string {
@@ -224,4 +274,37 @@ func (u *blobFSSenderBase) DirUrlToString() string {
 	// To avoid SAS token
 	dirUrl.RawQuery = ""
 	return dirUrl.String()
+}
+
+func (u *blobFSSenderBase) SendSymlink(linkData string) error {
+	meta := common.Metadata{} // meta isn't traditionally supported for dfs, but still exists
+	adapter, err := u.GetSourcePOSIXProperties()
+	if err != nil {
+		return fmt.Errorf("when polling for POSIX properties: %w", err)
+	} else if adapter == nil {
+		return nil // No-op
+	}
+
+	common.AddStatToBlobMetadata(adapter, meta)
+	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
+	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
+		BlobContentType: &u.creationTimeHeaders.ContentType,
+		BlobContentEncoding: &u.creationTimeHeaders.ContentEncoding,
+		BlobContentLanguage: &u.creationTimeHeaders.ContentLanguage,
+		BlobContentDisposition: &u.creationTimeHeaders.ContentDisposition,
+		BlobCacheControl: &u.creationTimeHeaders.CacheControl,
+	}
+	client, err := u.GetBlobURL()
+	if err != nil {
+		return err
+	}
+	_, err = client.Upload(
+		u.jptm.Context(),
+		streaming.NopCloser(strings.NewReader(linkData)),
+		&blockblob.UploadOptions{
+			HTTPHeaders: &blobHeaders,
+			Metadata: meta,
+		})
+
+	return err
 }
