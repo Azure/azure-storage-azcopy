@@ -23,7 +23,10 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"net/url"
 	"strings"
 	"time"
@@ -216,12 +219,15 @@ func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
 	return err
 }
 
-func (u *blobFSSenderBase) GetBlobURL() azblob.BlobURL{
-	blobPipeline := u.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline // pull the secondary (blob) pipeline
-	bURLParts := azblob.NewBlobURLParts(u.fileOrDirURL.URL())
-	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".dfs", ".blob") // switch back to blob
+func (u *blobFSSenderBase) GetBlobURL() (*blockblob.Client, error) {
+	blobURLParts, err := blob.ParseURL(u.fileOrDirURL.String())
+	if err != nil {
+		return nil, err
+	}
+	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".dfs", ".blob") // switch back to blob
 
-	return azblob.NewBlobURL(bURLParts.URL(), blobPipeline)
+	client := common.CreateBlockBlobClient(blobURLParts.String(), u.jptm.CredentialInfo(), u.jptm.CredentialOpOptions(), u.jptm.ClientOptions())
+	return client, nil
 }
 
 func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, error) {
@@ -245,11 +251,15 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 		return nil
 	}
 
-	meta := azblob.Metadata{}
+	meta := common.Metadata{}
 	common.AddStatToBlobMetadata(adapter, meta)
 	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
-	_, err = u.GetBlobURL().SetMetadata(u.jptm.Context(), meta, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+	client, err := u.GetBlobURL()
+	if err != nil {
+		return err
+	}
+	_, err = client.SetMetadata(u.jptm.Context(), meta, nil)
 	return err
 }
 
@@ -267,7 +277,7 @@ func (u *blobFSSenderBase) DirUrlToString() string {
 }
 
 func (u *blobFSSenderBase) SendSymlink(linkData string) error {
-	meta := azblob.Metadata{} // meta isn't traditionally supported for dfs, but still exists
+	meta := common.Metadata{} // meta isn't traditionally supported for dfs, but still exists
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
 		return fmt.Errorf("when polling for POSIX properties: %w", err)
@@ -276,25 +286,25 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 	}
 
 	common.AddStatToBlobMetadata(adapter, meta)
-	meta[common.POSIXSymlinkMeta] = "true" // just in case there isn't any metadata
-	blobHeaders := azblob.BlobHTTPHeaders{ // translate headers, since those still apply
-		ContentType: u.creationTimeHeaders.ContentType,
-		ContentEncoding: u.creationTimeHeaders.ContentEncoding,
-		ContentLanguage: u.creationTimeHeaders.ContentLanguage,
-		ContentDisposition: u.creationTimeHeaders.ContentDisposition,
-		CacheControl: u.creationTimeHeaders.CacheControl,
+	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
+	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
+		BlobContentType: &u.creationTimeHeaders.ContentType,
+		BlobContentEncoding: &u.creationTimeHeaders.ContentEncoding,
+		BlobContentLanguage: &u.creationTimeHeaders.ContentLanguage,
+		BlobContentDisposition: &u.creationTimeHeaders.ContentDisposition,
+		BlobCacheControl: &u.creationTimeHeaders.CacheControl,
 	}
-
-	_, err = u.GetBlobURL().ToBlockBlobURL().Upload(
+	client, err := u.GetBlobURL()
+	if err != nil {
+		return err
+	}
+	_, err = client.Upload(
 		u.jptm.Context(),
-		strings.NewReader(linkData),
-		blobHeaders,
-		meta,
-		azblob.BlobAccessConditions{},
-		azblob.AccessTierNone, // dfs uses default tier
-		nil, // dfs doesn't support tags
-		azblob.ClientProvidedKeyOptions{}, // cpk isn't used for dfs
-		azblob.ImmutabilityPolicyOptions{}) // dfs doesn't support immutability policy
+		streaming.NopCloser(strings.NewReader(linkData)),
+		&blockblob.UploadOptions{
+			HTTPHeaders: &blobHeaders,
+			Metadata: meta,
+		})
 
 	return err
 }
