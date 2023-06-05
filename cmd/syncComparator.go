@@ -280,7 +280,7 @@ func (f *syncDestinationComparator) FinalizeTargetDirectory(relativeDir string, 
 		//       Once we add support for directory attributes updation, change that call to cause
 		//       directory attributes updation and not directory creation and remove this code.
 		//
-		if storedObject.entityType == common.EEntityType.Folder() {
+		if storedObject.entityType == common.EEntityType.Folder() && !isTargetCompare {
 			dataChange = false
 		}
 
