@@ -128,6 +128,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 				return newAzureFilesUploader
 			case common.ELocation.BlobFS():
 				return newBlobFSUploader
+			//newlocalcopier
 			default:
 				panic("unexpected target location type")
 			}
