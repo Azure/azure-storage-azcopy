@@ -131,22 +131,20 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 	return tokenInfo, nil
 }
 
-// MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
-func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo IdentityInfo, persist bool) error {
-	if err := identityInfo.Validate(); err != nil {
-		return err
+func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuthTokenInfo, persist bool) error {
+	// Use default tenant ID and active directory endpoint, if nothing specified.
+	if oAuthTokenInfo.Tenant == "" {
+		oAuthTokenInfo.Tenant = DefaultTenantID
 	}
-
-	oAuthTokenInfo := &OAuthTokenInfo{
-		Identity:     true,
-		IdentityInfo: identityInfo,
+	if oAuthTokenInfo.ActiveDirectoryEndpoint == "" {
+		oAuthTokenInfo.ActiveDirectoryEndpoint = DefaultActiveDirectoryEndpoint
 	}
 	tc, err := oAuthTokenInfo.GetTokenCredential()
 	if err != nil {
 		return err
 	}
 	scopes := []string{oAuthTokenInfo.Resource}
-	_, err = tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
+	_, err = tc.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes})
 	if err != nil {
 		return err
 	}
@@ -159,18 +157,25 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo Id
 		}
 	}
 
-	return err
+	return nil
+}
+
+// MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
+func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist bool) error {
+	if err := identityInfo.Validate(); err != nil {
+		return err
+	}
+
+	oAuthTokenInfo := &OAuthTokenInfo{
+		Identity:     true,
+		IdentityInfo: identityInfo,
+	}
+
+	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
 }
 
 // SecretLogin is a UOTM shell for secretLoginNoUOTM.
 func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) (error) {
-	// Use default tenant ID and active directory endpoint, if nothing specified.
-	if tenantID == "" {
-		tenantID = DefaultTenantID
-	}
-	if activeDirectoryEndpoint == "" {
-		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
-	}
 	oAuthTokenInfo := &OAuthTokenInfo{
 		ServicePrincipalName: true,
 		Tenant:                  tenantID,
@@ -183,25 +188,7 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 		},
 	}
 
-	tc, err := oAuthTokenInfo.GetTokenCredential()
-	if err != nil {
-		return err
-	}
-	scopes := []string{oAuthTokenInfo.Resource}
-	_, err = tc.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: scopes})
-	if err != nil {
-		return err
-	}
-	uotm.stashedInfo = oAuthTokenInfo
-
-	if persist && err == nil {
-		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
-		if err != nil {
-			return err
-		}
-	}
-
-	return err
+	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
 }
 
 // CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
@@ -225,27 +212,8 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 			CertPath: absCertPath,
 		},
 	}
-	// TODO: Global default cert flag for true non interactive login?
-	// (Also could be useful if the user has multiple certificates they want to switch between in the same file.)
-	tc, err := oAuthTokenInfo.GetTokenCredential()
-	if err != nil {
-		return err
-	}
-	scopes := []string{oAuthTokenInfo.Resource}
-	_, err = tc.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: scopes})
-	if err != nil {
-		return err
-	}
-	uotm.stashedInfo = oAuthTokenInfo
 
-	if persist && err == nil {
-		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
-		if err != nil {
-			return err
-		}
-	}
-
-	return err
+	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
 }
 
 // UserLogin interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
@@ -624,6 +592,24 @@ func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredent
 	return tc, nil
 }
 
+type DeviceCodeCredential struct {
+	token adal.Token
+	aadEndpoint string
+	tenantID string
+	clientID string
+}
+
+func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	waitDuration := dcc.token.Expires().Sub(time.Now().UTC()) / 2
+	if dcc.token.WillExpireIn(waitDuration) {
+		_, err := dcc.RefreshTokenWithUserCredential(ctx)
+		if err != nil {
+			return azcore.AccessToken{}, err
+		}
+	}
+	return azcore.AccessToken{Token: dcc.token.AccessToken, ExpiresOn: dcc.token.Expires()}, nil
+}
+
 // RefreshTokenWithUserCredential gets new token with user credential through refresh.
 func (dcc *DeviceCodeCredential) RefreshTokenWithUserCredential(ctx context.Context) (*adal.Token, error) {
 	targetResource := Resource
@@ -652,26 +638,8 @@ func (dcc *DeviceCodeCredential) RefreshTokenWithUserCredential(ctx context.Cont
 	}
 
 	newToken := spt.Token()
+	dcc.token = newToken
 	return &newToken, nil
-}
-
-var _ azcore.TokenCredential = &DeviceCodeCredential{}
-type DeviceCodeCredential struct {
-	token adal.Token
-	aadEndpoint string
-	tenantID string
-	clientID string
-}
-func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	waitDuration := dcc.token.Expires().Sub(time.Now().UTC()) / 2
-	if dcc.token.WillExpireIn(waitDuration) {
-		token, err := dcc.RefreshTokenWithUserCredential(ctx)
-		if err != nil {
-			return azcore.AccessToken{}, err
-		}
-		dcc.token = *token
-	}
-	return azcore.AccessToken{Token: dcc.token.AccessToken, ExpiresOn: dcc.token.Expires()}, nil
 }
 
 func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredential, error) {

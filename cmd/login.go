@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"strings"
 
@@ -174,7 +173,7 @@ func (lca loginCmdArgs) process() error {
 			glcm.Info("SPN Auth via secret succeeded.")
 		}
 	case lca.identity:
-		if err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
+		if err := uotm.MSILogin(common.IdentityInfo{
 			ClientID: lca.identityClientID,
 			ObjectID: lca.identityObjectID,
 			MSIResID: lca.identityResourceID,
