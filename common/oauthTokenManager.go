@@ -143,7 +143,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	if err != nil {
 		return err
 	}
-	scopes := []string{oAuthTokenInfo.Resource}
+	scopes := []string{StorageScope}
 	_, err = tc.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes})
 	if err != nil {
 		return err
@@ -181,7 +181,6 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID: applicationID,
-		Resource: StorageScope,
 		SPNInfo: SPNInfo{
 			Secret:   secret,
 			CertPath: "",
@@ -206,7 +205,6 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID: applicationID,
-		Resource: StorageScope,
 		SPNInfo: SPNInfo{
 			Secret:   certPass,
 			CertPath: absCertPath,
@@ -265,7 +263,6 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID: ApplicationID,
-		Resource:      StorageScope,
 	}
 	uotm.stashedInfo = &oAuthTokenInfo
 
@@ -399,7 +396,6 @@ const TokenRefreshSourceTokenStore = "tokenstore"
 type OAuthTokenInfo struct {
 	azcore.TokenCredential `json:"-"`
 	adal.Token
-	Resource 				string `json:"_resource"`
 	Tenant                  string `json:"_tenant"`
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 	TokenRefreshSource      string `json:"_token_refresh_source"`
@@ -459,7 +455,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 		return nil, err
 	}
 	if credInfo.TokenRefreshSource == "tokenstore" || credInfo.Identity || credInfo.ServicePrincipalName {
-		scopes := []string{credInfo.Resource}
+		scopes := []string{StorageScope}
 		t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
 		if err != nil {
 			return nil, err
@@ -470,7 +466,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 		}, nil
 	} else {
 		if dcc, ok := tc.(*DeviceCodeCredential); ok {
-			return dcc.RefreshTokenWithUserCredential(ctx)
+			return dcc.RefreshTokenWithUserCredential(ctx, Resource)
 		}
 	}
 	return nil, errors.New("invalid token info")
@@ -599,10 +595,11 @@ type DeviceCodeCredential struct {
 	clientID string
 }
 
-func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
 	waitDuration := dcc.token.Expires().Sub(time.Now().UTC()) / 2
 	if dcc.token.WillExpireIn(waitDuration) {
-		_, err := dcc.RefreshTokenWithUserCredential(ctx)
+		resource := strings.TrimSuffix(options.Scopes[0], "/.default")
+		_, err := dcc.RefreshTokenWithUserCredential(ctx, resource)
 		if err != nil {
 			return azcore.AccessToken{}, err
 		}
@@ -611,8 +608,8 @@ func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, _ policy.TokenReq
 }
 
 // RefreshTokenWithUserCredential gets new token with user credential through refresh.
-func (dcc *DeviceCodeCredential) RefreshTokenWithUserCredential(ctx context.Context) (*adal.Token, error) {
-	targetResource := Resource
+func (dcc *DeviceCodeCredential) RefreshTokenWithUserCredential(ctx context.Context, resource string) (*adal.Token, error) {
+	targetResource := resource
 	if dcc.token.Resource != "" && dcc.token.Resource != targetResource {
 		targetResource = dcc.token.Resource
 	}
