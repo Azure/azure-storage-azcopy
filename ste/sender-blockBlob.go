@@ -67,7 +67,7 @@ type blockBlobSenderBase struct {
 	completedBlockList     map[int]string
 }
 
-func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSize int64, numChunks uint32, err error) {
+func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
 	chunkSize = transferInfo.BlockSize
 	srcSize := transferInfo.SourceSize
 	numChunks = getNumChunks(srcSize, chunkSize)
@@ -90,6 +90,12 @@ func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64) (chunkSiz
 	if chunkSize >= memLimit {
 		err = fmt.Errorf("Cannot use a block size of %.2fGiB. AzCopy is limited to use only %.2fGiB of memory",
 			toGiB(chunkSize), toGiB(memLimit))
+		return
+	}
+
+	if chunkSize >= strictMemLimit {
+		err = fmt.Errorf("Cannot use a block size of %.2fGiB. AzCopy is limited to use only %.2fGiB of memory, and only %.2fGiB of these are available for chunks.",
+			toGiB(chunkSize), toGiB(memLimit), toGiB(strictMemLimit))
 		return
 	}
 
@@ -121,7 +127,7 @@ func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32
 
 func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*blockBlobSenderBase, error) {
 	// compute chunk count
-	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit())
+	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit(), jptm.CacheLimiter().StrictLimit())
 	if err != nil {
 		return nil, err
 	}

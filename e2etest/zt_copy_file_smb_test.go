@@ -14,7 +14,7 @@ func TestSMB_FromShareSnapshot(t *testing.T) {
 		preserveSMBPermissions: true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, &hooks{
 		// create a snapshot for the source share
 		beforeRunJob: func(h hookHelper) {

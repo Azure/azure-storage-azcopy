@@ -60,7 +60,7 @@ func main() {
 	if azcopyJobPlanFolder == "" {
 		// make the app path folder ".azcopy" first so we can make a plans folder in it
 		if err := os.MkdirAll(azcopyAppPathFolder, os.ModeDir); err != nil && !os.IsExist(err) {
-			common.PanicIfErr(err)
+			log.Fatalf("Problem making .azcopy directory. Try setting AZCOPY_JOB_PLAN_LOCATION env variable. %v", err)
 		}
 		azcopyJobPlanFolder = path.Join(azcopyAppPathFolder, "plans")
 	}

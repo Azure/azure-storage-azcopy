@@ -194,7 +194,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -202,11 +202,12 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 	f := []pipeline.Factory{
 		azfile.NewTelemetryPolicyFactory(o.Telemetry),
 		azfile.NewUniqueRequestIDPolicyFactory(),
-		azfile.NewRetryPolicyFactory(r),       // actually retry the operation
+		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
 		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
+		NewVersionPolicyFactory(),
+		NewTrailingDotPolicyFactory(trailingDot),
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewVersionPolicyFactory(),
 		NewRequestLogPolicyFactory(RequestLogOptions{
 			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
 			SyslogDisabled:               common.IsForceLoggingDisabled(),
@@ -505,20 +506,22 @@ func (jpm *jobPartMgr) clientInfo() {
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		jpm.credInfo = jobState.CredentialInfo
 	}
+	fromTo := jpm.planMMF.Plan().FromTo
 
 	// S2S source credential
-	if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
-		var s2sSourceCredInfo common.CredentialInfo
-		if jobState.S2SSourceCredentialType == common.ECredentialType.Unknown() {
-			s2sSourceCredInfo = jobState.CredentialInfo.WithType(common.ECredentialType.Anonymous())
-		} else {
-			s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
+	// Default credential type assumed to be SAS
+	s2sSourceCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
+	// For Blob and BlobFS, there are other options for the source credential
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
+		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
+			if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
+				s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
+			}
+		} else if fromTo.IsDownload() && (jobState.CredentialInfo.CredentialType.IsAzureOAuth() || jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
+			s2sSourceCredInfo = jobState.CredentialInfo
 		}
-		if jobState.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
-			s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
-		}
-		jpm.s2sSourceCredInfo = s2sSourceCredInfo
 	}
+	jpm.s2sSourceCredInfo = s2sSourceCredInfo
 
 	jpm.credOption = &common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
@@ -535,7 +538,6 @@ func (jpm *jobPartMgr) clientInfo() {
 		MaxRetryDelay: UploadMaxRetryDelay,
 	}
 
-	fromTo := jpm.planMMF.Plan().FromTo
 	var userAgent string
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
@@ -594,9 +596,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
 
 	// Create source info provider's pipeline for S2S copy or download (in some cases).
-	if fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFile() || fromTo == common.EFromTo.BlobLocal() {
-		// Consider the ADLSG2->ADLSG2 ACLs case
-		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+	// BlobFS and Blob will utilize the Blob source info provider, as they are the "same" resource, but provide different details on both endpoints
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
+		// Prepare to pull dfs properties if we're working with BlobFS
+		if fromTo.From() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
 			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
 				credential,
@@ -612,8 +615,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				statsAccForSip)
 		}
 	}
-	// Consider the file-local SDDL transfer case.
-	if fromTo == common.EFromTo.FileBlob() || fromTo == common.EFromTo.FileFile() || fromTo == common.EFromTo.FileLocal() {
+	// Set up a source pipeline for files if necessary
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
 		jpm.sourceProviderPipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -621,27 +624,25 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				Telemetry: azfile.TelemetryOptions{
 					Value: userAgent,
 				},
-			},
-			azfile.RetryOptions{
-				Policy:        azfile.RetryPolicyExponential,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay,
-			},
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			statsAccForSip)
+			}, azfile.RetryOptions{
+			Policy:        azfile.RetryPolicyExponential,
+			MaxTries:      UploadMaxTries,
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay,
+		}, jpm.pacer, jpm.jobMgr.HttpClient(), statsAccForSip, jpm.planMMF.Plan().DstFileData.TrailingDot)
 	}
 
-	// Create pipeline for data transfer.
-	switch fromTo {
-	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
-		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob(), common.EFromTo.GCPBlob(), common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone():
+	switch {
+	case fromTo.IsS2S() && (fromTo.To() == common.ELocation.Blob() || fromTo.To() == common.ELocation.BlobFS()), // destination determines pipeline for S2S, blobfs uses blob for S2S
+		 fromTo.IsUpload() && fromTo.To() == common.ELocation.Blob(), // destination determines pipeline for upload
+		 fromTo.IsDownload() && fromTo.From() == common.ELocation.Blob(), // source determines pipeline for download
+		 fromTo.IsSetProperties() && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()), // source determines pipeline for set properties, blobfs uses blob for set properties
+		 fromTo.IsDelete() && fromTo.From() == common.ELocation.Blob(): // ditto for delete
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
-		// Consider the ADLSG2->ADLSG2 ACLs case
-		if fromTo == common.EFromTo.BlobBlob() && jpm.Plan().PreservePermissions.IsTruthy() {
+		// If we need to write specifically to the gen2 endpoint, we should have this available.
+		if fromTo.To() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
 			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 			jpm.secondaryPipeline = NewBlobFSPipeline(
 				credential,
@@ -656,8 +657,9 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				jpm.jobMgr.HttpClient(),
 				statsAccForSip)
 		}
-	// Create pipeline for Azure BlobFS.
-	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
+	case fromTo.IsUpload() && fromTo.To() == common.ELocation.BlobFS(), // Blobfs up/down/delete use the dfs endpoint
+		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS(),
+		 fromTo.IsDelete() && fromTo.From() == common.ELocation.BlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
@@ -673,9 +675,11 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
-	// Create pipeline for Azure File.
-	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile(),
-		common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileNone():
+	case fromTo.IsS2S() && fromTo.To() == common.ELocation.File(),
+	     fromTo.IsUpload() && fromTo.To() == common.ELocation.File(),
+		 fromTo.IsDownload() && fromTo.From() == common.ELocation.File(),
+		 fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File(),
+		 fromTo.IsDelete() && fromTo.From() == common.ELocation.File():
 		jpm.pipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -693,9 +697,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			},
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats())
-	default:
-		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
+			jpm.jobMgr.PipelineNetworkStats(),
+			jpm.planMMF.Plan().DstFileData.TrailingDot)
 	}
 }
 

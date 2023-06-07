@@ -343,13 +343,18 @@ func ClearStatFromBlobMetadata(metadata Metadata) {
 }
 
 func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
+	if s == nil {
+		return
+	}
+
 	applyMode := func(mode os.FileMode) {
 		modes := map[uint32]string{
 			S_IFCHR:  POSIXCharDeviceMeta,
 			S_IFBLK:  POSIXBlockDeviceMeta,
 			S_IFSOCK: POSIXSocketMeta,
-			S_IFIFO:  POSIXFIFOMeta,
-			S_IFDIR:  POSIXFolderMeta,
+			S_IFIFO: POSIXFIFOMeta,
+			S_IFDIR: POSIXFolderMeta,
+			S_IFLNK: POSIXSymlinkMeta,
 		}
 
 		for modeToTest, metaToApply := range modes {

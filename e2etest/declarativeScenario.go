@@ -71,6 +71,11 @@ type scenarioState struct {
 
 // Run runs one test scenario
 func (s *scenario) Run() {
+	defer func() { // catch a test panicking
+		if err := recover(); err != nil {
+			s.a.Error(fmt.Sprintf("Test panicked: %v", err))
+		}
+	}()
 	defer s.cleanup()
 
 	// setup runner
@@ -235,10 +240,8 @@ func (s *scenario) runHook(h hookFunc) bool {
 
 func (s *scenario) assignSourceAndDest() {
 	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
-		var accType AccountType
-		if isSourceAcc {
-			accType = s.srcAccountType
-		} else {
+		accType := s.srcAccountType
+		if !isSourceAcc {
 			accType = s.destAccountType
 		}
 
@@ -247,7 +250,7 @@ func (s *scenario) assignSourceAndDest() {
 		case common.ELocation.Local():
 			return &resourceLocal{common.Iff(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
-			return &resourceAzureFileShare{accountType: s.srcAccountType}
+			return &resourceAzureFileShare{accountType: accType}
 		case common.ELocation.Blob():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
@@ -257,11 +260,7 @@ func (s *scenario) assignSourceAndDest() {
 				return &resourceManagedDisk{config: *mdCfg}
 			}
 
-			if isSourceAcc {
-				return &resourceBlobContainer{accountType: s.srcAccountType}
-			} else {
-				return &resourceBlobContainer{accountType: s.destAccountType}
-			}
+			return &resourceBlobContainer{accountType: accType}
 		case common.ELocation.BlobFS():
 			s.a.Error("Not implemented yet for blob FS")
 			return &resourceDummy{}
@@ -384,11 +383,6 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 	if s.operation == eOperation.Remove() {
 		s.validateRemove()
 		return
-	}
-
-	if s.p.deleteDestination != common.EDeleteDestination.False() {
-		// TODO: implement deleteDestinationValidation
-		panic("validation of deleteDestination behaviour is not yet implemented in the declarative test runner")
 	}
 
 	isSrcEncoded := s.fromTo.From().IsRemote() // TODO: is this right, reviewers?

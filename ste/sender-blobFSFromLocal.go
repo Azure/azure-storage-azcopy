@@ -91,4 +91,14 @@ func (u *blobFSUploader) Epilogue() {
 			jptm.FailActiveUpload("Getting hash", errNoHash) // don't return, since need cleanup below
 		}
 	}
+
+	// Write POSIX data
+	if jptm.IsLive() {
+		if jptm.Info().PreservePOSIXProperties {
+			err := u.SetPOSIXProperties()
+			if err != nil {
+				jptm.FailActiveUpload("Setting POSIX Properties", err)
+			}
+		}
+	}
 }

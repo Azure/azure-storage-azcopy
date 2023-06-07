@@ -27,6 +27,9 @@ jobs:
         MacOS:
           imageName: 'macos-11'
           type: 'mac-os'
+        Windows:
+          imageName: 'windows-2019'
+          type: 'windows'
     pool:
       vmImage: $(imageName)
     steps:
@@ -58,19 +61,29 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
         displayName: 'Generate Windows AMD64'
-        condition: eq(variables.type, 'linux')
+        condition: eq(variables.type, 'windows')
+        env:
+          GOARCH: amd64
+          GOOS: windows
 
       - script: |
-          GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
         displayName: 'Generate Windows i386'
-        condition: eq(variables.type, 'linux')
+        condition: eq(variables.type, 'windows')
+        env:
+          GOARCH: 386
+          GOOS: windows
 
       - script: |
-          GOARCH=arm GOARM=7 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
         displayName: 'Generate Windows ARM'
-        condition: eq(variables.type, 'linux')
+        condition: eq(variables.type, 'windows')
+        env:
+          GOARCH: arm
+          GOARM: 7
+          GOOS: windows
 
       - script: |
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
@@ -82,9 +95,16 @@ jobs:
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
 
+      # uncomment below when manually releasing for m1
+#      - script: |
+#          curl -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64" -L "BUILD_URL"
+#        displayName: 'Generate MacOS Build with ARM64'
+#        condition: eq(variables.type, 'mac-os')
+
+      # cross compile to make sure nothing broke
       - script: |
-          GOARCH=arm64 CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64"
-        displayName: 'Generate MacOS Build with ARM64'
+          GOARCH=arm64 CGO_ENABLED=1 go build
+        displayName: 'Test Cross-compiled MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
       - task: PublishBuildArtifacts@1
