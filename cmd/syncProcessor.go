@@ -27,10 +27,12 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
 	"os"
 	"path"
@@ -282,7 +284,12 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 	if err != nil {
 		return nil, err
 	}
-	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel())
+	var trailingDot *common.TrailingDotOption
+	if cca.fromTo.To() == common.ELocation.File() {
+		trailingDot = &cca.trailingDot
+	}
+
+	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel(), trailingDot)
 
 	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
@@ -328,9 +335,16 @@ func (b *remoteResourceDeleter) getObjectURL(object StoredObject) (url url.URL) 
 		}
 		url = *u
 	case common.ELocation.File():
-		fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+		fileURLParts, err := sharefile.ParseURL(b.rootURL.String())
+		if err != nil {
+			panic(err)
+		}
 		fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
-		url = fileURLParts.URL()
+		u, err := url.Parse(fileURLParts.String())
+		if err != nil {
+			panic(err)
+		}
+		url = *u
 	case common.ELocation.BlobFS():
 		blobFSURLParts := azbfs.NewBfsURLParts(*b.rootURL)
 		blobFSURLParts.DirectoryOrFilePath = path.Join(blobFSURLParts.DirectoryOrFilePath, object.relativePath)
@@ -367,24 +381,26 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			_, err = blobClient.Delete(b.ctx, nil)
 			return err
 		case common.ELocation.File():
-			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+			fileURLParts, err := sharefile.ParseURL(b.rootURL.String())
+			if err != nil {
+				return err
+			}
 			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
 
-			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+			fileClient := common.CreateShareFileClient(fileURLParts.String(), b.credInfo, nil, b.clientOptions)
 
-			_, err = fileURL.Delete(b.ctx)
-
-			if stgErr, ok := err.(azfile.StorageError); b.forceIfReadOnly && ok && stgErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+			_, err = fileClient.Delete(b.ctx, nil)
+			if err != nil && b.forceIfReadOnly && fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
 				msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
 				if azcopyScanningLogger != nil {
 					azcopyScanningLogger.Log(pipeline.LogInfo, msg)
 				}
 
 				// if the file is read-only, we need to remove the read-only attribute before we can delete it
-				noAttrib := azfile.FileAttributeNone
-				_, err = fileURL.SetHTTPHeaders(b.ctx, azfile.FileHTTPHeaders{SMBProperties: azfile.SMBProperties{FileAttributes: &noAttrib}})
+				noAttrib := sharefile.NTFSFileAttributes{None: true}
+				_, err = fileClient.SetHTTPHeaders(b.ctx, &sharefile.SetHTTPHeadersOptions{SMBProperties: &sharefile.SMBProperties{Attributes: &noAttrib}})
 				if err == nil {
-					_, err = fileURL.Delete(b.ctx)
+					_, err = fileClient.Delete(b.ctx, nil)
 				} else {
 					msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
 					glcm.Info(msg + "; check the scanning log file for more details")
@@ -427,20 +443,20 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				// HNS endpoint doesn't like delete snapshots on a directory
 				_, err = blobClient.Delete(b.ctx, nil)
 			case common.ELocation.File():
-				dirURL := azfile.NewDirectoryURL(objectURL, b.p)
-				_, err = dirURL.Delete(ctx)
+				directoryClient := common.CreateShareDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
+				_, err = directoryClient.Delete(ctx, nil)
 
-				if stgErr, ok := err.(azfile.StorageError); b.forceIfReadOnly && ok && stgErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+				if err != nil && b.forceIfReadOnly && fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
 					msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
 					if azcopyScanningLogger != nil {
 						azcopyScanningLogger.Log(pipeline.LogInfo, msg)
 					}
 
 					// if the file is read-only, we need to remove the read-only attribute before we can delete it
-					noAttrib := azfile.FileAttributeNone
-					_, err = dirURL.SetProperties(b.ctx, azfile.SMBProperties{FileAttributes: &noAttrib})
+					noAttrib := sharefile.NTFSFileAttributes{None: true}
+					_, err = directoryClient.SetProperties(b.ctx, &sharedirectory.SetPropertiesOptions{FileSMBProperties: &sharefile.SMBProperties{Attributes: &noAttrib}})
 					if err == nil {
-						_, err = dirURL.Delete(b.ctx)
+						_, err = directoryClient.Delete(b.ctx, nil)
 					} else {
 						msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
 						glcm.Info(msg + "; check the scanning log file for more details")
