@@ -109,7 +109,7 @@ func (r *trailingDotPolicy) Do(req *policy.Request) (*http.Response, error) {
 	if r.trailingDot != nil && *r.trailingDot == common.ETrailingDotOption.Enable() {
 		req.Raw().Header.Set("x-ms-allow-trailing-dot", "true")
 		req.Raw().Header.Set("x-ms-source-allow-trailing-dot", "true")
-		req.Raw().Header.Set("x-ms-version", "2022-11-02")
+		req.Raw().Header["x-ms-version"] = []string{"2022-11-02"}
 	}
 	return req.Next()
 }
