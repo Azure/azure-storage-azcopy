@@ -22,15 +22,12 @@ package ste
 
 import (
 	"fmt"
-
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type blockBlobSuite struct{}
-
-var _ = chk.Suite(&blockBlobSuite{})
-
-func (s *blockBlobSuite) TestGetVerifiedChunkParams(c *chk.C) {
+func TestGetVerifiedChunkParams(t *testing.T) {
+	a := assert.New(t)
 	// Mock required params
 	transferInfo := TransferInfo{
 		BlockSize:  4195352576, // 4001MiB
@@ -42,19 +39,18 @@ func (s *blockBlobSuite) TestGetVerifiedChunkParams(c *chk.C) {
 	memLimit := int64(2097152000) // 2000Mib
 	expectedErr := fmt.Sprintf("Cannot use a block size of 3.91GiB. AzCopy is limited to use only 1.95GiB of memory")
 	_, _, err := getVerifiedChunkParams(transferInfo, memLimit, memLimit)
-	c.Assert(err.Error(), chk.Equals, expectedErr)
+	a.Equal(expectedErr, err.Error())
 
 	// Verify large block Size
 	memLimit = int64(8388608000) // 8000MiB
 	expectedErr = fmt.Sprintf("block size of 3.91GiB for file tmpSrc of size 7.81GiB exceeds maximum allowed block size for a BlockBlob")
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
-	c.Assert(err.Error(), chk.Equals, expectedErr)
+	a.Equal(expectedErr, err.Error())
 
 	// High block count
 	transferInfo.SourceSize = 2147483648 //16GiB
 	transferInfo.BlockSize = 2048        // 2KiB
 	expectedErr = fmt.Sprintf("Block size 2048 for source of size 2147483648 is not correct. Number of blocks will exceed the limit")
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
-	c.Assert(err.Error(), chk.Equals, expectedErr)
-
+	a.Equal(expectedErr, err.Error())
 }

@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
 	"net/http"
+	"testing"
 	"time"
-
-	chk "gopkg.in/check.v1"
 )
 
 // Testings for RetryReader
@@ -86,7 +86,8 @@ func (r *perByteReader) Close() error {
 
 // Test normal retry succeed, note initial response not provided.
 // Tests both with and without notification of failures
-func (r *aztestsSuite) TestRetryReaderReadWithRetry(c *chk.C) {
+func TestRetryReaderReadWithRetry(t *testing.T) {
+	a := assert.New(t)
 	// Test twice, the second time using the optional "logging"/notification callback for failed tries
 	// We must test both with and without the callback, since be testing without
 	// we are testing that it is, indeed, optional to provide the callback
@@ -124,7 +125,7 @@ func (r *aztestsSuite) TestRetryReaderReadWithRetry(c *chk.C) {
 
 		httpGetterInfo := azbfs.HTTPGetterInfo{Offset: 0, Count: int64(byteCount)}
 		initResponse, err := getter(context.Background(), httpGetterInfo)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		rrOptions := azbfs.RetryReaderOptions{MaxRetryRequests: 1}
 		if logThisRun {
@@ -135,28 +136,29 @@ func (r *aztestsSuite) TestRetryReaderReadWithRetry(c *chk.C) {
 		// should fail and succeed through retry
 		can := make([]byte, 1)
 		n, err := retryReader.Read(can)
-		c.Assert(n, chk.Equals, 1)
-		c.Assert(err, chk.IsNil)
+		a.Equal(1, n)
+		a.Nil(err)
 
 		// check "logging", if it was enabled
 		if logThisRun {
 			// We only expect one failed try in this test
 			// And the notification method is not called for successes
-			c.Assert(failureMethodNumCalls, chk.Equals, 1)           // this is the number of calls we counted
-			c.Assert(failureWillRetryCount, chk.Equals, 1)           // the sole failure was retried
-			c.Assert(failureLastReportedFailureCount, chk.Equals, 1) // this is the number of failures reported by the notification method
-			c.Assert(failureLastReportedError, chk.NotNil)
+			a.Equal(1, failureMethodNumCalls)           // this is the number of calls we counted
+			a.Equal(1, failureWillRetryCount)           // the sole failure was retried
+			a.Equal(1, failureLastReportedFailureCount) // this is the number of failures reported by the notification method
+			a.NotNil(failureLastReportedError)
 		}
 		// should return EOF
 		n, err = retryReader.Read(can)
-		c.Assert(n, chk.Equals, 0)
-		c.Assert(err, chk.Equals, io.EOF)
+		a.Zero(n)
+		a.Equal(io.EOF, err)
 	}
 }
 
 // Test normal retry succeed, note initial response not provided.
 // Tests both with and without notification of failures
-func (r *aztestsSuite) TestRetryReaderReadWithRetryIoUnexpectedEOF(c *chk.C) {
+func TestRetryReaderReadWithRetryIoUnexpectedEOF(t *testing.T) {
+	a := assert.New(t)
 	// Test twice, the second time using the optional "logging"/notification callback for failed tries
 	// We must test both with and without the callback, since be testing without
 	// we are testing that it is, indeed, optional to provide the callback
@@ -194,7 +196,7 @@ func (r *aztestsSuite) TestRetryReaderReadWithRetryIoUnexpectedEOF(c *chk.C) {
 
 		httpGetterInfo := azbfs.HTTPGetterInfo{Offset: 0, Count: int64(byteCount)}
 		initResponse, err := getter(context.Background(), httpGetterInfo)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		rrOptions := azbfs.RetryReaderOptions{MaxRetryRequests: 1}
 		if logThisRun {
@@ -205,27 +207,28 @@ func (r *aztestsSuite) TestRetryReaderReadWithRetryIoUnexpectedEOF(c *chk.C) {
 		// should fail and succeed through retry
 		can := make([]byte, 1)
 		n, err := retryReader.Read(can)
-		c.Assert(n, chk.Equals, 1)
-		c.Assert(err, chk.IsNil)
+		a.Equal(1, n)
+		a.Nil(err)
 
 		// check "logging", if it was enabled
 		if logThisRun {
 			// We only expect one failed try in this test
 			// And the notification method is not called for successes
-			c.Assert(failureMethodNumCalls, chk.Equals, 1)           // this is the number of calls we counted
-			c.Assert(failureWillRetryCount, chk.Equals, 1)           // the sole failure was retried
-			c.Assert(failureLastReportedFailureCount, chk.Equals, 1) // this is the number of failures reported by the notification method
-			c.Assert(failureLastReportedError, chk.NotNil)
+			a.Equal(1, failureMethodNumCalls)           // this is the number of calls we counted
+			a.Equal(1, failureWillRetryCount)           // the sole failure was retried
+			a.Equal(1, failureLastReportedFailureCount) // this is the number of failures reported by the notification method
+			a.NotNil(failureLastReportedError)
 		}
 		// should return EOF
 		n, err = retryReader.Read(can)
-		c.Assert(n, chk.Equals, 0)
-		c.Assert(err, chk.Equals, io.EOF)
+		a.Zero(n)
+		a.Equal(io.EOF, err)
 	}
 }
 
 // Test normal retry fail as retry Count not enough.
-func (r *aztestsSuite) TestRetryReaderReadNegativeNormalFail(c *chk.C) {
+func TestRetryReaderReadNegativeNormalFail(t *testing.T) {
+	a := assert.New(t)
 	// Extra setup for testing notification of failures (i.e. of unsuccessful tries)
 	failureMethodNumCalls := 0
 	failureWillRetryCount := 0
@@ -267,20 +270,21 @@ func (r *aztestsSuite) TestRetryReaderReadNegativeNormalFail(c *chk.C) {
 	// should fail
 	can := make([]byte, 1)
 	n, err := retryReader.Read(can)
-	c.Assert(n, chk.Equals, 0)
-	c.Assert(err, chk.Equals, body.injectedError)
+	a.Zero(n)
+	a.Equal(body.injectedError, err)
 
 	// Check that we received the right notification callbacks
 	// We only expect two failed tries in this test, but only one
 	// of the would have had willRetry = true
-	c.Assert(failureMethodNumCalls, chk.Equals, 2)           // this is the number of calls we counted
-	c.Assert(failureWillRetryCount, chk.Equals, 1)           // only the first failure was retried
-	c.Assert(failureLastReportedFailureCount, chk.Equals, 2) // this is the number of failures reported by the notification method
-	c.Assert(failureLastReportedError, chk.NotNil)
+	a.Equal(2, failureMethodNumCalls)           // this is the number of calls we counted
+	a.Equal(1, failureWillRetryCount)           // only the first failure was retried
+	a.Equal(2, failureLastReportedFailureCount) // this is the number of failures reported by the notification method
+	a.NotNil(failureLastReportedError)
 }
 
 // Test boundary case when Count equals to 0 and fail.
-func (r *aztestsSuite) TestRetryReaderReadCount0(c *chk.C) {
+func TestRetryReaderReadCount0(t *testing.T) {
+	a := assert.New(t)
 	byteCount := 1
 	body := newPerByteReader(byteCount)
 	body.doInjectError = true
@@ -304,16 +308,17 @@ func (r *aztestsSuite) TestRetryReaderReadCount0(c *chk.C) {
 	// should consume the only byte
 	can := make([]byte, 1)
 	n, err := retryReader.Read(can)
-	c.Assert(n, chk.Equals, 1)
-	c.Assert(err, chk.IsNil)
+	a.Equal(1, n)
+	a.Nil(err)
 
 	// should not read when Count=0, and should return EOF
 	n, err = retryReader.Read(can)
-	c.Assert(n, chk.Equals, 0)
-	c.Assert(err, chk.Equals, io.EOF)
+	a.Zero(n)
+	a.Equal(io.EOF, err)
 }
 
-func (r *aztestsSuite) TestRetryReaderReadNegativeNonRetriableError(c *chk.C) {
+func TestRetryReaderReadNegativeNonRetriableError(t *testing.T) {
+	a := assert.New(t)
 	byteCount := 1
 	body := newPerByteReader(byteCount)
 	body.doInjectError = true
@@ -336,7 +341,7 @@ func (r *aztestsSuite) TestRetryReaderReadNegativeNonRetriableError(c *chk.C) {
 
 	dest := make([]byte, 1)
 	_, err := retryReader.Read(dest)
-	c.Assert(err, chk.Equals, body.injectedError)
+	a.Equal(body.injectedError, err)
 }
 
 // Test the case where we programmatically force a retry to happen, via closing the body early from another goroutine
@@ -344,8 +349,8 @@ func (r *aztestsSuite) TestRetryReaderReadNegativeNonRetriableError(c *chk.C) {
 // purposes of unit testing, here we are testing the cancellation mechanism that is exposed to
 // consumers of the API, to allow programmatic forcing of retries (e.g. if the consumer deems
 // the read to be taking too long, they may force a retry in the hope of better performance next time).
-func (r *aztestsSuite) TestRetryReaderReadWithForcedRetry(c *chk.C) {
-
+func TestRetryReaderReadWithForcedRetry(t *testing.T) {
+	a := assert.New(t)
 	for _, enableRetryOnEarlyClose := range []bool{false, true} {
 
 		// use the notification callback, so we know that the retry really did happen
@@ -371,7 +376,7 @@ func (r *aztestsSuite) TestRetryReaderReadWithForcedRetry(c *chk.C) {
 
 		httpGetterInfo := azbfs.HTTPGetterInfo{Offset: 0, Count: int64(byteCount)}
 		initResponse, err := getter(context.Background(), httpGetterInfo)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		rrOptions := azbfs.RetryReaderOptions{MaxRetryRequests: 2, TreatEarlyCloseAsError: !enableRetryOnEarlyClose}
 		rrOptions.NotifyFailedRead = failureMethod
@@ -387,12 +392,12 @@ func (r *aztestsSuite) TestRetryReaderReadWithForcedRetry(c *chk.C) {
 		output := make([]byte, byteCount)
 		n, err := io.ReadFull(retryReader, output)
 		if enableRetryOnEarlyClose {
-			c.Assert(n, chk.Equals, byteCount)
-			c.Assert(err, chk.IsNil)
-			c.Assert(output, chk.DeepEquals, randBytes)
-			c.Assert(failureMethodNumCalls, chk.Equals, 1) // assert that the cancellation did indeed happen
+			a.Equal(byteCount, n)
+			a.Nil(err)
+			a.Equal(randBytes, output)
+			a.Equal(1, failureMethodNumCalls) // assert that the cancellation did indeed happen
 		} else {
-			c.Assert(err, chk.NotNil)
+			a.NotNil(err)
 		}
 	}
 }

@@ -25,97 +25,98 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type traverserBlobSuite struct{}
-
-var _ = chk.Suite(&traverserBlobSuite{})
-
-func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
+func TestIsSourceDirWithStub(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	dirName := "source_dir"
-	createNewDirectoryStub(c, containerURL, dirName)
+	createNewDirectoryStub(a, containerURL, dirName)
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, true)
-	c.Assert(err, chk.Equals, nil)
+	a.True(isDir)
+	a.Nil(err)
 }
 
-func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
+func TestIsSourceDirWithNoStub(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	dirName := "source_dir/"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, true)
-	c.Assert(err, chk.Equals, nil)
+	a.True(isDir)
+	a.Nil(err)
 }
 
-func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
+func TestIsSourceFileExists(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	fileName := "source_file"
-	_, fileName = createNewBlockBlob(c, containerURL, fileName)
+	_, fileName = createNewBlockBlob(a, containerURL, fileName)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, false)
-	c.Assert(err, chk.IsNil)
+	a.False(isDir)
+	a.Nil(err)
 }
 
-func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
+func TestIsSourceFileDoesNotExist(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	fileName := "file_does_not_exist"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, false)
-	c.Assert(err.Error(), chk.Equals, common.FILE_NOT_FOUND)
+	a.False(isDir)
+	a.Equal(common.FILE_NOT_FOUND, err.Error())
 }

@@ -21,18 +21,16 @@
 package common
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/url"
 	"sync"
+	"testing"
 	"time"
 )
 
-type proxyLookupCacheSuite struct{}
-
-var _ = chk.Suite(&proxyLookupCacheSuite{})
-
-func (s *proxyLookupCacheSuite) TestCacheIsUsed(c *chk.C) {
+func TestCacheIsUsed(t *testing.T) {
+	a := assert.New(t)
 	fakeMu := &sync.Mutex{} // avoids race condition in test code
 	var fakeResult *url.URL
 	var fakeError error
@@ -54,23 +52,23 @@ func (s *proxyLookupCacheSuite) TestCacheIsUsed(c *chk.C) {
 	fakeMu.Unlock()
 	fooRequest, _ := http.NewRequest("GET", "http://foo.com/a", nil)
 	fooResult1, err := pc.getProxy(fooRequest)
-	c.Check(err, chk.IsNil)
-	c.Check(fooResult1.String(), chk.Equals, "http://fooproxy")
+	a.Nil(err)
+	a.Equal("http://fooproxy", fooResult1.String())
 
 	fakeMu.Lock()
 	fakeResult, fakeError = url.Parse("http://barproxy")
 	fakeMu.Unlock()
 	barRequest, _ := http.NewRequest("GET", "http://bar.com/a", nil)
 	barResult1, err := pc.getProxy(barRequest)
-	c.Check(err, chk.IsNil)
-	c.Check(barResult1.String(), chk.Equals, "http://barproxy")
+	a.Nil(err)
+	a.Equal("http://barproxy", barResult1.String())
 
 	fakeMu.Lock()
 	fakeResult, fakeError = url.Parse("http://this will give a parsing error")
 	fakeMu.Unlock()
 	erroringRequest, _ := http.NewRequest("GET", "http://willerror.com/a", nil)
 	_, expectedErr := pc.getProxy(erroringRequest)
-	c.Check(expectedErr, chk.NotNil)
+	a.NotNil(expectedErr)
 
 	// set dummy values for next lookup, so we can be sure that lookups don't happen (i.e. we don't get these values, so we know we hit the cache)
 	fakeMu.Lock()
@@ -81,20 +79,21 @@ func (s *proxyLookupCacheSuite) TestCacheIsUsed(c *chk.C) {
 	// lookup URLs with same host portion, but different paths. Expect cache hits.
 	fooRequest, _ = http.NewRequest("GET", "http://foo.com/differentPathFromBefore", nil)
 	fooResult2, err := pc.getProxy(fooRequest)
-	c.Check(err, chk.IsNil)
-	c.Check(fooResult2.String(), chk.Equals, fooResult1.String())
+	a.Nil(err)
+	a.Equal(fooResult1.String(), fooResult2.String())
 
 	barRequest, _ = http.NewRequest("GET", "http://bar.com/differentPathFromBefore", nil)
 	barResult2, err := pc.getProxy(barRequest)
-	c.Check(err, chk.IsNil)
-	c.Check(barResult2.String(), chk.Equals, barResult1.String())
+	a.Nil(err)
+	a.Equal(barResult1.String(), barResult2.String())
 
 	erroringRequest, _ = http.NewRequest("GET", "http://willerror.com/differentPathFromBefore", nil)
 	_, expectedErr = pc.getProxy(erroringRequest)
-	c.Check(expectedErr, chk.NotNil)
+	a.NotNil(expectedErr)
 }
 
-func (s *proxyLookupCacheSuite) TestCacheEntriesGetRefreshed(c *chk.C) {
+func TestCacheEntriesGetRefreshed(t *testing.T) {
+	a := assert.New(t)
 	fakeMu := &sync.Mutex{} // avoids race condition in test code
 	var fakeResult *url.URL
 	var fakeError error
@@ -117,8 +116,8 @@ func (s *proxyLookupCacheSuite) TestCacheEntriesGetRefreshed(c *chk.C) {
 	fakeMu.Unlock()
 	fooRequest, _ := http.NewRequest("GET", "http://foo.com/a", nil)
 	fooResult1, err := pc.getProxy(fooRequest)
-	c.Check(err, chk.IsNil)
-	c.Check(fooResult1.String(), chk.Equals, "http://fooproxy")
+	a.Nil(err)
+	a.Equal("http://fooproxy", fooResult1.String())
 
 	// prime the refresh to actually produce a change
 	fakeMu.Lock()
@@ -130,11 +129,12 @@ func (s *proxyLookupCacheSuite) TestCacheEntriesGetRefreshed(c *chk.C) {
 
 	// read from cache, and check we get the update result
 	fooResult2, err := pc.getProxy(fooRequest)
-	c.Check(err, chk.IsNil)
-	c.Check(fooResult2.String(), chk.Equals, "http://updatedFooProxy")
+	a.Nil(err)
+	a.Equal("http://updatedFooProxy", fooResult2.String())
 }
 
-func (s *proxyLookupCacheSuite) TestUseOfLookupMethodHasTimout(c *chk.C) {
+func TestUseOfLookupMethodHasTimout(t *testing.T) {
+	a := assert.New(t)
 	pc := &proxyLookupCache{
 		m:             &sync.Map{},
 		lookupLock:    &sync.Mutex{},
@@ -147,5 +147,5 @@ func (s *proxyLookupCacheSuite) TestUseOfLookupMethodHasTimout(c *chk.C) {
 
 	fooRequest, _ := http.NewRequest("GET", "http://foo.com/a", nil)
 	tuple := pc.getProxyNoCache(fooRequest)
-	c.Check(tuple.err, chk.Equals, ProxyLookupTimeoutError)
+	a.Equal(ProxyLookupTimeoutError, tuple.err)
 }

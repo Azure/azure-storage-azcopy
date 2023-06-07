@@ -2,20 +2,18 @@ package common
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"net/url"
 	"strings"
+	"testing"
 	"unsafe"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	chk "gopkg.in/check.v1"
 )
 
-type extensionsTestSuite struct{}
-
-var _ = chk.Suite(&extensionsTestSuite{})
-
-func (s *extensionsTestSuite) TestGenerateFullPath(c *chk.C) {
+func TestGenerateFullPath(t *testing.T) {
+	a := assert.New(t)
 	// the goal is to make sure the root path and child path are always combined correctly
 	testCases := map[string][]string{
 		"/usr/foo1/bla.txt": {"/usr/foo1", "bla.txt"},    // normal case
@@ -38,11 +36,12 @@ func (s *extensionsTestSuite) TestGenerateFullPath(c *chk.C) {
 	for expectedFullPath, input := range testCases {
 		resultFullPath := GenerateFullPath(input[0], input[1])
 
-		c.Assert(resultFullPath, chk.Equals, expectedFullPath)
+		a.Equal(expectedFullPath, resultFullPath)
 	}
 }
 
-func (*extensionsTestSuite) TestURLWithPlusDecodedInPath(c *chk.C) {
+func TestURLWithPlusDecodedInPath(t *testing.T) {
+	a := assert.New(t)
 	type expectedResults struct {
 		expectedResult  string
 		expectedRawPath string
@@ -80,18 +79,18 @@ func (*extensionsTestSuite) TestURLWithPlusDecodedInPath(c *chk.C) {
 
 	for k, v := range replacementTests {
 		uri, err := url.Parse(k)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		extension := URLExtension{*uri}.URLWithPlusDecodedInPath()
 
-		c.Assert(extension.Path, chk.Equals, v.expectedPath)
-		c.Assert(extension.RawPath, chk.Equals, v.expectedRawPath)
-		c.Assert(extension.String(), chk.Equals, v.expectedResult)
+		a.Equal(v.expectedPath, extension.Path)
+		a.Equal(v.expectedRawPath, extension.RawPath)
+		a.Equal(v.expectedResult, extension.String())
 	}
 }
 
-func (*extensionsTestSuite) TestRedaction(c *chk.C) {
-
+func TestRedaction(t *testing.T) {
+	a := assert.New(t)
 	// must make sure that-
 	//1. the signature is redacted if present
 	//2. the capitalization of the rest of the string should not be affected
@@ -126,29 +125,30 @@ func (*extensionsTestSuite) TestRedaction(c *chk.C) {
 			actualOutputParams = append(actualOutputParams, param)
 		}
 
-		c.Assert(len(expectedOutputParams), chk.Equals, len(actualOutputParams))
+		a.Equal(len(actualOutputParams), len(expectedOutputParams))
 
 		var sigfound bool = false
 		for i := range expectedOutputParams {
 			expParam, expValue := strings.Split(expectedOutputParams[i], "=")[0], strings.Split(expectedOutputParams[i], "=")[1]
 			actParam, actValue := strings.Split(actualOutputParams[i], "=")[0], strings.Split(actualOutputParams[i], "=")[1]
 
-			c.Assert(expParam, chk.Equals, actParam)
-			c.Assert(expValue, chk.Equals, actValue)
+			a.Equal(actParam, expParam)
+			a.Equal(actValue, expValue)
 			if expParam == "sig" {
-				c.Assert(isRedacted, chk.Equals, true)
+				a.True(isRedacted)
 				sigfound = true
-				c.Assert(actValue, chk.Equals, "REDACTED")
+				a.Equal("REDACTED", actValue)
 			}
 		}
 		if !sigfound {
-			c.Assert(isRedacted, chk.Equals, false)
+			a.False(isRedacted)
 		}
 	}
 }
 
 
-func (*extensionsTestSuite) TestBlockblobBlockIDGeneration(c *chk.C) {
+func TestBlockblobBlockIDGeneration(t *testing.T) {
+	a := assert.New(t)
 	// Make sure that for a given JobID, jobPart, an index in job part and a block index,
 	// the blockID generated is consistent.
 	numOfFilesPerDispatchJobPart :=int32(10000) // == cmd.NumOfFilesPerDispatchJobPart
@@ -158,17 +158,17 @@ func (*extensionsTestSuite) TestBlockblobBlockIDGeneration(c *chk.C) {
 	placeHolder := "00000" // 5B placeholder
 	jobId := NewUUID()
 	jobIdStr := string((*[16]byte)(unsafe.Pointer(&jobId))[:]) // 16Byte jobID
-	partNum := rand.Int31n(maxNumberOfParts) // 5B partNumber 
+	partNum := rand.Int31n(maxNumberOfParts) // 5B partNumber
 	fileIndex  := rand.Int31n(numOfFilesPerDispatchJobPart) // 5Byte index of file in part
 	blockIndex := rand.Int31n(azblob.BlockBlobMaxBlocks) // 5B blockIndex
 
 	blockNamePrefix := fmt.Sprintf("%s%s%05d%05d", placeHolder, jobIdStr, partNum, fileIndex)
 	blockName := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)
-	c.Assert(len(blockName), chk.Equals, azCopyBlockLength)
+	a.Equal(azCopyBlockLength, len(blockName))
 
 	for i := 1; i <= 10; i++ {
 		tmp := GenerateBlockBlobBlockID(blockNamePrefix, blockIndex)
-		c.Assert(tmp, chk.Equals, blockName)
+		a.Equal(blockName, tmp)
 	}
 
 }

@@ -21,15 +21,12 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type blockSizeFilterSuite struct{}
-
-var _ = chk.Suite(&blockSizeFilterSuite{})
-
-func (s *genericFilterSuite) TestConversions(c *chk.C) {
-
+func TestConversions(t *testing.T) {
+	a := assert.New(t)
 	testData := []struct {
 		floatMiB         float64
 		expectedBytes    int64
@@ -46,9 +43,9 @@ func (s *genericFilterSuite) TestConversions(c *chk.C) {
 	for _, d := range testData {
 		actualBytes, err := blockSizeInBytes(d.floatMiB)
 		if d.expectedErrorMsg != "" {
-			c.Check(err.Error(), chk.Equals, d.expectedErrorMsg)
+			a.Equal(d.expectedErrorMsg, err.Error())
 		} else {
-			c.Check(actualBytes, chk.Equals, d.expectedBytes)
+			a.Equal(d.expectedBytes, actualBytes)
 		}
 	}
 }

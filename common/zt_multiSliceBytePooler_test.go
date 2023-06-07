@@ -21,16 +21,13 @@
 package common
 
 import (
+	"github.com/stretchr/testify/assert"
 	"math"
-
-	chk "gopkg.in/check.v1"
+	"testing"
 )
 
-type multiSliceBytePoolerSuite struct{}
-
-var _ = chk.Suite(&multiSliceBytePoolerSuite{})
-
-func (s *multiSliceBytePoolerSuite) TestMultiSliceSlotInfo(c *chk.C) {
+func TestMultiSliceSlotInfo(t *testing.T) {
+	a := assert.New(t)
 	eightMB := 8 * 1024 * 1024
 
 	cases := []struct {
@@ -58,10 +55,10 @@ func (s *multiSliceBytePoolerSuite) TestMultiSliceSlotInfo(c *chk.C) {
 		// now lets see if the pooler is working as we expect
 		slotIndex, maxCap := getSlotInfo(int64(x.size))
 
-		c.Assert(slotIndex, chk.Equals, roundedLogBase2)     // this what, mathematically, we expect
-		c.Assert(slotIndex, chk.Equals, x.expectedSlotIndex) // this what our test case said (should be same)
+		a.Equal(roundedLogBase2, slotIndex)     // this what, mathematically, we expect
+		a.Equal(x.expectedSlotIndex, slotIndex) // this what our test case said (should be same)
 
-		c.Assert(maxCap, chk.Equals, x.expectedMaxCapInSlot)
+		a.Equal(x.expectedMaxCapInSlot, maxCap)
 	}
 
 }
