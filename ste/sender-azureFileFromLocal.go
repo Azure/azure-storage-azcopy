@@ -105,28 +105,30 @@ func (s *azureFileUploader) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
 			return
 		}
 
-		_, err = s.addPermissionsToHeaders(info, s.fileURL().URL())
-		if err != nil {
-			s.jptm.FailActiveSend("Setting file metadata", err)
-			return
-		}
+		if s.jptm.Info().PreserveSMBInfo {
+			_, err = s.addPermissionsToHeaders(info, s.fileURL().URL())
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file metadata", err)
+				return
+			}
 
-		_, err = s.addSMBPropertiesToHeaders(info, s.fileURL().URL())
-		if err != nil {
-			s.jptm.FailActiveSend("Setting file metadata", err)
-			return
-		}
+			_, err = s.addSMBPropertiesToHeaders(info, s.fileURL().URL())
+			if err != nil {
+				s.jptm.FailActiveSend("Setting file metadata", err)
+				return
+			}
 
-		err = s.DoWithOverrideReadOnly(s.ctx,
-			func() (interface{}, error) {
-				return s.fileURL().SetHTTPHeaders(s.ctx, s.headersToApply)
-			},
-			s.fileOrDirURL,
-			s.jptm.GetForceIfReadOnly())
+			err = s.DoWithOverrideReadOnly(s.ctx,
+				func() (interface{}, error) {
+					return s.fileURL().SetHTTPHeaders(s.ctx, s.headersToApply)
+				},
+				s.fileOrDirURL,
+				s.jptm.GetForceIfReadOnly())
 
-		if err != nil {
-			s.jptm.FailActiveUpload("Setting file metadata", err)
-			return
+			if err != nil {
+				s.jptm.FailActiveUpload("Setting file metadata", err)
+				return
+			}
 		}
 	})
 }
