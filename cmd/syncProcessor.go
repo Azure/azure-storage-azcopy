@@ -165,7 +165,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 	if d.incrementDeletionCount != nil {
 		d.incrementDeletionCount()
 	}
-	return
+	return nil // Missing a file is an error, but it's not show-stopping. We logged it earlier; that's OK.
 }
 
 func (d *interactiveDeleteProcessor) promptForConfirmation(object StoredObject) (shouldDelete bool, keepPrompting bool) {
@@ -266,7 +266,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, stopDeleteWorkers chan struc
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To(), stopDeleteWorkers, cca.incrementDeletionCount).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To(), stopDeleteWorkers, cca.incrementDeletionCount, cca.forceIfReadOnly).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.Destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
@@ -279,14 +279,16 @@ type remoteResourceDeleter struct {
 	enumerationDone          chan struct{}
 	deleteDirEnumerationChan chan StoredObject
 	incrementDeletionCount   func()
+	forceIfReadOnly          bool
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location, enumDone chan struct{}, incrementDeletionCount func()) *remoteResourceDeleter {
+func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location, enumDone chan struct{}, incrementDeletionCount func(), forceIfReadOnly bool) *remoteResourceDeleter {
 	remote := &remoteResourceDeleter{
-		rootURL:        rawRootURL,
-		p:              p,
-		ctx:            ctx,
-		targetLocation: targetLocation,
+		rootURL:         rawRootURL,
+		p:               p,
+		ctx:             ctx,
+		targetLocation:  targetLocation,
+		forceIfReadOnly: forceIfReadOnly,
 		// This channel keep the blobURL to be deleted.
 		blobDeleteChan:           make(chan interface{}, 1000*1000),
 		deleteDirEnumerationChan: make(chan StoredObject, 1000),
@@ -439,22 +441,54 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 	if object.entityType == common.EEntityType.File() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
 		glcm.Info("Deleting extra object: " + object.relativePath)
+
+		var err error
 		switch b.targetLocation {
 		case common.ELocation.Blob():
 			blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
 			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
 			blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
-			_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
-			return err
+			_, err = blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
 		case common.ELocation.File():
 			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
 			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
+
 			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
-			_, err := fileURL.Delete(b.ctx)
-			return err
+
+			_, err = fileURL.Delete(b.ctx)
+
+			if stgErr, ok := err.(azfile.StorageError); b.forceIfReadOnly && ok && stgErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+				msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
+				if azcopyScanningLogger != nil {
+					azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+				}
+
+				// if the file is read-only, we need to remove the read-only attribute before we can delete it
+				noAttrib := azfile.FileAttributeNone
+				_, err = fileURL.SetHTTPHeaders(b.ctx, azfile.FileHTTPHeaders{SMBProperties: azfile.SMBProperties{FileAttributes: &noAttrib}})
+				if err == nil {
+					_, err = fileURL.Delete(b.ctx)
+				} else {
+					msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
+					glcm.Info(msg + "; check the scanning log file for more details")
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogError, msg+": "+err.Error())
+					}
+				}
+			}
 		default:
 			panic("not implemented, check your code")
 		}
+
+		if err != nil {
+			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
+			glcm.Info(msg + "; check the scanning log file for more details")
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogError, msg+": "+err.Error())
+			}
+		}
+
+		return nil
 	} else {
 		switch b.targetLocation {
 		case common.ELocation.Blob():
@@ -520,7 +554,28 @@ func (b *remoteResourceDeleter) enumerateFileDirectoryDeletion(object StoredObje
 			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
 			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath, fileInfo.Name)
 			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+
 			_, err := fileURL.Delete(b.ctx)
+
+			if stgErr, ok := err.(azfile.StorageError); b.forceIfReadOnly && ok && stgErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+				msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
+				if azcopyScanningLogger != nil {
+					azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+				}
+
+				// if the file is read-only, we need to remove the read-only attribute before we can delete it
+				noAttrib := azfile.FileAttributeNone
+				_, err = fileURL.SetHTTPHeaders(b.ctx, azfile.FileHTTPHeaders{SMBProperties: azfile.SMBProperties{FileAttributes: &noAttrib}})
+				if err == nil {
+					_, err = fileURL.Delete(b.ctx)
+				} else {
+					msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
+					glcm.Info(msg + "; check the scanning log file for more details")
+					if azcopyScanningLogger != nil {
+						azcopyScanningLogger.Log(pipeline.LogError, msg+": "+err.Error())
+					}
+				}
+			}
 			if err != nil {
 				// TODO: we are not checking error as of now. We can enqueue those error to errChan.
 				// errChan can be plunbed to error channel for sync. Like we done for copy to know errors at time of enumeration.
@@ -544,6 +599,27 @@ func (b *remoteResourceDeleter) enumerateFileDirectoryDeletion(object StoredObje
 		marker = lResp.NextMarker
 	}
 	_, err := dirUrl.Delete(b.ctx)
+
+	if stgErr, ok := err.(azfile.StorageError); b.forceIfReadOnly && ok && stgErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+		msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogInfo, msg)
+		}
+
+		// if the file is read-only, we need to remove the read-only attribute before we can delete it
+		noAttrib := azfile.FileAttributeNone
+		_, err = dirUrl.SetProperties(b.ctx, azfile.SMBProperties{FileAttributes: &noAttrib})
+		if err == nil {
+			_, err = dirUrl.Delete(b.ctx)
+		} else {
+			msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
+			glcm.Info(msg + "; check the scanning log file for more details")
+			if azcopyScanningLogger != nil {
+				azcopyScanningLogger.Log(pipeline.LogError, msg+": "+err.Error())
+			}
+		}
+	}
+
 	if err != nil {
 		// TODO: we are not checking error as of now. We can enqueue those error to errChan.
 		// errChan can be plunbed to error channel for sync. Like we done for copy to know errors at time of enumeration.
