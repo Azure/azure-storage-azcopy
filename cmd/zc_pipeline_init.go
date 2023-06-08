@@ -8,7 +8,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func InitPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo, logLevel pipeline.LogLevel, trailingDot common.TrailingDotOption) (p pipeline.Pipeline, err error) {
+func InitPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo, logLevel pipeline.LogLevel, trailingDot common.TrailingDotOption, from common.Location) (p pipeline.Pipeline, err error) {
 	switch location {
 	case common.ELocation.Local(),
 		common.ELocation.Benchmark():
@@ -17,7 +17,7 @@ func InitPipeline(ctx context.Context, location common.Location, credential comm
 	case common.ELocation.Blob():
 		p, err = createBlobPipeline(ctx, credential, logLevel)
 	case common.ELocation.File():
-		p, err = createFilePipeline(ctx, credential, logLevel, trailingDot)
+		p, err = createFilePipeline(ctx, credential, logLevel, trailingDot, from)
 	case common.ELocation.BlobFS():
 		p, err = createBlobFSPipeline(ctx, credential, logLevel)
 	case common.ELocation.S3():

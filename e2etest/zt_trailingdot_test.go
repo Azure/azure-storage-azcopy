@@ -121,7 +121,7 @@ func TestTrailingDot_Disabled(t *testing.T) {
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-func TestTrailingDot_S2S(t *testing.T) {
+func TestTrailingDot_FileFile(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
@@ -140,6 +140,36 @@ func TestTrailingDot_S2S(t *testing.T) {
 				f("directory/file"),
 			},
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+// This is testing that we do not pass the x-ms-source-allow-trailing-dot when the source is not File.
+func TestTrailingDot_BlobFile(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobFile()),  eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				f("file."),
+			},
+			objectTarget: "file.",
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+// This is testing that we do not pass the x-ms-source-allow-trailing-dot when the source is not File.
+func TestTrailingDot_BlobFileHNS(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobFile()),  eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				f("file."),
+			},
+			objectTarget: "file.",
+		}, EAccountType.Standard(), EAccountType.HierarchicalNamespaceEnabled(), "")
 }
 
 func TestTrailingDot_Remove(t *testing.T) {
