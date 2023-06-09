@@ -39,9 +39,9 @@ import (
 
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
-	sip                 ISourceInfoProvider
-	fileOrDirURL        URLHolder
-	chunkSize           int64
+	sip          ISourceInfoProvider
+	fileOrDirURL URLHolderV1
+	chunkSize    int64
 	numChunks           uint32
 	pipeline            pipeline.Pipeline
 	pacer               pacer
@@ -69,7 +69,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 	headers := props.SrcHTTPHeaders.ToBlobFSHTTPHeaders()
 
-	var h URLHolder
+	var h URLHolderV1
 	if info.IsFolderPropertiesTransfer() {
 		h = azbfs.NewDirectoryURL(*destURL, p)
 	} else {

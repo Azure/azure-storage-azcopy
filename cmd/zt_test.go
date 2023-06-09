@@ -36,6 +36,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"io"
 	"math/rand"
 	"net/url"
@@ -215,6 +219,12 @@ func getContainerClient(c *chk.C, bsc *blobservice.Client) (container *container
 	return
 }
 
+func getShareClient(c *chk.C, fsc *fileservice.Client) (share *share.Client, name string) {
+	name = generateShareName()
+	share = fsc.NewShareClient(name)
+	return
+}
+
 func getFilesystemURL(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
 	name = generateFilesystemName()
 	filesystem = bfssu.NewFileSystemURL(name)
@@ -285,6 +295,21 @@ func getBlobServiceClient() *blobservice.Client {
 		panic(err)
 	}
 	client, err := blobservice.NewClientWithSharedKeyCredential(u, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+func getFileServiceClient() *fileservice.Client {
+	accountName, accountKey := getAccountAndKey()
+	u := fmt.Sprintf("https://%s.file.core.windows.net/", accountName)
+
+	credential, err := fileservice.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -384,6 +409,15 @@ func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL
 	return share, name
 }
 
+func createNewShare(c *chk.C, fsc *fileservice.Client) (share *share.Client, name string) {
+	share, name = getShareClient(c, fsc)
+
+	_, err := share.Create(ctx, nil)
+	c.Assert(err, chk.IsNil)
+
+	return share, name
+}
+
 func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
 	file, name = getAzureFileURL(c, share, prefix)
 
@@ -401,7 +435,14 @@ func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
 	accountName, accountKey := getAccountAndKey()
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
 	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRootV1(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
+	c.Assert(err, chk.IsNil)
+}
+
+func generateParentsForShareFile(c *chk.C, fileClient *file.Client) {
+	serviceClient := getFileServiceClient()
+	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileClient, serviceClient, t)
 	c.Assert(err, chk.IsNil)
 }
 
@@ -798,6 +839,23 @@ func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, c
 	return client
 }
 
+func getShareClientWithSAS(c *chk.C, credential *file.SharedKeyCredential, shareName string) *share.Client {
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s",
+		credential.AccountName(), shareName)
+	client, err := share.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+
+	sasURL, err := client.GetSASURL(
+		filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
+		time.Now().Add(48*time.Hour),
+		nil)
+	c.Assert(err, chk.IsNil)
+
+	client, err = share.NewClientWithNoCredential(sasURL, nil)
+	c.Assert(err, chk.IsNil)
+
+	return client
+}
+
 func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential) *blobservice.Client {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/",
 		credential.AccountName())
@@ -811,6 +869,24 @@ func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential)
 	c.Assert(err, chk.IsNil)
 
 	client, err = blobservice.NewClientWithNoCredential(sasURL, nil)
+	c.Assert(err, chk.IsNil)
+
+	return client
+}
+
+func getFileServiceClientWithSAS(c *chk.C, credential *file.SharedKeyCredential) *fileservice.Client {
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/",
+		credential.AccountName())
+	client, err := fileservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+
+	sasURL, err := client.GetSASURL(
+		filesas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		filesas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, Create: true},
+		time.Now().Add(48*time.Hour),
+		nil)
+	c.Assert(err, chk.IsNil)
+
+	client, err = fileservice.NewClientWithNoCredential(sasURL, nil)
 	c.Assert(err, chk.IsNil)
 
 	return client

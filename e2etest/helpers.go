@@ -258,7 +258,7 @@ func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
 	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, p, newNullFolderCreationTracker())
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRootV1(ctx, fileURL, p, newNullFolderCreationTracker())
 	c.AssertNoErr(err)
 }
 

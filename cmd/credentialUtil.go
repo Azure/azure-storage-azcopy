@@ -635,6 +635,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
+// TODO: add location from so we can only set this on
 func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.TrailingDotOption) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
 	if azcopyScanningLogger != nil {

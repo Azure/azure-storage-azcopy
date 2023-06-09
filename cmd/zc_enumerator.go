@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
 	"path/filepath"
 	"runtime"
@@ -34,8 +35,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -455,6 +454,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions)
 		}
 	case common.ELocation.File():
+		// TODO (last service migration) : Remove dependency on URLs.
 		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
@@ -462,20 +462,30 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 		recommendHttpsIfNecessary(*resourceURL)
 
-		if ctx == nil || p == nil {
-			return nil, errors.New("a valid credential and context must be supplied to create a file traverser")
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a blob traverser")
 		}
+		r := resourceURL.String()
 
-		furl := azfile.NewFileURLParts(*resourceURL)
+		fileURLParts, err := file.ParseURL(r)
+		if err != nil {
+			return nil, err
+		}
+		shareName := fileURLParts.ShareName
+		// Strip any non-service related things away
+		fileURLParts.ShareName = ""
+		fileURLParts.ShareSnapshot = ""
+		fileURLParts.DirectoryOrFilePath = ""
+		fsc := common.CreateFileServiceClient(fileURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, &trailingDot))
 
-		if furl.ShareName == "" || strings.Contains(furl.ShareName, "*") {
+		if shareName == "" || strings.Contains(shareName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newFileAccountTraverser(resourceURL, p, *ctx, getProperties, incrementEnumerationCounter, trailingDot)
+			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot)
 		} else {
-			output = newFileTraverser(resourceURL, p, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot)
+			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()
