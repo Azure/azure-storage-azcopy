@@ -731,7 +731,7 @@ func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
 		c.Assert(err, chk.IsNil)
 
 		for _, v := range resp.ShareItems {
-			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
+			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
 
 			if err != nil {
 				if stgErr, ok := err.(azfile.StorageError); ok {
