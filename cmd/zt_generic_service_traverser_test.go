@@ -118,7 +118,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	// construct a file account traverser
 	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -289,7 +289,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
 	rawFSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
