@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 
@@ -47,6 +48,7 @@ type fileTraverser struct {
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 	trailingDot common.TrailingDotOption
+	destination *common.Location
 }
 
 func (t *fileTraverser) IsDirectory(bool) (bool, error) {
@@ -66,10 +68,28 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesRe
 }
 
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
+	invalidBlobOrWindowsName := func(path string) bool {
+		if t.destination != nil {
+			if (t.destination.IsLocal() && runtime.GOOS == "windows") || *t.destination == common.ELocation.Blob() || *t.destination == common.ELocation.BlobFS() {
+				/* Blob or Windows object name is invalid if it ends with period or
+				   one of (virtual) directories in path ends with period.
+				   This list is not exhaustive
+				*/
+				return strings.HasSuffix(path, ".") ||
+					strings.Contains(path, "./")
+			}
+		}
+		return false
+	}
+	invalidNameErrorMsg := "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
 	targetURLParts := azfile.NewFileURLParts(*t.rawURL)
 
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
+		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
+			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, targetURLParts.DirectoryOrFilePath))
+			return common.EAzError.InvalidBlobOrWindowsName()
+		}
 		if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
 			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
@@ -200,17 +220,27 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			for _, fileInfo := range lResp.FileItems {
-				// These conditions are to prevent a GetProperties from returning a 404 when trailing dot is turned off.
-				if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(fileInfo.Name, ".") {
-					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, fileInfo.Name))
+				if invalidBlobOrWindowsName(fileInfo.Name) {
+					//Throw a warning on console and continue
+					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, fileInfo.Name))
+					continue
+				} else {
+					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(fileInfo.Name, ".") {
+						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, fileInfo.Name))
+					}
 				}
 				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
 
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
-				// These conditions are to prevent a GetProperties from returning a 404 when trailing dot is turned off.
-				if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(dirInfo.Name, ".") {
-					azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, dirInfo.Name))
+				if invalidBlobOrWindowsName(dirInfo.Name) {
+					//Throw a warning on console and continue
+					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, dirInfo.Name))
+					continue
+				} else {
+					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(dirInfo.Name, ".") {
+						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, dirInfo.Name))
+					}
 				}
 				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
 				if t.recursive {
@@ -282,8 +312,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption) (t *fileTraverser) {
-	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter, trailingDot: trailingDot}
+func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
+	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter, trailingDot: trailingDot, destination: destination}
 	return
 }
 

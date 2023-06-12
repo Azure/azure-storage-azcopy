@@ -172,6 +172,75 @@ func TestTrailingDot_BlobFileHNS(t *testing.T) {
 		}, EAccountType.Standard(), EAccountType.HierarchicalNamespaceEnabled(), "")
 }
 
+// This is testing that we skip trailing dot files from File to Blob.
+func TestTrailingDot_FileBlob(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileBlob()),  eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("normalfile"),
+				folder("normaldirectory"),
+				f("normaldirectory/normalfile"),
+			},
+			shouldSkip: []interface{}{
+				f("trailingdotfile."),
+				folder("trailingdotdirectory."),
+				f("trailingdotdirectory./trailingdotfile."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+// This is testing that we skip trailing dot files from File to BlobFS.
+func TestTrailingDot_FileBlobHNS(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileBlobFS()),  eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("normalfile"),
+				folder("normaldirectory"),
+				f("normaldirectory/normalfile"),
+			},
+			shouldSkip: []interface{}{
+				f("trailingdotfile."),
+				folder("trailingdotdirectory."),
+				f("trailingdotdirectory./trailingdotfile."),
+			},
+		}, EAccountType.HierarchicalNamespaceEnabled(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_FileLocalWindows(t *testing.T) {
+	// Windows does not support trailing dot files, so we should skip trailing dot files
+	if runtime.GOOS != "windows" {
+		return
+	}
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("normalfile"),
+				folder("normaldirectory"),
+				f("normaldirectory/normalfile"),
+			},
+			shouldSkip: []interface{}{
+				f("trailingdotfile."),
+				folder("trailingdotdirectory."),
+				f("trailingdotdirectory./trailingdotfile."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
 func TestTrailingDot_Remove(t *testing.T) {
 	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
