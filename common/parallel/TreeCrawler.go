@@ -35,6 +35,7 @@ type crawler struct {
 	unstartedDirs      []Directory // not a channel, because channels have length limits, and those get in our way
 	dirInProgressCount int64
 	lastAutoShutdown   time.Time
+	directoryDepth     int
 }
 
 type Directory interface{}
@@ -50,17 +51,18 @@ func (r CrawlResult) Item() (interface{}, error) {
 }
 
 // must be safe to be simultaneously called by multiple go-routines, each with a different dir
-type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error
+type EnumerateOneDirFunc func(dir Directory, enqueueDir func(Directory, int), enqueueOutput func(DirectoryEntry, error)) error
 
 // Crawl crawls an abstract directory tree, using the supplied enumeration function.  May be use for whatever
 // that function can enumerate (i.e. not necessarily a local file system, just anything tree-structured)
 func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, parallelism int) <-chan CrawlResult {
 	c := &crawler{
-		unstartedDirs: make([]Directory, 0, 1024),
-		output:        make(chan CrawlResult, 1000),
-		workerBody:    worker,
-		parallelism:   parallelism,
-		cond:          sync.NewCond(&sync.Mutex{}),
+		unstartedDirs:  make([]Directory, 0, 1024),
+		output:         make(chan CrawlResult, 1000),
+		workerBody:     worker,
+		parallelism:    parallelism,
+		cond:           sync.NewCond(&sync.Mutex{}),
+		directoryDepth: 1,
 	}
 	go c.start(ctx, root)
 	return c.output
@@ -165,8 +167,10 @@ func (c *crawler) processOneDirectory(ctx context.Context, workerIndex int) (boo
 
 	// find dir's immediate children (outside the lock, because this could be slow)
 	var foundDirectories = make([]Directory, 0, 16)
-	addDir := func(d Directory) {
-		foundDirectories = append(foundDirectories, d)
+	addDir := func(d Directory, currentDirectoryDepth int) {
+		if currentDirectoryDepth < c.directoryDepth {
+			foundDirectories = append(foundDirectories, d)
+		}
 	}
 	addOutput := func(de DirectoryEntry, er error) {
 		select {

@@ -46,7 +46,7 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	trailingDot common.TrailingDotOption
+	trailingDot                 common.TrailingDotOption
 }
 
 func (t *fileTraverser) IsDirectory(bool) (bool, error) {
@@ -63,6 +63,11 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesRe
 	}
 
 	return nil, false
+}
+
+type fileNode struct {
+	directoryURL azfile.DirectoryURL
+	depth        int
 }
 
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
@@ -192,8 +197,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// Define how to enumerate its contents
 	// This func must be threadsafe/goroutine safe
-	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
-		currentDirURL := dir.(azfile.DirectoryURL)
+	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory, int), enqueueOutput func(parallel.DirectoryEntry, error)) error {
+		temp := dir.(fileNode)
+		currentDirURL := temp.directoryURL
+		currentDepth := temp.depth
 		for marker := (azfile.Marker{}); marker.NotDone(); {
 			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(t.ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
 			if err != nil {
@@ -214,8 +221,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				}
 				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
 				if t.recursive {
-						// If recursive is turned on, add sub directories to be processed
-					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
+					// If recursive is turned on, add sub directories to be processed
+					curNode := fileNode{
+						directoryURL: currentDirURL.NewDirectoryURL(dirInfo.Name),
+						depth:        currentDepth + 1,
+					}
+					enqueueDir(curNode, currentDepth)
 				}
 
 			}
@@ -253,8 +264,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	parallelism := EnumerationParallelism // for Azure Files we'll run two pools of this size, one for crawl and one for transform
 
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
+	root := fileNode{
+		directoryURL: directoryURL,
+		depth:        0,
+	}
 
-	cCrawled := parallel.Crawl(workerContext, directoryURL, enumerateOneDir, parallelism)
+	cCrawled := parallel.Crawl(workerContext, root, enumerateOneDir, parallelism)
 
 	cTransformed := parallel.Transform(workerContext, cCrawled, convertToStoredObject, parallelism)
 

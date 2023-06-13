@@ -44,7 +44,8 @@ type rawListCmdArgs struct {
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
-	trailingDot 	string
+	trailingDot     string
+	directoryDepth  uint
 }
 
 type validProperty string
@@ -97,6 +98,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked.MachineReadable = raw.MachineReadable
 	cooked.RunningTally = raw.RunningTally
 	cooked.MegaUnits = raw.MegaUnits
+	cooked.directoryDepth = raw.directoryDepth
 	cooked.location = location
 	err := cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
@@ -118,7 +120,8 @@ type cookedListCmdArgs struct {
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
-	trailingDot 	common.TrailingDotOption
+	trailingDot     common.TrailingDotOption
+	directoryDepth  uint
 }
 
 var raw rawListCmdArgs
@@ -165,6 +168,7 @@ func init() {
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
 	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "delimiter (;) separated values of properties required in list output.")
 	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Enabled by default. Options for trailing dot support in file share. Available options: Enable, Disable. Choose disable to go back to legacy (potentially unsafe) treatment of trailing dot files.")
+	listContainerCmd.PersistentFlags().UintVar(&raw.directoryDepth, "directory-depth", 1e9, "Enabled by default with max Directory depth. User can Input a postive Integer with directory depth considering root directory depth as zero")
 
 	rootCmd.AddCommand(listContainerCmd)
 }

@@ -43,14 +43,19 @@ type DirReader interface {
 	Close()
 }
 
+type localNode struct {
+	directory string
+	depth     int
+}
+
 // CrawlLocalDirectory specializes parallel.Crawl to work specifically on a local directory.
 // It does not follow symlinks.
 // The items in the CrawResult output channel are FileSystemEntry s.
 // For a wrapper that makes this look more like filepath.Walk, see parallel.Walk.
-func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, reader DirReader) <-chan CrawlResult {
+func CrawlLocalDirectory(ctx context.Context, root localNode, parallelism int, reader DirReader) <-chan CrawlResult {
 	return Crawl(ctx,
 		root,
-		func(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error)) error {
+		func(dir Directory, enqueueDir func(Directory, int), enqueueOutput func(DirectoryEntry, error)) error {
 			return enumerateOneFileSystemDirectory(dir, enqueueDir, enqueueOutput, reader)
 		},
 		parallelism,
@@ -59,10 +64,10 @@ func CrawlLocalDirectory(ctx context.Context, root string, parallelism int, read
 
 // Walk is similar to filepath.Walk.
 // But note the following difference is how WalkFunc is used:
-// 1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
-//    (whereas with filepath.Walk it will usually (always?) have a value).
-// 2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
-//    (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
+//  1. If fileError passed to walkFunc is not nil, then here the filePath passed to that function will usually be ""
+//     (whereas with filepath.Walk it will usually (always?) have a value).
+//  2. If the return value of walkFunc function is not nil, enumeration will always stop, not matter what the type of the error.
+//     (Unlike filepath.WalkFunc, where returning filePath.SkipDir is handled as a special case).
 func Walk(appCtx context.Context, root string, parallelism int, parallelStat bool, walkFn filepath.WalkFunc) {
 	var ctx context.Context
 	var cancel context.CancelFunc
@@ -101,7 +106,11 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 
 	ctx, cancel = context.WithCancel(appCtx)
 	defer cancel()
-	ch := CrawlLocalDirectory(ctx, root, remainingParallelism, reader)
+	rootNode := localNode{
+		directory: root,
+		depth:     0,
+	}
+	ch := CrawlLocalDirectory(ctx, rootNode, remainingParallelism, reader)
 	for crawlResult := range ch {
 		entry, err := crawlResult.Item()
 		if err == nil {
@@ -123,8 +132,10 @@ func Walk(appCtx context.Context, root string, parallelism int, parallelStat boo
 }
 
 // enumerateOneFileSystemDirectory is an implementation of EnumerateOneDirFunc specifically for the local file system
-func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), enqueueOutput func(DirectoryEntry, error), r DirReader) error {
-	dirString := dir.(string)
+func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory, int), enqueueOutput func(DirectoryEntry, error), r DirReader) error {
+	temp := dir.(localNode)
+	dirString := temp.directory
+	currentDirDepth := temp.depth
 
 	d, err := os.Open(dirString) // for directories, we don't need a special open with FILE_FLAG_BACKUP_SEMANTICS, because directory opening uses FindFirst which doesn't need that flag. https://blog.differentpla.net/blog/2007/05/25/findfirstfile-and-se_backup_name
 	if err != nil {
@@ -164,7 +175,11 @@ func enumerateOneFileSystemDirectory(dir Directory, enqueueDir func(Directory), 
 			}
 			isSymlink := childInfo.Mode()&os.ModeSymlink != 0 // for compatibility with filepath.Walk, we do not follow symlinks, but we do enqueue them as output
 			if childInfo.IsDir() && !isSymlink {
-				enqueueDir(childEntry.fullPath)
+				curNode := localNode{
+					directory: childEntry.fullPath,
+					depth:     currentDirDepth + 1,
+				}
+				enqueueDir(curNode, currentDirDepth)
 			}
 			enqueueOutput(childEntry, nil)
 		}

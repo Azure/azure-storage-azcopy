@@ -291,12 +291,19 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return t.serialList(containerURL, blobUrlParts.ContainerName, searchPrefix, extraSearchPrefix, preprocessor, processor, filters)
 }
 
+type blobNode struct {
+	directory string
+	depth     int
+}
+
 func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// Define how to enumerate its contents
 	// This func must be thread safe/goroutine safe
-	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
-		currentDirPath := dir.(string)
+	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory, int), enqueueOutput func(parallel.DirectoryEntry, error)) error {
+		temp := dir.(blobNode)
+		currentDirPath := temp.directory
+		currentDepth := temp.depth
 
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			lResp, err := containerURL.ListBlobsHierarchySegment(t.ctx, marker, "/", azblob.ListBlobsSegmentOptions{Prefix: currentDirPath,
@@ -308,7 +315,11 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			// queue up the sub virtual directories if recursive is true
 			if t.recursive {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
-					enqueueDir(virtualDir.Name)
+					d := blobNode{
+						directory: virtualDir.Name,
+						depth:     currentDepth + 1,
+					}
+					enqueueDir(d, currentDepth)
 					if azcopyScanningLogger != nil {
 						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", virtualDir.Name))
 					}
@@ -401,7 +412,11 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 	// initiate parallel scanning, starting at the root path
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
 	defer cancelWorkers()
-	cCrawled := parallel.Crawl(workerContext, searchPrefix+extraSearchPrefix, enumerateOneDir, EnumerationParallelism)
+	root := blobNode{
+		directory: searchPrefix + extraSearchPrefix,
+		depth:     0,
+	}
+	cCrawled := parallel.Crawl(workerContext, root, enumerateOneDir, EnumerationParallelism)
 
 	for x := range cCrawled {
 		item, workerError := x.Item()
@@ -470,6 +485,7 @@ func (t *blobTraverser) doesBlobRepresentAFolder(metadata azblob.Metadata) bool 
 func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 
+	directoryDepth := 0
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 
@@ -492,6 +508,11 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 			relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
 			// if recursive
 			if !t.recursive && strings.Contains(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) {
+				continue
+			}
+
+			depth := strings.Count(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+			if depth > directoryDepth {
 				continue
 			}
 
@@ -537,7 +558,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
-		preservePermissions: 		 preservePermissions,
+		preservePermissions:         preservePermissions,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
