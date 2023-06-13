@@ -64,7 +64,7 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, df downloaderFactory)
 type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
-type newJobXferWithLocaltoLocal = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
+type newJobXferWithLocaltoLocal = func(jptm IJobPartTransferMgr)
 
 // Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
@@ -82,7 +82,7 @@ func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFacto
 
 func parameterizedLocalCopy(targetFunction newJobXferWithLocaltoLocal, sf senderFactory, sipf sourceInfoProviderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
-		targetFunction(jptm, pipeline, pacer, sf, sipf)
+		targetFunction(jptm)
 	}
 }
 
@@ -128,6 +128,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 				return newAzureFilesUploader
 			case common.ELocation.BlobFS():
 				return newBlobFSUploader
+			case common.ELocation.Local():
+				return newLocalCopier
 			//newlocalcopier
 			default:
 				panic("unexpected target location type")
