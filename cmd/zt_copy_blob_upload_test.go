@@ -22,18 +22,20 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 )
 
-func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
+func TestIncludeDirSimple(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	files := []string{
 		"filea",
@@ -46,32 +48,33 @@ func (s *cmdIntegrationSuite) TestIncludeDirSimple(c *chk.C) {
 		"sub/child/filec",
 	}
 
-	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	dirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dirPath)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.includePath = "sub"
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+		a.Equal(3, len(mockedRPC.transfers))
 		// trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[5:], mockedRPC)
+		validateDownloadTransfersAreScheduled(a, "/", "/"+filepath.Base(dirPath)+"/", files[5:], mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
+func TestIncludeDir(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	files := []string{
 		"filea",
@@ -87,32 +90,33 @@ func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
 		"sub/subsub/filec",
 	}
 
-	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	dirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dirPath)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.includePath = "sub/subsub"
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+		a.Equal(3, len(mockedRPC.transfers))
 		// trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[8:], mockedRPC)
+		validateDownloadTransfersAreScheduled(a, "/", "/"+filepath.Base(dirPath)+"/", files[8:], mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
+func TestExcludeDir(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	files := []string{
 		"filea",
@@ -128,32 +132,33 @@ func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
 		"sub/subsub/filec",
 	}
 
-	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	dirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dirPath)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.excludePath = "sub/subsub"
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 8)
+		a.Equal(8, len(mockedRPC.transfers))
 		// Trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:8], mockedRPC)
+		validateDownloadTransfersAreScheduled(a, "/", "/"+filepath.Base(dirPath)+"/", files[:8], mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestIncludeAndExcludeDir(c *chk.C) {
+func TestIncludeAndExcludeDir(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	files := []string{
 		"xyz/aaa",
@@ -164,41 +169,42 @@ func (s *cmdIntegrationSuite) TestIncludeAndExcludeDir(c *chk.C) {
 		"filec",
 	}
 
-	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	dirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dirPath)
-	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+	scenarioHelper{}.generateLocalFilesFromList(a, dirPath, files)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.includePath = "xyz"
 	raw.excludePath = "def"
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		a.Equal(2, len(mockedRPC.transfers))
 		// Trim / and /folder/ off
-		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:2], mockedRPC)
+		validateDownloadTransfersAreScheduled(a, "/", "/"+filepath.Base(dirPath)+"/", files[:2], mockedRPC)
 	})
 }
 
 // regular local file->blob upload
-func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.C) {
+func TestUploadSingleFileToBlobVirtualDirectory(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
-		srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+		srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 		defer os.RemoveAll(srcDirName)
 		fileList := []string{srcFileName}
-		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
+		scenarioHelper{}.generateLocalFilesFromList(a, srcDirName, fileList)
 
 		// set up the destination container with a single blob
 		dstBlobName := "testfolder/"
@@ -209,61 +215,62 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName)
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dstBlobName)
 		raw := getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawBlobURLWithSAS.String())
 
 		// the blob was created after the file, so no sync should happen
-		runCopyAndVerify(c, raw, func(err error) {
-			c.Assert(err, chk.IsNil)
+		runCopyAndVerify(a, raw, func(err error) {
+			a.Nil(err)
 
 			// Validate that the destination is the file name (within the folder).
 			// The destination being the folder *was* the issue in the past.
 			// The service would just name the file as the folder if we didn't explicitly specify it.
-			c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+			a.Equal(1, len(mockedRPC.transfers))
 			d, err := url.PathUnescape(mockedRPC.transfers[0].Destination) //Unescape the destination, as we have special characters.
-			c.Assert(err, chk.IsNil)
-			c.Assert(d, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+srcFileName)
+			a.Nil(err)
+			a.Equal(common.AZCOPY_PATH_SEPARATOR_STRING+srcFileName, d)
 		})
 
 		// clean the RPC for the next test
 		mockedRPC.reset()
 
 		// now target the destination container, the result should be the same
-		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 		raw = getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawContainerURLWithSAS.String())
 
 		// the file was created after the blob, so no sync should happen
-		runCopyAndVerify(c, raw, func(err error) {
-			c.Assert(err, chk.IsNil)
+		runCopyAndVerify(a, raw, func(err error) {
+			a.Nil(err)
 
 			// verify explicitly since the source and destination names will be different:
 			// the source is "" since the given URL points to the blob itself
 			// the destination should be the blob name, since the given local path points to the parent dir
-			c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+			a.Equal(1, len(mockedRPC.transfers))
 
-			c.Assert(mockedRPC.transfers[0].Source, chk.Equals, "")
-			c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName))
+			a.Equal("", mockedRPC.transfers[0].Source)
+			a.Equal(common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName), mockedRPC.transfers[0].Destination)
 		})
 	}
 }
 
 // regular local file->blob upload
-func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
+func TestUploadSingleFileToBlob(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
-		srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+		srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 		defer os.RemoveAll(srcDirName)
 		fileList := []string{srcFileName}
-		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
+		scenarioHelper{}.generateLocalFilesFromList(a, srcDirName, fileList)
 
 		// set up the destination container with a single blob
 		dstBlobName := "whatever"
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
-		c.Assert(containerURL, chk.NotNil)
+		scenarioHelper{}.generateBlobsFromList(a, containerURL, []string{dstBlobName}, blockBlobDefaultData)
+		a.NotNil(containerURL)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -271,51 +278,52 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 		mockedRPC.init()
 
 		// construct the raw input to simulate user input
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName)
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dstBlobName)
 		raw := getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawBlobURLWithSAS.String())
 
 		// the blob was created after the file, so no sync should happen
-		runCopyAndVerify(c, raw, func(err error) {
-			c.Assert(err, chk.IsNil)
+		runCopyAndVerify(a, raw, func(err error) {
+			a.Nil(err)
 
 			// validate that the right number of transfers were scheduled
-			validateUploadTransfersAreScheduled(c, "", "", []string{""}, mockedRPC)
+			validateUploadTransfersAreScheduled(a, "", "", []string{""}, mockedRPC)
 		})
 
 		// clean the RPC for the next test
 		mockedRPC.reset()
 
 		// now target the destination container, the result should be the same
-		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 		raw = getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawContainerURLWithSAS.String())
 
 		// the file was created after the blob, so no sync should happen
-		runCopyAndVerify(c, raw, func(err error) {
-			c.Assert(err, chk.IsNil)
+		runCopyAndVerify(a, raw, func(err error) {
+			a.Nil(err)
 
 			// verify explicitly since the source and destination names will be different:
 			// the source is "" since the given URL points to the blob itself
 			// the destination should be the blob name, since the given local path points to the parent dir
-			c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+			a.Equal(1, len(mockedRPC.transfers))
 
-			c.Assert(mockedRPC.transfers[0].Source, chk.Equals, "")
-			c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName))
+			a.Equal("", mockedRPC.transfers[0].Source)
+			a.Equal(common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName), mockedRPC.transfers[0].Destination)
 		})
 	}
 }
 
 // regular directory->container upload
-func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
+func TestUploadDirectoryToContainer(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// set up the source with numerous files
-	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirPath)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirPath, "")
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -323,18 +331,18 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+		a.Equal(len(fileList), len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
-		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING,
 			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 	})
 
@@ -342,25 +350,26 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.NotNil(err)
+		a.Zero(len(mockedRPC.transfers))
 	})
 }
 
 // regular directory->virtual dir upload
-func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
+func TestUploadDirectoryToVirtualDirectory(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 	vdirName := "vdir"
 
 	// set up the source with numerous files
-	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirPath)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirPath, "")
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -368,19 +377,19 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, vdirName)
 	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+		a.Equal(len(fileList), len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
 		expectedTransfers := scenarioHelper{}.shaveOffPrefix(fileList, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
-		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING,
 			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
 	})
 
@@ -388,28 +397,29 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.NotNil(err)
+		a.Zero(len(mockedRPC.transfers))
 	})
 }
 
 // files(from pattern)->container upload
-func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C) {
+func TestUploadDirectoryToContainerWithPattern(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// set up the source with numerous files
-	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirPath)
-	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+	scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirPath, "")
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.pdf", "includeSub/wow/amazing.pdf"}
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
+	scenarioHelper{}.generateLocalFilesFromList(a, srcDirPath, filesToInclude)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -417,52 +427,54 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultCopyRawInput(filepath.Join(srcDirPath, "/*.pdf"), rawContainerURLWithSAS.String())
 	raw.recursive = true
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
 		// only the top pdf should be included
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
-		c.Assert(mockedRPC.transfers[0].Source, chk.Equals, mockedRPC.transfers[0].Destination)
-		c.Assert(strings.HasSuffix(mockedRPC.transfers[0].Source, ".pdf"), chk.Equals, true)
-		c.Assert(strings.Contains(mockedRPC.transfers[0].Source[1:], common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+		a.Equal(1, len(mockedRPC.transfers))
+		a.Equal(mockedRPC.transfers[0].Destination, mockedRPC.transfers[0].Source)
+		a.True(strings.HasSuffix(mockedRPC.transfers[0].Source, ".pdf"))
+		a.False(strings.Contains(mockedRPC.transfers[0].Source[1:], common.AZCOPY_PATH_SEPARATOR_STRING))
 	})
 }
 
-func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_UTC(c *chk.C) {
-	s.doTestUploadDirectoryToContainerWithIncludeBefore(true, c)
+func TestUploadDirectoryToContainerWithIncludeBefore_UTC(t *testing.T) {
+	a := assert.New(t)
+	doTestUploadDirectoryToContainerWithIncludeBefore(true, a)
 }
 
-func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeBefore_LocalTime(c *chk.C) {
-	s.doTestUploadDirectoryToContainerWithIncludeBefore(false, c)
+func TestUploadDirectoryToContainerWithIncludeBefore_LocalTime(t *testing.T) {
+	a := assert.New(t)
+	doTestUploadDirectoryToContainerWithIncludeBefore(false, a)
 }
 
-func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, c *chk.C) {
+func doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, a *assert.Assertions) {
 	bsu := getBSU()
 
 	// set up the source directory
-	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirPath)
 
 	// add newer files, which we wish to include
 	filesToInclude := []string{"important.txt", "includeSub/amazing.txt", "includeSub/wow/amazing.txt"}
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
+	scenarioHelper{}.generateLocalFilesFromList(a, srcDirPath, filesToInclude)
 
 	// sleep a little longer, to give clear LMT separation between the files above and those below (should not be copied)
 	time.Sleep(1500 * time.Millisecond)
 	includeFrom := time.Now()
 	extraIgnoredFiles := []string{"ignored.txt", "includeSub/ignored.txt", "includeSub/wow/ignored.txt"}
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, extraIgnoredFiles)
+	scenarioHelper{}.generateLocalFilesFromList(a, srcDirPath, extraIgnoredFiles)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -470,7 +482,7 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
 	raw.recursive = true
 	if useUtc {
@@ -479,34 +491,36 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeBefore(
 		raw.includeBefore = includeFrom.Format("2006-01-02T15:04:05") // local time, no timezone
 	}
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(filesToInclude))
+		a.Equal(len(filesToInclude), len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
 		expectedTransfers := scenarioHelper{}.shaveOffPrefix(filesToInclude, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
-		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING,
 			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_UTC(c *chk.C) {
-	s.doTestUploadDirectoryToContainerWithIncludeAfter(true, c)
+func TestUploadDirectoryToContainerWithIncludeAfter_UTC(t *testing.T) {
+	a := assert.New(t)
+	doTestUploadDirectoryToContainerWithIncludeAfter(true, a)
 }
 
-func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithIncludeAfter_LocalTime(c *chk.C) {
-	s.doTestUploadDirectoryToContainerWithIncludeAfter(false, c)
+func TestUploadDirectoryToContainerWithIncludeAfter_LocalTime(t *testing.T) {
+	a := assert.New(t)
+	doTestUploadDirectoryToContainerWithIncludeAfter(false, a)
 }
 
-func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, c *chk.C) {
+func doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, a *assert.Assertions) {
 	bsu := getBSU()
 
 	// set up the source with numerous files
-	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirPath)
-	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+	scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirPath, "")
 
 	// sleep a little longer, to give clear LMT separation between the files above and those below
 	time.Sleep(1500 * time.Millisecond)
@@ -514,11 +528,11 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(u
 
 	// add newer files, which we wish to include
 	filesToInclude := []string{"important.txt", "includeSub/amazing.txt", "includeSub/wow/amazing.txt"}
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
+	scenarioHelper{}.generateLocalFilesFromList(a, srcDirPath, filesToInclude)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -526,7 +540,7 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(u
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
 	raw.recursive = true
 	if useUtc {
@@ -535,32 +549,33 @@ func (s *cmdIntegrationSuite) doTestUploadDirectoryToContainerWithIncludeAfter(u
 		raw.includeAfter = includeFrom.Format("2006-01-02T15:04:05") // local time, no timezone
 	}
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+		a.Equal(3, len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
 		expectedTransfers := scenarioHelper{}.shaveOffPrefix(filesToInclude, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
-		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING,
 			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestDisableAutoDecoding(c *chk.C) {
+func TestDisableAutoDecoding(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	// Encoded file name since Windows won't create name with invalid chars
 	srcFileName := `%3C %3E %5C %2F %3A %22 %7C %3F %2A invalidcharsfile`
 
 	// set up the source as a single file
-	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
 	_, err := scenarioHelper{}.generateLocalFile(filepath.Join(srcDirName, srcFileName), defaultFileSize)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -571,20 +586,20 @@ func (s *cmdIntegrationSuite) TestDisableAutoDecoding(c *chk.C) {
 	mockedRPC.reset()
 
 	// now target the destination container, the result should be the same
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawContainerURLWithSAS.String())
 	raw.disableAutoDecoding = true
 
 	// the file was created after the blob, so no sync should happen
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// verify explicitly since the source and destination names will be different:
 		// the source is "" since the given URL points to the blob itself
 		// the destination should be the source file name, since decoding has been disabled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		a.Equal(1, len(mockedRPC.transfers))
 
-		c.Assert(mockedRPC.transfers[0].Source, chk.Equals, "")
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName))
+		a.Equal("", mockedRPC.transfers[0].Source)
+		a.Equal(common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName), mockedRPC.transfers[0].Destination)
 	})
 }

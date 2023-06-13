@@ -21,24 +21,22 @@
 package common
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type exclusiveStringMapSuite struct{}
-
-var _ = chk.Suite(&exclusiveStringMapSuite{})
-
-func (s *exclusiveStringMapSuite) TestExclusiveStringMap(c *chk.C) {
+func TestExclusiveStringMap(t *testing.T) {
+	a := assert.New(t)
 	var m *ExclusiveStringMap
 
 	addShouldWork := func(v string) {
 		err := m.Add(v)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 
 	addShouldErrorOut := func(v string) {
 		err := m.Add(v)
-		c.Assert(err, chk.Equals, exclusiveStringMapCollisionError)
+		a.Equal(exclusiveStringMapCollisionError, err)
 	}
 
 	// case sensitive
@@ -60,10 +58,11 @@ func (s *exclusiveStringMapSuite) TestExclusiveStringMap(c *chk.C) {
 
 }
 
-func (s *exclusiveStringMapSuite) TestChooseRightCaseSensitivity(c *chk.C) {
+func TestChooseRightCaseSensitivity(t *testing.T) {
+	a := assert.New(t)
 	test := func(fromTo FromTo, goos string, shouldBeSensitive bool) {
 		m := NewExclusiveStringMap(fromTo, goos)
-		c.Assert(m.caseSensitive, chk.Equals, shouldBeSensitive)
+		a.Equal(shouldBeSensitive, m.caseSensitive)
 	}
 
 	test(EFromTo.BlobLocal(), "linux", true)

@@ -21,18 +21,11 @@
 package common
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/adal"
-	chk "gopkg.in/check.v1"
 )
-
-// Hookup to the testing framework
-func Test(t *testing.T) { chk.TestingT(t) }
-
-type credCacheTestSuite struct{}
-
-var _ = chk.Suite(&credCacheTestSuite{})
 
 var fakeTokenInfo = OAuthTokenInfo{
 	Token: adal.Token{
@@ -48,7 +41,8 @@ var fakeTokenInfo = OAuthTokenInfo{
 	ActiveDirectoryEndpoint: "https://login.microsoftonline.com",
 }
 
-func (s *credCacheTestSuite) TestCredCacheSaveLoadDeleteHas(c *chk.C) {
+func TestCredCacheSaveLoadDeleteHas(t *testing.T) {
+	a := assert.New(t)
 	credCache := NewCredCache(CredCacheOptions{
 		DPAPIFilePath: ".",
 		KeyName:       "AzCopyOAuthTokenCache",
@@ -68,43 +62,43 @@ func (s *credCacheTestSuite) TestCredCacheSaveLoadDeleteHas(c *chk.C) {
 	hasCachedToken, err := credCache.HasCachedToken()
 	if hasCachedToken {
 		err = credCache.RemoveCachedToken()
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 
 	// Ensure no token cached initially.
 	hasCachedToken, err = credCache.HasCachedToken()
-	c.Assert(hasCachedToken, chk.Equals, false)
+	a.False(hasCachedToken)
 
 	// Test save token.
 	err = credCache.SaveToken(fakeTokenInfo)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Test has cached token, and validate save token.
 	hasCachedToken, err = credCache.HasCachedToken()
-	c.Assert(err, chk.IsNil)
-	c.Assert(hasCachedToken, chk.Equals, true)
+	a.Nil(err)
+	a.True(hasCachedToken)
 
 	// Test load token.
 	token, err := credCache.LoadToken()
-	c.Assert(err, chk.IsNil)
-	c.Assert(token, chk.NotNil)
-	c.Assert(*token, chk.DeepEquals, fakeTokenInfo)
+	a.Nil(err)
+	a.NotNil(token)
+	a.Equal(fakeTokenInfo, *token)
 
 	// Test update token.
 	cloneTokenWithDiff := fakeTokenInfo // deep copy
 	cloneTokenWithDiff.Tenant = "change the tenant info a little"
 	err = credCache.SaveToken(cloneTokenWithDiff)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	token, err = credCache.LoadToken()
-	c.Assert(err, chk.IsNil)
-	c.Assert(token, chk.NotNil)
-	c.Assert(*token, chk.DeepEquals, cloneTokenWithDiff)
+	a.Nil(err)
+	a.NotNil(token)
+	a.Equal(cloneTokenWithDiff, *token)
 
 	// Test remove token.
 	err = credCache.RemoveCachedToken()
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Test has cached token, and validate remove token.
 	hasCachedToken, err = credCache.HasCachedToken()
-	c.Assert(hasCachedToken, chk.Equals, false)
+	a.False(hasCachedToken)
 }

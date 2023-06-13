@@ -23,11 +23,13 @@ package cmd
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"testing"
 	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
@@ -47,40 +49,63 @@ var _ = chk.Suite(&genericTraverserSuite{})
 
 // On Windows, if you don't hold adequate permissions to create a symlink, tests regarding symlinks will fail.
 // This is arguably annoying to dig through, therefore, we cleanly skip the test.
-func trySymlink(src, dst string, c *chk.C) {
+func trySymlink(src, dst string, t *testing.T) {
 	if err := os.Symlink(src, dst); err != nil {
 		if strings.Contains(err.Error(), "A required privilege is not held by the client") {
-			c.Skip("client lacks required privilege to create symlinks; symlinks will not be tested")
+			t.Skip("client lacks required privilege to create symlinks; symlinks will not be tested")
 		}
-		c.Error(err)
+		t.Error(err)
 	}
 }
 
-func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
+func TestLocalWildcardOverlap(t *testing.T) {
+	a := assert.New(t)
 	if runtime.GOOS == "windows" {
-		c.Skip("invalid filename used")
+		t.Skip("invalid filename used")
 		return
 	}
 
 	/*
-	Wildcard support is not actually a part of the local traverser, believe it or not.
-	It's instead implemented in InitResourceTraverser as a short-circuit to a list traverser
-	utilizing the filepath.Glob function, which then initializes local traversers to achieve the same effect.
-	 */
-	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+		Wildcard support is not actually a part of the local traverser, believe it or not.
+		It's instead implemented in InitResourceTraverser as a short-circuit to a list traverser
+		utilizing the filepath.Glob function, which then initializes local traversers to achieve the same effect.
+	*/
+	tmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer func(path string) { _ = os.RemoveAll(path) }(tmpDir)
 
-	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, []string{
+	scenarioHelper{}.generateLocalFilesFromList(a, tmpDir, []string{
 		"test.txt",
 		"tes*t.txt",
 		"foobarbaz/test.txt",
 	})
 
 	resource, err := SplitResourceString(filepath.Join(tmpDir, "tes*t.txt"), common.ELocation.Local())
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	traverser, err := InitResourceTraverser(resource, common.ELocation.Local(), nil, nil, common.ESymlinkHandlingType.Follow(), nil, true, false, false, common.EPermanentDeleteOption.None(), nil, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogInfo, common.CpkOptions{}, nil, true, common.ETrailingDotOption.Enable(), nil)
-	c.Assert(err, chk.IsNil)
+	traverser, err := InitResourceTraverser(
+		resource,
+		common.ELocation.Local(),
+		nil,
+		nil,
+		common.ESymlinkHandlingType.Follow(),
+		nil,
+		true,
+		false,
+		false,
+		common.EPermanentDeleteOption.None(),
+		nil,
+		nil,
+		false,
+		common.ESyncHashType.None(),
+		common.EPreservePermissionsOption.None(),
+		pipeline.LogInfo,
+		common.CpkOptions{},
+		nil,
+		true,
+		common.ETrailingDotOption.Enable(),
+		nil,
+	)
+	a.Nil(err)
 
 	seenFiles := make(map[string]bool)
 
@@ -88,20 +113,21 @@ func (s *genericTraverserSuite) TestLocalWildcardOverlap(c *chk.C) {
 		seenFiles[storedObject.relativePath] = true
 		return nil
 	}, []ObjectFilter{})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	c.Assert(seenFiles, chk.DeepEquals, map[string]bool{
+	a.Equal(map[string]bool{
 		"test.txt": true,
 		"tes*t.txt": true,
-	})
+	}, seenFiles)
 }
 
 // GetProperties tests.
 // GetProperties does not exist on Blob, as the properties come in the list call.
 // While BlobFS could get properties in the future, it's currently disabled as BFS source S2S isn't set up right now, and likely won't be.
-func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
+func TestFilesGetProperties(t *testing.T) {
+	a := assert.New(t)
 	fsu := getFSU()
-	share, shareName := createNewAzureShare(c, fsu)
+	share, shareName := createNewAzureShare(a, fsu)
 	fileName := generateAzureFileName()
 
 	headers := azfile.FileHTTPHeaders{
@@ -112,10 +138,10 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 		CacheControl:       "testCacheControl",
 	}
 
-	scenarioHelper{}.generateAzureFilesFromList(c, share, []string{fileName})
+	scenarioHelper{}.generateAzureFilesFromList(a, share, []string{fileName})
 	_, err := share.NewRootDirectoryURL().NewFileURL(fileName).SetHTTPHeaders(ctx, headers)
-	c.Assert(err, chk.IsNil)
-	shareURL := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+	a.Nil(err)
+	shareURL := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
 
 	pipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	// first test reading from the share itself
@@ -126,39 +152,40 @@ func (s *genericTraverserSuite) TestFilesGetProperties(c *chk.C) {
 	processor := func(object StoredObject) error {
 		if object.entityType == common.EEntityType.File() {
 			// test all attributes (but only for files, since folders don't have them)
-			c.Assert(object.contentType, chk.Equals, headers.ContentType)
-			c.Assert(object.contentEncoding, chk.Equals, headers.ContentEncoding)
-			c.Assert(object.contentLanguage, chk.Equals, headers.ContentLanguage)
-			c.Assert(object.contentDisposition, chk.Equals, headers.ContentDisposition)
-			c.Assert(object.cacheControl, chk.Equals, headers.CacheControl)
+			a.Equal(headers.ContentType, object.contentType)
+			a.Equal(headers.ContentEncoding, object.contentEncoding)
+			a.Equal(headers.ContentLanguage, object.contentLanguage)
+			a.Equal(headers.ContentDisposition, object.contentDisposition)
+			a.Equal(headers.CacheControl, object.cacheControl)
 			seenContentType = true
 		}
 		return nil
 	}
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	c.Assert(err, chk.IsNil)
-	c.Assert(seenContentType, chk.Equals, true)
+	a.Nil(err)
+	a.True(seenContentType)
 
 	// then test reading from the filename exactly, because that's a different codepath.
 	seenContentType = false
-	fileURL := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileName)
+	fileURL := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileName)
 	traverser = newFileTraverser(&fileURL, pipeline, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	c.Assert(err, chk.IsNil)
-	c.Assert(seenContentType, chk.Equals, true)
+	a.Nil(err)
+	a.True(seenContentType)
 }
 
-func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
-	skipIfS3Disabled(c)
+func TestS3GetProperties(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
 	client, err := createS3ClientWithMinio(createS3ResOptions{})
 
 	if err != nil {
 		// TODO: Alter all tests that use S3 credentials to just skip instead of failing
 		//       This is useful for local testing, when we don't want to have to sift through errors related to S3 clients not being created
 		//       Just so that we can test locally without interrupting CI.
-		c.Skip("S3-based tests will not be ran as no credentials were supplied.")
+		t.Skip("S3-based tests will not be ran as no credentials were supplied.")
 		return // make syntax highlighting happy
 	}
 
@@ -173,54 +200,55 @@ func (s *genericTraverserSuite) TestS3GetProperties(c *chk.C) {
 	bucketName := generateBucketName()
 	objectName := generateObjectName()
 	err = client.MakeBucket(bucketName, "")
-	defer deleteBucket(c, client, bucketName, false)
-	c.Assert(err, chk.IsNil)
+	defer deleteBucket(client, bucketName, false)
+	a.Nil(err)
 
 	_, err = client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), int64(len(objectDefaultData)), headers)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// First test against the bucket
-	s3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
+	s3BucketURL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName)
 
 	credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 	traverser, err := newS3Traverser(credentialInfo.CredentialType, &s3BucketURL, ctx, false, true, func(common.EntityType) {})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Embed the check into the processor for ease of use
 	seenContentType := false
 	processor := func(object StoredObject) error {
 		// test all attributes
-		c.Assert(object.contentType, chk.Equals, headers.ContentType)
-		c.Assert(object.contentEncoding, chk.Equals, headers.ContentEncoding)
-		c.Assert(object.contentLanguage, chk.Equals, headers.ContentLanguage)
-		c.Assert(object.contentDisposition, chk.Equals, headers.ContentDisposition)
-		c.Assert(object.cacheControl, chk.Equals, headers.CacheControl)
+		a.Equal(headers.ContentType, object.contentType)
+		a.Equal(headers.ContentEncoding, object.contentEncoding)
+		a.Equal(headers.ContentLanguage, object.contentLanguage)
+		a.Equal(headers.ContentDisposition, object.contentDisposition)
+		a.Equal(headers.CacheControl, object.cacheControl)
 		seenContentType = true
 		return nil
 	}
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	c.Assert(err, chk.IsNil)
-	c.Assert(seenContentType, chk.Equals, true)
+	a.Nil(err)
+	a.True(seenContentType)
 
 	// Then, test against the object itself because that's a different codepath.
 	seenContentType = false
-	s3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, objectName)
+	s3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(a, "", bucketName, objectName)
 	credentialInfo = common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 	traverser, err = newS3Traverser(credentialInfo.CredentialType, &s3ObjectURL, ctx, false, true, func(common.EntityType) {})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	c.Assert(err, chk.IsNil)
-	c.Assert(seenContentType, chk.Equals, true)
+	a.Nil(err)
+	a.True(seenContentType)
 }
 
-func (s *genericTraverserSuite) TestGCPGetProperties(c *chk.C) {
-	skipIfGCPDisabled(c)
+func TestGCPGetProperties(t *testing.T) {
+	a := assert.New(t)
+	skipIfGCPDisabled(t)
 	client, err := createGCPClientWithGCSSDK()
 
 	if err != nil {
-		c.Skip("GCP-based tests will not be run as no credentials were supplied.")
+		t.Skip("GCP-based tests will not be run as no credentials were supplied.")
 		return
 	}
 
@@ -236,79 +264,80 @@ func (s *genericTraverserSuite) TestGCPGetProperties(c *chk.C) {
 	objectName := generateObjectName()
 	bkt := client.Bucket(bucketName)
 	err = bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-	defer deleteGCPBucket(c, client, bucketName, false)
-	c.Assert(err, chk.IsNil)
+	defer deleteGCPBucket(client, bucketName, false)
+	a.Nil(err)
 
 	reader := strings.NewReader(objectDefaultData)
 	obj := bkt.Object(objectName)
 	wc := obj.NewWriter(ctx)
 	n, err := io.Copy(wc, reader)
-	c.Assert(err, chk.IsNil)
-	c.Assert(n, chk.Equals, int64(len(objectDefaultData)))
+	a.Nil(err)
+	a.Equal(int64(len(objectDefaultData)), n)
 	err = wc.Close()
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	_, err = obj.Update(ctx, headers)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// First test against the bucket
-	gcpBucketURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketName)
+	gcpBucketURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketName)
 
 	traverser, err := newGCPTraverser(&gcpBucketURL, ctx, false, true, func(common.EntityType) {})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Embed the check into the processor for ease of use
 	seenContentType := false
 	processor := func(object StoredObject) error {
 		// test all attributes
-		c.Assert(object.contentType, chk.Equals, headers.ContentType)
-		c.Assert(object.contentEncoding, chk.Equals, headers.ContentEncoding)
-		c.Assert(object.contentLanguage, chk.Equals, headers.ContentLanguage)
-		c.Assert(object.contentDisposition, chk.Equals, headers.ContentDisposition)
-		c.Assert(object.cacheControl, chk.Equals, headers.CacheControl)
+		a.Equal(headers.ContentType, object.contentType)
+		a.Equal(headers.ContentEncoding, object.contentEncoding)
+		a.Equal(headers.ContentLanguage, object.contentLanguage)
+		a.Equal(headers.ContentDisposition, object.contentDisposition)
+		a.Equal(headers.CacheControl, object.cacheControl)
 		seenContentType = true
 		return nil
 	}
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	c.Assert(err, chk.IsNil)
-	c.Assert(seenContentType, chk.Equals, true)
+	a.Nil(err)
+	a.True(seenContentType)
 
 	// Then, test against the object itself because that's a different codepath.
 	seenContentType = false
-	gcpObjectURL := scenarioHelper{}.getRawGCPObjectURL(c, bucketName, objectName)
+	gcpObjectURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketName, objectName)
 	traverser, err = newGCPTraverser(&gcpObjectURL, ctx, false, true, func(common.EntityType) {})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
-	c.Assert(err, chk.IsNil)
-	c.Assert(seenContentType, chk.Equals, true)
+	a.Nil(err)
+	a.True(seenContentType)
 }
 
 // Test follow symlink functionality
-func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
+func TestWalkWithSymlinks_ToFolder(t *testing.T) {
+	a := assert.New(t)
 	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
-	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	tmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(tmpDir)
-	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(symlinkTmpDir)
-	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
+	a.NotEqual(symlinkTmpDir, tmpDir)
 
-	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
-	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(a, tmpDir, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(a, symlinkTmpDir, fileNames)
 	dirLinkName := "so long and thanks for all the fish"
 	time.Sleep(2 * time.Second) // to be sure to get different LMT for link, compared to root, so we can make assertions later about whose fileInfo we get
-	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, dirLinkName), c)
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, dirLinkName), t)
 
 	fileCount := 0
 	sawLinkTargetDir := false
-	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-		c.Assert(err, chk.IsNil)
+	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
+		a.Nil(err)
 
 		if fi.IsDir() {
 			if fi.Name() == dirLinkName {
 				sawLinkTargetDir = true
 				s, _ := os.Stat(symlinkTmpDir)
-				c.Assert(fi.ModTime().UTC(), chk.Equals, s.ModTime().UTC())
+				a.Equal(s.ModTime().UTC(), fi.ModTime().UTC())
 			}
 			return nil
 		}
@@ -316,31 +345,32 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFolder(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil))
 
 	// 3 files live in base, 3 files live in symlink
-	c.Assert(fileCount, chk.Equals, 6)
-	c.Assert(sawLinkTargetDir, chk.Equals, true)
+	a.Equal(6, fileCount)
+	a.True(sawLinkTargetDir)
 }
 
 // Next test is temporarily disabled, to avoid changing functionality near 10.4 release date
 /*
 // symlinks are not just to folders. They may be to individual files
-func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFile(c *chk.C) {
+func TestWalkWithSymlinks_ToFile(t *testing.T) {
+	a := assert.New(t)
 	mainDirFilenames := []string{"iAmANormalFile.txt"}
 	symlinkTargetFilenames := []string{"iAmASymlinkTargetFile.txt"}
-	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	tmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(tmpDir)
-	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(symlinkTmpDir)
 	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
-	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, mainDirFilenames)
-	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, symlinkTargetFilenames)
+	scenarioHelper{}.generateLocalFilesFromList(a, tmpDir, mainDirFilenames)
+	scenarioHelper{}.generateLocalFilesFromList(a, symlinkTmpDir, symlinkTargetFilenames)
 	trySymlink(filepath.Join(symlinkTmpDir, symlinkTargetFilenames[0]), filepath.Join(tmpDir, "iPointToTheSymlink"), c)
 	trySymlink(filepath.Join(symlinkTmpDir, symlinkTargetFilenames[0]), filepath.Join(tmpDir, "iPointToTheSameSymlink"), c)
 	fileCount := 0
 	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 		if fi.IsDir() {
 			return nil
 		}
@@ -360,19 +390,20 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks_ToFile(c *chk.C) {
 */
 
 // Test cancel symlink loop functionality
-func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
+func TestWalkWithSymlinksBreakLoop(t *testing.T) {
+	a := assert.New(t)
 	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
-	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	tmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(tmpDir)
 
-	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
-	trySymlink(tmpDir, filepath.Join(tmpDir, "spinloop"), c)
+	scenarioHelper{}.generateLocalFilesFromList(a, tmpDir, fileNames)
+	trySymlink(tmpDir, filepath.Join(tmpDir, "spinloop"), t)
 
 	// Only 3 files should ever be found.
 	// This is because the symlink links back to the root dir
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-		c.Assert(err, chk.IsNil)
+	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
+		a.Nil(err)
 
 		if fi.IsDir() {
 			return nil
@@ -381,28 +412,29 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil))
 
-	c.Assert(fileCount, chk.Equals, 3)
+	a.Equal(3, fileCount)
 }
 
 // Test ability to dedupe within the same directory
-func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
+func TestWalkWithSymlinksDedupe(t *testing.T) {
+	a := assert.New(t)
 	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
-	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	tmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(tmpDir)
 	symlinkTmpDir, err := os.MkdirTemp(tmpDir, "subdir")
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
-	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
-	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir"), c)
+	scenarioHelper{}.generateLocalFilesFromList(a, tmpDir, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(a, symlinkTmpDir, fileNames)
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir"), t)
 
 	// Only 6 files should ever be found.
 	// 3 in the root dir, 3 in subdir, then symlinkdir should be ignored because it's been seen.
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-		c.Assert(err, chk.IsNil)
+	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
+		a.Nil(err)
 
 		if fi.IsDir() {
 			return nil
@@ -411,29 +443,30 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil))
 
-	c.Assert(fileCount, chk.Equals, 6)
+	a.Equal(6, fileCount)
 }
 
 // Test ability to only get the output of one symlink when two point to the same place
-func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
+func TestWalkWithSymlinksMultitarget(t *testing.T) {
+	a := assert.New(t)
 	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
-	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	tmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(tmpDir)
-	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(symlinkTmpDir)
-	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
+	a.NotEqual(symlinkTmpDir, tmpDir)
 
-	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
-	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
-	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish"), c)
-	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "extradir"), c)
-	trySymlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink"), c)
+	scenarioHelper{}.generateLocalFilesFromList(a, tmpDir, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(a, symlinkTmpDir, fileNames)
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish"), t)
+	trySymlink(symlinkTmpDir, filepath.Join(tmpDir, "extradir"), t)
+	trySymlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink"), t)
 
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
-		c.Assert(err, chk.IsNil)
+	a.Nil(WalkWithSymlinks(context.TODO(), tmpDir, func(path string, fi os.FileInfo, err error) error {
+		a.Nil(err)
 
 		if fi.IsDir() {
 			return nil
@@ -442,31 +475,32 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil))
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
-	c.Assert(fileCount, chk.Equals, 6)
+	a.Equal(6, fileCount)
 }
 
-func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
+func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
+	a := assert.New(t)
 	fileNames := []string{"file1.txt", "file2.txt", "file3.txt"}
 
-	root1 := scenarioHelper{}.generateLocalDirectory(c)
+	root1 := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(root1)
-	root2 := scenarioHelper{}.generateLocalDirectory(c)
+	root2 := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(root2)
 
 	child, err := os.MkdirTemp(root2, "childdir")
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	scenarioHelper{}.generateLocalFilesFromList(c, root2, fileNames)
-	scenarioHelper{}.generateLocalFilesFromList(c, child, fileNames)
-	trySymlink(root2, filepath.Join(root1, "toroot"), c)
-	trySymlink(child, filepath.Join(root1, "tochild"), c)
+	scenarioHelper{}.generateLocalFilesFromList(a, root2, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(a, child, fileNames)
+	trySymlink(root2, filepath.Join(root1, "toroot"), t)
+	trySymlink(child, filepath.Join(root1, "tochild"), t)
 
 	fileCount := 0
-	c.Assert(WalkWithSymlinks(context.TODO(), root1, func(path string, fi os.FileInfo, err error) error {
-		c.Assert(err, chk.IsNil)
+	a.Nil(WalkWithSymlinks(context.TODO(), root1, func(path string, fi os.FileInfo, err error) error {
+		a.Nil(err)
 
 		if fi.IsDir() {
 			return nil
@@ -475,22 +509,27 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil), chk.IsNil)
+		common.ESymlinkHandlingType.Follow(), nil))
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
-	c.Assert(fileCount, chk.Equals, 6)
+	a.Equal(6, fileCount)
 }
 
 // validate traversing a single Blob, a single Azure File, and a single local file
 // compare that the traversers get consistent results
-func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
+func TestTraverserWithSingleObject(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, shareURL)
+	shareURL, shareName := createNewAzureShare(a, fsu)
+	defer deleteShare(a, shareURL)
+
+	bfsu := GetBFSSU()
+	filesystemURL, _ := createNewFilesystem(a, bfsu)
+	defer deleteFilesystem(a, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	s3Enabled := err == nil && !isS3Disabled()
@@ -499,25 +538,25 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	var bucketName string
 	var bucketNameGCP string
 	if s3Enabled {
-		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
-		defer deleteBucket(c, s3Client, bucketName, true)
+		bucketName = createNewBucket(a, s3Client, createS3ResOptions{})
+		defer deleteBucket(s3Client, bucketName, true)
 	}
 	if gcpEnabled {
-		bucketNameGCP = createNewGCPBucket(c, gcpClient)
-		defer deleteGCPBucket(c, gcpClient, bucketNameGCP, true)
+		bucketNameGCP = createNewGCPBucket(a, gcpClient)
+		defer deleteGCPBucket(gcpClient, bucketNameGCP, true)
 	}
 
 	// test two scenarios, either blob is at the root virtual dir, or inside sub virtual dirs
 	for _, storedObjectName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob", "满汉全席.txt"} {
 		// set up the container with a single blob
 		blobList := []string{storedObjectName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
+		scenarioHelper{}.generateBlobsFromList(a, containerURL, blobList, blockBlobDefaultData)
 
 		// set up the directory as a single file
-		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+		dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 		defer os.RemoveAll(dstDirName)
 		dstFileName := storedObjectName
-		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
+		scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, blobList)
 
 		// construct a local traverser
 		localTraverser, _ := newLocalTraverser(context.TODO(), filepath.Join(dstDirName, dstFileName), false, false, common.ESymlinkHandlingType.Follow(), common.ESyncHashType.None(), func(common.EntityType) {}, nil)
@@ -525,24 +564,24 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
 		err := localTraverser.Traverse(noPreProccessor, localDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-		c.Assert(len(localDummyProcessor.record), chk.Equals, 1)
+		a.Nil(err)
+		a.Equal(1, len(localDummyProcessor.record))
 
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, blobList[0])
 		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
 		err = blobTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-		c.Assert(len(blobDummyProcessor.record), chk.Equals, 1)
+		a.Nil(err)
+		a.Equal(1, len(blobDummyProcessor.record))
 
 		// assert the important info are correct
-		c.Assert(localDummyProcessor.record[0].name, chk.Equals, blobDummyProcessor.record[0].name)
-		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, blobDummyProcessor.record[0].relativePath)
+		a.Equal(localDummyProcessor.record[0].name, blobDummyProcessor.record[0].name)
+		a.Equal(localDummyProcessor.record[0].relativePath, blobDummyProcessor.record[0].relativePath)
 
 		// Azure File cannot handle names with '/' in them
 		// TODO: Construct a directory URL and then build a file URL atop it in order to solve this portion of the test.
@@ -551,75 +590,76 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		if !strings.Contains(storedObjectName, "/") {
 			// set up the Azure Share with a single file
 			fileList := []string{storedObjectName}
-			scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
+			scenarioHelper{}.generateAzureFilesFromList(a, shareURL, fileList)
 
 			// construct an Azure file traverser
 			filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
+			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileList[0])
 			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
 			err = azureFileTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
-			c.Assert(err, chk.IsNil)
-			c.Assert(len(fileDummyProcessor.record), chk.Equals, 1)
+			a.Nil(err)
+			a.Equal(1, len(fileDummyProcessor.record))
 
-			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, fileDummyProcessor.record[0].relativePath)
-			c.Assert(localDummyProcessor.record[0].name, chk.Equals, fileDummyProcessor.record[0].name)
+			a.Equal(localDummyProcessor.record[0].relativePath, fileDummyProcessor.record[0].relativePath)
+			a.Equal(localDummyProcessor.record[0].name, fileDummyProcessor.record[0].name)
 		}
 
 		if s3Enabled {
 			// set up the bucket with a single file
 			s3List := []string{storedObjectName}
-			scenarioHelper{}.generateObjects(c, s3Client, bucketName, s3List)
+			scenarioHelper{}.generateObjects(a, s3Client, bucketName, s3List)
 
 			// construct a s3 traverser
 			s3DummyProcessor := dummyProcessor{}
-			url := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, storedObjectName)
+			url := scenarioHelper{}.getRawS3ObjectURL(a, "", bucketName, storedObjectName)
 			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 			S3Traverser, err := newS3Traverser(credentialInfo.CredentialType, &url, ctx, false, false, func(common.EntityType) {})
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 
 			err = S3Traverser.Traverse(noPreProccessor, s3DummyProcessor.process, nil)
-			c.Assert(err, chk.IsNil)
-			c.Assert(len(s3DummyProcessor.record), chk.Equals, 1)
+			a.Nil(err)
+			a.Equal(1, len(s3DummyProcessor.record))
 
-			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, s3DummyProcessor.record[0].relativePath)
-			c.Assert(localDummyProcessor.record[0].name, chk.Equals, s3DummyProcessor.record[0].name)
+			a.Equal(localDummyProcessor.record[0].relativePath, s3DummyProcessor.record[0].relativePath)
+			a.Equal(localDummyProcessor.record[0].name, s3DummyProcessor.record[0].name)
 		}
 		if gcpEnabled {
 			gcpList := []string{storedObjectName}
-			scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketNameGCP, gcpList)
+			scenarioHelper{}.generateGCPObjects(a, gcpClient, bucketNameGCP, gcpList)
 
 			gcpDummyProcessor := dummyProcessor{}
-			gcpURL := scenarioHelper{}.getRawGCPObjectURL(c, bucketNameGCP, storedObjectName)
+			gcpURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketNameGCP, storedObjectName)
 			GCPTraverser, err := newGCPTraverser(&gcpURL, ctx, false, false, func(entityType common.EntityType) {})
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 
 			err = GCPTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
-			c.Assert(err, chk.IsNil)
-			c.Assert(len(gcpDummyProcessor.record), chk.Equals, 1)
+			a.Nil(err)
+			a.Equal(1, len(gcpDummyProcessor.record))
 
-			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, gcpDummyProcessor.record[0].relativePath)
-			c.Assert(localDummyProcessor.record[0].name, chk.Equals, gcpDummyProcessor.record[0].name)
+			a.Equal(localDummyProcessor.record[0].relativePath, gcpDummyProcessor.record[0].relativePath)
+			a.Equal(localDummyProcessor.record[0].name, gcpDummyProcessor.record[0].name)
 		}
 	}
 }
 
 // validate traversing a container, a share, and a local directory containing the same objects
 // compare that traversers get consistent results
-func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C) {
+func TestTraverserContainerAndLocalDirectory(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, shareURL)
+	shareURL, shareName := createNewAzureShare(a, fsu)
+	defer deleteShare(a, shareURL)
 
 	bfsu := GetBFSSU()
-	filesystemURL, _ := createNewFilesystem(c, bfsu)
-	defer deleteFilesystem(c, filesystemURL)
+	filesystemURL, _ := createNewFilesystem(a, bfsu)
+	defer deleteFilesystem(a, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	s3Enabled := err == nil && !isS3Disabled() // are creds supplied, and is S3 enabled
@@ -628,35 +668,35 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	var bucketName string
 	var bucketNameGCP string
 	if s3Enabled {
-		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
-		defer deleteBucket(c, s3Client, bucketName, true)
+		bucketName = createNewBucket(a, s3Client, createS3ResOptions{})
+		defer deleteBucket(s3Client, bucketName, true)
 	}
 	if gcpEnabled {
-		bucketNameGCP = createNewGCPBucket(c, gcpClient)
-		defer deleteGCPBucket(c, gcpClient, bucketNameGCP, true)
+		bucketNameGCP = createNewGCPBucket(a, gcpClient)
+		defer deleteGCPBucket(gcpClient, bucketNameGCP, true)
 	}
 
 	// set up the container with numerous blobs
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	c.Assert(containerURL, chk.NotNil)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
+	a.NotNil(containerURL)
 
 	// set up an Azure File Share with the same files
-	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
+	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, fileList)
 
 	// set up a filesystem with the same files
-	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
+	scenarioHelper{}.generateBFSPathsFromList(a, filesystemURL, fileList)
 
 	if s3Enabled {
 		// set up a bucket with the same files
-		scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+		scenarioHelper{}.generateObjects(a, s3Client, bucketName, fileList)
 	}
 	if gcpEnabled {
-		scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketNameGCP, fileList)
+		scenarioHelper{}.generateGCPObjects(a, gcpClient, bucketNameGCP, fileList)
 	}
 
-	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dstDirName)
-	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
+	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, fileList)
 
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
@@ -667,46 +707,46 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		// so that the results are indexed for easy validation
 		localIndexer := newObjectIndexer()
 		err := localTraverser.Traverse(noPreProccessor, localIndexer.store, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
 		err = blobTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
 		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
 		err = azureFileTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		s3DummyProcessor := dummyProcessor{}
 		gcpDummyProcessor := dummyProcessor{}
 		if s3Enabled {
 			// construct and run a S3 traverser
-			rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
+			rawS3URL := scenarioHelper{}.getRawS3BucketURL(a, "", bucketName)
 			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 			S3Traverser, err := newS3Traverser(credentialInfo.CredentialType, &rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 			err = S3Traverser.Traverse(noPreProccessor, s3DummyProcessor.process, nil)
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 		}
 		if gcpEnabled {
-			rawGCPURL := scenarioHelper{}.getRawGCPBucketURL(c, bucketNameGCP)
+			rawGCPURL := scenarioHelper{}.getRawGCPBucketURL(a, bucketNameGCP)
 			GCPTraverser, err := newGCPTraverser(&rawGCPURL, ctx, isRecursiveOn, false, func(entityType common.EntityType) {})
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 			err = GCPTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 		}
 
 		// make sure the results are as expected
@@ -718,21 +758,21 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 			}
 		}
 
-		c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount)
+		a.Equal(localFileOnlyCount, len(blobDummyProcessor.record))
 		if isRecursiveOn {
-			c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount)
+			a.Equal(localTotalCount, len(fileDummyProcessor.record))
 		} else {
 			// in real usage, folders get stripped out in ToNewCopyTransfer when non-recursive,
 			// but that doesn't run here in this test,
 			// so we have to count files only on the processor
-			c.Assert(fileDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
+			a.Equal(localTotalCount, fileDummyProcessor.countFilesOnly())
 		}
 
 		if s3Enabled {
-			c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount)
+			a.Equal(localFileOnlyCount, len(s3DummyProcessor.record))
 		}
 		if gcpEnabled {
-			c.Assert(len(gcpDummyProcessor.record), chk.Equals, localFileOnlyCount)
+			a.Equal(localFileOnlyCount, len(gcpDummyProcessor.record))
 		}
 
 		// if s3dummyprocessor is empty, it's A-OK because no records will be tested
@@ -740,11 +780,11 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 			if isRecursiveOn || storedObject.entityType == common.EEntityType.File() { // folder enumeration knowingly NOT consistent when non-recursive (since the folders get stripped out by ToNewCopyTransfer when non-recursive anyway)
 				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
-				c.Assert(present, chk.Equals, true)
-				c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
+				a.True(present)
+				a.Equal(storedObject.name, correspondingLocalFile.name)
 
 				if !isRecursiveOn {
-					c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+					a.False(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING))
 				}
 			}
 		}
@@ -753,14 +793,19 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 // validate traversing a virtual and a local directory containing the same objects
 // compare that blob and local traversers get consistent results
-func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk.C) {
+func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, shareURL)
+	shareURL, shareName := createNewAzureShare(a, fsu)
+	defer deleteShare(a, shareURL)
+
+	bfsu := GetBFSSU()
+	filesystemURL, _ := createNewFilesystem(a, bfsu)
+	defer deleteFilesystem(a, filesystemURL)
 
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	s3Enabled := err == nil && !isS3Disabled()
@@ -768,36 +813,39 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	gcpEnabled := err == nil && !gcpTestsDisabled()
 	var bucketName, bucketNameGCP string
 	if s3Enabled {
-		bucketName = createNewBucket(c, s3Client, createS3ResOptions{})
-		defer deleteBucket(c, s3Client, bucketName, true)
+		bucketName = createNewBucket(a, s3Client, createS3ResOptions{})
+		defer deleteBucket(s3Client, bucketName, true)
 	}
 	if gcpEnabled {
-		bucketNameGCP = createNewGCPBucket(c, gcpClient)
-		defer deleteGCPBucket(c, gcpClient, bucketNameGCP, true)
+		bucketNameGCP = createNewGCPBucket(a, gcpClient)
+		defer deleteGCPBucket(gcpClient, bucketNameGCP, true)
 	}
 
 	// set up the container with numerous blobs
 	virDirName := "virdir"
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, virDirName+"/")
-	c.Assert(containerURL, chk.NotNil)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, virDirName+"/")
+	a.NotNil(containerURL)
 
 	// set up an Azure File Share with the same files
-	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
+	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, fileList)
+
+	// set up the filesystem with the same files
+	scenarioHelper{}.generateBFSPathsFromList(a, filesystemURL, fileList)
 
 	if s3Enabled {
 		// Set up the bucket with the same files
-		scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+		scenarioHelper{}.generateObjects(a, s3Client, bucketName, fileList)
 	}
 	if gcpEnabled {
-		scenarioHelper{}.generateGCPObjects(c, gcpClient, bucketNameGCP, fileList)
+		scenarioHelper{}.generateGCPObjects(a, gcpClient, bucketNameGCP, fileList)
 	}
 
 	time.Sleep(time.Second * 2) // Ensure the objects' LMTs are in the past
 
 	// set up the destination with a folder that have the exact same files
-	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dstDirName)
-	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
+	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, fileList)
 
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
@@ -808,28 +856,28 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// so that the results are indexed for easy validation
 		localIndexer := newObjectIndexer()
 		err := localTraverser.Traverse(noPreProccessor, localIndexer.store, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// construct a blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
+		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, virDirName)
 		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
 		err = blobTraverser.Traverse(noPreProccessor, blobDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, virDirName)
+		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, virDirName)
 		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
 		err = azureFileTraverser.Traverse(noPreProccessor, fileDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		localTotalCount := len(localIndexer.indexMap)
 		localFileOnlyCount := 0
@@ -844,33 +892,33 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		if s3Enabled {
 			// construct and run a S3 traverser
 			// directory object keys always end with / in S3
-			rawS3URL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, virDirName+"/")
+			rawS3URL := scenarioHelper{}.getRawS3ObjectURL(a, "", bucketName, virDirName+"/")
 			credentialInfo := common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}
 			S3Traverser, err := newS3Traverser(credentialInfo.CredentialType, &rawS3URL, ctx, isRecursiveOn, false, func(common.EntityType) {})
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 			err = S3Traverser.Traverse(noPreProccessor, s3DummyProcessor.process, nil)
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 
 			// check that the results are the same length
-			c.Assert(len(s3DummyProcessor.record), chk.Equals, localFileOnlyCount)
+			a.Equal(localFileOnlyCount, len(s3DummyProcessor.record))
 		}
 		if gcpEnabled {
-			rawGCPURL := scenarioHelper{}.getRawGCPObjectURL(c, bucketNameGCP, virDirName+"/")
+			rawGCPURL := scenarioHelper{}.getRawGCPObjectURL(a, bucketNameGCP, virDirName+"/")
 			GCPTraverser, err := newGCPTraverser(&rawGCPURL, ctx, isRecursiveOn, false, func(common.EntityType) {})
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 			err = GCPTraverser.Traverse(noPreProccessor, gcpDummyProcessor.process, nil)
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 
-			c.Assert(len(gcpDummyProcessor.record), chk.Equals, localFileOnlyCount)
+			a.Equal(localFileOnlyCount, len(gcpDummyProcessor.record))
 		}
 
 		// make sure the results are as expected
-		c.Assert(len(blobDummyProcessor.record), chk.Equals, localFileOnlyCount)
+		a.Equal(localFileOnlyCount, len(blobDummyProcessor.record))
 		if isRecursiveOn {
-			c.Assert(len(fileDummyProcessor.record), chk.Equals, localTotalCount)
+			a.Equal(localTotalCount, len(fileDummyProcessor.record))
 		} else {
 			// only files matter when not recursive (since ToNewCopyTransfer strips out everything else when non-recursive)
-			c.Assert(fileDummyProcessor.countFilesOnly(), chk.Equals, localTotalCount)
+			a.Equal(localTotalCount, fileDummyProcessor.countFilesOnly())
 		}
 		// if s3 testing is disabled the s3 dummy processors' records will be empty. This is OK for appending. Nothing will happen.
 		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), s3DummyProcessor.record...), gcpDummyProcessor.record...) {
@@ -878,14 +926,14 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 				correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
-				c.Assert(present, chk.Equals, true)
-				c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
+				a.True(present)
+				a.Equal(storedObject.name, correspondingLocalFile.name)
 				// Say, here's a good question, why do we have this last check?
 				// None of the other tests have it.
-				c.Assert(correspondingLocalFile.isMoreRecentThan(storedObject, false), chk.Equals, true)
+				a.True(correspondingLocalFile.isMoreRecentThan(storedObject, false))
 
 				if !isRecursiveOn {
-					c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+					a.False(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING))
 				}
 			}
 		}
@@ -894,22 +942,23 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 // validate traversing a virtual directory containing the same objects
 // compare that the serial and parallel blob traversers get consistent results
-func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
+func TestSerialAndParallelBlobTraverser(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
 
 	// set up the container with numerous blobs
 	virDirName := "virdir"
-	scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, virDirName+"/")
-	c.Assert(containerURL, chk.NotNil)
+	scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, virDirName+"/")
+	a.NotNil(containerURL)
 
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a parallel blob traverser
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
+		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, virDirName)
 		parallelBlobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 		// construct a serial blob traverser
@@ -919,15 +968,15 @@ func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
 		// invoke the parallel traversal with a dummy processor
 		parallelDummyProcessor := dummyProcessor{}
 		err := parallelBlobTraverser.Traverse(noPreProccessor, parallelDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// invoke the serial traversal with a dummy processor
 		serialDummyProcessor := dummyProcessor{}
 		err = parallelBlobTraverser.Traverse(noPreProccessor, serialDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// make sure the results are as expected
-		c.Assert(len(parallelDummyProcessor.record), chk.Equals, len(serialDummyProcessor.record))
+		a.Equal(len(serialDummyProcessor.record), len(parallelDummyProcessor.record))
 
 		// compare the entries one by one
 		lookupMap := make(map[string]StoredObject)
@@ -937,9 +986,9 @@ func (s *genericTraverserSuite) TestSerialAndParallelBlobTraverser(c *chk.C) {
 
 		for _, storedObject := range serialDummyProcessor.record {
 			correspondingFile, present := lookupMap[storedObject.relativePath]
-			c.Assert(present, chk.Equals, true)
-			c.Assert(storedObject.lastModifiedTime, chk.DeepEquals, correspondingFile.lastModifiedTime)
-			c.Assert(storedObject.md5, chk.DeepEquals, correspondingFile.md5)
+			a.True(present)
+			a.Equal(correspondingFile.lastModifiedTime, storedObject.lastModifiedTime)
+			a.Equal(correspondingFile.md5, storedObject.md5)
 		}
 	}
 }

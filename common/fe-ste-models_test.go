@@ -22,72 +22,71 @@ package common_test
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type feSteModelsTestSuite struct{}
-
-var _ = chk.Suite(&feSteModelsTestSuite{})
-
-func (s *feSteModelsTestSuite) TestEnhanceJobStatusInfo(c *chk.C) {
+func TestEnhanceJobStatusInfo(t *testing.T) {
+	a := assert.New(t)
 	status := common.EJobStatus
 
 	status = status.EnhanceJobStatusInfo(true, true, true)
-	c.Assert(status, chk.Equals, common.EJobStatus.CompletedWithErrorsAndSkipped())
+	a.Equal(common.EJobStatus.CompletedWithErrorsAndSkipped(), status)
 
 	status = status.EnhanceJobStatusInfo(true, true, false)
-	c.Assert(status, chk.Equals, common.EJobStatus.CompletedWithErrorsAndSkipped())
+	a.Equal(common.EJobStatus.CompletedWithErrorsAndSkipped(), status)
 
 	status = status.EnhanceJobStatusInfo(true, false, true)
-	c.Assert(status, chk.Equals, common.EJobStatus.CompletedWithSkipped())
+	a.Equal(common.EJobStatus.CompletedWithSkipped(), status)
 
 	status = status.EnhanceJobStatusInfo(true, false, false)
-	c.Assert(status, chk.Equals, common.EJobStatus.CompletedWithSkipped())
+	a.Equal(common.EJobStatus.CompletedWithSkipped(), status)
 
 	status = status.EnhanceJobStatusInfo(false, true, true)
-	c.Assert(status, chk.Equals, common.EJobStatus.CompletedWithErrors())
+	a.Equal(common.EJobStatus.CompletedWithErrors(), status)
 
 	status = status.EnhanceJobStatusInfo(false, true, false)
-	c.Assert(status, chk.Equals, common.EJobStatus.Failed())
+	a.Equal(common.EJobStatus.Failed(), status)
 
 	status = status.EnhanceJobStatusInfo(false, false, true)
-	c.Assert(status, chk.Equals, common.EJobStatus.Completed())
+	a.Equal(common.EJobStatus.Completed(), status)
 
 	// No-op if all are false
 	status = status.EnhanceJobStatusInfo(false, false, false)
-	c.Assert(status, chk.Equals, common.EJobStatus.Completed())
+	a.Equal(common.EJobStatus.Completed(), status)
 }
 
-func (s *feSteModelsTestSuite) TestIsJobDone(c *chk.C) {
+func TestIsJobDone(t *testing.T) {
+	a := assert.New(t)
 	status := common.EJobStatus.InProgress()
-	c.Assert(status.IsJobDone(), chk.Equals, false)
+	a.False(status.IsJobDone())
 
 	status = status.Paused()
-	c.Assert(status.IsJobDone(), chk.Equals, false)
+	a.False(status.IsJobDone())
 
 	status = status.Cancelling()
-	c.Assert(status.IsJobDone(), chk.Equals, false)
+	a.False(status.IsJobDone())
 
 	status = status.Cancelled()
-	c.Assert(status.IsJobDone(), chk.Equals, true)
+	a.True(status.IsJobDone())
 
 	status = status.Completed()
-	c.Assert(status.IsJobDone(), chk.Equals, true)
+	a.True(status.IsJobDone())
 
 	status = status.CompletedWithErrors()
-	c.Assert(status.IsJobDone(), chk.Equals, true)
+	a.True(status.IsJobDone())
 
 	status = status.CompletedWithSkipped()
-	c.Assert(status.IsJobDone(), chk.Equals, true)
+	a.True(status.IsJobDone())
 
 	status = status.CompletedWithErrors()
-	c.Assert(status.IsJobDone(), chk.Equals, true)
+	a.True(status.IsJobDone())
 
 	status = status.CompletedWithErrorsAndSkipped()
-	c.Assert(status.IsJobDone(), chk.Equals, true)
+	a.True(status.IsJobDone())
 
 	status = status.Failed()
-	c.Assert(status.IsJobDone(), chk.Equals, true)
+	a.True(status.IsJobDone())
 }
 
 func getInvalidMetadataSample() common.Metadata {
@@ -115,61 +114,64 @@ func getValidMetadataSample() common.Metadata {
 	return m
 }
 
-func validateMapEqual(c *chk.C, m1 map[string]string, m2 map[string]string) {
-	c.Assert(len(m1), chk.Equals, len(m2))
+func validateMapEqual(a *assert.Assertions, m1 map[string]string, m2 map[string]string) {
+	a.Equal(len(m2), len(m1))
 
 	for k1, v1 := range m1 {
-		c.Assert(m2[k1], chk.Equals, v1)
+		a.Equal(v1, m2[k1])
 	}
 }
 
-func (s *feSteModelsTestSuite) TestMetadataExcludeInvalidKey(c *chk.C) {
+func TestMetadataExcludeInvalidKey(t *testing.T) {
+	a := assert.New(t)
 	mInvalid := getInvalidMetadataSample()
 	mValid := getValidMetadataSample()
 
 	retainedMetadata, excludedMetadata, invalidKeyExists := mInvalid.ExcludeInvalidKey()
-	c.Assert(invalidKeyExists, chk.Equals, true)
-	validateMapEqual(c, retainedMetadata,
+	a.True(invalidKeyExists)
+	validateMapEqual(a, retainedMetadata,
 		map[string]string{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_": "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_",
 			"Am": "v:Am", "_123": "v:_123"})
-	validateMapEqual(c, excludedMetadata,
+	validateMapEqual(a, excludedMetadata,
 		map[string]string{"1abc": "v:1abc", "a!@#": "v:a!@#", "a-metadata-samplE": "v:a-metadata-samplE"})
 
 	retainedMetadata, excludedMetadata, invalidKeyExists = mValid.ExcludeInvalidKey()
-	c.Assert(invalidKeyExists, chk.Equals, false)
-	validateMapEqual(c, retainedMetadata, map[string]string{"Key": "value"})
-	c.Assert(len(excludedMetadata), chk.Equals, 0)
-	c.Assert(retainedMetadata.ConcatenatedKeys(), chk.Equals, "'Key' ")
+	a.False(invalidKeyExists)
+	validateMapEqual(a, retainedMetadata, map[string]string{"Key": "value"})
+	a.Zero(len(excludedMetadata))
+	a.Equal("'Key' ", retainedMetadata.ConcatenatedKeys())
 }
 
-func (s *feSteModelsTestSuite) TestMetadataResolveInvalidKey(c *chk.C) {
+func TestMetadataResolveInvalidKey(t *testing.T) {
+	a := assert.New(t)
 	mInvalid := getInvalidMetadataSample()
 	mValid := getValidMetadataSample()
 
 	resolvedMetadata, err := mInvalid.ResolveInvalidKey()
-	c.Assert(err, chk.IsNil)
-	validateMapEqual(c, resolvedMetadata,
+	a.Nil(err)
+	validateMapEqual(a, resolvedMetadata,
 		map[string]string{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_": "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_",
 			"Am": "v:Am", "_123": "v:_123", "rename_1abc": "v:1abc", "rename_key_1abc": "1abc", "rename_a___": "v:a!@#", "rename_key_a___": "a!@#",
 			"rename_a_metadata_samplE": "v:a-metadata-samplE", "rename_key_a_metadata_samplE": "a-metadata-samplE"})
 
 	resolvedMetadata, err = mValid.ResolveInvalidKey()
-	c.Assert(err, chk.IsNil)
-	validateMapEqual(c, resolvedMetadata, map[string]string{"Key": "value"})
+	a.Nil(err)
+	validateMapEqual(a, resolvedMetadata, map[string]string{"Key": "value"})
 }
 
 // In this phase we keep the resolve logic easy, and whenever there is key resolving collision found, error reported.
-func (s *feSteModelsTestSuite) TestMetadataResolveInvalidKeyNegative(c *chk.C) {
+func TestMetadataResolveInvalidKeyNegative(t *testing.T) {
+	a := assert.New(t)
 	mNegative1 := common.Metadata(map[string]string{"!": "!", "*": "*"})
 	mNegative2 := common.Metadata(map[string]string{"!": "!", "rename__": "rename__"})
 	mNegative3 := common.Metadata(map[string]string{"!": "!", "rename_key__": "rename_key__"})
 
 	_, err := mNegative1.ResolveInvalidKey()
-	c.Assert(err, chk.NotNil)
+	a.NotNil(err)
 
 	_, err = mNegative2.ResolveInvalidKey()
-	c.Assert(err, chk.NotNil)
+	a.NotNil(err)
 
 	_, err = mNegative3.ResolveInvalidKey()
-	c.Assert(err, chk.NotNil)
+	a.NotNil(err)
 }

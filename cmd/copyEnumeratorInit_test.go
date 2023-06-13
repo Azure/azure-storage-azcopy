@@ -25,51 +25,50 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type copyEnumeratorSuite struct{}
-
-var _ = chk.Suite(&copyEnumeratorSuite{})
-
 // ============================================= BLOB TRAVERSER TESTS =======================================
-func (ce *copyEnumeratorSuite) TestValidateSourceDirThatExists(c *chk.C) {
+func TestValidateSourceDirThatExists(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	dirName := "source_dir"
-	createNewDirectoryStub(c, containerURL, dirName)
+	createNewDirectoryStub(a, containerURL, dirName)
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
-	c.Assert(err.Error(), chk.Equals, "cannot use directory as source without --recursive or a trailing wildcard (/*)")
+	a.Equal("cannot use directory as source without --recursive or a trailing wildcard (/*)", err.Error())
 
 	// dir but recursive flag set - pass
 	cca.Recursive = true
 	err = cca.validateSourceDir(blobTraverser)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cca.IsSourceDir, chk.Equals, true)
+	a.Nil(err)
+	a.True(cca.IsSourceDir)
 }
 
-func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
+func TestValidateSourceDirDoesNotExist(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	dirName := "source_dir/"
 	// set up to create blob traverser
@@ -77,52 +76,54 @@ func (ce *copyEnumeratorSuite) TestValidateSourceDirDoesNotExist(c *chk.C) {
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
-	c.Assert(err.Error(), chk.Equals, "cannot use directory as source without --recursive or a trailing wildcard (/*)")
+	a.Equal("cannot use directory as source without --recursive or a trailing wildcard (/*)", err.Error())
 
 	// dir but recursive flag set - pass
 	cca.Recursive = true
 	err = cca.validateSourceDir(blobTraverser)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cca.IsSourceDir, chk.Equals, true)
+	a.Nil(err)
+	a.True(cca.IsSourceDir)
 }
 
-func (ce *copyEnumeratorSuite) TestValidateSourceFileExists(c *chk.C) {
+func TestValidateSourceFileExists(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	fileName := "source_file"
-	_, fileName = createNewBlockBlob(c, containerURL, fileName)
+	_, fileName = createNewBlockBlob(a, containerURL, fileName)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cca.IsSourceDir, chk.Equals, false)
+	a.Nil(err)
+	a.False(cca.IsSourceDir)
 }
 
-func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
+func TestValidateSourceFileDoesNotExist(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	fileName := "source_file"
 
@@ -130,22 +131,23 @@ func (ce *copyEnumeratorSuite) TestValidateSourceFileDoesNotExist(c *chk.C) {
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, fileName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
-	c.Assert(err.Error(), chk.Equals, common.FILE_NOT_FOUND)
-	c.Assert(cca.IsSourceDir, chk.Equals, false)
+	a.Equal(common.FILE_NOT_FOUND, err.Error())
+	a.False(cca.IsSourceDir)
 }
 
-func (ce *copyEnumeratorSuite) TestValidateSourceWithWildCard(c *chk.C) {
+func TestValidateSourceWithWildCard(t *testing.T) {
+	a := assert.New(t)
 	bsu := getBSU()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
 
 	dirName := "source_dir_does_not_exist"
 	// set up to create blob traverser
@@ -153,12 +155,12 @@ func (ce *copyEnumeratorSuite) TestValidateSourceWithWildCard(c *chk.C) {
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dirName)
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
 	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: true, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cca.IsSourceDir, chk.Equals, false)
+	a.Nil(err)
+	a.False(cca.IsSourceDir)
 }

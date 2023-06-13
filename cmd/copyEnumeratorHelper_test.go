@@ -22,12 +22,9 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
-
-type copyEnumeratorHelperTestSuite struct{}
-
-var _ = chk.Suite(&copyEnumeratorHelperTestSuite{})
 
 func newLocalRes(path string) common.ResourceString {
 	return common.ResourceString{Value: path}
@@ -41,7 +38,8 @@ func newRemoteRes(url string) common.ResourceString {
 	return r
 }
 
-func (s *copyEnumeratorHelperTestSuite) TestRelativePath(c *chk.C) {
+func TestRelativePath(t *testing.T) {
+	a := assert.New(t)
 	// setup
 	cca := CookedCopyCmdArgs{
 		Source:      newLocalRes("a/b/"),
@@ -59,6 +57,6 @@ func (s *copyEnumeratorHelperTestSuite) TestRelativePath(c *chk.C) {
 	destRelPath := cca.MakeEscapedRelativePath(false, true, false, object)
 
 	// assert
-	c.Assert(srcRelPath, chk.Equals, "/c.txt")
-	c.Assert(destRelPath, chk.Equals, "/c.txt")
+	a.Equal("/c.txt", srcRelPath)
+	a.Equal("/c.txt", destRelPath)
 }
