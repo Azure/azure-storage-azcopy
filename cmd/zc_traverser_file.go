@@ -86,7 +86,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
-		if t.trailingDot == common.ETrailingDotOption.Enable() && invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
+		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, targetURLParts.DirectoryOrFilePath))
 			return common.EAzError.InvalidBlobOrWindowsName()
 		}
@@ -220,7 +220,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			for _, fileInfo := range lResp.FileItems {
-				if t.trailingDot == common.ETrailingDotOption.Enable() && invalidBlobOrWindowsName(fileInfo.Name) {
+				if invalidBlobOrWindowsName(fileInfo.Name) {
 					//Throw a warning on console and continue
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, fileInfo.Name))
 					continue
@@ -233,7 +233,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 			}
 			for _, dirInfo := range lResp.DirectoryItems {
-				if t.trailingDot == common.ETrailingDotOption.Enable() && invalidBlobOrWindowsName(dirInfo.Name) {
+				if invalidBlobOrWindowsName(dirInfo.Name) {
 					//Throw a warning on console and continue
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, dirInfo.Name))
 					continue
