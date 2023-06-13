@@ -722,10 +722,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
@@ -741,10 +737,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
-		}
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -797,10 +789,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.FromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	case common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
@@ -828,10 +816,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
 			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while copying from service to service")
-		}
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.FromTo.To() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	}
 	if err = validatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
@@ -1310,7 +1294,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := createClientOptions(pipeline.LogNone, nil)
+	options := createClientOptions(pipeline.LogNone, nil, nil)
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1357,7 +1341,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := createClientOptions(pipeline.LogNone, nil)
+	options := createClientOptions(pipeline.LogNone, nil, nil)
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()

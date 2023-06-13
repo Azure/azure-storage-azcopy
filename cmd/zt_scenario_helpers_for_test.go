@@ -31,6 +31,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"net/url"
 	"os"
@@ -47,7 +48,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
-	chk "gopkg.in/check.v1"
 )
 
 const defaultFileSize = 1024
@@ -69,25 +69,25 @@ var specialNames = []string{
 }
 
 // note: this is to emulate the list-of-files flag
-func (scenarioHelper) generateListOfFiles(c *chk.C, fileList []string) (path string) {
+func (scenarioHelper) generateListOfFiles(a *assert.Assertions, fileList []string) (path string) {
 	parentDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// create the file
 	path = common.GenerateFullPath(parentDirName, generateName("listy", 0))
 	err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// pipe content into it
 	content := strings.Join(fileList, "\n")
 	err = os.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	return
 }
 
-func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
+func (scenarioHelper) generateLocalDirectory(a *assert.Assertions) (dstDirName string) {
 	dstDirName, err := os.MkdirTemp("", "AzCopyLocalTest")
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	return
 }
 
@@ -107,17 +107,17 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	return bigBuff, err
 }
 
-func (s scenarioHelper) generateLocalFilesFromList(c *chk.C, dirPath string, fileList []string) {
+func (s scenarioHelper) generateLocalFilesFromList(a *assert.Assertions, dirPath string, fileList []string) {
 	for _, fileName := range fileList {
 		_, err := s.generateLocalFile(filepath.Join(dirPath, fileName), defaultFileSize)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath string, prefix string) (fileList []string) {
+func (s scenarioHelper) generateCommonRemoteScenarioForLocal(a *assert.Assertions, dirPath string, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 	for i := 0; i < 10; i++ {
 		batch := []string{
@@ -131,7 +131,7 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 		for j, name := range batch {
 			fileList[5*i+j] = name
 			_, err := s.generateLocalFile(filepath.Join(dirPath, name), defaultFileSize)
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 		}
 	}
 
@@ -140,14 +140,14 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, containerClient *container.Client, prefix string) (string, []*blockblob.Client, []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(a *assert.Assertions, containerClient *container.Client, prefix string) (string, []*blockblob.Client, []string) {
 	blobList := make([]*blockblob.Client, 3)
 	blobNames := make([]string, 3)
 	var listOfTransfers []string
 
-	blobClient1, blobName1 := createNewBlockBlob(c, containerClient, prefix+"top")
-	blobClient2, blobName2 := createNewBlockBlob(c, containerClient, prefix+"sub1/")
-	blobClient3, blobName3 := createNewBlockBlob(c, containerClient, prefix+"sub1/sub3/sub5/")
+	blobClient1, blobName1 := createNewBlockBlob(a, containerClient, prefix+"top")
+	blobClient2, blobName2 := createNewBlockBlob(a, containerClient, prefix+"sub1/")
+	blobClient3, blobName3 := createNewBlockBlob(a, containerClient, prefix+"sub1/sub3/sub5/")
 
 	blobList[0] = blobClient1
 	blobNames[0] = blobName1
@@ -160,16 +160,16 @@ func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, contai
 		for j := 0; j < 3; j++ { // create 3 soft-deleted snapshots for each blob
 			// Create snapshot for blob
 			snapResp, err := blobList[i].CreateSnapshot(ctx, nil)
-			c.Assert(snapResp, chk.NotNil)
-			c.Assert(err, chk.IsNil)
+			a.NotNil(snapResp)
+			a.Nil(err)
 
 			time.Sleep(time.Millisecond * 30)
 
 			// Soft delete snapshot
 			snapshotBlob, err := blobList[i].WithSnapshot(*snapResp.Snapshot)
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 			_, err = snapshotBlob.Delete(ctx, nil)
-			c.Assert(err, chk.IsNil)
+			a.Nil(err)
 
 			listOfTransfers = append(listOfTransfers, blobNames[i])
 		}
@@ -180,15 +180,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForSoftDelete(c *chk.C, contai
 	return blobName1, blobList, listOfTransfers
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerClient *container.Client, prefix string) (blobList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForBlob(a *assert.Assertions, containerClient *container.Client, prefix string) (blobList []string) {
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, blobName1 := createNewBlockBlob(c, containerClient, prefix+"top")
-		_, blobName2 := createNewBlockBlob(c, containerClient, prefix+"sub1/")
-		_, blobName3 := createNewBlockBlob(c, containerClient, prefix+"sub2/")
-		_, blobName4 := createNewBlockBlob(c, containerClient, prefix+"sub1/sub3/sub5/")
-		_, blobName5 := createNewBlockBlob(c, containerClient, prefix+specialNames[i])
+		_, blobName1 := createNewBlockBlob(a, containerClient, prefix+"top")
+		_, blobName2 := createNewBlockBlob(a, containerClient, prefix+"sub1/")
+		_, blobName3 := createNewBlockBlob(a, containerClient, prefix+"sub2/")
+		_, blobName4 := createNewBlockBlob(a, containerClient, prefix+"sub1/sub3/sub5/")
+		_, blobName5 := createNewBlockBlob(a, containerClient, prefix+specialNames[i])
 
 		blobList[5*i] = blobName1
 		blobList[5*i+1] = blobName2
@@ -203,15 +203,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerCli
 }
 
 // same as blob, but for every virtual directory, a blob with the same name is created, and it has metadata 'hdi_isfolder = true'
-func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerClient *container.Client, prefix string) (blobList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForWASB(a *assert.Assertions, containerClient *container.Client, prefix string) (blobList []string) {
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, blobName1 := createNewBlockBlob(c, containerClient, prefix+"top")
-		_, blobName2 := createNewBlockBlob(c, containerClient, prefix+"sub1/")
-		_, blobName3 := createNewBlockBlob(c, containerClient, prefix+"sub2/")
-		_, blobName4 := createNewBlockBlob(c, containerClient, prefix+"sub1/sub3/sub5/")
-		_, blobName5 := createNewBlockBlob(c, containerClient, prefix+specialNames[i])
+		_, blobName1 := createNewBlockBlob(a, containerClient, prefix+"top")
+		_, blobName2 := createNewBlockBlob(a, containerClient, prefix+"sub1/")
+		_, blobName3 := createNewBlockBlob(a, containerClient, prefix+"sub2/")
+		_, blobName4 := createNewBlockBlob(a, containerClient, prefix+"sub1/sub3/sub5/")
+		_, blobName5 := createNewBlockBlob(a, containerClient, prefix+specialNames[i])
 
 		blobList[5*i] = blobName1
 		blobList[5*i+1] = blobName2
@@ -222,14 +222,14 @@ func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerCli
 
 	if prefix != "" {
 		rootDir := strings.TrimSuffix(prefix, "/")
-		createNewDirectoryStub(c, containerClient, rootDir)
+		createNewDirectoryStub(a, containerClient, rootDir)
 		blobList = append(blobList, rootDir)
 	}
 
-	createNewDirectoryStub(c, containerClient, prefix+"sub1")
-	createNewDirectoryStub(c, containerClient, prefix+"sub1/sub3")
-	createNewDirectoryStub(c, containerClient, prefix+"sub1/sub3/sub5")
-	createNewDirectoryStub(c, containerClient, prefix+"sub2")
+	createNewDirectoryStub(a, containerClient, prefix+"sub1")
+	createNewDirectoryStub(a, containerClient, prefix+"sub1/sub3")
+	createNewDirectoryStub(a, containerClient, prefix+"sub1/sub3/sub5")
+	createNewDirectoryStub(a, containerClient, prefix+"sub2")
 
 	for _, dirPath := range []string{prefix + "sub1", prefix + "sub1/sub3", prefix + "sub1/sub3/sub5", prefix + "sub2"} {
 		blobList = append(blobList, dirPath)
@@ -240,15 +240,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForWASB(c *chk.C, containerCli
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(a *assert.Assertions, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
 	pathList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, pathName1 := createNewBfsFile(c, filesystemURL, prefix+"top")
-		_, pathName2 := createNewBfsFile(c, filesystemURL, prefix+"sub1/")
-		_, pathName3 := createNewBfsFile(c, filesystemURL, prefix+"sub2/")
-		_, pathName4 := createNewBfsFile(c, filesystemURL, prefix+"sub1/sub3/sub5")
-		_, pathName5 := createNewBfsFile(c, filesystemURL, prefix+specialNames[i])
+		_, pathName1 := createNewBfsFile(a, filesystemURL, prefix+"top")
+		_, pathName2 := createNewBfsFile(a, filesystemURL, prefix+"sub1/")
+		_, pathName3 := createNewBfsFile(a, filesystemURL, prefix+"sub2/")
+		_, pathName4 := createNewBfsFile(a, filesystemURL, prefix+"sub1/sub3/sub5")
+		_, pathName5 := createNewBfsFile(a, filesystemURL, prefix+specialNames[i])
 
 		pathList[5*i] = pathName1
 		pathList[5*i+1] = pathName2
@@ -262,15 +262,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c *chk.C, filesystem
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareURL azfile.ShareURL, prefix string) (fileList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(a *assert.Assertions, shareURL azfile.ShareURL, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, fileName1 := createNewAzureFile(c, shareURL, prefix+"top")
-		_, fileName2 := createNewAzureFile(c, shareURL, prefix+"sub1/")
-		_, fileName3 := createNewAzureFile(c, shareURL, prefix+"sub2/")
-		_, fileName4 := createNewAzureFile(c, shareURL, prefix+"sub1/sub3/sub5/")
-		_, fileName5 := createNewAzureFile(c, shareURL, prefix+specialNames[i])
+		_, fileName1 := createNewAzureFile(a, shareURL, prefix+"top")
+		_, fileName2 := createNewAzureFile(a, shareURL, prefix+"sub1/")
+		_, fileName3 := createNewAzureFile(a, shareURL, prefix+"sub2/")
+		_, fileName4 := createNewAzureFile(a, shareURL, prefix+"sub1/sub3/sub5/")
+		_, fileName5 := createNewAzureFile(a, shareURL, prefix+specialNames[i])
 
 		fileList[5*i] = fileName1
 		fileList[5*i+1] = fileName2
@@ -284,67 +284,67 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareUR
 	return
 }
 
-func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c *chk.C, serviceClient *blobservice.Client, containerList []string, blobList []string, data string) {
+func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(a *assert.Assertions, serviceClient *blobservice.Client, containerList []string, blobList []string, data string) {
 	for _, containerName := range containerList {
 		containerClient := serviceClient.NewContainerClient(containerName)
 		_, err := containerClient.Create(ctx, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
-		s.generateBlobsFromList(c, containerClient, blobList, data)
+		s.generateBlobsFromList(a, containerClient, blobList, data)
 	}
 }
 
-func (s scenarioHelper) generateFileSharesAndFilesFromLists(c *chk.C, serviceURL azfile.ServiceURL, shareList []string, fileList []string, data string) {
+func (s scenarioHelper) generateFileSharesAndFilesFromLists(a *assert.Assertions, serviceURL azfile.ServiceURL, shareList []string, fileList []string, data string) {
 	for _, shareName := range shareList {
 		surl := serviceURL.NewShareURL(shareName)
 		_, err := surl.Create(ctx, azfile.Metadata{}, 0)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
-		s.generateAzureFilesFromList(c, surl, fileList)
+		s.generateAzureFilesFromList(a, surl, fileList)
 	}
 }
 
-func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c *chk.C, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
+func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertions, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
 	for _, filesystemName := range fsList {
 		fsURL := serviceURL.NewFileSystemURL(filesystemName)
 		_, err := fsURL.Create(ctx)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
-		s.generateBFSPathsFromList(c, fsURL, fileList)
+		s.generateBFSPathsFromList(a, fsURL, fileList)
 	}
 }
 
-func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c *chk.C, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
+func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(a *assert.Assertions, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
 		err := s3Client.MakeBucket(bucketName, "")
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
-		s.generateObjects(c, s3Client, bucketName, objectList)
+		s.generateObjects(a, s3Client, bucketName, objectList)
 	}
 }
 
-func (s scenarioHelper) generateGCPBucketsAndObjectsFromLists(c *chk.C, client *gcpUtils.Client, bucketList []string, objectList []string) {
+func (s scenarioHelper) generateGCPBucketsAndObjectsFromLists(a *assert.Assertions, client *gcpUtils.Client, bucketList []string, objectList []string) {
 	for _, bucketName := range bucketList {
 		bkt := client.Bucket(bucketName)
 		err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-		c.Assert(err, chk.IsNil)
-		s.generateGCPObjects(c, client, bucketName, objectList)
+		a.Nil(err)
+		s.generateGCPObjects(a, client, bucketName, objectList)
 	}
 }
 
 // create the demanded blobs
-func (scenarioHelper) generateBlobsFromList(c *chk.C, containerClient *container.Client, blobList []string, data string) {
+func (scenarioHelper) generateBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string, data string) {
 	for _, blobName := range blobList {
 		blobClient := containerClient.NewBlockBlobClient(blobName)
 		_, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader(data)), nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerClient *container.Client, blobList []string, data string) {
+func (scenarioHelper) generatePageBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string, data string) {
 	for _, blobName := range blobList {
 		// Create the blob (PUT blob)
 		blobClient := containerClient.NewPageBlobClient(blobName)
@@ -354,19 +354,19 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerClient *conta
 				SequenceNumber: to.Ptr(int64(0)),
 				HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
 			})
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// Create the page (PUT page)
 		_, err = blobClient.UploadPages(ctx, streaming.NopCloser(strings.NewReader(data)),
 			blob.HTTPRange{Offset: 0, Count: int64(len(data))}, nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerClient *container.Client, blobList []string, data string) {
+func (scenarioHelper) generateAppendBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string, data string) {
 	for _, blobName := range blobList {
 		// Create the blob (PUT blob)
 		blobClient := containerClient.NewAppendBlobClient(blobName)
@@ -374,52 +374,52 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerClient *con
 			&appendblob.CreateOptions{
 				HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
 			})
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		// Append a block (PUT block)
 		_, err = blobClient.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), nil)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerClient *container.Client, blobName string, accessTier *blob.AccessTier) {
+func (scenarioHelper) generateBlockBlobWithAccessTier(a *assert.Assertions, containerClient *container.Client, blobName string, accessTier *blob.AccessTier) {
 	blobClient := containerClient.NewBlockBlobClient(blobName)
 	_, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), &blockblob.UploadOptions{Tier: accessTier})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }
 
 // create the demanded objects
-func (scenarioHelper) generateObjects(c *chk.C, client *minio.Client, bucketName string, objectList []string) {
+func (scenarioHelper) generateObjects(a *assert.Assertions, client *minio.Client, bucketName string, objectList []string) {
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
 		n, err := client.PutObjectWithContext(ctx, bucketName, objectName, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
-		c.Assert(err, chk.IsNil)
-		c.Assert(n, chk.Equals, size)
+		a.Nil(err)
+		a.Equal(size, n)
 	}
 }
 
-func (scenarioHelper) generateGCPObjects(c *chk.C, client *gcpUtils.Client, bucketName string, objectList []string) {
+func (scenarioHelper) generateGCPObjects(a *assert.Assertions, client *gcpUtils.Client, bucketName string, objectList []string) {
 	size := int64(len(objectDefaultData))
 	for _, objectName := range objectList {
 		wc := client.Bucket(bucketName).Object(objectName).NewWriter(context.Background())
 		reader := strings.NewReader(objectDefaultData)
 		written, err := io.Copy(wc, reader)
-		c.Assert(err, chk.IsNil)
-		c.Assert(written, chk.Equals, size)
+		a.Nil(err)
+		a.Equal(size, written)
 		err = wc.Close()
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 }
 
 // create the demanded files
-func (scenarioHelper) generateFlatFiles(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
+func (scenarioHelper) generateFlatFiles(a *assert.Assertions, shareURL azfile.ShareURL, fileList []string) {
 	for _, fileName := range fileList {
 		file := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
 		err := azfile.UploadBufferToAzureFile(ctx, []byte(fileDefaultData), file, azfile.UploadToAzureFileOptions{})
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -432,15 +432,15 @@ func (scenarioHelper) generateFlatFiles(c *chk.C, shareURL azfile.ShareURL, file
 // 10 of them in sub dir "sub2"
 // 10 of them in deeper sub dir "sub1/sub3/sub5"
 // 10 of them with special characters
-func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) (objectList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForS3(a *assert.Assertions, client *minio.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) (objectList []string) {
 	objectList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		objectName1 := createNewObject(c, client, bucketName, prefix+"top")
-		objectName2 := createNewObject(c, client, bucketName, prefix+"sub1/")
-		objectName3 := createNewObject(c, client, bucketName, prefix+"sub2/")
-		objectName4 := createNewObject(c, client, bucketName, prefix+"sub1/sub3/sub5/")
-		objectName5 := createNewObject(c, client, bucketName, prefix+specialNames[i])
+		objectName1 := createNewObject(a, client, bucketName, prefix+"top")
+		objectName2 := createNewObject(a, client, bucketName, prefix+"sub1/")
+		objectName3 := createNewObject(a, client, bucketName, prefix+"sub2/")
+		objectName4 := createNewObject(a, client, bucketName, prefix+"sub1/sub3/sub5/")
+		objectName5 := createNewObject(a, client, bucketName, prefix+specialNames[i])
 
 		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
 		// transfer.Source & transfer.Destination(after trimming the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
@@ -463,14 +463,14 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForGCP(c *chk.C, client *gcpUtils.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) []string {
+func (scenarioHelper) generateCommonRemoteScenarioForGCP(a *assert.Assertions, client *gcpUtils.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) []string {
 	objectList := make([]string, 50)
 	for i := 0; i < 10; i++ {
-		objectName1 := createNewGCPObject(c, client, bucketName, prefix+"top")
-		objectName2 := createNewGCPObject(c, client, bucketName, prefix+"sub1/")
-		objectName3 := createNewGCPObject(c, client, bucketName, prefix+"sub2/")
-		objectName4 := createNewGCPObject(c, client, bucketName, prefix+"sub1/sub3/sub5/")
-		objectName5 := createNewGCPObject(c, client, bucketName, prefix+specialNames[i])
+		objectName1 := createNewGCPObject(a, client, bucketName, prefix+"top")
+		objectName2 := createNewGCPObject(a, client, bucketName, prefix+"sub1/")
+		objectName3 := createNewGCPObject(a, client, bucketName, prefix+"sub2/")
+		objectName4 := createNewGCPObject(a, client, bucketName, prefix+"sub1/sub3/sub5/")
+		objectName5 := createNewGCPObject(a, client, bucketName, prefix+specialNames[i])
 
 		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
 		// transfer.Source & transfer.Destination(after trimming the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
@@ -494,39 +494,39 @@ func (scenarioHelper) generateCommonRemoteScenarioForGCP(c *chk.C, client *gcpUt
 }
 
 // create the demanded azure files
-func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
+func (scenarioHelper) generateAzureFilesFromList(a *assert.Assertions, shareURL azfile.ShareURL, fileList []string) {
 	for _, filePath := range fileList {
 		file := shareURL.NewRootDirectoryURL().NewFileURL(filePath)
 
 		// create parents first
-		generateParentsForAzureFile(c, file)
+		generateParentsForAzureFile(a, file)
 
 		// create the file itself
 		cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
-		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+		a.Nil(err)
+		a.Equal(201, cResp.StatusCode())
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (scenarioHelper) generateBFSPathsFromList(c *chk.C, filesystemURL azbfs.FileSystemURL, fileList []string) {
-	for _, path := range fileList {
-		file := filesystemURL.NewRootDirectoryURL().NewFileURL(path)
+func (scenarioHelper) generateBFSPathsFromList(a *assert.Assertions, filesystemURL azbfs.FileSystemURL, fileList []string) {
+	for _, p := range fileList {
+		file := filesystemURL.NewRootDirectoryURL().NewFileURL(p)
 
 		// Create the file
 		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+		a.Nil(err)
+		a.Equal(201, cResp.StatusCode())
 
 		aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
-		c.Assert(err, chk.IsNil)
-		c.Assert(aResp.StatusCode(), chk.Equals, 202)
+		a.Nil(err)
+		a.Equal(202, aResp.StatusCode())
 
 		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
-		c.Assert(err, chk.IsNil)
-		c.Assert(fResp.StatusCode(), chk.Equals, 200)
+		a.Nil(err)
+		a.Equal(200, fResp.StatusCode())
 	}
 }
 
@@ -588,30 +588,30 @@ func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 	return modifiedList
 }
 
-func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) *url.URL {
+func (scenarioHelper) getRawContainerURLWithSAS(a *assert.Assertions, containerName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
-	cc := getContainerClientWithSAS(c, credential, containerName)
+	a.Nil(err)
+	cc := getContainerClientWithSAS(a, credential, containerName)
 
 	u := cc.URL()
 	parsedURL, err := url.Parse(u)
 	return parsedURL
 }
 
-func (scenarioHelper) getContainerClientWithSAS(c *chk.C, containerName string) *container.Client {
+func (scenarioHelper) getContainerClientWithSAS(a *assert.Assertions, containerName string) *container.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
-	containerURLWithSAS := getContainerClientWithSAS(c, credential, containerName)
+	a.Nil(err)
+	containerURLWithSAS := getContainerClientWithSAS(a, credential, containerName)
 	return containerURLWithSAS
 }
 
-func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string) *url.URL {
+func (scenarioHelper) getRawBlobURLWithSAS(a *assert.Assertions, containerName string, blobName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
-	cc := getContainerClientWithSAS(c, credential, containerName)
+	a.Nil(err)
+	cc := getContainerClientWithSAS(a, credential, containerName)
 	bc := cc.NewBlockBlobClient(blobName)
 
 	u := bc.URL()
@@ -619,144 +619,144 @@ func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobN
 	return parsedURL
 }
 
-func (scenarioHelper) getBlobClientWithSAS(c *chk.C, containerName string, blobName string) *blob.Client {
+func (scenarioHelper) getBlobClientWithSAS(a *assert.Assertions, containerName string, blobName string) *blob.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
-	containerURLWithSAS := getContainerClientWithSAS(c, credential, containerName)
+	a.Nil(err)
+	containerURLWithSAS := getContainerClientWithSAS(a, credential, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlobClient(blobName)
 	return blobURLWithSAS
 }
 
-func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) *url.URL {
+func (scenarioHelper) getRawBlobServiceURLWithSAS(a *assert.Assertions) *url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	u := getBlobServiceClientWithSAS(c, credential).URL()
+	u := getBlobServiceClientWithSAS(a, credential).URL()
 	parsedURL, err := url.Parse(u)
 	return parsedURL
 }
 
-func (scenarioHelper) getBlobServiceClientWithSAS(c *chk.C) *blobservice.Client {
+func (scenarioHelper) getBlobServiceClientWithSAS(a *assert.Assertions) *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	return getBlobServiceClientWithSAS(c, credential)
+	return getBlobServiceClientWithSAS(a, credential)
 }
 
-func (scenarioHelper) getBlobServiceClientWithSASFromURL(c *chk.C, rawURL string) *blobservice.Client {
+func (scenarioHelper) getBlobServiceClientWithSASFromURL(a *assert.Assertions, rawURL string) *blobservice.Client {
 	blobURLParts, err := blob.ParseURL(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	blobURLParts.ContainerName = ""
 	blobURLParts.BlobName = ""
 	blobURLParts.VersionID = ""
 	blobURLParts.Snapshot = ""
 
 	client, err := blobservice.NewClientWithNoCredential(blobURLParts.String(), nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return client
 }
 
-func (scenarioHelper) getRawFileServiceURLWithSAS(c *chk.C) url.URL {
+func (scenarioHelper) getRawFileServiceURLWithSAS(a *assert.Assertions) url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	return getFileServiceURLWithSAS(c, *credential).URL()
+	return getFileServiceURLWithSAS(a, *credential).URL()
 }
 
-func (scenarioHelper) getRawAdlsServiceURLWithSAS(c *chk.C) azbfs.ServiceURL {
+func (scenarioHelper) getRawAdlsServiceURLWithSAS(a *assert.Assertions) azbfs.ServiceURL {
 	accountName, accountKey := getAccountAndKey()
 	credential := azbfs.NewSharedKeyCredential(accountName, accountKey)
 
-	return getAdlsServiceURLWithSAS(c, *credential)
+	return getAdlsServiceURLWithSAS(a, *credential)
 }
 
-func (scenarioHelper) getBlobServiceClient(c *chk.C) *blobservice.Client {
+func (scenarioHelper) getBlobServiceClient(a *assert.Assertions) *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net", credential.AccountName())
 
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return client
 }
 
-func (s scenarioHelper) getContainerClient(c *chk.C, containerName string) *container.Client {
-	serviceURL := s.getBlobServiceClient(c)
+func (s scenarioHelper) getContainerClient(a *assert.Assertions, containerName string) *container.Client {
+	serviceURL := s.getBlobServiceClient(a)
 	containerURL := serviceURL.NewContainerClient(containerName)
 
 	return containerURL
 }
 
-func (scenarioHelper) getRawS3AccountURL(c *chk.C, region string) url.URL {
+func (scenarioHelper) getRawS3AccountURL(a *assert.Assertions, region string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.Iff(region == "", "", "-"+region))
 
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return *fullURL
 }
 
-func (scenarioHelper) getRawGCPAccountURL(c *chk.C) url.URL {
+func (scenarioHelper) getRawGCPAccountURL(a *assert.Assertions) url.URL {
 	rawURL := "https://storage.cloud.google.com/"
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	return *fullURL
 }
 
 // TODO: Possibly add virtual-hosted-style and dual stack support. Currently use path style for testing.
-func (scenarioHelper) getRawS3BucketURL(c *chk.C, region string, bucketName string) url.URL {
+func (scenarioHelper) getRawS3BucketURL(a *assert.Assertions, region string, bucketName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s", common.Iff(region == "", "", "-"+region), bucketName)
 
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return *fullURL
 }
 
-func (scenarioHelper) getRawGCPBucketURL(c *chk.C, bucketName string) url.URL {
+func (scenarioHelper) getRawGCPBucketURL(a *assert.Assertions, bucketName string) url.URL {
 	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s", bucketName)
 	fmt.Println(rawURL)
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	return *fullURL
 }
 
-func (scenarioHelper) getRawS3ObjectURL(c *chk.C, region string, bucketName string, objectName string) url.URL {
+func (scenarioHelper) getRawS3ObjectURL(a *assert.Assertions, region string, bucketName string, objectName string) url.URL {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.Iff(region == "", "", "-"+region), bucketName, objectName)
 
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return *fullURL
 }
 
-func (scenarioHelper) getRawGCPObjectURL(c *chk.C, bucketName string, objectName string) url.URL {
+func (scenarioHelper) getRawGCPObjectURL(a *assert.Assertions, bucketName string, objectName string) url.URL {
 	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s/%s", bucketName, objectName)
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	return *fullURL
 }
 
-func (scenarioHelper) getRawFileURLWithSAS(c *chk.C, shareName string, fileName string) url.URL {
+func (scenarioHelper) getRawFileURLWithSAS(a *assert.Assertions, shareName string, fileName string) url.URL {
 	credential, err := getGenericCredentialForFile("")
-	c.Assert(err, chk.IsNil)
-	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
+	a.Nil(err)
+	shareURLWithSAS := getShareURLWithSAS(a, *credential, shareName)
 	fileURLWithSAS := shareURLWithSAS.NewRootDirectoryURL().NewFileURL(fileName)
 	return fileURLWithSAS.URL()
 }
 
-func (scenarioHelper) getRawShareURLWithSAS(c *chk.C, shareName string) url.URL {
+func (scenarioHelper) getRawShareURLWithSAS(a *assert.Assertions, shareName string) url.URL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	c.Assert(err, chk.IsNil)
-	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
+	a.Nil(err)
+	shareURLWithSAS := getShareURLWithSAS(a, *credential, shareName)
 	return shareURLWithSAS.URL()
 }
 
@@ -776,10 +776,10 @@ func (scenarioHelper) containerExists(containerClient *container.Client) bool {
 	return false
 }
 
-func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
+func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// the enumeration ends when process() returns
 	err = cooked.process()
@@ -788,7 +788,7 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 	verifier(err)
 }
 
-func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
+func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
 	if err == nil {
@@ -806,21 +806,21 @@ func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	verifier(err)
 }
 
-func validateUploadTransfersAreScheduled(c *chk.C, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
-	validateCopyTransfersAreScheduled(c, false, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
+func validateUploadTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(a, false, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
-func validateDownloadTransfersAreScheduled(c *chk.C, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
-	validateCopyTransfersAreScheduled(c, true, false, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
+func validateDownloadTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(a, true, false, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
-func validateS2SSyncTransfersAreScheduled(c *chk.C, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
-	validateCopyTransfersAreScheduled(c, true, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
+func validateS2SSyncTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(a, true, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
-func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
+func validateCopyTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool, isDstEncoded bool, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
-	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
+	a.Equal(len(expectedTransfers), len(mockedRPC.transfers))
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
@@ -851,18 +851,18 @@ func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded
 		}
 
 		// the relative paths should be equal
-		c.Assert(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
+		a.Equal(dstRelativeFilePath, srcRelativeFilePath)
 
 		// look up the path from the expected transfers, make sure it exists
 		_, transferExist := lookupMap[srcRelativeFilePath]
-		c.Assert(transferExist, chk.Equals, true)
+		a.True(transferExist)
 	}
 }
 
-func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
+func validateRemoveTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
 
 	// validate that the right number of transfers were scheduled
-	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
+	a.Equal(len(expectedTransfers), len(mockedRPC.transfers))
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
@@ -875,7 +875,7 @@ func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTr
 
 		// look up the source from the expected transfers, make sure it exists
 		_, srcExist := lookupMap[srcRelativeFilePath]
-		c.Assert(srcExist, chk.Equals, true)
+		a.True(srcExist)
 
 		delete(lookupMap, srcRelativeFilePath)
 	}
@@ -884,11 +884,11 @@ func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTr
 	// }
 }
 
-func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
+func getDefaultSyncRawInput(sra, dst string) rawSyncCmdArgs {
 	deleteDestination := common.EDeleteDestination.True()
 
 	return rawSyncCmdArgs{
-		src:                 src,
+		src:                 sra,
 		dst:                 dst,
 		recursive:           true,
 		deleteDestination:   deleteDestination.String(),

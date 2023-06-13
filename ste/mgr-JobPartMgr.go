@@ -143,14 +143,14 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 	})
 }
 
-func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, trailingDot *common.TrailingDotOption) azcore.ClientOptions {
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	// TODO (gapra): Does this have to happen this happen here?
 	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newColdTierPolicy(), newTrailingDotPolicy(trailingDot), newLogPolicy(log), newStatsPolicy(statsAcc)}
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newColdTierPolicy(), newTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
@@ -193,7 +193,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption, from common.Location) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -204,7 +204,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
 		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
 		NewVersionPolicyFactory(),
-		NewTrailingDotPolicyFactory(trailingDot),
+		NewTrailingDotPolicyFactory(trailingDot, from),
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewRequestLogPolicyFactory(RequestLogOptions{
@@ -554,8 +554,8 @@ func (jpm *jobPartMgr) clientInfo() {
 	logOptions := LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()}
 
 	// TODO : Add trailing dot when migrating ste azfile.
-	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, nil)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, nil)
+	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, nil, nil)
+	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, nil, nil)
 }
 
 func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
@@ -630,7 +630,11 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			TryTimeout:    UploadTryTimeout,
 			RetryDelay:    UploadRetryDelay,
 			MaxRetryDelay: UploadMaxRetryDelay,
-		}, jpm.pacer, jpm.jobMgr.HttpClient(), statsAccForSip, jpm.planMMF.Plan().DstFileData.TrailingDot)
+		}, jpm.pacer,
+		jpm.jobMgr.HttpClient(),
+		statsAccForSip,
+		jpm.planMMF.Plan().DstFileData.TrailingDot,
+		fromTo.From())
 	}
 
 	switch {
@@ -698,7 +702,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats(),
-			jpm.planMMF.Plan().DstFileData.TrailingDot)
+			jpm.planMMF.Plan().DstFileData.TrailingDot,
+			fromTo.From())
 	}
 }
 

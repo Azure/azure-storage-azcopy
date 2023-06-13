@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
@@ -280,16 +281,18 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel(), cca.trailingDot)
+	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel(), cca.trailingDot, cca.fromTo.From())
 	if err != nil {
 		return nil, err
 	}
 	var trailingDot *common.TrailingDotOption
+	var from *common.Location
 	if cca.fromTo.To() == common.ELocation.File() {
 		trailingDot = &cca.trailingDot
+		from = to.Ptr(cca.fromTo.From())
 	}
 
-	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel(), trailingDot)
+	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel(), trailingDot, from)
 
 	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil

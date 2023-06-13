@@ -1,25 +1,27 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"strings"
+	"testing"
 )
 
-func (s *cmdIntegrationSuite) TestCopyBlobsWithDirectoryStubsS2S(c *chk.C) {
-	c.Skip("Enable after setting Account to non-HNS")
+func TestCopyBlobsWithDirectoryStubsS2S(t *testing.T) {
+	a := assert.New(t)
+	t.Skip("Enable after setting Account to non-HNS")
 	bsc := getBlobServiceClient()
 	vdirName := "vdir1/"
 
 	// create container and dest container
-	srcContainerClient, srcContainerName := createNewContainer(c, bsc)
-	dstContainerClient, dstContainerName := createNewContainer(c, bsc)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
 	dstBlobName := "testcopyblobswithdirectorystubs" + generateBlobName()
-	defer deleteContainer(c, srcContainerClient)
-	defer deleteContainer(c, dstContainerClient)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
-	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(c, srcContainerClient, vdirName)
-	c.Assert(srcContainerClient, chk.NotNil)
-	c.Assert(len(blobAndDirStubsList), chk.Not(chk.Equals), 0)
+	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(a, srcContainerClient, vdirName)
+	a.NotNil(srcContainerClient)
+	a.NotZero(len(blobAndDirStubsList))
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -27,20 +29,20 @@ func (s *cmdIntegrationSuite) TestCopyBlobsWithDirectoryStubsS2S(c *chk.C) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawSrcBlobWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, vdirName)
-	rawDstBlobWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, dstContainerName, dstBlobName)
+	rawSrcBlobWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, vdirName)
+	rawDstBlobWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, dstContainerName, dstBlobName)
 	raw := getDefaultCopyRawInput(rawSrcBlobWithSAS.String(), rawDstBlobWithSAS.String())
 	raw.recursive = true
 	raw.includeDirectoryStubs = true
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobAndDirStubsList))
+		a.Equal(len(blobAndDirStubsList), len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
 		expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobAndDirStubsList, strings.TrimSuffix(vdirName, "/"))
-		validateCopyTransfersAreScheduled(c, true, true, vdirName, "/vdir1", expectedTransfers, mockedRPC)
+		validateCopyTransfersAreScheduled(a, true, true, vdirName, "/vdir1", expectedTransfers, mockedRPC)
 	})
 }

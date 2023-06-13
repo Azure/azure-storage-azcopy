@@ -3,267 +3,264 @@ package azbfs_test
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/url"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	chk "gopkg.in/check.v1"
 )
 
-type DirectoryUrlSuite struct{}
-
-var _ = chk.Suite(&DirectoryUrlSuite{})
-
-// deleteDirectory deletes the directory represented by directory Url
-func deleteDirectory(c *chk.C, dul azbfs.DirectoryURL) {
-	resp, err := dul.Delete(context.Background(), nil, true)
-	c.Assert(err, chk.IsNil)
-	c.Assert(resp.Response().StatusCode, chk.Equals, http.StatusOK)
-}
-
 // TestCreateDirectory test the creation of a directory
-func (dus *DirectoryUrlSuite) TestCreateDeleteDirectory(c *chk.C) {
+func TestCreateDeleteDirectory(t *testing.T) {
+	a := assert.New(t)
 	// Create a file system
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create a directory url from the fileSystem Url
-	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	dirUrl, _ := getDirectoryURLFromFileSystem(a, fsURL)
 	cResp, err := dirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, dirUrl)
+	defer deleteDirectory(a, dirUrl)
 
 	// Assert the directory create response header attributes
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
-	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
+	a.NotEqual("", cResp.ETag())
+	a.NotEqual("", cResp.LastModified())
+	a.NotEqual("", cResp.XMsRequestID())
+	a.NotEqual("", cResp.XMsVersion())
+	a.NotEqual("", cResp.Date())
 }
 
 // TestCreateSubDir tests creating the sub-directory inside a directory
-func (dus *DirectoryUrlSuite) TestCreateSubDir(c *chk.C) {
+func TestCreateSubDir(t *testing.T) {
+	a := assert.New(t)
 	// Create the file system
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create the directory Url from fileSystem Url and create directory
-	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	dirUrl, _ := getDirectoryURLFromFileSystem(a, fsURL)
 	cResp, err := dirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, dirUrl)
+	defer deleteDirectory(a, dirUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
-	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
+	a.NotEqual("", cResp.ETag())
+	a.NotEqual("", cResp.LastModified())
+	a.NotEqual("", cResp.XMsRequestID())
+	a.NotEqual("", cResp.XMsVersion())
+	a.NotEqual("", cResp.Date())
 
 	// Create the sub-directory url from directory Url and create sub-directory
-	subDirUrl, _ := getDirectoryURLFromDirectory(c, dirUrl)
+	subDirUrl, _ := getDirectoryURLFromDirectory(a, dirUrl)
 	cResp, err = subDirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, subDirUrl)
+	defer deleteDirectory(a, subDirUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
-	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
+	a.NotEqual("", cResp.ETag())
+	a.NotEqual("", cResp.LastModified())
+	a.NotEqual("", cResp.XMsRequestID())
+	a.NotEqual("", cResp.XMsVersion())
+	a.NotEqual("", cResp.Date())
 
 }
 
 // TestDirectoryCreateAndGetProperties tests the create directory and
 // get directory properties
-func (dus *DirectoryUrlSuite) TestDirectoryCreateAndGetProperties(c *chk.C) {
+func TestDirectoryCreateAndGetProperties(t *testing.T) {
+	a := assert.New(t)
 	// Create file system
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create directory url from fileSystemUrl and create directory
-	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	dirUrl, _ := getDirectoryURLFromFileSystem(a, fsURL)
 	cResp, err := dirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, dirUrl)
+	defer deleteDirectory(a, dirUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
-	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
+	a.NotEqual("", cResp.ETag())
+	a.NotEqual("", cResp.LastModified())
+	a.NotEqual("", cResp.XMsRequestID())
+	a.NotEqual("", cResp.XMsVersion())
+	a.NotEqual("", cResp.Date())
 
 	// Get the directory properties and verify the resource type
 	gResp, err := dirUrl.GetProperties(context.Background())
-	c.Assert(err, chk.IsNil)
-	c.Assert(gResp.StatusCode(), chk.Equals, http.StatusOK)
-	c.Assert(gResp.XMsResourceType(), chk.Equals, "directory")
+	a.Nil(err)
+	a.Equal(http.StatusOK, gResp.StatusCode())
+	a.Equal("directory", gResp.XMsResourceType())
 }
 
 // TestCreateDirectoryAndFiles tests the create directory and create file inside the directory
-func (dus *DirectoryUrlSuite) TestCreateDirectoryAndFiles(c *chk.C) {
+func TestCreateDirectoryAndFiles(t *testing.T) {
+	a := assert.New(t)
 	// Create the file system
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create the directoryUrl from fileSystemUrl
 	// and create directory
-	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	dirUrl, _ := getDirectoryURLFromFileSystem(a, fsURL)
 	cResp, err := dirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, dirUrl)
+	defer deleteDirectory(a, dirUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
-	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
+	a.NotEqual("", cResp.ETag())
+	a.NotEqual("", cResp.LastModified())
+	a.NotEqual("", cResp.XMsRequestID())
+	a.NotEqual("", cResp.XMsVersion())
+	a.NotEqual("", cResp.Date())
 
 	// Create fileUrl from directoryUrl and create file inside the directory
-	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
+	fileUrl, _ := getFileURLFromDirectory(a, dirUrl)
 	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	defer delFile(c, fileUrl)
+	defer deleteFile(a, fileUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(fresp.Response().StatusCode, chk.Equals, http.StatusCreated)
-	c.Assert(fresp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, fresp.Response().StatusCode)
+	a.NotEqual("", fresp.ETag())
+	a.NotEqual("", fresp.LastModified())
+	a.NotEqual("", fresp.XMsRequestID())
+	a.NotEqual("", fresp.XMsVersion())
+	a.NotEqual("", fresp.Date())
 
 }
 
 // TestReCreateDirectory tests the creation of directories that already exist
-func (dus *DirectoryUrlSuite) TestReCreateDirectory(c *chk.C) {
+func TestReCreateDirectory(t *testing.T) {
+	a := assert.New(t)
 	// Create the file system
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create the directoryUrl from fileSystemUrl and create directory
-	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	dirUrl, _ := getDirectoryURLFromFileSystem(a, fsURL)
 	cResp, err := dirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, dirUrl)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
+	defer deleteDirectory(a, dirUrl)
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
 
 	// Re-create it (allowing overwrite)
 	// TODO: put some files in it before this, and make assertions about what happens to them after the re-creation
 	cResp, err = dirUrl.Create(context.Background(), true)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
 
 	// Attempt to re-create it (but do NOT allow overwrite)
 	cResp, err = dirUrl.Create(context.Background(), false) // <- false for re-create
-	c.Assert(err, chk.NotNil)
+	a.NotNil(err)
 	stgErr, ok := err.(azbfs.StorageError)
-	c.Assert(ok, chk.Equals, true)
-	c.Assert(stgErr.Response().StatusCode, chk.Equals, http.StatusConflict)
-	c.Assert(stgErr.ServiceCode(), chk.Equals, azbfs.ServiceCodePathAlreadyExists)
+	a.True(ok)
+	a.Equal(http.StatusConflict, stgErr.Response().StatusCode)
+	a.Equal(azbfs.ServiceCodePathAlreadyExists, stgErr.ServiceCode())
 }
 
 // TestCreateMetadataDeleteDirectory test the creation of a directory with metadata
-func (dus *DirectoryUrlSuite) TestCreateMetadataDeleteDirectory(c *chk.C) {
+func TestCreateMetadataDeleteDirectory(t *testing.T) {
+	a := assert.New(t)
 	// Create a file system
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create metadata
 	metadata := make(map[string]string)
 	metadata["foo"] = "bar"
 
 	// Create a directory url from the fileSystem Url
-	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	dirUrl, _ := getDirectoryURLFromFileSystem(a, fsURL)
 	cResp, err := dirUrl.CreateWithOptions(context.Background(),
 		azbfs.CreateDirectoryOptions{RecreateIfExists: true, Metadata: metadata})
-	defer deleteDirectory(c, dirUrl)
+	defer deleteDirectory(a, dirUrl)
 
 	// Assert the directory create response header attributes
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
-	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
+	a.NotEqual("", cResp.ETag())
+	a.NotEqual("", cResp.LastModified())
+	a.NotEqual("", cResp.XMsRequestID())
+	a.NotEqual("", cResp.XMsVersion())
+	a.NotEqual("", cResp.Date())
 
 	getResp, err := dirUrl.GetProperties(context.Background())
-	c.Assert(err, chk.IsNil)
-	c.Assert(getResp.Response().StatusCode, chk.Equals, http.StatusOK)
-	c.Assert(getResp.XMsProperties(), chk.Not(chk.Equals), "") // Check metadata returned is not null.
+	a.Nil(err)
+	a.Equal(http.StatusOK, getResp.StatusCode())
+	a.NotEqual("", getResp.XMsProperties()) // Check metadata returned is not null.
 }
 
 // TestDirectoryStructure tests creating dir, sub-dir inside dir and files
 // inside dirs and sub-dirs. Then verify the count of files / sub-dirs inside directory
-func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
+func TestDirectoryStructure(t *testing.T) {
+	a := assert.New(t)
 	// Create file system
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create a directory inside filesystem
-	dirUrl, _ := getDirectoryURLFromFileSystem(c, fsURL)
+	dirUrl, _ := getDirectoryURLFromFileSystem(a, fsURL)
 	cResp, err := dirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, dirUrl)
+	defer deleteDirectory(a, dirUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
-	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
+	a.NotEqual("", cResp.ETag())
+	a.NotEqual("", cResp.LastModified())
+	a.NotEqual("", cResp.XMsRequestID())
+	a.NotEqual("", cResp.XMsVersion())
+	a.NotEqual("", cResp.Date())
 
 	// Create a sub-dir inside the above create directory
-	subDirUrl, _ := getDirectoryURLFromDirectory(c, dirUrl)
+	subDirUrl, _ := getDirectoryURLFromDirectory(a, dirUrl)
 	cResp, err = subDirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, subDirUrl)
+	defer deleteDirectory(a, subDirUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, http.StatusCreated)
-	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, cResp.StatusCode())
+	a.NotEqual("", cResp.ETag())
+	a.NotEqual("", cResp.LastModified())
+	a.NotEqual("", cResp.XMsRequestID())
+	a.NotEqual("", cResp.XMsVersion())
+	a.NotEqual("", cResp.Date())
 
 	// Create a file inside directory
-	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
+	fileUrl, _ := getFileURLFromDirectory(a, dirUrl)
 	fresp, err := fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	defer delFile(c, fileUrl)
+	defer deleteFile(a, fileUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(fresp.Response().StatusCode, chk.Equals, http.StatusCreated)
-	c.Assert(fresp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, fresp.Response().StatusCode)
+	a.NotEqual("", fresp.ETag())
+	a.NotEqual("", fresp.LastModified())
+	a.NotEqual("", fresp.XMsRequestID())
+	a.NotEqual("", fresp.XMsVersion())
+	a.NotEqual("", fresp.Date())
 
 	// create a file inside the sub-dir created above
-	subDirfileUrl, _ := getFileURLFromDirectory(c, subDirUrl)
+	subDirfileUrl, _ := getFileURLFromDirectory(a, subDirUrl)
 	fresp, err = subDirfileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	defer delFile(c, subDirfileUrl)
+	defer deleteFile(a, subDirfileUrl)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(fresp.Response().StatusCode, chk.Equals, http.StatusCreated)
-	c.Assert(fresp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(fresp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusCreated, fresp.Response().StatusCode)
+	a.NotEqual("", fresp.ETag())
+	a.NotEqual("", fresp.LastModified())
+	a.NotEqual("", fresp.XMsRequestID())
+	a.NotEqual("", fresp.XMsVersion())
+	a.NotEqual("", fresp.Date())
 
 	// list the directory create above.
 	// expected number of file inside the dir is 2 i.e one
@@ -272,156 +269,161 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 	continuationMarker := ""
 	lresp, err := dirUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
 
-	c.Assert(err, chk.IsNil)
-	c.Assert(lresp.Response().StatusCode, chk.Equals, http.StatusOK)
-	c.Assert(len(lresp.Files()), chk.Equals, 2)
-	c.Assert(len(lresp.Directories()), chk.Equals, 1)
-	c.Assert(lresp.ETag(), chk.Equals, "")
-	c.Assert(lresp.LastModified(), chk.Equals, "")
-	c.Assert(lresp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(lresp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(lresp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusOK, lresp.Response().StatusCode)
+	a.Equal(2, len(lresp.Files()))
+	a.Equal(1, len(lresp.Directories()))
+	a.Equal("", lresp.ETag())
+	a.Equal("", lresp.LastModified())
+	a.NotEqual("", lresp.XMsRequestID())
+	a.NotEqual("", lresp.XMsVersion())
+	a.NotEqual("", lresp.Date())
 }
 
-func (dus *DirectoryUrlSuite) TestListDirectoryWithSpaces(c *chk.C) {
+func TestListDirectoryWithSpaces(t *testing.T) {
+	a := assert.New(t)
 	// Create file system
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create a directory inside filesystem
 	dirUrl := fsURL.NewDirectoryURL("New Folder Test 2")
 	_, err := dirUrl.Create(context.Background(), true)
-	defer deleteDirectory(c, dirUrl)
+	defer deleteDirectory(a, dirUrl)
 
 	// Create a file inside directory
-	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
+	fileUrl, _ := getFileURLFromDirectory(a, dirUrl)
 	_, err = fileUrl.Create(context.Background(), azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	defer delFile(c, fileUrl)
+	defer deleteFile(a, fileUrl)
 
 	// list the directory created above.
 	// expected number of files inside the dir is 1
 	continuationMarker := ""
 	lresp, err := dirUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
-	c.Assert(err, chk.IsNil)
-	c.Assert(lresp.Response().StatusCode, chk.Equals, http.StatusOK)
-	c.Assert(len(lresp.Files()), chk.Equals, 1)
-	c.Assert(len(lresp.Directories()), chk.Equals, 0)
-	c.Assert(lresp.ETag(), chk.Equals, "")
-	c.Assert(lresp.LastModified(), chk.Equals, "")
-	c.Assert(lresp.XMsRequestID(), chk.Not(chk.Equals), "")
-	c.Assert(lresp.XMsVersion(), chk.Not(chk.Equals), "")
-	c.Assert(lresp.Date(), chk.Not(chk.Equals), "")
+	a.Nil(err)
+	a.Equal(http.StatusOK, lresp.Response().StatusCode)
+	a.Equal(1, len(lresp.Files()))
+	a.Equal(0, len(lresp.Directories()))
+	a.Equal("", lresp.ETag())
+	a.Equal("", lresp.LastModified())
+	a.NotEqual("", lresp.XMsRequestID())
+	a.NotEqual("", lresp.XMsVersion())
+	a.NotEqual("", lresp.Date())
 }
 
-func (s *FileURLSuite) TestRenameDirectory(c *chk.C) {
+func TestRenameDirectory(t *testing.T) {
+	a := assert.New(t)
 	fsu := getBfsServiceURL()
-	fileSystemURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fileSystemURL)
+	fileSystemURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fileSystemURL)
 
-	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirURL, dirName := createNewDirectoryFromFileSystem(a, fileSystemURL)
 	dirRename := dirName + "rename"
 
 	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
-	c.Assert(renamedDirURL, chk.NotNil)
-	c.Assert(err, chk.IsNil)
+	a.NotNil(renamedDirURL)
+	a.Nil(err)
 
 	// Check that the old directory does not exist
 	getPropertiesResp, err := dirURL.GetProperties(context.Background())
-	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
-	c.Assert(getPropertiesResp, chk.IsNil)
+	a.NotNil(err) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	a.Nil(getPropertiesResp)
 
 	// Check that the renamed directory does exist
 	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
-	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
-	c.Assert(err, chk.IsNil)
+	a.Equal(http.StatusOK, getPropertiesResp.StatusCode())
+	a.Nil(err)
 }
 
-func (s *FileURLSuite) TestRenameDirWithFile(c *chk.C) {
+func TestRenameDirWithFile(t *testing.T) {
+	a := assert.New(t)
 	fsu := getBfsServiceURL()
-	fileSystemURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fileSystemURL)
+	fileSystemURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fileSystemURL)
 
-	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirURL, dirName := createNewDirectoryFromFileSystem(a, fileSystemURL)
 	fileName := "test.txt"
 	fileURL := dirURL.NewFileURL(fileName)
 	dirRename := dirName + "rename"
 
 	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
-	c.Assert(renamedDirURL, chk.NotNil)
-	c.Assert(err, chk.IsNil)
+	a.NotNil(renamedDirURL)
+	a.Nil(err)
 
 	// Check that the old directory and file do not exist
 	getPropertiesResp, err := dirURL.GetProperties(context.Background())
-	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
-	c.Assert(getPropertiesResp, chk.IsNil)
+	a.NotNil(err) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	a.Nil(getPropertiesResp)
 	getPropertiesResp2, err := fileURL.GetProperties(context.Background())
-	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
-	c.Assert(getPropertiesResp2, chk.IsNil)
+	a.NotNil(err) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	a.Nil(getPropertiesResp2)
 
 	// Check that the renamed directory and file do exist
 	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
-	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
-	c.Assert(err, chk.IsNil)
+	a.Equal(http.StatusOK, getPropertiesResp.StatusCode())
+	a.Nil(err)
 	getPropertiesResp2, err = renamedDirURL.NewFileURL(fileName).GetProperties(context.Background())
-	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
-	c.Assert(getPropertiesResp2, chk.IsNil)
+	a.NotNil(err) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	a.Nil(getPropertiesResp2)
 }
 
-func (dus *DirectoryUrlSuite) TestSetACL(c *chk.C) {
+func TestSetACL(t *testing.T) {
+	a := assert.New(t)
 	// Create a filesystem
 	fsu := getBfsServiceURL()
-	fsURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fsURL)
+	fsURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fsURL)
 
 	// Create a directory inside the filesystem
 	dirURL := fsURL.NewDirectoryURL("test")
 	_, err := dirURL.Create(ctx, true)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Grab it's default ACLs
 	folderAccess, err := dirURL.GetAccessControl(ctx)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Modify it slightly
 	folderAccess.ACL = "user::r-x,group::r-x,other::---"
 	folderAccess.Permissions = ""
 	_, err = dirURL.SetAccessControl(ctx, folderAccess)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Compare them
 	folderAccessToValidate, err := dirURL.GetAccessControl(ctx)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	// We're checking ACLs are the same
 	folderAccessToValidate.Permissions = ""
-	c.Assert(folderAccessToValidate, chk.Equals, folderAccess)
+	a.Equal(folderAccess, folderAccessToValidate)
 
 	// Create a file
 	fileUrl := dirURL.NewFileURL("foo.bar")
 	_, err = fileUrl.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Grab it's default ACLs
 	fileAccess, err := fileUrl.GetAccessControl(ctx)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Modify it slightly.
 	fileAccess.ACL = "user::r-x,group::r-x,other::---"
 	fileAccess.Permissions = ""
 	_, err = fileUrl.SetAccessControl(ctx, fileAccess)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// Compare them
 	fileAccessToValidate, err := fileUrl.GetAccessControl(ctx)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	// We're checking ACLs are the same
 	fileAccessToValidate.Permissions = ""
-	c.Assert(fileAccessToValidate, chk.Equals, fileAccess)
+	a.Equal(fileAccess, fileAccessToValidate)
 
 	// Don't bother testing the root ACLs, since it calls into the directoryclient
 }
 
-func (s *FileURLSuite) TestRenameDirectoryWithSas(c *chk.C) {
+func TestRenameDirectoryWithSas(t *testing.T) {
+	a := assert.New(t)
 	name, key := getAccountAndKey()
 	credential := azbfs.NewSharedKeyCredential(name, key)
 	sasQueryParams, err := azbfs.AccountSASSignatureValues{
@@ -431,38 +433,39 @@ func (s *FileURLSuite) TestRenameDirectoryWithSas(c *chk.C) {
 		Services:      azbfs.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	qp := sasQueryParams.Encode()
 	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
 		credential.AccountName(), qp)
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	fsu := azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
 
-	fileSystemURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fileSystemURL)
+	fileSystemURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fileSystemURL)
 
-	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirURL, dirName := createNewDirectoryFromFileSystem(a, fileSystemURL)
 	dirRename := dirName + "rename"
 
 	renamedDirURL, err := dirURL.Rename(context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename})
-	c.Assert(renamedDirURL, chk.NotNil)
-	c.Assert(err, chk.IsNil)
+	a.NotNil(renamedDirURL)
+	a.Nil(err)
 
 	// Check that the old directory does not exist
 	getPropertiesResp, err := dirURL.GetProperties(context.Background())
-	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
-	c.Assert(getPropertiesResp, chk.IsNil)
+	a.NotNil(err) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	a.Nil(getPropertiesResp)
 
 	// Check that the renamed directory does exist
 	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
-	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
-	c.Assert(err, chk.IsNil)
+	a.Equal(http.StatusOK, getPropertiesResp.StatusCode())
+	a.Nil(err)
 }
 
-func (s *FileURLSuite) TestRenameDirectoryWithDestinationSas(c *chk.C) {
+func TestRenameDirectoryWithDestinationSas(t *testing.T) {
+	a := assert.New(t)
 	name, key := getAccountAndKey()
 	credential := azbfs.NewSharedKeyCredential(name, key)
 	sourceSasQueryParams, err := azbfs.AccountSASSignatureValues{
@@ -472,7 +475,7 @@ func (s *FileURLSuite) TestRenameDirectoryWithDestinationSas(c *chk.C) {
 		Services:      azbfs.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	destinationSasQueryParams, err := azbfs.AccountSASSignatureValues{
 		Protocol:      azbfs.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().Add(24 * time.Hour),
@@ -480,38 +483,38 @@ func (s *FileURLSuite) TestRenameDirectoryWithDestinationSas(c *chk.C) {
 		Services:      azbfs.AccountSASServices{File: true, Blob: true}.String(),
 		ResourceTypes: azbfs.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(credential)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	sourceQp := sourceSasQueryParams.Encode()
 	destQp := destinationSasQueryParams.Encode()
 	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
 		credential.AccountName(), sourceQp)
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	fsu := azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
 
-	fileSystemURL, _ := createNewFileSystem(c, fsu)
-	defer delFileSystem(c, fileSystemURL)
+	fileSystemURL, _ := createNewFileSystem(a, fsu)
+	defer deleteFileSystem(a, fileSystemURL)
 
-	dirURL, dirName := createNewDirectoryFromFileSystem(c, fileSystemURL)
+	dirURL, dirName := createNewDirectoryFromFileSystem(a, fileSystemURL)
 	dirRename := dirName + "rename"
 
 	renamedDirURL, err := dirURL.Rename(
 		context.Background(), azbfs.RenameDirectoryOptions{DestinationPath: dirRename, DestinationSas: &destQp})
-	c.Assert(renamedDirURL, chk.NotNil)
-	c.Assert(err, chk.IsNil)
+	a.NotNil(renamedDirURL)
+	a.Nil(err)
 	found := strings.Contains(renamedDirURL.String(), destQp)
 	// make sure the correct SAS is used
-	c.Assert(found, chk.Equals, true)
+	a.True(found)
 
 	// Check that the old directory does not exist
 	getPropertiesResp, err := dirURL.GetProperties(context.Background())
-	c.Assert(err, chk.NotNil) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
-	c.Assert(getPropertiesResp, chk.IsNil)
+	a.NotNil(err) // TODO: I want to check the status code is 404 but not sure how since the resp is nil
+	a.Nil(getPropertiesResp)
 
 	// Check that the renamed directory does exist
 	getPropertiesResp, err = renamedDirURL.GetProperties(context.Background())
-	c.Assert(getPropertiesResp.StatusCode(), chk.Equals, http.StatusOK)
-	c.Assert(err, chk.IsNil)
+	a.Equal(http.StatusOK, getPropertiesResp.StatusCode())
+	a.Nil(err)
 }

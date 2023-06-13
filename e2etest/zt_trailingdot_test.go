@@ -121,7 +121,7 @@ func TestTrailingDot_Disabled(t *testing.T) {
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-func TestTrailingDot_S2S(t *testing.T) {
+func TestTrailingDot_FileFile(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
 		params{
 			recursive: true,
@@ -138,6 +138,151 @@ func TestTrailingDot_S2S(t *testing.T) {
 				folder("directory"),
 				f("directory/file."),
 				f("directory/file"),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+// This is testing that we do not pass the x-ms-source-allow-trailing-dot when the source is not File.
+func TestTrailingDot_BlobFile(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobFile()),  eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				f("file."),
+			},
+			objectTarget: "file.",
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+// This is testing that we do not pass the x-ms-source-allow-trailing-dot when the source is not File.
+func TestTrailingDot_BlobFileHNS(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobFile()),  eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				f("file."),
+			},
+			objectTarget: "file.",
+		}, EAccountType.Standard(), EAccountType.HierarchicalNamespaceEnabled(), "")
+}
+
+// This is testing that we skip trailing dot files from File to Blob.
+func TestTrailingDot_FileBlob(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileBlob()),  eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("normalfile"),
+				folder("normaldirectory"),
+				f("normaldirectory/normalfile"),
+			},
+			shouldSkip: []interface{}{
+				f("trailingdotfile."),
+				folder("trailingdotdirectory."),
+				f("trailingdotdirectory./trailingdotfile."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+// This is testing that we skip trailing dot files from File to BlobFS.
+func TestTrailingDot_FileBlobHNS(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.FileBlobFS()),  eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("normalfile"),
+				folder("normaldirectory"),
+				f("normaldirectory/normalfile"),
+			},
+			shouldSkip: []interface{}{
+				f("trailingdotfile."),
+				folder("trailingdotdirectory."),
+				f("trailingdotdirectory./trailingdotfile."),
+			},
+		}, EAccountType.HierarchicalNamespaceEnabled(), EAccountType.Standard(), "")
+}
+
+func TestTrailingDot_FileLocalWindows(t *testing.T) {
+	// Windows does not support trailing dot files, so we should skip trailing dot files
+	if runtime.GOOS != "windows" {
+		return
+	}
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("normalfile"),
+				folder("normaldirectory"),
+				f("normaldirectory/normalfile"),
+			},
+			shouldSkip: []interface{}{
+				f("trailingdotfile."),
+				folder("trailingdotdirectory."),
+				f("trailingdotdirectory./trailingdotfile."),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+// TODO : Enable when the test suite supports testing AzCopy runs that we expect to fail
+//func TestTrailingDot_FileLocalWindowsError(t *testing.T) {
+//	// Windows does not support trailing dot files, so we should error out on trailing dot file
+//	if runtime.GOOS != "windows" {
+//		return
+//	}
+//	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+//		params{
+//			recursive: true,
+//		}, nil,
+//		testFiles{
+//			defaultSize: "1K",
+//			shouldFail: []interface{}{
+//				f("trailingdotfile."),
+//			},
+//			objectTarget: "trailingdotfile.",
+//		}, EAccountType.Standard(), EAccountType.Standard(), "")
+//}
+
+// This is testing we still skip the trailing dot paths when the trailing dot option is set to Disable.
+func TestTrailingDot_FileLocalWindowsDisable(t *testing.T) {
+	// Windows does not support trailing dot files, so we should skip trailing dot files
+	if runtime.GOOS != "windows" {
+		return
+	}
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.FileLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+			trailingDot: common.ETrailingDotOption.Disable(),
+		}, nil,
+		testFiles{
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("normalfile"),
+				folder("normaldirectory"),
+				f("normaldirectory/normalfile"),
+			},
+			shouldSkip: []interface{}{
+				f("trailingdotfile."),
+				folder("trailingdotdirectory."),
+				f("trailingdotdirectory./trailingdotfile."),
 			},
 		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
