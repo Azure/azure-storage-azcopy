@@ -80,7 +80,7 @@ func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFacto
 	}
 }
 
-func parameterizedLocalCopy(targetFunction newJobXferWithLocaltoLocal, sf senderFactory, sipf sourceInfoProviderFactory) newJobXfer {
+func parameterizedLocalCopy(targetFunction newJobXferWithLocaltoLocal) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
 		targetFunction(jptm)
 	}
@@ -128,9 +128,6 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 				return newAzureFilesUploader
 			case common.ELocation.BlobFS():
 				return newBlobFSUploader
-			case common.ELocation.Local():
-				return newLocalCopier
-			//newlocalcopier
 			default:
 				panic("unexpected target location type")
 			}
@@ -170,7 +167,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		return SetProperties
 	case common.EFromTo.LocalLocal():
 		//TODO: check upload/Download
-		return parameterizedLocalCopy(localToLocal, getSenderFactory(fromTo), getSipFactory(fromTo.From()))
+		return parameterizedLocalCopy(localToLocal)
 	default:
 		if fromTo.IsDownload() {
 			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))
