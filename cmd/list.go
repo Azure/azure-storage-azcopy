@@ -127,8 +127,8 @@ func (raw *rawListCmdArgs) stripTrailingWildcardOnRemoteSource(location common.L
 }
 
 func (raw rawListCmdArgs) cook() (cookedListCmdArgs, bool, bool, error) {
-	stripTopDir := false //default value
-	recursive := true    //default value
+	stripTopDir := false //default value for list command
+	recursive := true    //default value for list command
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
@@ -144,7 +144,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, bool, bool, error) {
 	cooked.location = location
 	err := cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
-		return cooked, err
+		return cooked, recursive, stripTopDir, err
 	}
 
 	newPath, stripTopDir, err := raw.stripTrailingWildcardOnRemoteSource(location)
