@@ -23,7 +23,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"strings"
+	"testing"
 	"time"
 
 	chk "gopkg.in/check.v1"
@@ -33,7 +35,8 @@ type genericFilterSuite struct{}
 
 var _ = chk.Suite(&genericFilterSuite{})
 
-func (s *genericFilterSuite) TestIncludeFilter(c *chk.C) {
+func TestIncludeFilter(t *testing.T) {
+	a := assert.New(t)
 	// set up the filters
 	raw := rawSyncCmdArgs{}
 	includePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
@@ -43,18 +46,19 @@ func (s *genericFilterSuite) TestIncludeFilter(c *chk.C) {
 	filesToPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
 	for _, file := range filesToPass {
 		passed := includeFilter.DoesPass(StoredObject{name: file})
-		c.Assert(passed, chk.Equals, true)
+		a.True(passed)
 	}
 
 	// test the negative cases
 	filesNotToPass := []string{"bla.pdff", "fancyjpeg", "socool.jpeg.pdf.wut", "eexactName"}
 	for _, file := range filesNotToPass {
 		passed := includeFilter.DoesPass(StoredObject{name: file})
-		c.Assert(passed, chk.Equals, false)
+		a.False(passed)
 	}
 }
 
-func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
+func TestExcludeFilter(t *testing.T) {
+	a := assert.New(t)
 	// set up the filters
 	raw := rawSyncCmdArgs{}
 	excludePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
@@ -65,8 +69,8 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 	for _, file := range filesToPass {
 		dummyProcessor := &dummyProcessor{}
 		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
-		c.Assert(err, chk.IsNil)
-		c.Assert(len(dummyProcessor.record), chk.Equals, 1)
+		a.Nil(err)
+		a.Equal(1, len(dummyProcessor.record))
 	}
 
 	// test the negative cases
@@ -74,12 +78,13 @@ func (s *genericFilterSuite) TestExcludeFilter(c *chk.C) {
 	for _, file := range filesToNotPass {
 		dummyProcessor := &dummyProcessor{}
 		err := processIfPassedFilters(excludeFilterList, StoredObject{name: file}, dummyProcessor.process)
-		c.Assert(err, chk.Equals, ignoredError)
-		c.Assert(len(dummyProcessor.record), chk.Equals, 0)
+		a.Equal(ignoredError, err)
+		a.Zero(len(dummyProcessor.record))
 	}
 }
 
-func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
+func TestDateParsingForIncludeAfter(t *testing.T) {
+	a := assert.New(t)
 	examples := []struct {
 		input                 string // ISO 8601
 		expectedValue         string // RFC822Z (with seconds and X for placeholder for local timezone offset)
@@ -110,7 +115,7 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 	for _, x := range examples {
 		t, err := IncludeAfterDateFilter{}.ParseISO8601(x.input, true)
 		if x.expectedErrorContents == "" {
-			c.Assert(err, chk.IsNil, chk.Commentf(x.input))
+			a.Nil(err, x.input)
 			//fmt.Printf("%v -> %v\n", x.input, t)
 			expString := x.expectedValue
 			expectedTime, expErr := time.Parse(expectedFormatWithTz, expString)
@@ -119,14 +124,14 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 				expString = strings.Replace(x.expectedValue, " X", "", -1)
 				expectedTime, expErr = time.ParseInLocation(expectedFormatShort, expString, loc)
 			}
-			c.Assert(expErr, chk.IsNil)
+			a.Nil(expErr)
 			foo := expectedTime.String()
 			if foo == "" {
 			}
-			c.Check(t.Equal(expectedTime), chk.Equals, true, chk.Commentf(x.input))
+			a.True(t.Equal(expectedTime), x.input)
 		} else {
-			c.Assert(err, chk.Not(chk.IsNil))
-			c.Assert(strings.Contains(err.Error(), x.expectedErrorContents), chk.Equals, true, chk.Commentf(x.input))
+			a.NotNil(err)
+			a.True(strings.Contains(err.Error(), x.expectedErrorContents), x.input)
 		}
 	}
 }
@@ -137,29 +142,30 @@ func (s *genericFilterSuite) TestDateParsingForIncludeAfter(c *chk.C) {
 // with include-after failing to pick up changes, if the include-after date fails within the ambiguous hour and files have been
 // changed in that hour.  Using the earliest possible interpretation of the date avoids that problem).
 // There's no similar ambiguity in spring, because there an hour is just skipped.
-func (s *genericFilterSuite) TestDateParsingForIncludeAfter_IsSafeAtDaylightSavingsTransition(c *chk.C) {
+func TestDateParsingForIncludeAfter_IsSafeAtDaylightSavingsTransition(t *testing.T) {
+	a := assert.New(t)
 
-	dateString, utcEarlyVersion, utcLateVersion, err := s.findAmbiguousTime()
+	dateString, utcEarlyVersion, utcLateVersion, err := findAmbiguousTime()
 	if err == noAmbiguousHourError {
-		c.Skip(fmt.Sprintf("Cannot run daylight savings test, because local timezone does not appear to have daylight savings time. Local time is %v", time.Now()))
+		t.Skip(fmt.Sprintf("Cannot run daylight savings test, because local timezone does not appear to have daylight savings time. Local time is %v", time.Now()))
 	}
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	fmt.Println("Testing end of daylight saving at " + dateString + " local time")
 
 	// ask for the earliest of the two ambiguous times
 	parsed, err := IncludeAfterDateFilter{}.ParseISO8601(dateString, true) // we use chooseEarliest=true for includeAfter
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	fmt.Printf("For chooseEarliest = true, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
-	c.Assert(parsed.Equal(utcEarlyVersion), chk.Equals, true)
-	c.Assert(parsed.Equal(utcLateVersion), chk.Equals, false)
+	a.True(parsed.Equal(utcEarlyVersion))
+	a.False(parsed.Equal(utcLateVersion))
 
 	// ask for the latest of the two ambiguous times
 	parsed, err = IncludeAfterDateFilter{}.ParseISO8601(dateString, false) // we test the false case in this test too, just for completeness
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	fmt.Printf("For chooseEarliest = false, the times are parsed %v, utcEarly %v, utcLate %v \n", parsed, utcEarlyVersion, utcLateVersion)
-	c.Assert(parsed.UTC().Equal(utcEarlyVersion), chk.Equals, false)
-	c.Assert(parsed.UTC().Equal(utcLateVersion), chk.Equals, true)
+	a.False(parsed.UTC().Equal(utcEarlyVersion))
+	a.True(parsed.UTC().Equal(utcLateVersion))
 
 }
 
@@ -167,7 +173,7 @@ var noAmbiguousHourError = errors.New("could not find hour for end of daylight s
 
 // Go's Location object is opaque to us, so we can't directly use it to see when daylight savings ends.
 // So we'll just test all the hours in the year, and see!
-func (_ *genericFilterSuite) findAmbiguousTime() (string, time.Time, time.Time, error) {
+func findAmbiguousTime() (string, time.Time, time.Time, error) {
 	const localTimeFormat = "2006-01-02T15:04:05"
 	start := time.Now().UTC()
 	end := start.AddDate(1, 0, 0)

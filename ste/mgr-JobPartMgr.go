@@ -194,7 +194,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption, from common.Location) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -205,7 +205,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
 		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
 		NewVersionPolicyFactory(),
-		NewTrailingDotPolicyFactory(trailingDot),
+		NewTrailingDotPolicyFactory(trailingDot, from),
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewRequestLogPolicyFactory(RequestLogOptions{
@@ -630,7 +630,11 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			TryTimeout:    UploadTryTimeout,
 			RetryDelay:    UploadRetryDelay,
 			MaxRetryDelay: UploadMaxRetryDelay,
-		}, jpm.pacer, jpm.jobMgr.HttpClient(), statsAccForSip, jpm.planMMF.Plan().DstFileData.TrailingDot)
+		}, jpm.pacer,
+		jpm.jobMgr.HttpClient(),
+		statsAccForSip,
+		jpm.planMMF.Plan().DstFileData.TrailingDot,
+		fromTo.From())
 	}
 
 	switch {
@@ -698,7 +702,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats(),
-			jpm.planMMF.Plan().DstFileData.TrailingDot)
+			jpm.planMMF.Plan().DstFileData.TrailingDot,
+			fromTo.From())
 	}
 }
 

@@ -21,77 +21,79 @@
 package cmd
 
 import (
+	"github.com/stretchr/testify/assert"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"testing"
 	"time"
-
-	chk "gopkg.in/check.v1"
 )
 
-func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
+func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
-	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirName, "")
 
 	// add special files with attributes that we wish to exclude
 	filesToExclude := []string{"file1.pdf", "file2.txt", "file3"}
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, filesToExclude)
+	scenarioHelper{}.generateLocalFilesFromList(a, srcDirName, filesToExclude)
 	attrList := []string{"H", "I", "C"}
 	excludeAttrsStr := "H;I;S"
-	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, filesToExclude, attrList)
+	scenarioHelper{}.setAttributesForLocalFiles(a, srcDirName, filesToExclude, attrList)
 
 	// set up the destination as an empty container
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 	raw.excludeFileAttributes = excludeAttrsStr
 
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
+	runSyncAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+		validateUploadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
 	})
 }
 
-func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
+func TestSyncUploadWithIncludeAttrFlag(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
-	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
-	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+	scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirName, "")
 
 	// add special files with attributes that we wish to include
 	filesToInclude := []string{"file1.txt", "file2.pdf", "file3.pdf"}
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, filesToInclude)
+	scenarioHelper{}.generateLocalFilesFromList(a, srcDirName, filesToInclude)
 	attrList := []string{"H", "I", "C"}
 	includeAttrsStr := "H;I;S"
-	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, filesToInclude, attrList)
+	scenarioHelper{}.setAttributesForLocalFiles(a, srcDirName, filesToInclude, attrList)
 
 	// set up the destination as an empty container
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 	raw.includeFileAttributes = includeAttrsStr
 
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
+	runSyncAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+		validateUploadTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
 	})
 }
 
@@ -100,35 +102,36 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
 // Create one file that matches only the attribute filter
 // Create one file that matches both
 // Only the last file should be transferred
-func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *chk.C) {
+func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
-	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
-	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+	scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirName, "")
 
 	fileList := []string{"file1.txt", "file2.png", "file3.txt"}
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
+	scenarioHelper{}.generateLocalFilesFromList(a, srcDirName, fileList)
 	includeString := "*.txt"
 	includeAttrsStr := "H;I;S"
 	attrList := []string{"H", "I", "C"}
-	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, fileList[1:], attrList)
+	scenarioHelper{}.setAttributesForLocalFiles(a, srcDirName, fileList[1:], attrList)
 
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 	raw.includeFileAttributes = includeAttrsStr
 	raw.include = includeString
 
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, "", "", fileList[2:], mockedRPC)
+	runSyncAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+		validateUploadTransfersAreScheduled(a, "", "", fileList[2:], mockedRPC)
 	})
 }
 
@@ -137,66 +140,68 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *ch
 // Create one file that matches only the attribute filter
 // Create one file that matches both
 // None of them should be transferred
-func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *chk.C) {
+func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
-	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
-	commonFileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+	commonFileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirName, "")
 
 	fileList := []string{"file1.bin", "file2.png", "file3.bin"}
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
+	scenarioHelper{}.generateLocalFilesFromList(a, srcDirName, fileList)
 	excludeString := "*.bin"
 	excludeAttrsStr := "H;I;S"
 	attrList := []string{"H", "I", "C"}
-	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, fileList[1:], attrList)
+	scenarioHelper{}.setAttributesForLocalFiles(a, srcDirName, fileList[1:], attrList)
 
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
 	raw.excludeFileAttributes = excludeAttrsStr
 	raw.exclude = excludeString
 
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, "", "", commonFileList, mockedRPC)
+	runSyncAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+		validateUploadTransfersAreScheduled(a, "", "", commonFileList, mockedRPC)
 	})
 }
 
 // mouthfull of a test name, but this ensures that case insensitivity doesn't cause the unintended deletion of files
-func (s *cmdIntegrationSuite) TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(c *chk.C) {
+func TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
-	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dstDirName)
 	fileList := []string{"FileWithCaps", "FiLeTwO", "FoOBaRBaZ"}
 
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
-	scenarioHelper{}.generateBlobsFromList(c, cc, fileList, "Hello, World!")
+	scenarioHelper{}.generateBlobsFromList(a, cc, fileList, "Hello, World!")
 
 	// let the local files be in the future; we don't want to do _anything_ to them; not delete nor download.
 	time.Sleep(time.Second * 5)
 
-	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
+	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, fileList)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.recursive = true
 	raw.deleteDestination = "true"
 
-	runSyncAndVerify(c, raw, func(err error) {
+	runSyncAndVerify(a, raw, func(err error) {
 		// It should not have deleted them
 		seenFiles := make(map[string]bool)
 		filepath.Walk(dstDirName, func(path string, info fs.FileInfo, err error) error {
@@ -208,12 +213,12 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithDeleteDestinationOnCaseInsensi
 			return nil
 		})
 
-		c.Assert(len(seenFiles), chk.Equals, len(fileList))
+		a.Equal(len(fileList), len(seenFiles))
 		for _, v := range fileList {
-			c.Assert(seenFiles[v], chk.Equals, true)
+			a.True(seenFiles[v])
 		}
 
 		// It should not have downloaded them
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+		a.Zero(len(mockedRPC.transfers))
 	})
 }

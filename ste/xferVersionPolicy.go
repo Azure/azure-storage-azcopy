@@ -83,12 +83,14 @@ func (r *coldTierPolicy) Do(req *policy.Request) (*http.Response, error) {
 	return req.Next()
 }
 
-func NewTrailingDotPolicyFactory(trailingDot common.TrailingDotOption) pipeline.Factory {
+func NewTrailingDotPolicyFactory(trailingDot common.TrailingDotOption, from common.Location) pipeline.Factory {
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
 			if trailingDot == common.ETrailingDotOption.Enable() {
 				request.Header.Set("x-ms-allow-trailing-dot", "true")
-				request.Header.Set("x-ms-source-allow-trailing-dot", "true")
+				if from == common.ELocation.File() {
+					request.Header.Set("x-ms-source-allow-trailing-dot", "true")
+				}
 				request.Header.Set("x-ms-version", "2022-11-02")
 			}
 			return next.Do(ctx, request)

@@ -1,4 +1,4 @@
-// Copyright © Microsoft <wastore@microsoft.com>
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,648 +21,222 @@
 package cmd
 
 import (
-	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
-	chk "gopkg.in/check.v1"
-	"os"
-	"sort"
-	"strings"
+	"github.com/stretchr/testify/assert"
+	"testing"
 	"time"
 )
 
-// regular file->file sync
-func (s *cmdIntegrationSuite) TestFileSyncS2SWithSingleFile(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
+func TestSyncSourceComparator(t *testing.T) {
+	a := assert.New(t)
+	dummyCopyScheduler := dummyProcessor{}
+	srcMD5 := []byte{'s'}
+	destMD5 := []byte{'d'}
 
-	for _, fileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
-		// set up the source share with a single file
-		fileList := []string{fileName}
-		scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, fileList)
+	// set up the indexer as well as the source comparator
+	indexer := newObjectIndexer()
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, false)
 
-		// set up the destination share with the same single file
-		scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileList)
+	// create a sample destination object
+	sampleDestinationObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: destMD5}
 
-		// set up interceptor
-		mockedRPC := interceptor{}
-		Rpc = mockedRPC.intercept
-		mockedRPC.init()
+	// test the comparator in case a given source object is not present at the destination
+	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
+	compareErr := sourceComparator.processIfNecessary(StoredObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now(), md5: srcMD5})
+	a.Nil(compareErr)
 
-		// construct the raw input to simulate user input
-		srcFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, srcShareName, fileList[0])
-		dstFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, dstShareName, fileList[0])
-		raw := getDefaultSyncRawInput(srcFileURLWithSAS.String(), dstFileURLWithSAS.String())
+	// check the source object was indeed scheduled
+	a.Equal(1, len(dummyCopyScheduler.record))
 
-		// the destination was created after the source, so no sync should happen
-		runSyncAndVerify(c, raw, func(err error) {
-			c.Assert(err, chk.IsNil)
+	a.Equal(srcMD5, dummyCopyScheduler.record[0].md5)
 
-			// validate that the right number of transfers were scheduled
-			c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
-		})
+	// reset the processor so that it's empty
+	dummyCopyScheduler = dummyProcessor{}
 
-		// recreate the source file to have a later last modified time
-		scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, fileList)
-		mockedRPC.reset()
+	// test the comparator in case a given source object is present at the destination
+	// and it has a later modified time, so the comparator should pass the give object to schedule a transfer
+	err := indexer.store(sampleDestinationObject)
+	a.Nil(err)
+	compareErr = sourceComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: srcMD5})
+	a.Nil(compareErr)
 
-		runSyncAndVerify(c, raw, func(err error) {
-			c.Assert(err, chk.IsNil)
-			validateS2SSyncTransfersAreScheduled(c, "", "", []string{""}, mockedRPC)
-		})
+	// check the source object was indeed scheduled
+	a.Equal(1, len(dummyCopyScheduler.record))
+	a.Equal(srcMD5, dummyCopyScheduler.record[0].md5)
+	a.Zero(len(indexer.indexMap))
+
+	// reset the processor so that it's empty
+	dummyCopyScheduler = dummyProcessor{}
+
+	// test the comparator in case a given source object is present at the destination
+	// but is has an earlier modified time compared to the one at the destination
+	// meaning that the source object is considered stale, so no transfer should be scheduled
+	err = indexer.store(sampleDestinationObject)
+	a.Nil(err)
+	compareErr = sourceComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: srcMD5})
+	a.Nil(compareErr)
+
+	// check no source object was scheduled
+	a.Zero(len(dummyCopyScheduler.record))
+	a.Zero(len(indexer.indexMap))
+}
+
+func TestSyncSrcCompDisableComparator(t *testing.T) {
+	a := assert.New(t)
+	dummyCopyScheduler := dummyProcessor{}
+	srcMD5 := []byte{'s'}
+	destMD5 := []byte{'d'}
+
+	// set up the indexer as well as the source comparator
+	indexer := newObjectIndexer()
+	sourceComparator := newSyncSourceComparator(indexer, dummyCopyScheduler.process, common.ESyncHashType.None(), false, true)
+
+	// test the comparator in case a given source object is not present at the destination
+	// meaning no entry in the index, so the comparator should pass the given object to schedule a transfer
+	compareErr := sourceComparator.processIfNecessary(StoredObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now(), md5: srcMD5})
+	a.Nil(compareErr)
+
+	// check the source object was indeed scheduled
+	a.Equal(1, len(dummyCopyScheduler.record))
+	a.Equal(srcMD5, dummyCopyScheduler.record[0].md5)
+
+	// reset the processor so that it's empty
+	dummyCopyScheduler = dummyProcessor{}
+
+	// create a sample source object
+	currTime := time.Now()
+	destinationStoredObjects := []StoredObject{
+		// file whose last modified time is greater than that of source
+		{name: "test1", relativePath: "/usr/test1", lastModifiedTime: currTime, md5: destMD5},
+		// file whose last modified time is less than that of source
+		{name: "test2", relativePath: "/usr/test2", lastModifiedTime: currTime, md5: destMD5},
+	}
+
+	sourceStoredObjects := []StoredObject{
+		{name: "test1", relativePath: "/usr/test1", lastModifiedTime: currTime.Add(time.Hour), md5: srcMD5},
+		{name: "test2", relativePath: "/usr/test2", lastModifiedTime: currTime.Add(-time.Hour), md5: srcMD5},
+	}
+
+	// test the comparator in case a given source object is present at the destination
+	// but is has an earlier modified time compared to the one at the destination
+	// meaning that the source object is considered stale, so no transfer should be scheduled
+	for key, dstStoredObject := range destinationStoredObjects {
+		err := indexer.store(dstStoredObject)
+		a.Nil(err)
+		compareErr = sourceComparator.processIfNecessary(sourceStoredObjects[key])
+		a.Nil(compareErr)
+		a.Equal(key+1, len(dummyCopyScheduler.record))
+		a.Zero(len(indexer.indexMap))
 	}
 }
 
-// regular share->share sync but destination is empty, so everything has to be transferred
-func (s *cmdIntegrationSuite) TestFileSyncS2SWithEmptyDestination(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
+func TestSyncDestinationComparator(t *testing.T) {
+	a := assert.New(t)
+	dummyCopyScheduler := dummyProcessor{}
+	dummyCleaner := dummyProcessor{}
+	srcMD5 := []byte{'s'}
+	destMD5 := []byte{'d'}
 
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
+	// set up the indexer as well as the destination comparator
+	indexer := newObjectIndexer()
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, false)
 
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
+	// create a sample source object
+	sampleSourceObject := StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now(), md5: srcMD5}
 
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
+	// test the comparator in case a given destination object is not present at the source
+	// meaning it is an extra file that needs to be deleted, so the comparator should pass the given object to the destinationCleaner
+	compareErr := destinationComparator.processIfNecessary(StoredObject{name: "only_at_dst", relativePath: "only_at_dst", lastModifiedTime: time.Now(), md5: destMD5})
+	a.Nil(compareErr)
 
-	// all files at source should be synced to destination
-	expectedList := scenarioHelper{}.addFoldersToList(fileList, false)
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+	// verify that destination object is being deleted
+	a.Zero(len(dummyCopyScheduler.record))
+	a.Equal(1, len(dummyCleaner.record))
+	a.Equal(destMD5, dummyCleaner.record[0].md5)
 
-		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedList))
+	// reset dummy processors
+	dummyCopyScheduler = dummyProcessor{}
+	dummyCleaner = dummyProcessor{}
 
-		// validate that the right transfers were sent
-		validateS2SSyncTransfersAreScheduled(c, "", "", expectedList, mockedRPC)
-	})
+	// test the comparator in case a given destination object is present at the source
+	// and it has a later modified time, since the source data is stale,
+	// no transfer happens
+	err := indexer.store(sampleSourceObject)
+	a.Nil(err)
+	compareErr = destinationComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(time.Hour), md5: destMD5})
+	a.Nil(compareErr)
 
-	// turn off recursive, this time only top files should be transferred
-	raw.recursive = false
-	mockedRPC.reset()
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(fileList))
+	// verify that the source object is scheduled for transfer
+	a.Zero(len(dummyCopyScheduler.record))
+	a.Zero(len(dummyCleaner.record))
 
-		for _, transfer := range mockedRPC.transfers {
-			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
-		}
-	})
+	// reset dummy processors
+	dummyCopyScheduler = dummyProcessor{}
+	dummyCleaner = dummyProcessor{}
+
+	// test the comparator in case a given destination object is present at the source
+	// but is has an earlier modified time compared to the one at the source
+	// meaning that the source object should be transferred since the destination object is stale
+	err = indexer.store(sampleSourceObject)
+	a.Nil(err)
+	compareErr = destinationComparator.processIfNecessary(StoredObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now().Add(-time.Hour), md5: destMD5})
+	a.Nil(compareErr)
+
+	// verify that there's no transfer & no deletes
+	a.Equal(1, len(dummyCopyScheduler.record))
+	a.Equal(srcMD5, dummyCopyScheduler.record[0].md5)
+	a.Zero(len(dummyCleaner.record))
 }
 
-// regular share->share sync but destination is identical to the source, transfers are scheduled based on lmt
-func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestination(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
+func TestSyncDestCompDisableComparison(t *testing.T) {
+	a := assert.New(t)
+	dummyCopyScheduler := dummyProcessor{}
+	dummyCleaner := dummyProcessor{}
+	srcMD5 := []byte{'s'}
+	destMD5 := []byte{'d'}
 
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
+	// set up the indexer as well as the destination comparator
+	indexer := newObjectIndexer()
+	destinationComparator := newSyncDestinationComparator(indexer, dummyCopyScheduler.process, dummyCleaner.process, common.ESyncHashType.None(), false, true)
 
-	// set up the destination with the exact same files
-	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileList)
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-
-	// nothing should be sync since the source is older
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-
-		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
-	})
-
-	// refresh the source files' last modified time so that they get synced
-	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, fileList)
-	mockedRPC.reset()
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", fileList, mockedRPC)
-	})
-}
-
-// regular share->share sync where destination is missing some files from source, and also has some extra files
-func (s *cmdIntegrationSuite) TestFileSyncS2SWithMismatchedDestination(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
-
-	// set up the share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-
-	// set up the destination with half of the files from source
-	filesAlreadyAtDestination := fileList[0 : len(fileList)/2]
-	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, filesAlreadyAtDestination)
-	expectedOutput := fileList[len(fileList)/2:] // the missing half of source files should be transferred
-
-	// add some extra files that shouldn't be included
-	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, dstShareURL, "extra")
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-
-	expectedOutputMap := scenarioHelper{}.convertListToMap(
-		scenarioHelper{}.addFoldersToList(expectedOutput, false))
-	everythingAlreadyAtDestination := scenarioHelper{}.convertListToMap(
-		scenarioHelper{}.addFoldersToList(filesAlreadyAtDestination, false))
-	for exists := range everythingAlreadyAtDestination {
-		delete(expectedOutputMap, exists) // remove directories that actually exist at destination
+	// create a sample source object
+	currTime := time.Now()
+	sourceStoredObjects := []StoredObject{
+		{name: "test1", relativePath: "/usr/test1", lastModifiedTime: currTime, md5: srcMD5},
+		{name: "test2", relativePath: "/usr/test2", lastModifiedTime: currTime, md5: srcMD5},
 	}
-	expectedOutput = scenarioHelper{}.convertMapKeysToList(expectedOutputMap)
 
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", expectedOutput, mockedRPC)
-
-		// make sure the extra files were deleted
-		extraFilesFound := false
-		for marker := (azfile.Marker{}); marker.NotDone(); {
-			listResponse, err := dstShareURL.NewRootDirectoryURL().ListFilesAndDirectoriesSegment(ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
-			c.Assert(err, chk.IsNil)
-			marker = listResponse.NextMarker
-
-			// if ever the extra files are found, note it down
-			for _, file := range listResponse.FileItems {
-				if strings.Contains(file.Name, "extra") {
-					extraFilesFound = true
-				}
-			}
-		}
-
-		c.Assert(extraFilesFound, chk.Equals, false)
-	})
-}
-
-// include flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
-
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-
-	// add special files that we wish to include
-	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, filesToInclude)
-	includeString := "*.pdf;*.jpeg;exactName"
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.include = includeString
-
-	// verify that only the files specified by the include flag are synced
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
-	})
-}
-
-// exclude flag limits the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestFileSyncS2SWithExcludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
-
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-
-	// add special files that we wish to exclude
-	filesToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, filesToExclude)
-	excludeString := "*.pdf;*.jpeg;exactName"
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.exclude = excludeString
-
-	// make sure the list doesn't include the files specified by the exclude flag
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", fileList, mockedRPC)
-	})
-}
-
-// include and exclude flag can work together to limit the scope of source/destination comparison
-func (s *cmdIntegrationSuite) TestFileSyncS2SWithIncludeAndExcludeFlag(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
-
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-
-	// add special files that we wish to include
-	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, filesToInclude)
-	includeString := "*.pdf;*.jpeg;exactName"
-
-	// add special files that we wish to exclude
-	// note that the excluded files also match the include string
-	filesToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, filesToExclude)
-	excludeString := "so*;not*;exactName"
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.include = includeString
-	raw.exclude = excludeString
-
-	// verify that only the files specified by the include flag are synced
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
-	})
-}
-
-// TODO: Fix me, passes locally (Windows and WSL2), but not on CI
-// // validate the bug fix for this scenario
-// func (s *cmdIntegrationSuite) TestFileSyncS2SWithMissingDestination(c *chk.C) {
-// 	fsu := getFSU()
-// 	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-// 	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-// 	defer deleteShare(c, srcShareURL)
-//
-// 	// delete the destination share to simulate non-existing destination, or recently removed destination
-// 	deleteShare(c, dstShareURL)
-//
-// 	// set up the share with numerous files
-// 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-// 	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-//
-// 	// set up interceptor
-// 	mockedRPC := interceptor{}
-// 	Rpc = mockedRPC.intercept
-// 	mockedRPC.init()
-//
-// 	// construct the raw input to simulate user input
-// 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-// 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-// 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-//
-// 	// verify error is thrown
-// 	runSyncAndVerify(c, raw, func(err error) {
-// 		// error should not be nil, but the app should not crash either
-// 		c.Assert(err, chk.NotNil)
-//
-// 		// validate that the right number of transfers were scheduled
-// 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
-// 	})
-// }
-
-// there is a type mismatch between the source and destination
-func (s *cmdIntegrationSuite) TestFileSyncS2SMismatchShareAndFile(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
-
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-
-	// set up the destination share with a single file
-	singleFileName := "single"
-	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, []string{singleFileName})
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, dstShareName, singleFileName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstFileURLWithSAS.String())
-
-	// type mismatch, we should get an error
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
-
-		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
-	})
-
-	// reverse the source and destination
-	raw = getDefaultSyncRawInput(dstFileURLWithSAS.String(), srcShareURLWithSAS.String())
-
-	// type mismatch again, we should also get an error
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
-
-		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
-	})
-}
-
-// share <-> dir sync
-func (s *cmdIntegrationSuite) TestFileSyncS2SShareAndEmptyDir(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
-
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dirName := "emptydir"
-	_, err := dstShareURL.NewDirectoryURL(dirName).Create(context.Background(), azfile.Metadata{}, azfile.SMBProperties{})
-	c.Assert(err, chk.IsNil)
-	dstDirURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, dstShareName, dirName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstDirURLWithSAS.String())
-
-	// verify that targeting a directory works fine
-	expectedList := scenarioHelper{}.addFoldersToList(fileList, false)
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-
-		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedList))
-
-		// validate that the right transfers were sent
-		validateS2SSyncTransfersAreScheduled(c, "", "", expectedList, mockedRPC)
-	})
-
-	// turn off recursive, this time only top files should be transferred
-	raw.recursive = false
-	mockedRPC.reset()
-
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(fileList))
-
-		for _, transfer := range mockedRPC.transfers {
-			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
-		}
-	})
-}
-
-// regular dir -> dir sync
-func (s *cmdIntegrationSuite) TestFileSyncS2SBetweenDirs(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
-
-	// set up the source share with numerous files
-	dirName := "dir"
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, dirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-
-	// set up the destination with the exact same files
-	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileList)
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	srcShareURLWithSAS.Path += common.AZCOPY_PATH_SEPARATOR_STRING + dirName
-	dstShareURLWithSAS.Path += common.AZCOPY_PATH_SEPARATOR_STRING + dirName
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-
-	// nothing should be synced since the source is older
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-
-		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
-	})
-
-	// refresh the files' last modified time so that they are newer
-	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, fileList)
-	mockedRPC.reset()
-	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+common.AZCOPY_PATH_SEPARATOR_STRING)
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", expectedList, mockedRPC)
-	})
-}
-
-func (s *cmdIntegrationSuite) TestDryrunSyncFiletoFile(c *chk.C) {
-	fsu := getFSU()
-
-	//set up src share
-	filesToInclude := []string{"AzURE2.jpeg", "TestOne.txt"}
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, filesToInclude)
-
-	//set up dst share
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, dstShareURL)
-	fileToDelete := []string{"testThree.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileToDelete)
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
-	glcm = &mockedLcm
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.dryrun = true
-	raw.deleteDestination = "true"
-
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
-
-		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
-		sort.Strings(msg)
-		for i := 0; i < len(msg); i++ {
-			if strings.Contains(msg[i], "DRYRUN: remove") {
-				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
-			} else {
-				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], srcShareName), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
-			}
-		}
-
-		c.Check(testDryrunStatements(fileToDelete, msg), chk.Equals, true)
-		c.Check(testDryrunStatements(filesToInclude, msg), chk.Equals, true)
-	})
-}
-
-func (s *cmdIntegrationSuite) TestDryrunSyncLocaltoFile(c *chk.C) {
-	fsu := getFSU()
-
-	//set up local src
-	blobsToInclude := []string{"AzURE2.jpeg"}
-	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
-	defer os.RemoveAll(srcDirName)
-	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, blobsToInclude)
-
-	//set up dst share
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, dstShareURL)
-	fileToDelete := []string{"testThree.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileToDelete)
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
-	mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
-	glcm = &mockedLcm
-
-	// construct the raw input to simulate user input
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcDirName, dstShareURLWithSAS.String())
-	raw.dryrun = true
-	raw.deleteDestination = "true"
-
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", []string{}, mockedRPC)
-
-		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
-		sort.Strings(msg)
-		for i := 0; i < len(msg); i++ {
-			if strings.Contains(msg[i], "DRYRUN: remove") {
-				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
-			} else {
-				c.Check(strings.Contains(msg[i], "DRYRUN: copy"), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], srcDirName), chk.Equals, true)
-				c.Check(strings.Contains(msg[i], dstShareURL.String()), chk.Equals, true)
-			}
-		}
-
-		c.Check(testDryrunStatements(blobsToInclude, msg), chk.Equals, true)
-		c.Check(testDryrunStatements(fileToDelete, msg), chk.Equals, true)
-	})
-}
-
-// regular share->share sync but destination is identical to the source, transfers are scheduled based on lmt
-func (s *cmdIntegrationSuite) TestFileSyncS2SWithIdenticalDestinationTemp(c *chk.C) {
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(c, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, srcShareURL)
-	defer deleteShare(c, dstShareURL)
-
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, srcShareURL, "")
-	c.Assert(len(fileList), chk.Not(chk.Equals), 0)
-
-	// set up the destination with the exact same files
-	scenarioHelper{}.generateAzureFilesFromList(c, dstShareURL, fileList)
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, srcShareName)
-	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, dstShareName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.preserveSMBInfo = false
-
-	// nothing should be sync since the source is older
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-
-		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
-	})
-
-	// refresh the source files' last modified time so that they get synced
-	scenarioHelper{}.generateAzureFilesFromList(c, srcShareURL, fileList)
-	mockedRPC.reset()
-	currentTime := time.Now()
-	newTime := currentTime.Add(-time.Hour) // give extra hour
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
-		validateS2SSyncTransfersAreScheduled(c, "", "", fileList, mockedRPC)
-
-		for _, transfer := range mockedRPC.transfers {
-			if transfer.LastModifiedTime.Before(currentTime) && transfer.LastModifiedTime.After(newTime) {
-				c.Succeed()
-			}
-		}
-	})
+	// onlyAtSrc := StoredObject{name: "only_at_src", relativePath: "/usr/only_at_src", lastModifiedTime: currTime, md5: destMD5}
+
+	destinationStoredObjects := []StoredObject{
+		// file whose last modified time is greater than that of source
+		{name: "test1", relativePath: "/usr/test1", lastModifiedTime: time.Now().Add(time.Hour), md5: destMD5},
+		// file whose last modified time is less than that of source
+		{name: "test2", relativePath: "/usr/test2", lastModifiedTime: time.Now().Add(-time.Hour), md5: destMD5},
+	}
+
+	// test the comparator in case a given destination object is not present at the source
+	// meaning it is an extra file that needs to be deleted, so the comparator should pass the given object to the destinationCleaner
+	compareErr := destinationComparator.processIfNecessary(StoredObject{name: "only_at_dst", relativePath: "only_at_dst", lastModifiedTime: currTime, md5: destMD5})
+	a.Nil(compareErr)
+
+	// verify that destination object is being deleted
+	a.Zero(len(dummyCopyScheduler.record))
+	a.Equal(1, len(dummyCleaner.record))
+	a.Equal(destMD5, dummyCleaner.record[0].md5)
+
+	// reset dummy processors
+	dummyCopyScheduler = dummyProcessor{}
+	dummyCleaner = dummyProcessor{}
+
+	// test the comparator in case a given destination object is present at the source
+	// and it has a later modified time, since the source data is stale,
+	// no transfer happens
+	for key, srcStoredObject := range sourceStoredObjects {
+		err := indexer.store(srcStoredObject)
+		a.Nil(err)
+		compareErr = destinationComparator.processIfNecessary(destinationStoredObjects[key])
+		a.Nil(compareErr)
+		a.Equal(key+1, len(dummyCopyScheduler.record))
+	}
 }

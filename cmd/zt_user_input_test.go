@@ -21,38 +21,40 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-func (s *cmdIntegrationSuite) TestCPKEncryptionInputTest(c *chk.C) {
+func TestCPKEncryptionInputTest(t *testing.T) {
+	a := assert.New(t)
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
 	dirPath := "this/is/a/dummy/path"
-	rawDFSEndpointWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+	rawDFSEndpointWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
 	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.String())
 	raw.recursive = true
 	raw.cpkInfo = true
 
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
-		c.Assert(err.Error(), StringContains, "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
+	runCopyAndVerify(a, raw, func(err error) {
+		a.NotNil(err)
+		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
 	})
 
 	mockedRPC.reset()
 	raw.cpkInfo = false
 	raw.cpkScopeInfo = "dummyscope"
-	runCopyAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
-		c.Assert(err.Error(), StringContains, "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
+	runCopyAndVerify(a, raw, func(err error) {
+		a.NotNil(err)
+		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
 	})
 
-	rawContainerURL := scenarioHelper{}.getContainerClient(c, "testcpkcontainer")
+	rawContainerURL := scenarioHelper{}.getContainerClient(a, "testcpkcontainer")
 	raw2 := getDefaultRawCopyInput(dirPath, rawContainerURL.URL())
 	raw2.recursive = true
 	raw2.cpkInfo = true
 
 	_, err := raw2.cook()
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }

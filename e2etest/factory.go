@@ -68,7 +68,7 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) azfile.Ser
 	if err != nil {
 		panic(err)
 	}
-	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable(), common.ELocation.File())
 
 	return azfile.NewServiceURL(*u, p)
 }
@@ -145,7 +145,7 @@ func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType Account
 	fullURL, err := url.Parse(rawURL)
 	c.AssertNoErr(err)
 
-	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable(), common.ELocation.File())
 	return azfile.NewShareURL(*fullURL, p)
 }
 
