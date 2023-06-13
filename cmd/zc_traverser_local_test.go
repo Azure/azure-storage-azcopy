@@ -1,16 +1,13 @@
 package cmd
 
 import (
+	"github.com/stretchr/testify/assert"
 	"os"
-
-	chk "gopkg.in/check.v1"
+	"testing"
 )
 
-type localTraverserTestSuite struct{}
-
-var _ = chk.Suite(&localTraverserTestSuite{})
-
-func (s *localTraverserTestSuite) TestCleanLocalPath(c *chk.C) {
+func TestCleanLocalPath(t *testing.T) {
+	a := assert.New(t)
 	testCases := map[string]string{
 		"/user/foo/bar":    "/user/foo/bar", // regular unix path with no change
 		"/user/foo/bar/":   "/user/foo/bar", // regular unix path with extra slash
@@ -21,15 +18,16 @@ func (s *localTraverserTestSuite) TestCleanLocalPath(c *chk.C) {
 	}
 
 	for orig, expected := range testCases {
-		c.Assert(cleanLocalPath(orig), chk.Equals, expected)
+		a.Equal(expected, cleanLocalPath(orig))
 	}
 }
 
-func (s *localTraverserTestSuite) TestCleanLocalPathForWindows(c *chk.C) {
+func TestCleanLocalPathForWindows(t *testing.T) {
+	a := assert.New(t)
 	// ignore these tests when not running on Windows
 	// as the path cleaning behavior depends on the platform
 	if os.PathSeparator != '\\' {
-		c.Skip("not running since the test applies to Windows only")
+		t.Skip("not running since the test applies to Windows only")
 	}
 
 	// Paths on Windows get consolidated to backwards-slash typically.
@@ -47,6 +45,6 @@ func (s *localTraverserTestSuite) TestCleanLocalPathForWindows(c *chk.C) {
 	}
 
 	for orig, expected := range testCases {
-		c.Assert(cleanLocalPath(orig), chk.Equals, expected)
+		a.Equal(expected, cleanLocalPath(orig))
 	}
 }

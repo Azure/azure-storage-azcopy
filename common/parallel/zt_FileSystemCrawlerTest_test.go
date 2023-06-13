@@ -22,29 +22,23 @@ package parallel
 
 import (
 	"context"
+	"fmt"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-
-	chk "gopkg.in/check.v1"
 )
-
-// Hookup to the testing framework
-func Test(t *testing.T) { chk.TestingT(t) }
-
-type fileSystemCrawlerSuite struct{}
-
-var _ = chk.Suite(&fileSystemCrawlerSuite{})
 
 var windowsSystemDirectory = ""
 
-func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *chk.C) {
+func TestParallelEnumerationFindsTheRightFiles(t *testing.T) {
+	a := assert.New(t)
 	dir := "/usr"
 	if runtime.GOOS == "windows" {
 		dir = windowsSystemDirectory
-		c.Assert(dir, chk.Not(chk.Equals), "")
+		a.NotEqual("", dir)
 	}
 
 	// standard (Go SDK) file walk
@@ -74,8 +68,8 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 		if _, ok := parallelResults[key]; ok {
 			delete(parallelResults, key)
 		} else {
-			c.Error("expected " + key)
-			c.Fail()
+			t.Error("expected " + key)
+			t.Fail()
 		}
 	}
 	// repeat for cases where access was denied in the standard enumeration (since we still pick up those dirs in the parallel enumeration (we just don't pick up their contents))
@@ -83,31 +77,31 @@ func (s *fileSystemCrawlerSuite) TestParallelEnumerationFindsTheRightFiles(c *ch
 		if _, ok := parallelResults[key]; ok {
 			delete(parallelResults, key)
 		} else {
-			c.Error("expected in access denied results" + key)
-			c.Fail()
+			t.Error("expected in access denied results" + key)
+			t.Fail()
 		}
 	}
 	// assert that everything has been removed now
 	for key := range parallelResults {
-		c.Error("unexpected extra " + key)
-		c.Fail()
+		t.Error("unexpected extra " + key)
+		t.Fail()
 	}
 }
 
-func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo_NormalStat(c *chk.C) {
-	s.doTestParallelEnumerationGetsTheRightFileInfo(false, c)
+func TestParallelEnumerationGetsTheRightFileInfo_NormalStat(t *testing.T) {
+	doTestParallelEnumerationGetsTheRightFileInfo(false, t)
 }
 
-func (s *fileSystemCrawlerSuite) TestParallelEnumerationGetsTheRightFileInfo_ParallelStat(c *chk.C) {
-	s.doTestParallelEnumerationGetsTheRightFileInfo(true, c)
+func TestParallelEnumerationGetsTheRightFileInfo_ParallelStat(t *testing.T) {
+	doTestParallelEnumerationGetsTheRightFileInfo(true, t)
 }
 
-func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(parallelStat bool, c *chk.C) {
-
+func doTestParallelEnumerationGetsTheRightFileInfo(parallelStat bool, t *testing.T) {
+	a := assert.New(t)
 	dir := "/usr"
 	if runtime.GOOS == "windows" {
 		dir = windowsSystemDirectory
-		c.Assert(dir, chk.Not(chk.Equals), "")
+		a.NotEqual("", dir)
 		dir = dir[0:1] + ":\\" + "Program Files" // need one where the contents won't change while our test runs
 	}
 
@@ -130,14 +124,14 @@ func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(p
 	})
 
 	// check results.
-	c.Assert(len(stdResults) > 1000, chk.Equals, true) // assert that we got a decent number of results
+	a.True(len(stdResults) > 1000) // assert that we got a decent number of results
 	// check all std results have the same file info in the parallel results
 	for key := range stdResults {
 		if pInfo, ok := parallelResults[key]; ok {
 			stdInfo := stdResults[key]
-			c.Assert(pInfo.Name(), chk.Equals, stdInfo.Name(), chk.Commentf(key))
-			c.Assert(pInfo.Mode(), chk.Equals, stdInfo.Mode(), chk.Commentf(key))
-			c.Assert(pInfo.IsDir(), chk.Equals, stdInfo.IsDir(), chk.Commentf(key))
+			a.Equal(stdInfo.Name(), pInfo.Name(), key)
+			a.Equal(stdInfo.Mode(), pInfo.Mode(), key)
+			a.Equal(stdInfo.IsDir(), pInfo.IsDir(), key)
 			if pInfo.ModTime() != stdInfo.ModTime() {
 				// Sometimes, Windows will give us the creation time instead of the last write time for a directory
 				// That's documented. (In fact, it's not clear to the author of this test how or why we are sometimes seeing the actual last write time,
@@ -155,23 +149,23 @@ func (s *fileSystemCrawlerSuite) doTestParallelEnumerationGetsTheRightFileInfo(p
 				// Tuesday, August 27, 2019 5:29:08 AM
 				// PS C:\Program Files\Microsoft SQL Server> (gci | ? Name -eq 90).LastWriteTime  # ask for same info, via different API
 				// Tuesday, August 27, 2019 5:26:53 AM     // and it gives is the creation datetime instead
-				c.Assert(pInfo.IsDir(), chk.Equals, true, chk.Commentf(key+" times are different, which is only OK on directories"))
+				a.True(pInfo.IsDir(), fmt.Sprintf(key+" times are different, which is only OK on directories"))
 			}
 			if !stdInfo.IsDir() {
 				// std Enumeration gives 4096 as size of some directories on Windows, but parallel sizes them as zero
 				// See here for what the std one is doing: https://stackoverflow.com/questions/33593335/size-of-directory-from-os-stat-lstat
 				// Parallel one, on Windows, gets the info from the find result, so that's probably why its zero there for dirs
-				c.Assert(pInfo.Size(), chk.Equals, stdInfo.Size(), chk.Commentf(key))
+				a.Equal(stdInfo.Size(), pInfo.Size(), key)
 			}
 			// don't check the Sys() method.  It can be different, and we don't mind that
 		} else {
-			c.Error("expected " + key)
-			c.Fail()
+			a.Fail("expected " + key)
 		}
 	}
 }
 
-func (s *fileSystemCrawlerSuite) TestRootErrorsAreSignalled(c *chk.C) {
+func TestRootErrorsAreSignalled(t *testing.T) {
+	a := assert.New(t)
 	receivedError := false
 	nonExistentDir := filepath.Join(os.TempDir(), "Big random-named directory that almost certainly doesn't exist 85784362628398473732827384")
 	Walk(context.TODO(), nonExistentDir, 16, false, func(path string, _ os.FileInfo, fileErr error) error {
@@ -180,5 +174,5 @@ func (s *fileSystemCrawlerSuite) TestRootErrorsAreSignalled(c *chk.C) {
 		}
 		return nil
 	})
-	c.Assert(receivedError, chk.Equals, true)
+	a.True(receivedError)
 }

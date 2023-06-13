@@ -36,6 +36,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
 	"net/url"
@@ -51,19 +52,10 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/minio/minio-go"
-
-	chk "gopkg.in/check.v1"
-
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/minio/minio-go"
 )
 
-// Hookup to the testing framework
-func Test(t *testing.T) { chk.TestingT(t) }
-
-type cmdIntegrationSuite struct{}
-
-var _ = chk.Suite(&cmdIntegrationSuite{})
 var ctx = context.Background()
 
 const (
@@ -92,9 +84,9 @@ func isS3Disabled() bool {
 	return strings.ToLower(os.Getenv("S3_TESTS_OFF")) != ""
 }
 
-func skipIfS3Disabled(c *chk.C) {
+func skipIfS3Disabled(t *testing.T) {
 	if isS3Disabled() {
-		c.Skip("S3 testing is disabled for this unit test suite run.")
+		t.Skip("S3 testing is disabled for this unit test suite run.")
 	}
 }
 
@@ -103,9 +95,9 @@ func gcpTestsDisabled() bool {
 	return strings.ToLower(os.Getenv("GCP_TESTS_OFF")) != ""
 }
 
-func skipIfGCPDisabled(c *chk.C) {
+func skipIfGCPDisabled(t *testing.T) {
 	if gcpTestsDisabled() {
-		c.Skip("GCP testing is disabled for this run")
+		t.Skip("GCP testing is disabled for this run")
 	}
 }
 
@@ -140,7 +132,7 @@ func generateName(prefix string, maxLen int) string {
 	name := "TestFoo" // default stub "Foo" is used if anything goes wrong with this procedure
 	for {
 		frame, more := frames.Next()
-		if strings.Contains(frame.Func.Name(), "Suite") {
+		if strings.Contains(frame.Func.Name(), "Test") {
 			name = frame.Func.Name()
 			break
 		} else if !more {
@@ -194,7 +186,7 @@ func generateFilesystemName() string {
 	return generateName(blobfsPrefix, 63)
 }
 
-func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+func getShareURL(a *assert.Assertions, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	name = generateShareName()
 	share = fsu.NewShareURL(name)
 
@@ -209,45 +201,45 @@ func generateBfsFileName() string {
 	return generateName(blobfsPrefix, 0)
 }
 
-func getContainerClient(c *chk.C, bsc *blobservice.Client) (container *container.Client, name string) {
+func getContainerClient(a *assert.Assertions, bsc *blobservice.Client) (container *container.Client, name string) {
 	name = generateContainerName()
 	container = bsc.NewContainerClient(name)
 	return
 }
 
-func getFilesystemURL(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
+func getFilesystemURL(a *assert.Assertions, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
 	name = generateFilesystemName()
 	filesystem = bfssu.NewFileSystemURL(name)
 
 	return
 }
 
-func getBlockBlobClient(c *chk.C, cc *container.Client, prefix string) (bbc *blockblob.Client, name string) {
+func getBlockBlobClient(a *assert.Assertions, cc *container.Client, prefix string) (bbc *blockblob.Client, name string) {
 	name = prefix + generateBlobName()
 	bbc = cc.NewBlockBlobClient(name)
 	return
 }
 
-func getBfsFileURL(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
+func getBfsFileURL(a *assert.Assertions, filesystemURL azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
 	name = prefix + generateBfsFileName()
 	file = filesystemURL.NewRootDirectoryURL().NewFileURL(name)
 
 	return
 }
 
-func getAppendBlobClient(c *chk.C, cc *container.Client, prefix string) (abc *appendblob.Client, name string) {
+func getAppendBlobClient(a *assert.Assertions, cc *container.Client, prefix string) (abc *appendblob.Client, name string) {
 	name = generateBlobName()
 	abc = cc.NewAppendBlobClient(prefix + name)
 	return
 }
 
-func getPageBlobClient(c *chk.C, cc *container.Client, prefix string) (pbc *pageblob.Client, name string) {
+func getPageBlobClient(a *assert.Assertions, cc *container.Client, prefix string) (pbc *pageblob.Client, name string) {
 	name = generateBlobName()
 	pbc = cc.NewPageBlobClient(prefix + name)
 	return
 }
 
-func getAzureFileURL(c *chk.C, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
+func getAzureFileURL(a *assert.Assertions, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
 	name = prefix + generateAzureFileName()
 	fileURL = shareURL.NewRootDirectoryURL().NewFileURL(name)
 
@@ -312,130 +304,124 @@ func GetBFSSU() azbfs.ServiceURL {
 	return azbfs.NewServiceURL(*u, pipeline)
 }
 
-func createNewContainer(c *chk.C, bsc *blobservice.Client) (cc *container.Client, name string) {
-	cc, name = getContainerClient(c, bsc)
+func createNewContainer(a *assert.Assertions, bsc *blobservice.Client) (cc *container.Client, name string) {
+	cc, name = getContainerClient(a, bsc)
 
 	// ignore any errors here, since it doesn't matter if this fails (if it does, it's probably because the container didn't exist)
 	_, _ = cc.Delete(ctx, nil)
 
 	_, err := cc.Create(ctx, nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	return cc, name
 }
 
-func createNewFilesystem(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
-	filesystem, name = getFilesystemURL(c, bfssu)
+func createNewFilesystem(a *assert.Assertions, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
+	filesystem, name = getFilesystemURL(a, bfssu)
 
 	// ditto
 	_, _ = filesystem.Delete(ctx)
 
-	cResp, err := filesystem.Create(ctx)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	_, err := filesystem.Create(ctx)
+	a.Nil(err)
 	return
 }
 
-func createNewBfsFile(c *chk.C, filesystem azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
-	file, name = getBfsFileURL(c, filesystem, prefix)
+func createNewBfsFile(a *assert.Assertions, filesystem azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
+	file, name = getBfsFileURL(a, filesystem, prefix)
 
 	// Create the file
-	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	_, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
+	a.Nil(err)
 
-	aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
-	c.Assert(err, chk.IsNil)
-	c.Assert(aResp.StatusCode(), chk.Equals, 202)
+	_, err = file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
+	a.Nil(err)
 
-	fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
-	c.Assert(err, chk.IsNil)
-	c.Assert(fResp.StatusCode(), chk.Equals, 200)
+	_, err = file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+	a.Nil(err)
 	return
 }
 
-func createNewBlockBlob(c *chk.C, cc *container.Client, prefix string) (bbc *blockblob.Client, name string) {
-	bbc, name = getBlockBlobClient(c, cc, prefix)
+func createNewBlockBlob(a *assert.Assertions, cc *container.Client, prefix string) (bbc *blockblob.Client, name string) {
+	bbc, name = getBlockBlobClient(a, cc, prefix)
 
 	_, err := bbc.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return
 }
 
 // create metadata indicating that this is a dir
-func createNewDirectoryStub(c *chk.C, cc *container.Client, dirPath string) {
+func createNewDirectoryStub(a *assert.Assertions, cc *container.Client, dirPath string) {
 	dirClient := cc.NewBlockBlobClient(dirPath)
 
 	_, err := dirClient.Upload(ctx, streaming.NopCloser(bytes.NewReader(nil)),
 		&blockblob.UploadOptions{
 			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
 		})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return
 }
 
-func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
-	share, name = getShareURL(c, fsu)
+func createNewAzureShare(a *assert.Assertions, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+	share, name = getShareURL(a, fsu)
 
-	cResp, err := share.Create(ctx, nil, 0)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	_, err := share.Create(ctx, nil, 0)
+	a.Nil(err)
+
 	return share, name
 }
 
-func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
-	file, name = getAzureFileURL(c, share, prefix)
+func createNewAzureFile(a *assert.Assertions, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
+	file, name = getAzureFileURL(a, share, prefix)
 
 	// generate parents first
-	generateParentsForAzureFile(c, file)
+	generateParentsForAzureFile(a, file)
 
-	cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	_, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
+	a.Nil(err)
 
 	return
 }
 
-func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
+func generateParentsForAzureFile(a *assert.Assertions, fileURL azfile.FileURL) {
 	accountName, accountKey := getAccountAndKey()
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
 	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }
 
-func createNewAppendBlob(c *chk.C, cc *container.Client, prefix string) (abc *appendblob.Client, name string) {
-	abc, name = getAppendBlobClient(c, cc, prefix)
+func createNewAppendBlob(a *assert.Assertions, cc *container.Client, prefix string) (abc *appendblob.Client, name string) {
+	abc, name = getAppendBlobClient(a, cc, prefix)
 
 	_, err := abc.Create(ctx, nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return
 }
 
-func createNewPageBlob(c *chk.C, cc *container.Client, prefix string) (pbc *pageblob.Client, name string) {
-	pbc, name = getPageBlobClient(c, cc, prefix)
+func createNewPageBlob(a *assert.Assertions, cc *container.Client, prefix string) (pbc *pageblob.Client, name string) {
+	pbc, name = getPageBlobClient(a, cc, prefix)
 
 	_, err := pbc.Create(ctx, pageblob.PageBytes*10, nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return
 }
 
-func deleteContainer(c *chk.C, cc *container.Client) {
+func deleteContainer(a *assert.Assertions, cc *container.Client) {
 	_, err := cc.Delete(ctx, nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }
 
-func deleteFilesystem(c *chk.C, filesystem azbfs.FileSystemURL) {
-	resp, err := filesystem.Delete(ctx)
-	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 202)
+func deleteFilesystem(a *assert.Assertions, filesystem azbfs.FileSystemURL) {
+	_, err := filesystem.Delete(ctx)
+	a.Nil(err)
 }
 
-func validateStorageError(c *chk.C, err error, code bloberror.Code) {
-	c.Assert(bloberror.HasCode(err, code), chk.Equals, true)
+func validateStorageError(a *assert.Assertions, err error, code bloberror.Code) {
+	a.True(bloberror.HasCode(err, code))
 }
 
 func getRelativeTimeGMT(amount time.Duration) time.Time {
@@ -490,62 +476,62 @@ func createGCPClientWithGCSSDK() (*gcpUtils.Client, error) {
 	return gcpClient, nil
 }
 
-func createNewBucket(c *chk.C, client *minio.Client, o createS3ResOptions) string {
+func createNewBucket(a *assert.Assertions, client *minio.Client, o createS3ResOptions) string {
 	bucketName := generateBucketName()
 	err := client.MakeBucket(bucketName, o.Location)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return bucketName
 }
 
-func createNewGCPBucket(c *chk.C, client *gcpUtils.Client) string {
+func createNewGCPBucket(a *assert.Assertions, client *gcpUtils.Client) string {
 	bucketName := generateBucketName()
 	bkt := client.Bucket(bucketName)
 	err := bkt.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return bucketName
 }
 
-func createNewBucketWithName(c *chk.C, client *minio.Client, bucketName string, o createS3ResOptions) {
+func createNewBucketWithName(a *assert.Assertions, client *minio.Client, bucketName string, o createS3ResOptions) {
 	err := client.MakeBucket(bucketName, o.Location)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }
 
-func createNewGCPBucketWithName(c *chk.C, client *gcpUtils.Client, bucketName string) {
+func createNewGCPBucketWithName(a *assert.Assertions, client *gcpUtils.Client, bucketName string) {
 	bucket := client.Bucket(bucketName)
 	err := bucket.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }
 
-func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix string) (objectKey string) {
+func createNewObject(a *assert.Assertions, client *minio.Client, bucketName string, prefix string) (objectKey string) {
 	objectKey = prefix + generateObjectName()
 
 	size := int64(len(objectDefaultData))
 	n, err := client.PutObject(bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
-	c.Assert(n, chk.Equals, size)
+	a.Equal(size, n)
 
 	return
 }
 
-func createNewGCPObject(c *chk.C, client *gcpUtils.Client, bucketName string, prefix string) (objectKey string) {
+func createNewGCPObject(a *assert.Assertions, client *gcpUtils.Client, bucketName string, prefix string) (objectKey string) {
 	objectKey = prefix + generateObjectName()
 
 	size := int64(len(objectDefaultData))
 	wc := client.Bucket(bucketName).Object(objectKey).NewWriter(context.Background())
 	reader := strings.NewReader(objectDefaultData)
 	written, err := io.Copy(wc, reader)
-	c.Assert(err, chk.IsNil)
-	c.Assert(written, chk.Equals, size)
+	a.Nil(err)
+	a.Equal(size, written)
 	err = wc.Close()
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	return objectKey
 
 }
 
-func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarterMinute bool) {
+func deleteBucket(client *minio.Client, bucketName string, waitQuarterMinute bool) {
 	// If we error out in this function, simply just skip over deleting the bucket.
 	// Some of our buckets have become "ghost" buckets in the past.
 	// Ghost buckets show up in list calls but can't actually be interacted with.
@@ -589,7 +575,7 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarter
 	}
 }
 
-func deleteGCPBucket(c *chk.C, client *gcpUtils.Client, bucketName string, waitQuarterMinute bool) {
+func deleteGCPBucket(client *gcpUtils.Client, bucketName string, waitQuarterMinute bool) {
 	bucket := client.Bucket(bucketName)
 	ctx := context.Background()
 	it := bucket.Objects(ctx, &gcpUtils.Query{Prefix: ""})
@@ -599,23 +585,18 @@ func deleteGCPBucket(c *chk.C, client *gcpUtils.Client, bucketName string, waitQ
 			if err == iterator.Done {
 				break
 			}
-
-			// Failure during listing
-			c.Assert(err, chk.Equals, nil)
 			return
 		}
 		if err == nil {
 			err = bucket.Object(attrs.Name).Delete(nil)
 			if err != nil {
-				// Failure cleaning bucket
-				c.Assert(err, chk.Equals, nil)
 				return
 			}
 		}
 	}
 	err := bucket.Delete(context.Background())
 	if err != nil {
-		c.Log(fmt.Sprintf("Failed to Delete GCS Bucket %v", bucketName))
+		fmt.Println(fmt.Sprintf("Failed to Delete GCS Bucket %v", bucketName))
 	}
 
 	if waitQuarterMinute {
@@ -623,7 +604,7 @@ func deleteGCPBucket(c *chk.C, client *gcpUtils.Client, bucketName string, waitQ
 	}
 }
 
-func cleanS3Account(c *chk.C, client *minio.Client) {
+func cleanS3Account(client *minio.Client) {
 	buckets, err := client.ListBuckets()
 	if err != nil {
 		return
@@ -633,16 +614,16 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 		if strings.Contains(bucket.Name, "elastic") {
 			continue
 		}
-		deleteBucket(c, client, bucket.Name, false)
+		deleteBucket(client, bucket.Name, false)
 	}
 
 	time.Sleep(time.Minute)
 }
 
-func cleanGCPAccount(c *chk.C, client *gcpUtils.Client) {
+func cleanGCPAccount(client *gcpUtils.Client) {
 	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
 	if projectID == "" {
-		c.Log("GOOGLE_CLOUD_PROJECT env variable not set. GCP tests will not run")
+		fmt.Println("GOOGLE_CLOUD_PROJECT env variable not set. GCP tests will not run")
 		return
 	}
 	ctx := context.Background()
@@ -653,19 +634,18 @@ func cleanGCPAccount(c *chk.C, client *gcpUtils.Client) {
 			if err == iterator.Done {
 				break
 			}
-
-			c.Assert(err, chk.Equals, nil)
 			return
 		}
-		deleteGCPBucket(c, client, battrs.Name, false)
+		deleteGCPBucket(client, battrs.Name, false)
 	}
 }
 
-func cleanBlobAccount(c *chk.C, serviceClient *blobservice.Client) {
+func cleanBlobAccount(a *assert.Assertions, serviceClient *blobservice.Client) {
 	pager := serviceClient.NewListContainersPager(nil)
 	for pager.More() {
 		resp, err := pager.NextPage(ctx)
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
+
 		for _, v := range resp.ContainerItems {
 			_, err = serviceClient.NewContainerClient(*v.Name).Delete(ctx, nil)
 
@@ -677,17 +657,17 @@ func cleanBlobAccount(c *chk.C, serviceClient *blobservice.Client) {
 					}
 				}
 
-				c.Assert(err, chk.IsNil)
+				a.Nil(err)
 			}
 		}
 	}
 }
 
-func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
+func cleanFileAccount(a *assert.Assertions, serviceURL azfile.ServiceURL) {
 	marker := azfile.Marker{}
 	for marker.NotDone() {
 		resp, err := serviceURL.ListSharesSegment(ctx, marker, azfile.ListSharesOptions{})
-		c.Assert(err, chk.IsNil)
+		a.Nil(err)
 
 		for _, v := range resp.ShareItems {
 			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
@@ -699,7 +679,7 @@ func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
 					}
 				}
 
-				c.Assert(err, chk.IsNil)
+				a.Nil(err)
 			}
 		}
 
@@ -735,9 +715,9 @@ func getAlternateFSU() (azfile.ServiceURL, error) {
 	return azfile.NewServiceURL(*fsURL, pipeline), nil
 }
 
-func deleteShare(c *chk.C, share azfile.ShareURL) {
+func deleteShare(a *assert.Assertions, share azfile.ShareURL) {
 	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }
 
 // Some tests require setting service properties. It can take up to 30 seconds for the new properties to be reflected across all FEs.
@@ -745,43 +725,43 @@ func deleteShare(c *chk.C, share azfile.ShareURL) {
 // those changes not being reflected yet, we will wait 30 seconds and try the test again. If it fails this time for any reason,
 // we fail the test. It is the responsibility of the the testImplFunc to determine which error string indicates the test should be retried.
 // There can only be one such string. All errors that cannot be due to this detail should be asserted and not returned as an error string.
-func runTestRequiringServiceProperties(c *chk.C, bsc *blobservice.Client, code string,
-	enableServicePropertyFunc func(*chk.C, *blobservice.Client),
-	testImplFunc func(*chk.C, *blobservice.Client) error,
-	disableServicePropertyFunc func(*chk.C, *blobservice.Client)) {
-	enableServicePropertyFunc(c, bsc)
-	defer disableServicePropertyFunc(c, bsc)
-	err := testImplFunc(c, bsc)
+func runTestRequiringServiceProperties(a *assert.Assertions, bsc *blobservice.Client, code string,
+	enableServicePropertyFunc func(*assert.Assertions, *blobservice.Client),
+	testImplFunc func(*assert.Assertions, *blobservice.Client) error,
+	disableServicePropertyFunc func(*assert.Assertions, *blobservice.Client)) {
+	enableServicePropertyFunc(a, bsc)
+	defer disableServicePropertyFunc(a, bsc)
+	err := testImplFunc(a, bsc)
 	// We cannot assume that the error indicative of slow update will necessarily be a StorageError. As in ListBlobs.
 	if err != nil && err.Error() == code {
 		time.Sleep(time.Second * 30)
-		err = testImplFunc(c, bsc)
-		c.Assert(err, chk.IsNil)
+		err = testImplFunc(a, bsc)
+		a.Nil(err)
 	}
 }
 
-func enableSoftDelete(c *chk.C, bsc *blobservice.Client) {
+func enableSoftDelete(a *assert.Assertions, bsc *blobservice.Client) {
 	_, err := bsc.SetProperties(ctx, &blobservice.SetPropertiesOptions{
 		DeleteRetentionPolicy: &blobservice.RetentionPolicy{Enabled: to.Ptr(true), Days: to.Ptr(int32(1))},
 	})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }
 
-func disableSoftDelete(c *chk.C, bsc *blobservice.Client) {
+func disableSoftDelete(a *assert.Assertions, bsc *blobservice.Client) {
 	_, err := bsc.SetProperties(ctx, &blobservice.SetPropertiesOptions{
 		DeleteRetentionPolicy: &blobservice.RetentionPolicy{Enabled: to.Ptr(false)},
 	})
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 }
 
-func validateUpload(c *chk.C, bbc *blockblob.Client) {
+func validateUpload(a *assert.Assertions, bbc *blockblob.Client) {
 	resp, err := bbc.DownloadStream(ctx, nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 	data, _ := io.ReadAll(resp.Body)
-	c.Assert(data, chk.HasLen, 0)
+	a.Len(data, 0)
 }
 
-func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, containerName string) *container.Client {
+func getContainerClientWithSAS(a *assert.Assertions, credential *blob.SharedKeyCredential, containerName string) *container.Client {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s",
 		credential.AccountName(), containerName)
 	client, err := container.NewClientWithSharedKeyCredential(rawURL, credential, nil)
@@ -790,15 +770,15 @@ func getContainerClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential, c
 		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, Tag: true},
 		time.Now().Add(48*time.Hour),
 		nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	client, err = container.NewClientWithNoCredential(sasURL, nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return client
 }
 
-func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential) *blobservice.Client {
+func getBlobServiceClientWithSAS(a *assert.Assertions, credential *blob.SharedKeyCredential) *blobservice.Client {
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/",
 		credential.AccountName())
 	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
@@ -808,15 +788,15 @@ func getBlobServiceClientWithSAS(c *chk.C, credential *blob.SharedKeyCredential)
 		blobsas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true},
 		time.Now().Add(48*time.Hour),
 		nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	client, err = blobservice.NewClientWithNoCredential(sasURL, nil)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return client
 }
 
-func getFileServiceURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential) azfile.ServiceURL {
+func getFileServiceURLWithSAS(a *assert.Assertions, credential azfile.SharedKeyCredential) azfile.ServiceURL {
 	sasQueryParams, err := azfile.AccountSASSignatureValues{
 		Protocol:      azfile.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().Add(48 * time.Hour),
@@ -824,25 +804,25 @@ func getFileServiceURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential) a
 		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	qp := sasQueryParams.Encode()
 	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/?%s", credential.AccountName(), qp)
 
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return azfile.NewServiceURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
 }
 
-func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareName string) azfile.ShareURL {
+func getShareURLWithSAS(a *assert.Assertions, credential azfile.SharedKeyCredential, shareName string) azfile.ShareURL {
 	sasQueryParams, err := azfile.FileSASSignatureValues{
 		Protocol:    azfile.SASProtocolHTTPS,
 		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
 		ShareName:   shareName,
 		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
 	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -851,13 +831,13 @@ func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareNa
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// TODO perhaps we need a global default pipeline
 	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
 }
 
-func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) azbfs.ServiceURL {
+func getAdlsServiceURLWithSAS(a *assert.Assertions, credential azbfs.SharedKeyCredential) azbfs.ServiceURL {
 	sasQueryParams, err := azbfs.AccountSASSignatureValues{
 		Protocol:      azbfs.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().Add(48 * time.Hour),
@@ -865,7 +845,7 @@ func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) az
 		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
 		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
 	}.NewSASQueryParameters(&credential)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	// construct the url from scratch
 	qp := sasQueryParams.Encode()
@@ -874,38 +854,7 @@ func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) az
 
 	// convert the raw url and validate it was parsed successfully
 	fullURL, err := url.Parse(rawURL)
-	c.Assert(err, chk.IsNil)
+	a.Nil(err)
 
 	return azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
-}
-
-// check.v1 style "StringContains" checker
-
-type stringContainsChecker struct {
-	*chk.CheckerInfo
-}
-
-var StringContains = &stringContainsChecker{
-	&chk.CheckerInfo{Name: "StringContains", Params: []string{"obtained", "expected to find"}},
-}
-
-func (checker *stringContainsChecker) Check(params []interface{}, names []string) (result bool, error string) {
-	if len(params) < 2 {
-		return false, "StringContains requires two parameters"
-	} // Ignore extra parameters
-
-	// Assert that params[0] and params[1] are strings
-	aStr, aOK := params[0].(string)
-	bStr, bOK := params[1].(string)
-	if !aOK || !bOK {
-		return false, "All parameters must be strings"
-	}
-
-	if strings.Contains(aStr, bStr) {
-		return true, ""
-	}
-
-	return false, fmt.Sprintf("Failed to find substring in source string:\n\n"+
-		"SOURCE: %s\n"+
-		"EXPECTED: %s\n", aStr, bStr)
 }

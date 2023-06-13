@@ -3,22 +3,16 @@ package azbfs_test
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"net/http"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	chk "gopkg.in/check.v1"
 )
-
-func Test(t *testing.T) { chk.TestingT(t) }
-
-type aztestsSuite struct{}
-
-var _ = chk.Suite(&aztestsSuite{})
 
 const (
 	fileSystemPrefix = "go"
@@ -59,7 +53,7 @@ func generateName(prefix string) string {
 	runtime.Callers(0, pc)
 	f := runtime.FuncForPC(pc[0])
 	name := f.Name()
-	for i := 0; !strings.Contains(name, "Suite"); i++ { // The tests are all scoped to the suite, so this ensures getting the actual test name
+	for i := 0; !strings.Contains(name, "Test"); i++ { // The tests are all scoped to the suite, so this ensures getting the actual test name
 		f = runtime.FuncForPC(pc[i])
 		name = f.Name()
 	}
@@ -83,67 +77,83 @@ func generateFileName() string {
 	return generateName(filePrefix)
 }
 
-func getFileSystemURL(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, name string) {
+func getFileSystemURL(a *assert.Assertions, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, name string) {
 	name = generateFileSystemName()
 	fs = fsu.NewFileSystemURL(name)
 
 	return fs, name
 }
 
-func getDirectoryURLFromFileSystem(c *chk.C, fs azbfs.FileSystemURL) (directory azbfs.DirectoryURL, name string) {
+func getDirectoryURLFromFileSystem(a *assert.Assertions, fs azbfs.FileSystemURL) (directory azbfs.DirectoryURL, name string) {
 	name = generateDirectoryName()
 	directory = fs.NewDirectoryURL(name)
 	return directory, name
 }
 
-func getDirectoryURLFromDirectory(c *chk.C, parentDirectory azbfs.DirectoryURL) (directory azbfs.DirectoryURL, name string) {
+func getDirectoryURLFromDirectory(a *assert.Assertions, parentDirectory azbfs.DirectoryURL) (directory azbfs.DirectoryURL, name string) {
 	name = generateDirectoryName()
 	directory = parentDirectory.NewDirectoryURL(name)
 	return directory, name
 }
 
 // This is a convenience method, No public API to create file URL from fileSystem now. This method uses fileSystem's root directory.
-func getFileURLFromFileSystem(c *chk.C, fs azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
+func getFileURLFromFileSystem(a *assert.Assertions, fs azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
 	name = generateFileName()
 	file = fs.NewRootDirectoryURL().NewFileURL(name)
 
 	return file, name
 }
 
-func getFileURLFromDirectory(c *chk.C, directory azbfs.DirectoryURL) (file azbfs.FileURL, name string) {
+func getFileURLFromDirectory(a *assert.Assertions, directory azbfs.DirectoryURL) (file azbfs.FileURL, name string) {
 	name = generateFileName()
 	file = directory.NewFileURL(name)
 
 	return file, name
 }
 
-func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, name string) {
-	fs, name = getFileSystemURL(c, fsu)
+func createNewFileSystem(a *assert.Assertions, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, name string) {
+	fs, name = getFileSystemURL(a, fsu)
 
-	cResp, err := fs.Create(ctx)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	_, err := fs.Create(ctx)
+	a.Nil(err)
 	return fs, name
 }
 
-func createNewDirectoryFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (dir azbfs.DirectoryURL, name string) {
-	dir, name = getDirectoryURLFromFileSystem(c, fileSystem)
+func createNewDirectoryFromFileSystem(a *assert.Assertions, fileSystem azbfs.FileSystemURL) (dir azbfs.DirectoryURL, name string) {
+	dir, name = getDirectoryURLFromFileSystem(a, fileSystem)
 
-	cResp, err := dir.Create(ctx, true)
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	_, err := dir.Create(ctx, true)
+	a.Nil(err)
 	return dir, name
 }
 
 // This is a convenience method, No public API to create file URL from fileSystem now. This method uses fileSystem's root directory.
-func createNewFileFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
+func createNewFileFromFileSystem(a *assert.Assertions, fileSystem azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
 	dir := fileSystem.NewRootDirectoryURL()
 
-	file, name = getFileURLFromDirectory(c, dir)
+	file, name = getFileURLFromDirectory(a, dir)
 
-	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
-	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	_, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
+	a.Nil(err)
 
 	return file, name
+}
+
+func deleteFileSystem(a *assert.Assertions, fs azbfs.FileSystemURL) {
+	resp, err := fs.Delete(context.Background())
+	a.Nil(err)
+	a.Equal(http.StatusAccepted, resp.Response().StatusCode)
+}
+
+// deleteDirectory deletes the directory represented by directory Url
+func deleteDirectory(a *assert.Assertions, dul azbfs.DirectoryURL) {
+	resp, err := dul.Delete(context.Background(), nil, true)
+	a.Nil(err)
+	a.Equal(http.StatusOK, resp.Response().StatusCode)
+}
+
+func deleteFile(a *assert.Assertions, file azbfs.FileURL) {
+	resp, err := file.Delete(context.Background())
+	a.Nil(err)
+	a.Equal(http.StatusOK, resp.Response().StatusCode)
 }

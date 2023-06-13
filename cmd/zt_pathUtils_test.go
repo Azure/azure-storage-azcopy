@@ -22,14 +22,17 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
+	"testing"
 )
 
 type pathUtilsSuite struct{}
 
 var _ = chk.Suite(&pathUtilsSuite{})
 
-func (s *pathUtilsSuite) TestStripQueryFromSaslessUrl(c *chk.C) {
+func TestStripQueryFromSaslessUrl(t *testing.T) {
+	a := assert.New(t)
 	tests := []struct {
 		full          string
 		isRemote      bool
@@ -53,14 +56,15 @@ func (s *pathUtilsSuite) TestStripQueryFromSaslessUrl(c *chk.C) {
 			loc = common.ELocation.File()
 		}
 		m, q := splitQueryFromSaslessResource(t.full, loc)
-		c.Assert(m, chk.Equals, t.expectedMain)
-		c.Assert(q, chk.Equals, t.expectedQuery)
+		a.Equal(t.expectedMain, m)
+		a.Equal(t.expectedQuery, q)
 	}
 }
 
-func (s *pathUtilsSuite) TestToReversedString(c *chk.C) {
-	t := &benchmarkTraverser{}
-	c.Assert("1", chk.Equals, t.toReversedString(1))
-	c.Assert("01", chk.Equals, t.toReversedString(10))
-	c.Assert("54321", chk.Equals, t.toReversedString(12345))
+func TestToReversedString(t *testing.T) {
+	a := assert.New(t)
+	traverser := &benchmarkTraverser{}
+	a.Equal("1", traverser.toReversedString(1))
+	a.Equal("01", traverser.toReversedString(10))
+	a.Equal("54321", traverser.toReversedString(12345))
 }

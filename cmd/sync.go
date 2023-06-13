@@ -156,26 +156,14 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.fromTo.To() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.fromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.fromTo.To() != common.ELocation.File() && cooked.fromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}

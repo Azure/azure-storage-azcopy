@@ -24,97 +24,99 @@ import (
 	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	chk "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-type traverserBlobSuite struct{}
-
-var _ = chk.Suite(&traverserBlobSuite{})
-
-func (s *traverserBlobSuite) TestIsSourceDirWithStub(c *chk.C) {
+func TestIsSourceDirWithStub(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
-	c.Assert(cc, chk.NotNil)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	dirName := "source_dir"
-	createNewDirectoryStub(c, cc, dirName)
+	createNewDirectoryStub(a, cc, dirName)
+
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, dirName).URL()
-	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, true)
-	c.Assert(err, chk.Equals, nil)
+	a.True(isDir)
+	a.Nil(err)
 }
 
-func (s *traverserBlobSuite) TestIsSourceDirWithNoStub(c *chk.C) {
+func TestIsSourceDirWithNoStub(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
-	c.Assert(cc, chk.NotNil)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	dirName := "source_dir/"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, dirName).URL()
-	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, true)
-	c.Assert(err, chk.Equals, nil)
+	a.True(isDir)
+	a.Nil(err)
 }
 
-func (s *traverserBlobSuite) TestIsSourceFileExists(c *chk.C) {
+func TestIsSourceFileExists(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
-	c.Assert(cc, chk.NotNil)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	fileName := "source_file"
-	_, fileName = createNewBlockBlob(c, cc, fileName)
+	_, fileName = createNewBlockBlob(a, cc, fileName)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, fileName).URL()
-	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, false)
-	c.Assert(err, chk.IsNil)
+	a.False(isDir)
+	a.Nil(err)
 }
 
-func (s *traverserBlobSuite) TestIsSourceFileDoesNotExist(c *chk.C) {
+func TestIsSourceFileDoesNotExist(t *testing.T) {
+	a := assert.New(t)
 	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	cc, containerName := createNewContainer(c, bsc)
-	defer deleteContainer(c, cc)
-	c.Assert(cc, chk.NotNil)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	fileName := "file_does_not_exist"
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(c, containerName, fileName).URL()
-	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(c, rawBlobURLWithSAS)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
 
 	isDir, err := blobTraverser.IsDirectory(true)
-	c.Assert(isDir, chk.Equals, false)
-	c.Assert(err.Error(), chk.Equals, common.FILE_NOT_FOUND)
+	a.False(isDir)
+	a.Equal(common.FILE_NOT_FOUND, err.Error())
 }
