@@ -153,11 +153,11 @@ func TestFilesGetProperties(t *testing.T) {
 	processor := func(object StoredObject) error {
 		if object.entityType == common.EEntityType.File() {
 			// test all attributes (but only for files, since folders don't have them)
-			a.Equal(headers.ContentType, object.contentType)
-			a.Equal(headers.ContentEncoding, object.contentEncoding)
-			a.Equal(headers.ContentLanguage, object.contentLanguage)
-			a.Equal(headers.ContentDisposition, object.contentDisposition)
-			a.Equal(headers.CacheControl, object.cacheControl)
+			a.Equal(*headers.ContentType, object.contentType)
+			a.Equal(*headers.ContentEncoding, object.contentEncoding)
+			a.Equal(*headers.ContentLanguage, object.contentLanguage)
+			a.Equal(*headers.ContentDisposition, object.contentDisposition)
+			a.Equal(*headers.CacheControl, object.cacheControl)
 			seenContentType = true
 		}
 		return nil
