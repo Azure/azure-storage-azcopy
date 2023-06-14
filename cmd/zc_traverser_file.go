@@ -197,7 +197,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if err != nil {
 			return nil, err
 		}
-		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
+		targetPath := strings.TrimSuffix(targetURLParts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetPath)
 		relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 		size := f.contentLength

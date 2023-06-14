@@ -490,9 +490,9 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newFileAccountTraverser(fsc, shareName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, trailingDot, destination)
+			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination)
 		} else {
-			output = newFileTraverser(r, fsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, trailingDot, destination)
+			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()

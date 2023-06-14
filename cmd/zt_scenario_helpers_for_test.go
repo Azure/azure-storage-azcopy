@@ -922,7 +922,7 @@ func validateRemoveTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool
 
 		// look up the source from the expected transfers, make sure it exists
 		_, srcExist := lookupMap[srcRelativeFilePath]
-		a.True(srcExist)
+		a.True(srcExist, srcRelativeFilePath)
 
 		delete(lookupMap, srcRelativeFilePath)
 	}
