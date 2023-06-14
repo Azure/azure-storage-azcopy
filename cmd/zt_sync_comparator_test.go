@@ -668,8 +668,8 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	// refresh the source files' last modified time so that they get synced
 	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, fileList)
 	mockedRPC.reset()
-	currentTime := time.Now()
-	newTime := currentTime.Add(-time.Hour) // give extra hour
+	currentTime := time.Now().UTC()
+	newTime := currentTime.Add(-time.Hour).UTC() // give extra hour
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
 		validateS2SSyncTransfersAreScheduled(a, "", "", fileList, mockedRPC)

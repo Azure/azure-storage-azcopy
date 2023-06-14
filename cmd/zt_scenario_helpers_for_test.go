@@ -527,7 +527,7 @@ func (scenarioHelper) generateAzureFilesFromList(a *assert.Assertions, shareURL 
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1050)
+	time.Sleep(time.Second * 3)
 }
 
 func (scenarioHelper) generateBFSPathsFromList(a *assert.Assertions, filesystemURL azbfs.FileSystemURL, fileList []string) {
