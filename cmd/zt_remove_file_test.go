@@ -32,7 +32,7 @@ func TestRemoveSingleFile(t *testing.T) {
 	a := assert.New(t)
 	fsu := getFSU()
 	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 
 	for _, fileName := range []string{"top/mid/low/singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the share with a single file
@@ -64,7 +64,7 @@ func TestRemoveFilesUnderShare(t *testing.T) {
 
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	a.NotNil(shareURL)
 	a.NotZero(len(fileList))
@@ -117,7 +117,7 @@ func TestRemoveFilesUnderDirectory(t *testing.T) {
 
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName)
 	a.NotNil(shareURL)
 	a.NotZero(len(fileList))
@@ -174,7 +174,7 @@ func TestRemoveFilesWithIncludeFlag(t *testing.T) {
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	a.NotNil(shareURL)
 	a.NotZero(len(fileList))
 
@@ -208,7 +208,7 @@ func TestRemoveFilesWithExcludeFlag(t *testing.T) {
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	a.NotNil(shareURL)
 	a.NotZero(len(fileList))
 
@@ -242,7 +242,7 @@ func TestRemoveFilesWithIncludeAndExcludeFlag(t *testing.T) {
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	a.NotNil(shareURL)
 	a.NotZero(len(fileList))
 
@@ -284,7 +284,7 @@ func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
 	a.NotNil(shareURL)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	filesUnderTopDir := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName+"/")
 	combined := append(individualFilesList, filesUnderTopDir...)
@@ -352,7 +352,7 @@ func TestRemoveListOfFilesWithIncludeAndExclude(t *testing.T) {
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
 	a.NotNil(shareURL)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName+"/")
 
@@ -406,7 +406,7 @@ func TestRemoveSingleFileWithFromTo(t *testing.T) {
 	a := assert.New(t)
 	fsu := getFSU()
 	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 
 	for _, fileName := range []string{"top/mid/low/singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the share with a single file
@@ -439,7 +439,7 @@ func TestRemoveFilesUnderShareWithFromTo(t *testing.T) {
 
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
 	a.NotNil(shareURL)
 	a.NotZero(len(fileList))
@@ -493,7 +493,7 @@ func TestRemoveFilesUnderDirectoryWithFromTo(t *testing.T) {
 
 	// set up the share with numerous files
 	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName)
 	a.NotNil(shareURL)
 	a.NotZero(len(fileList))

@@ -38,8 +38,8 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	for _, fileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source share with a single file
@@ -84,8 +84,8 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -132,8 +132,8 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -175,8 +175,8 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -238,8 +238,8 @@ func TestFileSyncS2SWithIncludeFlag(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -274,8 +274,8 @@ func TestFileSyncS2SWithExcludeFlag(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -310,8 +310,8 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -354,10 +354,10 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 // 	fsu := getFSU()
 // 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 // 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-// 	defer deleteShare(a, srcShareURL)
+// 	defer deleteShareV1(a, srcShareURL)
 //
 // 	// delete the destination share to simulate non-existing destination, or recently removed destination
-// 	deleteShare(a, dstShareURL)
+// 	deleteShareV1(a, dstShareURL)
 //
 // 	// set up the share with numerous files
 // 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -389,8 +389,8 @@ func TestFileSyncS2SMismatchShareAndFile(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -436,8 +436,8 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -488,8 +488,8 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	dirName := "dir"
@@ -536,12 +536,12 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 	//set up src share
 	filesToInclude := []string{"AzURE2.jpeg", "TestOne.txt"}
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
+	defer deleteShareV1(a, srcShareURL)
 	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToInclude)
 
 	//set up dst share
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, dstShareURL)
 	fileToDelete := []string{"testThree.jpeg"}
 	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileToDelete)
 
@@ -592,7 +592,7 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 
 	//set up dst share
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, dstShareURL)
 	fileToDelete := []string{"testThree.jpeg"}
 	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileToDelete)
 
@@ -636,8 +636,8 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")

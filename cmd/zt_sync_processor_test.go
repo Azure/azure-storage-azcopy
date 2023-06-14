@@ -104,7 +104,7 @@ func TestFileDeleter(t *testing.T) {
 
 	// set up the file to delete
 	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	defer deleteShareV1(a, shareURL)
 	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, []string{fileName})
 
 	// validate that the file exists

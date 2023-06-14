@@ -1270,7 +1270,7 @@ func TestS2SCopyFromSingleAzureFileToBlobContainer(t *testing.T) {
 	fsu := getFSU()
 
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
+	defer deleteShareV1(a, srcShareURL)
 	a.NotNil(srcShareURL)
 
 	scenarioHelper{}.generateFlatFiles(a, srcShareURL, []string{"file"})
