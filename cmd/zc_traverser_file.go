@@ -204,7 +204,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		// We need to omit some properties if we don't get properties
 		var lmt time.Time
 		var smbLMT time.Time
-		var contentProps contentPropsProvider
+		var contentProps contentPropsProvider = noContentProps
 		var metadata common.Metadata
 
 		// Only get the properties if we're told to
