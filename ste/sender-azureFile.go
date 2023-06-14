@@ -171,6 +171,13 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		creationHeaders.FileAttributes = &revisedAttribs
 	}
 
+	// Set last write time to the minimum time to enable retry copy on next sync
+	// Source last write time will be set in epilogue
+	if info.ShouldTransferLastWriteTime() && u.jptm.Info().PreserveSMBInfo {
+		minimalLwt := time.Unix(0, 0)
+		creationHeaders.FileLastWriteTime = &minimalLwt
+	}
+
 	err = u.DoWithOverrideReadOnly(u.ctx,
 		func() (interface{}, error) {
 			return u.fileURL().Create(u.ctx, info.SourceSize, creationHeaders, u.metadataToApply)
