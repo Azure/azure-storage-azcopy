@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/stretchr/testify/assert"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 func TestServiceTraverserWithManyObjects(t *testing.T) {

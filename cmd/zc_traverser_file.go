@@ -23,24 +23,26 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
-	"net/url"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 const trailingDotErrMsg = "File share contains file/directory %s with a trailing dot but the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner."
+const invalidNameErrorMsg = "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
 
 // allow us to iterate through a path pointing to the file endpoint
 type fileTraverser struct {
-	rawURL        *url.URL
-	p             pipeline.Pipeline
+	rawURL        string
+	serviceClient *service.Client
 	ctx           context.Context
 	recursive     bool
 	getProperties bool
@@ -51,20 +53,75 @@ type fileTraverser struct {
 	destination *common.Location
 }
 
-func (t *fileTraverser) IsDirectory(bool) (bool, error) {
-	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p), nil // This handles all of the fanciness for us.
+func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
+	shareClient := client.NewShareClient(fileURLParts.ShareName)
+	if fileURLParts.ShareSnapshot != "" {
+		return shareClient.WithSnapshot(fileURLParts.ShareSnapshot)
+	}
+	return shareClient, nil
 }
 
-func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesResponse, bool) {
-	fileURL := azfile.NewFileURL(*t.rawURL, t.p)
-	fileProps, filePropertiesErr := fileURL.GetProperties(t.ctx)
+func createDirectoryClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*directory.Client, error) {
+	shareClient, err := createShareClientFromServiceClient(fileURLParts, client)
+	if err != nil {
+		return nil, err
+	}
+	directoryClient := shareClient.NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
+	return directoryClient, err
+}
+
+func createFileClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*file.Client, error) {
+	shareClient, err := createShareClientFromServiceClient(fileURLParts, client)
+	if err != nil {
+		return nil, err
+	}
+	fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileURLParts.DirectoryOrFilePath)
+	return fileClient, err
+}
+
+func (t *fileTraverser) IsDirectory(bool) (bool, error) {
+	// Azure file share case
+	if gCopyUtil.urlIsContainerOrVirtualDirectory(t.rawURL) {
+		return true, nil
+	}
+
+	// Need make request to ensure if it's directory
+	fileURLParts, err := file.ParseURL(t.rawURL)
+	if err != nil {
+		return false, err
+	}
+	directoryClient, err := createDirectoryClientFromServiceClient(fileURLParts, t.serviceClient)
+	if err != nil {
+		return false, err
+	}
+	_, err = directoryClient.GetProperties(t.ctx, nil)
+	if err != nil {
+		if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err))
+		}
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse, bool, error) {
+	fileURLParts, err := file.ParseURL(t.rawURL)
+	if err != nil {
+		return nil, false, err
+	}
+	fileClient, err := createFileClientFromServiceClient(fileURLParts, t.serviceClient)
+	if err != nil {
+		return nil, false, err
+	}
+	fileProps, filePropertiesErr := fileClient.GetProperties(t.ctx, nil)
 
 	// if there was no problem getting the properties, it means that we are looking at a single file
 	if filePropertiesErr == nil {
-		return fileProps, true
+		return &fileProps, true, nil
 	}
 
-	return nil, false
+	return nil, false, nil
 }
 
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
@@ -81,8 +138,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 		return false
 	}
-	invalidNameErrorMsg := "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
-	targetURLParts := azfile.NewFileURLParts(*t.rawURL)
+	targetURLParts, err := file.ParseURL(t.rawURL)
+	if err != nil {
+		return err
+	}
 
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
@@ -94,7 +153,10 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
 		// check if the url points to a single file
-		fileProperties, isFile := t.getPropertiesIfSingleFile()
+		fileProperties, isFile, err := t.getPropertiesIfSingleFile()
+		if err != nil {
+			return err
+		}
 		if isFile {
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a file.")
@@ -105,16 +167,15 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
 				"",
 				common.EEntityType.File(),
-				fileProperties.LastModified(),
-				fileProperties.ContentLength(),
-				fileProperties,
+				*fileProperties.LastModified,
+				*fileProperties.ContentLength,
+				shareFilePropertiesAdapter{fileProperties},
 				noBlobProps,
-				common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata()), // .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
+				fileProperties.Metadata,
 				targetURLParts.ShareName,
 			)
 
-			smbLastWriteTime, _ := time.Parse(azfile.ISO8601, fileProperties.FileLastWriteTime()) // no need to worry about error since we'll only check against it if it's non-zero for sync
-			storedObject.smbLastModifiedTime = smbLastWriteTime
+			storedObject.smbLastModifiedTime = *fileProperties.FileLastWriteTime
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter(common.EEntityType.File())
@@ -132,21 +193,23 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	convertToStoredObject := func(input parallel.InputObject) (parallel.OutputObject, error) {
 		f := input.(azfileEntity)
 		// compute the relative path of the file with respect to the target directory
-		fileURLParts := azfile.NewFileURLParts(f.url)
+		fileURLParts, err := file.ParseURL(f.url)
+		if err != nil {
+			return nil, err
+		}
 		relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
 		relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 		size := f.contentLength
-
 		// We need to omit some properties if we don't get properties
-		lmt := time.Time{}
-		smbLMT := time.Time{}
-		var contentProps contentPropsProvider = noContentProps
-		var meta common.Metadata = nil
+		var lmt time.Time
+		var smbLMT time.Time
+		var contentProps contentPropsProvider
+		var metadata common.Metadata
 
 		// Only get the properties if we're told to
 		if t.getProperties {
-			var fullProperties azfilePropertiesAdapter
+			var fullProperties filePropsProvider
 			fullProperties, err = f.propertyGetter(t.ctx)
 			if err != nil {
 				return StoredObject{
@@ -154,17 +217,15 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				}, err
 			}
 			lmt = fullProperties.LastModified()
-			smbLMT, _ = time.Parse(azfile.ISO8601, fullProperties.FileLastWriteTime())
-			if f.entityType == common.EEntityType.File() {
-				contentProps = fullProperties.(*azfile.FileGetPropertiesResponse) // only files have content props. Folders don't.
-				// Get an up-to-date size, because it's documented that the size returned by the listing might not be up-to-date,
-				// if an SMB client has modified by not yet closed the file. (See https://docs.microsoft.com/en-us/rest/api/storageservices/list-directories-and-files)
-				// Doing this here makes sure that our size is just as up-to-date as our LMT .
-				// (If s2s-detect-source-changed is false, then this code won't run.  If if its false, we don't check for modifications anyway,
-				// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
-				size = fullProperties.(*azfile.FileGetPropertiesResponse).ContentLength()
-			}
-			meta = common.FromAzFileMetadataToCommonMetadata(fullProperties.NewMetadata())
+			smbLMT = fullProperties.FileLastWriteTime()
+			contentProps = fullProperties
+			// Get an up-to-date size, because it's documented that the size returned by the listing might not be up-to-date,
+			// if an SMB client has modified by not yet closed the file. (See https://docs.microsoft.com/en-us/rest/api/storageservices/list-directories-and-files)
+			// Doing this here makes sure that our size is just as up-to-date as our LMT .
+			// (If s2s-detect-source-changed is false, then this code won't run.  If if its false, we don't check for modifications anyway,
+			// so it's fair to assume that the size will stay equal to that returned at by the listing operation)
+			size = fullProperties.ContentLength()
+			metadata = fullProperties.Metadata()
 		}
 		obj := newStoredObject(
 			preprocessor,
@@ -175,7 +236,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			size,
 			contentProps,
 			noBlobProps,
-			meta,
+			metadata,
 			targetURLParts.ShareName,
 		)
 
@@ -194,13 +255,16 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	}
 
 	// get the directory URL so that we can list the files
-	directoryURL := azfile.NewDirectoryURL(targetURLParts.URL(), t.p)
+	directoryClient, err := createDirectoryClientFromServiceClient(targetURLParts, t.serviceClient)
+	if err != nil {
+		return err
+	}
 
 	// Our rule is that enumerators of folder-aware sources should include the root folder's properties.
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
-	_, err = directoryURL.GetProperties(t.ctx)
+	_, err = directoryClient.GetProperties(t.ctx, nil)
 	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
-		s, err := convertToStoredObject(newAzFileRootFolderEntity(directoryURL, ""))
+		s, err := convertToStoredObject(newAzFileRootDirectoryEntity(directoryClient, ""))
 		if err != nil {
 			return err
 		}
@@ -213,39 +277,41 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// Define how to enumerate its contents
 	// This func must be threadsafe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
-		currentDirURL := dir.(azfile.DirectoryURL)
-		for marker := (azfile.Marker{}); marker.NotDone(); {
-			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(t.ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
+		currentDirectoryClient := dir.(*directory.Client)
+		pager := currentDirectoryClient.NewListFilesAndDirectoriesPager(nil)
+		var marker *string
+		for pager.More() {
+			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
-			for _, fileInfo := range lResp.FileItems {
-				if invalidBlobOrWindowsName(fileInfo.Name) {
+			for _, fileInfo := range lResp.Segment.Files {
+				if invalidBlobOrWindowsName(*fileInfo.Name) {
 					//Throw a warning on console and continue
-					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, fileInfo.Name))
+					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *fileInfo.Name))
 					continue
 				} else {
-					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(fileInfo.Name, ".") {
-						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, fileInfo.Name))
+					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(*fileInfo.Name, ".") {
+						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
 					}
 				}
-				enqueueOutput(newAzFileFileEntity(currentDirURL, fileInfo), nil)
+				enqueueOutput(newAzFileFileEntity(currentDirectoryClient, fileInfo), nil)
 
 			}
-			for _, dirInfo := range lResp.DirectoryItems {
-				if invalidBlobOrWindowsName(dirInfo.Name) {
+			for _, dirInfo := range lResp.Segment.Directories {
+				if invalidBlobOrWindowsName(*dirInfo.Name) {
 					//Throw a warning on console and continue
-					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, dirInfo.Name))
+					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *dirInfo.Name))
 					continue
 				} else {
-					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(dirInfo.Name, ".") {
-						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, dirInfo.Name))
+					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(*dirInfo.Name, ".") {
+						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, *dirInfo.Name))
 					}
 				}
-				enqueueOutput(newAzFileChildFolderEntity(currentDirURL, dirInfo.Name), nil)
+				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, *dirInfo.Name), nil)
 				if t.recursive {
 						// If recursive is turned on, add sub directories to be processed
-					enqueueDir(currentDirURL.NewDirectoryURL(dirInfo.Name))
+					enqueueDir(currentDirectoryClient.NewSubdirectoryClient(*dirInfo.Name))
 				}
 
 			}
@@ -253,21 +319,25 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			// if debug mode is on, note down the result, this is not going to be fast
 			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
 				tokenValue := "NONE"
-				if marker.Val != nil {
-					tokenValue = *marker.Val
+				if marker != nil {
+					tokenValue = *marker
 				}
 
 				var dirListBuilder strings.Builder
-				for _, dir := range lResp.DirectoryItems {
-					fmt.Fprintf(&dirListBuilder, " %s,", dir.Name)
+				for _, dir := range lResp.Segment.Directories {
+					fmt.Fprintf(&dirListBuilder, " %s,", *dir.Name)
 				}
 				var fileListBuilder strings.Builder
-				for _, fileInfo := range lResp.FileItems {
-					fmt.Fprintf(&fileListBuilder, " %s,", fileInfo.Name)
+				for _, fileInfo := range lResp.Segment.Files {
+					fmt.Fprintf(&fileListBuilder, " %s,", *fileInfo.Name)
 				}
 
-				dirName := azfile.NewFileURLParts(currentDirURL.URL()).DirectoryOrFilePath
-				msg := fmt.Sprintf("Enumerating %s with token %s. Sub-dirs:%s Files:%s", dirName,
+				fileURLParts, err := file.ParseURL(currentDirectoryClient.URL())
+				if err != nil {
+					return err
+				}
+				directoryName := fileURLParts.DirectoryOrFilePath
+				msg := fmt.Sprintf("Enumerating %s with token %s. Sub-dirs:%s Files:%s", directoryName,
 					tokenValue, dirListBuilder.String(), fileListBuilder.String())
 				azcopyScanningLogger.Log(pipeline.LogDebug, msg)
 			}
@@ -284,7 +354,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	workerContext, cancelWorkers := context.WithCancel(t.ctx)
 
-	cCrawled := parallel.Crawl(workerContext, directoryURL, enumerateOneDir, parallelism)
+	cCrawled := parallel.Crawl(workerContext, directoryClient, enumerateOneDir, parallelism)
 
 	cTransformed := parallel.Transform(workerContext, cCrawled, convertToStoredObject, parallelism)
 
@@ -312,8 +382,17 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
-	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter, trailingDot: trailingDot, destination: destination}
+func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
+	t = &fileTraverser{
+		rawURL: rawURL,
+		serviceClient: serviceClient,
+		ctx: ctx,
+		recursive: recursive,
+		getProperties: getProperties,
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		trailingDot: trailingDot,
+		destination: destination,
+	}
 	return
 }
 
@@ -321,40 +400,45 @@ func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 type azfileEntity struct {
 	name           string
 	contentLength  int64
-	url            url.URL
-	propertyGetter func(ctx context.Context) (azfilePropertiesAdapter, error)
+	url            string
+	propertyGetter func(ctx context.Context) (filePropsProvider, error)
 	entityType     common.EntityType
 }
 
-func newAzFileFileEntity(containingDir azfile.DirectoryURL, fileInfo azfile.FileItem) azfileEntity {
-	fu := containingDir.NewFileURL(fileInfo.Name)
+func newAzFileFileEntity(parentDirectoryClient *directory.Client, fileInfo *directory.File) azfileEntity {
+	fileClient := parentDirectoryClient.NewFileClient(*fileInfo.Name)
 	return azfileEntity{
-		fileInfo.Name,
-		fileInfo.Properties.ContentLength,
-		fu.URL(),
-		func(ctx context.Context) (azfilePropertiesAdapter, error) { return fu.GetProperties(ctx) },
+		*fileInfo.Name,
+		*fileInfo.Properties.ContentLength,
+		fileClient.URL(),
+		func(ctx context.Context) (filePropsProvider, error) {
+			fileProperties, err := fileClient.GetProperties(ctx, nil)
+			if err != nil {
+				return nil, err
+			}
+			return shareFilePropertiesAdapter{&fileProperties}, nil
+		},
 		common.EEntityType.File(),
 	}
 }
 
-func newAzFileChildFolderEntity(containingDir azfile.DirectoryURL, dirName string) azfileEntity {
-	du := containingDir.NewDirectoryURL(dirName)
-	return newAzFileRootFolderEntity(du, dirName) // now that we have du, the logic is same as if it was the root
+func newAzFileSubdirectoryEntity(parentDirectoryClient *directory.Client, dirName string) azfileEntity {
+	directoryClient := parentDirectoryClient.NewSubdirectoryClient(dirName)
+	return newAzFileRootDirectoryEntity(directoryClient, dirName) // now that we have directoryClient, the logic is same as if it was the root
 }
 
-func newAzFileRootFolderEntity(rootDir azfile.DirectoryURL, name string) azfileEntity {
+func newAzFileRootDirectoryEntity(directoryClient *directory.Client, name string) azfileEntity {
 	return azfileEntity{
 		name,
 		0,
-		rootDir.URL(),
-		func(ctx context.Context) (azfilePropertiesAdapter, error) { return rootDir.GetProperties(ctx) },
+		directoryClient.URL(),
+		func(ctx context.Context) (filePropsProvider, error) {
+			directoryProperties, err := directoryClient.GetProperties(ctx, nil)
+			if err != nil {
+				return nil, err
+			}
+			return shareDirectoryPropertiesAdapter{&directoryProperties}, nil
+		},
 		common.EEntityType.Folder(),
 	}
-}
-
-// azureFilesMetadataAdapter allows polymorphic treatment of File and Folder properties, since both implement the method
-type azfilePropertiesAdapter interface {
-	NewMetadata() azfile.Metadata
-	LastModified() time.Time
-	FileLastWriteTime() string
 }
