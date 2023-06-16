@@ -6,7 +6,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"mime"
 	"net"
 	"net/http"
@@ -20,7 +22,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -553,9 +554,16 @@ func (jpm *jobPartMgr) clientInfo() {
 	networkStats := jpm.jobMgr.PipelineNetworkStats()
 	logOptions := LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()}
 
-	// TODO : Add trailing dot when migrating ste azfile.
-	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, nil, nil)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, nil, nil)
+	var trailingDot *common.TrailingDotOption
+	var from *common.Location
+	if fromTo.To() == common.ELocation.File() || fromTo.From() == common.ELocation.File(){
+		trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+		if fromTo.To() == common.ELocation.File() {
+			from = to.Ptr(fromTo.From())
+		}
+	}
+	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, trailingDot, from)
+	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)
 }
 
 func (jpm *jobPartMgr) createPipelines(ctx context.Context) {

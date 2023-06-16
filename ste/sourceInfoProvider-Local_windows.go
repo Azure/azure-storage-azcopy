@@ -4,6 +4,7 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strings"
 	"syscall"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -129,7 +129,7 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
 }
 
-func (hi HandleInfo) FileAttributes() azfile.FileAttributeFlags {
+func (hi HandleInfo) FileAttributes() file.NTFSFileAttributes {
 	// Can't shorthand it because the function name overrides.
-	return azfile.FileAttributeFlags(hi.ByHandleFileInformation.FileAttributes)
+	return fileAttributesFromUint32(hi.ByHandleFileInformation.FileAttributes)
 }
