@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"strings"
 
@@ -161,20 +160,20 @@ func (lca loginCmdArgs) process() error {
 	case lca.servicePrincipal:
 
 		if lca.certPath != "" {
-			if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
+			if err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
 
 			glcm.Info("SPN Auth via cert succeeded.")
 		} else {
-			if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
+			if err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
 
 			glcm.Info("SPN Auth via secret succeeded.")
 		}
 	case lca.identity:
-		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
+		if err := uotm.MSILogin(common.IdentityInfo{
 			ClientID: lca.identityClientID,
 			ObjectID: lca.identityObjectID,
 			MSIResID: lca.identityResourceID,
@@ -184,7 +183,7 @@ func (lca loginCmdArgs) process() error {
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	default:
-		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
+		if err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
 			return err
 		}
 		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
