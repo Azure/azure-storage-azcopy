@@ -26,6 +26,10 @@ import (
 	"time"
 )
 
+// directoyDepth -> which can be set from frontEnd "cmd" package
+// assuming that maximum directory depth would not exceed 1000000000
+var DirectoryDepth uint = 1000000000
+
 type crawler struct {
 	output      chan CrawlResult
 	workerBody  EnumerateOneDirFunc
@@ -62,7 +66,7 @@ func Crawl(ctx context.Context, root Directory, worker EnumerateOneDirFunc, para
 		workerBody:     worker,
 		parallelism:    parallelism,
 		cond:           sync.NewCond(&sync.Mutex{}),
-		directoryDepth: 1,
+		directoryDepth: int(DirectoryDepth),
 	}
 	go c.start(ctx, root)
 	return c.output

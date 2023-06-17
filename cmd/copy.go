@@ -35,6 +35,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -180,6 +181,8 @@ type rawCopyCmdArgs struct {
 	rehydratePriority string
 	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
 	trailingDot string
+	// Optional flag that set directorydepth if user specifies, Used when traversing the files
+	directoryDepth uint
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -325,6 +328,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if err = validateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
 		return cooked, err
 	}
+
+	cooked.directoryDepth = raw.directoryDepth
+	parallel.DirectoryDepth = cooked.directoryDepth
 
 	// copy&transform flags to type-safety
 	err = cooked.ForceWrite.Parse(raw.forceWrite)
@@ -1245,6 +1251,8 @@ type CookedCopyCmdArgs struct {
 	propertiesToTransfer common.SetPropertiesFlags
 
 	trailingDot common.TrailingDotOption
+
+	directoryDepth uint
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1351,7 +1359,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		blockSize = pipingDefaultBlockSize
 	}
 
-	// GetCredentialInfoForLocation populates oauth token fields... so, it's very easy.
+	// GetCredentialInfoForLocation pop/cookulates oauth token fields... so, it's very easy.
 	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false, cca.CpkOptions)
 
 	if err != nil {
@@ -2043,6 +2051,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers.")
 	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. Can be set to true to disable automatic decoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be copied by this command. This flag does not copy the actual files.")
+	cpCmd.PersistentFlags().UintVar(&raw.directoryDepth, "directory-depth", 1e9, "Enabled by default with max Directory depth. User can Input a postive Integer with directory depth considering root directory depth as zero")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),

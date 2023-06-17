@@ -33,6 +33,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
@@ -240,6 +241,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 			credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
 	}
+	parallel.DirectoryDepth = cooked.directoryDepth
 
 	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil)
 
