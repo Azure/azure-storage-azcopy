@@ -6,14 +6,13 @@ package ste
 import (
 	"encoding/binary"
 	"fmt"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/pkg/xattr"
 	"golang.org/x/sys/unix"
@@ -30,16 +29,19 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 
 	// Set 32-bit FileAttributes for the file.
 	setAttributes := func() error {
+		attribs, err := propHolder.FileAttributes()
+		if err != nil {
+			return fmt.Errorf("attempted to read SMB properties: %w", err)
+		}
 		// This is a safe conversion.
-		attribs := uint32(propHolder.FileAttributes())
-
+		attr := fileAttributesToUint32(*attribs)
 		xattrbuf := make([]byte, 4)
-		binary.LittleEndian.PutUint32(xattrbuf, uint32(attribs))
+		binary.LittleEndian.PutUint32(xattrbuf, attr)
 
-		err := xattr.Set(txInfo.Destination, common.CIFS_XATTR_ATTRIB, xattrbuf)
+		err = xattr.Set(txInfo.Destination, common.CIFS_XATTR_ATTRIB, xattrbuf)
 		if err != nil {
 			return fmt.Errorf("xattr.Set(%s, %s, 0x%x) failed: %w",
-				txInfo.Destination, common.CIFS_XATTR_ATTRIB, attribs, err)
+				txInfo.Destination, common.CIFS_XATTR_ATTRIB, attr, err)
 		}
 
 		return nil
@@ -219,12 +221,11 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 
 // TODO: this method may become obsolete if/when we are able to get permissions from the share root
 func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
-	u, err := url.Parse(source)
+	fileURLParts, err := file.ParseURL(source)
 	if err != nil {
 		return false
 	}
-	f := azfile.NewFileURLParts(*u)
-	path := f.DirectoryOrFilePath
+	path := fileURLParts.DirectoryOrFilePath
 	sep := common.DeterminePathSeparator(path)
 	splitPath := strings.Split(strings.Trim(path, sep), sep)
 	return path != "" && len(splitPath) == 1

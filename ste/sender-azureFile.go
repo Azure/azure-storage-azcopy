@@ -37,15 +37,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
-
-type URLHolderV1 interface {
-	URL() url.URL
-	String() string
-}
 
 type URLHolder interface {
 	URL() string
@@ -95,12 +89,6 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	// compute num chunks (irrelevant but harmless for folders)
 	numChunks := getNumChunks(info.SourceSize, chunkSize)
-
-	// make sure URL is parsable
-	destURL, err := url.Parse(destination)
-	if err != nil {
-		return nil, err
-	}
 
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
@@ -194,7 +182,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		return
 	}
 
-	stage, err = u.addSMBPropertiesToHeaders(info, u.getFileClient().URL())
+	stage, err = u.addSMBPropertiesToHeaders(info)
 	if err != nil {
 		jptm.FailActiveSend(stage, err)
 		return
@@ -202,23 +190,22 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
-	creationHeaders := u.headersToApply
-	if creationHeaders.FileAttributes != nil {
-		revisedAttribs := creationHeaders.FileAttributes.Remove(azfile.FileAttributeReadonly)
-		creationHeaders.FileAttributes = &revisedAttribs
+	creationProperties := u.smbPropertiesToApply
+	if creationProperties.Attributes != nil {
+		creationProperties.Attributes.ReadOnly = false
 	}
 
 	err = u.DoWithOverrideReadOnly(u.ctx,
 		func() (interface{}, error) {
-			return u.fileURL().Create(u.ctx, info.SourceSize, creationHeaders, u.metadataToApply)
+			return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{HTTPHeaders: &u.headersToApply, Permissions: &u.permissionsToApply, SMBProperties: &creationProperties, Metadata: u.metadataToApply})
 		},
 		u.fileOrDirClient,
 		u.jptm.GetForceIfReadOnly())
 
-	if strErr, ok := err.(azfile.StorageError); ok && strErr.ServiceCode() == azfile.ServiceCodeParentNotFound {
+	if fileerror.HasCode(err, fileerror.ParentNotFound) {
 		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		jptm.Log(pipeline.LogError, fmt.Sprintf("%s: %s \n AzCopy going to create parent directories of the Azure files", strErr.ServiceCode(), strErr.Error()))
-		err = AzureFileParentDirCreator{}.CreateParentDirToRootV1(u.ctx, u.fileURL(), u.pipeline, u.jptm.GetFolderCreationTracker())
+		jptm.Log(pipeline.LogError, fmt.Sprintf("%s: %s \n AzCopy going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
+		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.serviceClient, u.jptm.GetFolderCreationTracker())
 		if err != nil {
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
@@ -226,7 +213,12 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		// retrying file creation
 		err = u.DoWithOverrideReadOnly(u.ctx,
 			func() (interface{}, error) {
-				return u.fileURL().Create(u.ctx, info.SourceSize, creationHeaders, u.metadataToApply)
+				return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{
+					HTTPHeaders:  &u.headersToApply,
+					SMBProperties: &creationProperties,
+					Permissions:  &u.permissionsToApply,
+					Metadata: u.metadataToApply,
+				})
 			},
 			u.fileOrDirClient,
 			u.jptm.GetForceIfReadOnly())
@@ -264,7 +256,6 @@ func (u *azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action
 	}
 
 	// did fail as readonly, and forcing is enabled
-	none := azfile.FileAttributeNone
 	if f, ok := targetFileOrDir.(*file.Client); ok {
 		h := file.HTTPHeaders{}
 		_, err = f.SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{
@@ -295,7 +286,7 @@ func (u *azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action
 	return err
 }
 
-func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
+func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destURL string) (stage string, err error) {
 	if !info.PreserveSMBPermissions.IsTruthy() {
 		return "", nil
 	}
@@ -304,26 +295,26 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl
 	if sddlSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
 		// If both sides are Azure Files...
 		if fSIP, ok := sddlSIP.(*fileSourceInfoProvider); ok {
-			srcURL, err := url.Parse(info.Source)
-			common.PanicIfErr(err)
 
-			srcURLParts := azfile.NewFileURLParts(*srcURL)
-			dstURLParts := azfile.NewFileURLParts(destUrl)
+			srcURLParts, err := file.ParseURL(info.Source)
+			common.PanicIfErr(err)
+			dstURLParts, err := file.ParseURL(destURL)
+			common.PanicIfErr(err)
 
 			// and happen to be the same account and share, we can get away with using the same key and save a trip.
 			if srcURLParts.Host == dstURLParts.Host && srcURLParts.ShareName == dstURLParts.ShareName {
-				u.headersToApply.PermissionKey = &fSIP.cachedPermissionKey
+				u.permissionsToApply.PermissionKey = &fSIP.cachedPermissionKey
 			}
 		}
 
 		// If we didn't do the workaround, then let's get the SDDL and put it later.
-		if u.headersToApply.PermissionKey == nil || *u.headersToApply.PermissionKey == "" {
+		if u.permissionsToApply.PermissionKey == nil || *u.permissionsToApply.PermissionKey == "" {
 			pString, err := sddlSIP.GetSDDL()
 
 			// Sending "" to the service is invalid, but the service will return it sometimes (e.g. on file shares)
 			// Thus, we'll let the files SDK fill in "inherit" for us, so the service is happy.
 			if pString != "" {
-				u.headersToApply.PermissionString = &pString
+				u.permissionsToApply.Permission = &pString
 			}
 
 			if err != nil {
@@ -332,25 +323,21 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destUrl
 		}
 	}
 
-	if u.headersToApply.PermissionString != nil && len(*u.headersToApply.PermissionString) > filesServiceMaxSDDLSize {
-		fURLParts := azfile.NewFileURLParts(destUrl)
-		fURLParts.DirectoryOrFilePath = ""
-		shareURL := azfile.NewShareURL(fURLParts.URL(), u.pipeline)
-
+	if u.permissionsToApply.Permission != nil && len(*u.permissionsToApply.Permission) > filesServiceMaxSDDLSize {
 		sipm := u.jptm.SecurityInfoPersistenceManager()
-		pkey, err := sipm.PutSDDL(*u.headersToApply.PermissionString, shareURL)
-		u.headersToApply.PermissionKey = &pkey
+		pkey, err := sipm.PutSDDL(*u.permissionsToApply.Permission, u.shareClient)
+		u.permissionsToApply.PermissionKey = &pkey
 		if err != nil {
 			return "Putting permissions", err
 		}
 
 		ePermString := ""
-		u.headersToApply.PermissionString = &ePermString
+		u.permissionsToApply.Permission = &ePermString
 	}
 	return "", nil
 }
 
-func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destUrl url.URL) (stage string, err error) {
+func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo) (stage string, err error) {
 	if !info.PreserveSMBInfo {
 		return "", nil
 	}
@@ -366,27 +353,26 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 			defer func() { // recover from potential panics and output raw properties for debug purposes
 				if panicerr := recover(); panicerr != nil {
 					stage = "Reading SMB properties"
-					pAdapt := smbProps.(*azfile.SMBPropertyAdapter)
 
-					attr := pAdapt.PropertySource.FileAttributes()
-					lwt := pAdapt.PropertySource.FileLastWriteTime()
-					fct := pAdapt.PropertySource.FileCreationTime()
+					attr, err := smbProps.FileAttributes()
+					lwt := smbProps.FileLastWriteTime()
+					fct := smbProps.FileCreationTime()
 
 					err = fmt.Errorf("failed to read SMB properties (%w)! Raw data: attr: `%s` lwt: `%s`, fct: `%s`", err, attr, lwt, fct)
 				}
 			}()
 		}
 
-		attribs := smbProps.FileAttributes()
-		u.headersToApply.FileAttributes = &attribs
+		attribs, err := smbProps.FileAttributes()
+		u.smbPropertiesToApply.Attributes = attribs
 
 		if info.ShouldTransferLastWriteTime() {
 			lwTime := smbProps.FileLastWriteTime()
-			u.headersToApply.FileLastWriteTime = &lwTime
+			u.smbPropertiesToApply.LastWriteTime = &lwTime
 		}
 
 		creationTime := smbProps.FileCreationTime()
-		u.headersToApply.FileCreationTime = &creationTime
+		u.smbPropertiesToApply.CreationTime = &creationTime
 	}
 	return "", nil
 }
@@ -400,7 +386,11 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
 	if u.jptm.IsLive() && u.jptm.Info().PreserveSMBInfo {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
-		_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
+		_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
+			HTTPHeaders: &u.headersToApply,
+			Permissions: &u.permissionsToApply,
+			SMBProperties: &u.smbPropertiesToApply,
+		})
 		if err != nil {
 			u.jptm.FailActiveSend("Applying final attribute settings", err)
 		}
@@ -417,70 +407,72 @@ func (u *azureFileSenderBase) Cleanup() {
 		// contents will be at an unknown stage of partial completeness
 		deletionContext, cancelFn := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 2*time.Minute)
 		defer cancelFn()
-		_, err := u.fileURL().Delete(deletionContext)
+		_, err := u.getFileClient().Delete(deletionContext, nil)
 		if err != nil {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileOrDirClient.String(), err.Error()))
+			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileOrDirClient.URL(), err.Error()))
 		}
 	}
 }
 
 func (u *azureFileSenderBase) GetDestinationLength() (int64, error) {
-	prop, err := u.fileURL().GetProperties(u.ctx)
+	prop, err := u.getFileClient().GetProperties(u.ctx, nil)
 
 	if err != nil {
 		return -1, err
 	}
 
-	return prop.ContentLength(), nil
+	if prop.ContentLength == nil {
+		return -1, fmt.Errorf("destination content length not returned")
+	}
+	return *prop.ContentLength, nil
 }
 
 func (u *azureFileSenderBase) EnsureFolderExists() error {
-	return AzureFileParentDirCreator{}.CreateDirToRootV1(u.ctx, u.dirURL(), u.pipeline, u.jptm.GetFolderCreationTracker())
+	return AzureFileParentDirCreator{}.CreateDirToRoot(u.ctx, u.shareClient, u.getDirectoryClient(), u.jptm.GetFolderCreationTracker())
 }
 
 func (u *azureFileSenderBase) SetFolderProperties() error {
 	info := u.jptm.Info()
 
-	_, err := u.addPermissionsToHeaders(info, u.dirURL().URL())
+	_, err := u.addPermissionsToHeaders(info, u.getDirectoryClient().URL())
 	if err != nil {
 		return err
 	}
 
-	_, err = u.addSMBPropertiesToHeaders(info, u.dirURL().URL())
+	_, err = u.addSMBPropertiesToHeaders(info)
 	if err != nil {
 		return err
 	}
 
-	_, err = u.dirURL().SetMetadata(u.ctx, u.metadataToApply)
+	_, err = u.getDirectoryClient().SetMetadata(u.ctx, &directory.SetMetadataOptions{Metadata: u.metadataToApply})
 	if err != nil {
 		return err
 	}
 
 	err = u.DoWithOverrideReadOnly(u.ctx,
-		func() (interface{}, error) { return u.dirURL().SetProperties(u.ctx, u.headersToApply.SMBProperties) },
+		func() (interface{}, error) {
+			return u.getDirectoryClient().SetProperties(u.ctx, &directory.SetPropertiesOptions{
+			FileSMBProperties: &u.smbPropertiesToApply,
+			FilePermissions: &u.permissionsToApply,
+		}) },
 		u.fileOrDirClient,
 		u.jptm.GetForceIfReadOnly())
 	return err
 }
 
 func (u *azureFileSenderBase) DirUrlToString() string {
-	dirUrl := azfile.NewFileURLParts(u.dirURL().URL()).URL()
-	dirUrl.RawQuery = ""
+	directoryURL := u.getDirectoryClient().URL()
+	rawURL, err := url.Parse(directoryURL)
+	common.PanicIfErr(err)
+	rawURL.RawQuery = ""
 	// To avoid encoding/decoding
-	dirUrl.RawPath = ""
-	return dirUrl.String()
+	rawURL.RawPath = ""
+	return rawURL.String()
 }
 
 // namespace for functions related to creating parent directories in Azure File
 // to avoid free floating global funcs
 type AzureFileParentDirCreator struct{}
-
-// getParentDirectoryURL gets parent directory URL of an Azure FileURL.
-func (AzureFileParentDirCreator) getParentDirectoryURL(uh URLHolderV1, p pipeline.Pipeline) azfile.DirectoryURL {
-	u := uh.URL()
-	u.Path = u.Path[:strings.LastIndex(u.Path, "/")]
-	return azfile.NewDirectoryURL(u, p)
-}
 
 // getParentDirectoryClient gets parent directory client of a path.
 func (AzureFileParentDirCreator) getParentDirectoryClient(uh URLHolder, serviceClient *service.Client) (*share.Client, *directory.Client, error) {
@@ -508,11 +500,6 @@ func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusConflict { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
-			return nil
-		}
-		sErr, sErrOk := err.(azfile.StorageError)
-		if sErrOk && sErr.Response() != nil &&
-			(sErr.Response().StatusCode == http.StatusConflict) { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
 			return nil
 		}
 		return err
@@ -571,47 +558,6 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 			return err
 		}
 	}
-	// Directly return if parent directory exists.
-	return nil
-}
-
-// CreateParentDirToRootV1 creates parent directories of the Azure file if file's parent directory doesn't exist.
-func (d AzureFileParentDirCreator) CreateParentDirToRootV1(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t FolderCreationTracker) error {
-	dirURL := d.getParentDirectoryURL(fileURL, p)
-	return d.CreateDirToRootV1(ctx, dirURL, p, t)
-}
-
-// CreateDirToRootV1 Creates the dir (and parents as necessary) if it does not exist
-func (d AzureFileParentDirCreator) CreateDirToRootV1(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline, t FolderCreationTracker) error {
-	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
-	if _, err := dirURL.GetProperties(ctx); err != nil {
-		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
-			(resp.Response().StatusCode == http.StatusNotFound ||
-				resp.Response().StatusCode == http.StatusForbidden) {
-			// Either the parent directory does not exist, or we may not have read permissions.
-			// Try to create the parent directories. Split directories as segments.
-			segments := d.splitWithoutToken(dirURLExtension.DirectoryOrFilePath, '/')
-
-			shareURL := azfile.NewShareURL(dirURLExtension.GetShareURL(), p)
-			curDirURL := shareURL.NewRootDirectoryURL() // Share directory should already exist, doesn't support creating share
-			// Try to create the directories
-			for i := 0; i < len(segments); i++ {
-				curDirURL = curDirURL.NewDirectoryURL(segments[i])
-				recorderURL := curDirURL.URL()
-				recorderURL.RawQuery = ""
-				err = t.CreateFolder(recorderURL.String(), func() error {
-					_, err := curDirURL.Create(ctx, azfile.Metadata{}, azfile.SMBProperties{})
-					return err
-				})
-				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
-					return verifiedErr
-				}
-			}
-		} else {
-			return err
-		}
-	}
-
 	// Directly return if parent directory exists.
 	return nil
 }

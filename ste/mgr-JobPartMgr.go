@@ -623,27 +623,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				statsAccForSip)
 		}
 	}
-	// Set up a source pipeline for files if necessary
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
-		jpm.sourceProviderPipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{
-					Value: userAgent,
-				},
-			}, azfile.RetryOptions{
-			Policy:        azfile.RetryPolicyExponential,
-			MaxTries:      UploadMaxTries,
-			TryTimeout:    UploadTryTimeout,
-			RetryDelay:    UploadRetryDelay,
-			MaxRetryDelay: UploadMaxRetryDelay,
-		}, jpm.pacer,
-		jpm.jobMgr.HttpClient(),
-		statsAccForSip,
-		jpm.planMMF.Plan().DstFileData.TrailingDot,
-		fromTo.From())
-	}
 
 	switch {
 	case fromTo.IsS2S() && (fromTo.To() == common.ELocation.Blob() || fromTo.To() == common.ELocation.BlobFS()), // destination determines pipeline for S2S, blobfs uses blob for S2S
@@ -687,31 +666,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
-	case fromTo.IsS2S() && fromTo.To() == common.ELocation.File(),
-	     fromTo.IsUpload() && fromTo.To() == common.ELocation.File(),
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.File(),
-		 fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File(),
-		 fromTo.IsDelete() && fromTo.From() == common.ELocation.File():
-		jpm.pipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			azfile.RetryOptions{
-				Policy:        azfile.RetryPolicyExponential,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay,
-			},
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats(),
-			jpm.planMMF.Plan().DstFileData.TrailingDot,
-			fromTo.From())
 	}
 }
 

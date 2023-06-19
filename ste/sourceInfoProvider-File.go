@@ -24,11 +24,8 @@ import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"net/url"
 	"sync"
 	"time"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
