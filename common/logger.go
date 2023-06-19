@@ -23,6 +23,7 @@ package common
 import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"log"
 	"net/url"
 	"os"
@@ -170,10 +171,36 @@ func NewV1ReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, 
 	}
 }
 
-func NewReadLogFunc(logger ILogger, fullUrl string) func(int32, error, blob.HTTPRange, bool) {
+func NewBlobReadLogFunc(logger ILogger, fullUrl string) func(int32, error, blob.HTTPRange, bool) {
 	redactedUrl := URLStringExtension(fullUrl).RedactSecretQueryParamForLogging()
 
 	return func(failureCount int32, err error, r blob.HTTPRange, willRetry bool) {
+		retryMessage := "Will retry"
+		if !willRetry {
+			retryMessage = "Will NOT retry"
+		}
+		logger.Log(pipeline.LogInfo, fmt.Sprintf(
+			"Error reading body of reply. Next try (if any) will be %s%d. %s. Error: %s. Offset: %d  Count: %d URL: %s",
+			TryEquals, // so that retry wording for body-read retries is similar to that for URL-hitting retries
+
+			// We log the number of the NEXT try, not the failure just done, so that users searching the log for "Try=2"
+			// will find ALL retries, both the request send retries (which are logged as try 2 when they are made) and
+			// body read retries (for which only the failure is logged - so if we did the actual failure number, there would be
+			// not Try=2 in the logs if the retries work).
+			failureCount+1,
+
+			retryMessage,
+			err,
+			r.Offset,
+			r.Count,
+			redactedUrl))
+	}
+}
+
+func NewFileReadLogFunc(logger ILogger, fullUrl string) func(int32, error, sharefile.HTTPRange, bool) {
+	redactedUrl := URLStringExtension(fullUrl).RedactSecretQueryParamForLogging()
+
+	return func(failureCount int32, err error, r sharefile.HTTPRange, willRetry bool) {
 		retryMessage := "Will retry"
 		if !willRetry {
 			retryMessage = "Will NOT retry"

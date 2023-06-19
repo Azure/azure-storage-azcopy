@@ -2,7 +2,6 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"io"
 	"math/rand"
 	"net"
@@ -411,7 +410,7 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 
 					// TODO make sure Storage error can be cast to different package's error object
 					// TODO: Discuss the error handling of Go Blob SDK.
-					if stErr, ok := err.(azfile.StorageError); ok {
+					if stErr, ok := err.(azbfs.StorageError); ok {
 						// retry only in case of temporary storage errors.
 						if stErr.Temporary() {
 							action = "Retry: StorageError with error service code and Temporary()"

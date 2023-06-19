@@ -7,7 +7,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -849,8 +848,6 @@ func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
 		return respErr.StatusCode, respErr.RawResponse.Status
 	}
 	switch e := err.(type) {
-	case azfile.StorageError:
-		return e.Response().StatusCode, e.Response().Status
 	case azbfs.StorageError:
 		return e.Response().StatusCode, e.Response().Status
 	default:

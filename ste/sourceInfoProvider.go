@@ -78,7 +78,7 @@ type IBlobSourceInfoProvider interface {
 type TypedSMBPropertyHolder interface {
 	FileCreationTime() time.Time
 	FileLastWriteTime() time.Time
-	FileAttributes() file.NTFSFileAttributes
+	FileAttributes() (*file.NTFSFileAttributes, error)
 }
 
 type ISMBPropertyBearingSourceInfoProvider interface {
