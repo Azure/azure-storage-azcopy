@@ -10,7 +10,16 @@ import (
 )
 
 func localToLocal(jptm IJobPartTransferMgr) {
-	localToLocal_file(jptm)
+	info := jptm.Info()
+
+	switch info.EntityType {
+	case common.EEntityType.Folder():
+		localToLocal_folder(jptm)
+	case common.EEntityType.FileProperties():
+		//anyToRemote_fileProperties(jptm)
+	case common.EEntityType.File():
+		localToLocal_file(jptm)
+	}
 }
 
 func localToLocal_file(jptm IJobPartTransferMgr) {
@@ -73,9 +82,10 @@ func localToLocal_file(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 		return
 	}
-
+	//Although we are transfering the folders but we don't know whether file in that folder will be executed before or after.
+	//As the enumeration is done using parllel workers
 	if _, err := os.Stat(dst); os.IsNotExist(err) {
-		os.MkdirAll(filepath.Dir(dst), 0700) // Create your file
+		os.MkdirAll(filepath.Dir(dst), 0700)
 	}
 
 	body := func() {

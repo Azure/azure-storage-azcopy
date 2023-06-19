@@ -21,10 +21,11 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/JeffreyRichter/enum/enum"
@@ -147,9 +148,9 @@ type params struct {
 	includeAttributes         string
 	excludePath               string
 	excludePattern            string
-	excludeAttributes 		  string
-	forceIfReadOnly   		  bool
-	capMbps           		  float32
+	excludeAttributes         string
+	forceIfReadOnly           bool
+	capMbps                   float32
 	blockSizeMB               float32
 	deleteDestination         common.DeleteDestination // Manual validation is needed.
 	s2sSourceChangeValidation bool
@@ -179,7 +180,7 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
-	trailingDot common.TrailingDotOption
+	trailingDot            common.TrailingDotOption
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -471,6 +472,7 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			}
 		}
 	}
+	result = append(result, common.EFromTo.LocalLocal())
 
 	return result
 }
