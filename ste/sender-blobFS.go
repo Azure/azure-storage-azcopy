@@ -37,6 +37,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+type URLHolderV1 interface {
+	String() string
+	URL() url.URL
+}
+
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
 	sip          ISourceInfoProvider

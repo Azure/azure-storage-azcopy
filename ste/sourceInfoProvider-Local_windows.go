@@ -129,7 +129,7 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 	return time.Unix(0, hi.LastWriteTime.Nanoseconds())
 }
 
-func (hi HandleInfo) FileAttributes() file.NTFSFileAttributes {
+func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {
 	// Can't shorthand it because the function name overrides.
 	return fileAttributesFromUint32(hi.ByHandleFileInformation.FileAttributes)
 }

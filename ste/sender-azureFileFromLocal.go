@@ -22,6 +22,7 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -68,7 +69,7 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.ctx, reader, u.pacer)
-		_, err := u.fileURL().UploadRange(u.ctx, id.OffsetInFile(), body, nil)
+		_, err := u.getFileClient().UploadRange(u.ctx, id.OffsetInFile(), body, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return
@@ -89,7 +90,11 @@ func (u *azureFileUploader) Epilogue() {
 			}
 
 			u.headersToApply.ContentMD5 = md5Hash
-			_, err := u.fileURL().SetHTTPHeaders(u.ctx, u.headersToApply)
+			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
+				HTTPHeaders: &u.headersToApply,
+				Permissions: &u.permissionsToApply,
+				SMBProperties: &u.smbPropertiesToApply,
+			})
 			return err
 		})
 	}
