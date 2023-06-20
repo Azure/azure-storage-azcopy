@@ -160,13 +160,17 @@ jobs:
           echo 'Building executable'
           go build -cover -o $(build_name)
           echo 'Running tests'
-          go test -timeout=1h -v ./e2etest 2>&1 | $(go_path)go-junit-report$(suffix) > report.xml
+          go test -timeout=1h -v ./e2etest | tee test.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "Generating junit report"
+          cat test.txt | | $(go_path)go-junit-report$(suffix) > report.xml
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o coverage.txt
           echo 'Formatting coverage to json format'
           $(go_path)gocov$(suffix) convert coverage.txt > coverage.json
           echo 'Formatting coverage to xml format'
           $(go_path)gocov-xml$(suffix) < coverage.json > coverage.xml
+          exit "$exit_code"
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
