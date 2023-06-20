@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
@@ -104,7 +103,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		true,
 		common.ETrailingDotOption.Enable(),
 		nil,
-		to.Ptr(common.ELocation.Local()),
+		nil,
 	)
 	a.Nil(err)
 
