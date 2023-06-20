@@ -106,6 +106,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	}
 	shareName := fileURLParts.ShareName
 	shareSnapshot := fileURLParts.ShareSnapshot
+	directoryOrFilePath := fileURLParts.DirectoryOrFilePath
 	// Strip any non-service related things away
 	fileURLParts.ShareName = ""
 	fileURLParts.ShareSnapshot = ""
@@ -122,9 +123,9 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	var client URLHolder
 	if info.IsFolderPropertiesTransfer() {
-		client = shareClient.NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
+		client = shareClient.NewDirectoryClient(directoryOrFilePath)
 	} else {
-		client = shareClient.NewRootDirectoryClient().NewFileClient(fileURLParts.DirectoryOrFilePath)
+		client = shareClient.NewRootDirectoryClient().NewFileClient(directoryOrFilePath)
 	}
 
 	return &azureFileSenderBase{
