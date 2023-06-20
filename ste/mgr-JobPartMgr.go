@@ -554,15 +554,23 @@ func (jpm *jobPartMgr) clientInfo() {
 	networkStats := jpm.jobMgr.PipelineNetworkStats()
 	logOptions := LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()}
 
+	var sourceTrailingDot *common.TrailingDotOption
 	var trailingDot *common.TrailingDotOption
 	var from *common.Location
-	if fromTo.To() == common.ELocation.File() || fromTo.From() == common.ELocation.File(){
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
+		sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+	}
+	if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
+		fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
+		fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
+		fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
+		fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
 		trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-		if fromTo.To() == common.ELocation.File() {
+		if fromTo.IsS2S() {
 			from = to.Ptr(fromTo.From())
 		}
 	}
-	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, trailingDot, from)
+	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, sourceTrailingDot, nil)
 	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)
 }
 

@@ -462,7 +462,7 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 }
 
 func (u *azureFileSenderBase) DirUrlToString() string {
-	directoryURL := u.jptm.Info().Destination
+	directoryURL := u.getDirectoryClient().URL()
 	rawURL, err := url.Parse(directoryURL)
 	common.PanicIfErr(err)
 	rawURL.RawQuery = ""
