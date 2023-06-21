@@ -82,29 +82,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 	resource, err := SplitResourceString(filepath.Join(tmpDir, "tes*t.txt"), common.ELocation.Local())
 	a.Nil(err)
 
-	traverser, err := InitResourceTraverser(
-		resource,
-		common.ELocation.Local(),
-		nil,
-		nil,
-		common.ESymlinkHandlingType.Follow(),
-		nil,
-		true,
-		false,
-		false,
-		common.EPermanentDeleteOption.None(),
-		nil,
-		nil,
-		false,
-		common.ESyncHashType.None(),
-		common.EPreservePermissionsOption.None(),
-		pipeline.LogInfo,
-		common.CpkOptions{},
-		nil,
-		true,
-		common.ETrailingDotOption.Enable(),
-		nil,
-	)
+	traverser, err := InitResourceTraverser(resource, common.ELocation.Local(), nil, nil, common.ESymlinkHandlingType.Follow(), nil, true, false, false, common.EPermanentDeleteOption.None(), nil, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogInfo, common.CpkOptions{}, nil, true, common.ETrailingDotOption.Enable(), nil, nil)
 	a.Nil(err)
 
 	seenFiles := make(map[string]bool)
@@ -145,7 +123,7 @@ func TestFilesGetProperties(t *testing.T) {
 
 	pipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	// first test reading from the share itself
-	traverser := newFileTraverser(&shareURL, pipeline, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+	traverser := newFileTraverser(&shareURL, pipeline, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 	// embed the check into the processor for ease of use
 	seenContentType := false
@@ -169,7 +147,7 @@ func TestFilesGetProperties(t *testing.T) {
 	// then test reading from the filename exactly, because that's a different codepath.
 	seenContentType = false
 	fileURL := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileName)
-	traverser = newFileTraverser(&fileURL, pipeline, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+	traverser = newFileTraverser(&fileURL, pipeline, ctx, false, true, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 	err = traverser.Traverse(noPreProccessor, processor, nil)
 	a.Nil(err)
@@ -595,7 +573,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 			// construct an Azure file traverser
 			filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, fileList[0])
-			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
@@ -723,7 +701,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
@@ -872,7 +850,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, shareName, virDirName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}

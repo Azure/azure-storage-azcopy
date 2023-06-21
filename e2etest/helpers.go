@@ -261,7 +261,7 @@ func newNullFolderCreationTracker() ste.FolderCreationTracker {
 func generateParentsForAzureFile(c asserter, fileURL azfile.FileURL) {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
-	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable())
+	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable(), common.ELocation.File())
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, p, newNullFolderCreationTracker())
 	c.AssertNoErr(err)
 }
