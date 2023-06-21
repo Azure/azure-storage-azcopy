@@ -310,11 +310,13 @@ func createFile(fileURLStr string, fileSize uint32, metadata map[string]*string,
 		os.Exit(1)
 	}
 
-	err = fileClient.UploadBuffer(context.Background(), []byte(randomString), nil)
+	if fileSize > 0 {
+		err = fileClient.UploadBuffer(context.Background(), []byte(randomString), nil)
 
-	if err != nil {
-		fmt.Printf("error uploading the file %v\n", err)
-		os.Exit(1)
+		if err != nil {
+			fmt.Printf("error uploading the file %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
