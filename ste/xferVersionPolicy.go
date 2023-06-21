@@ -104,7 +104,7 @@ type trailingDotPolicy struct {
 	from *common.Location
 }
 
-func newTrailingDotPolicy(trailingDot *common.TrailingDotOption, from *common.Location) policy.Policy {
+func NewTrailingDotPolicy(trailingDot *common.TrailingDotOption, from *common.Location) policy.Policy {
 	return &trailingDotPolicy{trailingDot: trailingDot, from: from}
 }
 

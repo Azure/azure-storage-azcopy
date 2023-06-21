@@ -71,8 +71,6 @@ func (a filesResourceAdapter) toSMBProperties(c asserter) *file.SMBProperties {
 	}
 }
 
-
-
 func (a filesResourceAdapter) toAttributes(c asserter) *file.NTFSFileAttributes {
 	if a.obj.creationProperties.smbAttributes != nil {
 		attr, err := ste.FileAttributesFromUint32(*a.obj.creationProperties.smbAttributes)
