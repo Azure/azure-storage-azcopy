@@ -26,6 +26,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -262,7 +264,11 @@ func getFileServiceClient() *fileservice.Client {
 	if err != nil {
 		panic(err)
 	}
-	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, nil)
+	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(to.Ptr(common.ETrailingDotOption.Enable()), nil)}
+	clientOptions := azcore.ClientOptions{
+		PerRetryPolicies: perRetryPolicies,
+	}
+	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, &fileservice.ClientOptions{ClientOptions: clientOptions})
 	if err != nil {
 		panic(err)
 	}
