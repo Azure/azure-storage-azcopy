@@ -77,7 +77,7 @@ func localToLocal_file(jptm IJobPartTransferMgr) {
 		}
 	}
 
-	// step 4a: mark destination as modified before we take our first action there (which is to create the destination file)
+	//mark destination as modified before we take our first action there (which is to create the destination file)
 	jptm.SetDestinationIsModified()
 
 	common.GetLifecycleMgr().E2EAwaitAllowOpenFiles()
@@ -113,7 +113,7 @@ func localToLocal_file(jptm IJobPartTransferMgr) {
 		return
 	}
 
-	// step 4c: normal file creation when source has content
+	//normal file creation when source has content
 
 	failFileCreation := func(err error) {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
@@ -127,7 +127,7 @@ func localToLocal_file(jptm IJobPartTransferMgr) {
 	}
 
 	if strings.EqualFold(info.Destination, common.Dev_Null) {
-		// the user wants to discard the downloaded data
+		// the user wants to discard the Copy data
 		//dstFile = devNullWriter{}
 	} else {
 		// Normal scenario, create the destination file as expected
@@ -153,25 +153,7 @@ func localToLocal_file(jptm IJobPartTransferMgr) {
 	body := func() {
 		if info.SourceSize > 0 {
 			_, err = copyFile(jptm.Context(), src, dstFilePtr)
-
-			//	if destinationSize != jptm.Info().SourceSize || err != nil {
-			// 	err1 := removeFile(dst)
-			// 	if err1 != nil {
-			// 		//gives error when destination file not exist means that
-			// 		//context was cancelled before we created the file
-			// 		jptm.LogSendError(info.Source, info.Destination, "Transfer got failed", 0)
-			// 		jptm.SetStatus(common.ETransferStatus.Failed())
-			// 		jptm.ReportTransferDone()
-			// 		return
-			// 	}
-			// 	jptm.LogSendError(info.Source, info.Destination, "CleanUp Successful and transfer got failed", 0) //cleanup was successful
-			// 	jptm.SetStatus(common.ETransferStatus.Failed())
-			// 	jptm.ReportTransferDone()
-			// 	return
-			//}
 		}
-		// jptm.SetStatus(common.ETransferStatus.Success()) // is a real failure, not just a SkippedFileAlreadyExists, in this case
-		// jptm.ReportTransferDone()
 	}
 	cf := createChunkFunc(true, jptm, common.NewChunkID(src, 0, info.SourceSize), body)
 	jptm.ScheduleChunks(cf)
@@ -210,32 +192,10 @@ func removeFile(dst string) error {
 }
 
 func createDestinationFile_return_filePtr(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool) (file *os.File, err error) {
-	// ct := common.ECompressionType.None()
-	// if jptm.ShouldDecompress() {
-	// 	size = 0                                  // we don't know what the final size will be, so we can't pre-size it
-	// 	ct, err = jptm.GetSourceCompressionType() // calls same decompression getter routine as the front-end does
-	// 	if err != nil {                           // check this, and return error, before we create any disk file, since if we return err, then no cleanup of file will be required
-	// 		return nil, err
-	// 	}
-	// 	// Why get the decompression type again here, when we already looked at it at enumeration time?
-	// 	// Because we have better ability to report unsupported compression types here, with clear "transfer failed" handling,
-	// 	// and we still need to set size to zero here, so relying on enumeration more wouldn't simply this code much, if at all.
-	// }
-
 	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker(), jptm.GetForceIfReadOnly())
 	if err != nil {
 		return nil, err
 	}
-	//TODO: check for decompress
-	// if jptm.ShouldDecompress() {
-	// 	jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "will be decompressed from "+ct.String())
-
-	// 	// wrap for automatic decompression
-	// 	dstFile = common.NewDecompressingWriter(dstFile, ct)
-	// 	// why don't we just let Go's network stack automatically decompress for us? Because
-	// 	// 1. Then we can't check the MD5 hash (since logically, any stored hash should be the hash of the file that exists in Storage, i.e. the compressed one)
-	// 	// 2. Then we can't pre-plan a certain number of fixed-size chunks (which is required by the way our architecture currently works).
-	// }
 	return dstFile, nil
 }
 
@@ -260,18 +220,7 @@ func epilogueWithRename(jptm IJobPartTransferMgr, activeDstFile *os.File) {
 			jptm.FailActiveDownload("Closing file", closeErr)
 		}
 
-		// Check MD5 (but only if file was fully flushed and saved - else no point and may not have actualAsSaved hash anyway)
 		if jptm.IsLive() {
-			// comparison := md5Comparer{
-			// 	expected:         info.SrcHTTPHeaders.ContentMD5, // the MD5 that came back from Service when we enumerated the source
-			// 	actualAsSaved:    md5OfFileAsWritten,
-			// 	validationOption: jptm.MD5ValidationOption(),
-			// 	logger:           jptm}
-			// err := comparison.Check()
-			// if err != nil {
-			// 	jptm.FailActiveDownload("Checking MD5 hash", err)
-			// }
-
 			// check length if enabled (except for dev null and decompression case, where that's impossible)
 			if info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
 				fi, err := common.OSStat(info.getDownloadPath())
@@ -311,7 +260,6 @@ func epilogueWithRename(jptm IJobPartTransferMgr, activeDstFile *os.File) {
 				// do NOT return, since final status and cleanup logging still to come
 			} else {
 				//successfully modified last modified time
-				//jptm.Log(pipeline.LogInfo, fmt.Sprintf(" Preserved Modified Time for %s", info.Destination))
 			}
 		}
 	}
