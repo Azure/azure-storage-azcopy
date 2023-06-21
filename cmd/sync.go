@@ -156,26 +156,14 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.fromTo.To() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.fromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.fromTo.To() != common.ELocation.File() && cooked.fromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	default:
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}
@@ -818,7 +806,9 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
-	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Enabled by default. Options for trailing dot support in file share. Available options: Enable, Disable. Choose disable to go back to legacy (potentially unsafe) treatment of trailing dot files.")
+	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. " +
+		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation." +
+		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "", "When using `--local-hash-storage-mode=HiddenFiles` you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
