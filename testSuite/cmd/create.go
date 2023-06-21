@@ -11,6 +11,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"net/url"
 	"os"
 	"time"
@@ -21,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	minio "github.com/minio/minio-go"
 	"github.com/spf13/cobra"
 )
@@ -95,7 +97,7 @@ func init() {
 					createBlob(
 						resourceURL,
 						blobSize,
-						getBlobMetadata(metadata),
+						getMetadata(metadata),
 						&blob.HTTPHeaders{
 							BlobContentType:        &contentType,
 							BlobContentDisposition: &contentDisposition,
@@ -115,14 +117,14 @@ func init() {
 					createFile(
 						resourceURL,
 						blobSize,
-						getFileMetadata(metadata),
-						azfile.FileHTTPHeaders{
-							ContentType:        contentType,
-							ContentDisposition: contentDisposition,
-							ContentEncoding:    contentEncoding,
-							ContentLanguage:    contentLanguage,
+						getMetadata(metadata),
+						&sharefile.HTTPHeaders{
+							ContentType:        &contentType,
+							ContentDisposition: &contentDisposition,
+							ContentEncoding:    &contentEncoding,
+							ContentLanguage:    &contentLanguage,
 							ContentMD5:         md5,
-							CacheControl:       cacheControl,
+							CacheControl:       &cacheControl,
 						})
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
@@ -187,7 +189,7 @@ func init() {
 
 }
 
-func getBlobMetadata(metadataString string) map[string]*string {
+func getMetadata(metadataString string) map[string]*string {
 	var metadata map[string]*string
 
 	if len(metadataString) > 0 {
@@ -195,20 +197,6 @@ func getBlobMetadata(metadataString string) map[string]*string {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
 			metadata[kv[0]] = to.Ptr(kv[1])
-		}
-	}
-
-	return metadata
-}
-
-func getFileMetadata(metadataString string) azfile.Metadata {
-	var metadata azfile.Metadata
-
-	if len(metadataString) > 0 {
-		metadata = azfile.Metadata{}
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadata[kv[0]] = kv[1]
 		}
 	}
 
@@ -267,32 +255,23 @@ func createBlob(blobURL string, blobSize uint32, metadata map[string]*string, bl
 }
 
 func createShareOrDirectory(shareOrDirectoryURLStr string) {
-	u, err := url.Parse(shareOrDirectoryURLStr)
-
-	if err != nil {
-		fmt.Println("error parsing the share or directory URL with SAS ", err)
-		os.Exit(1)
-	}
-
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-
-	fileURLPart := azfile.NewFileURLParts(*u)
+	fileURLParts, err := sharefile.ParseURL(shareOrDirectoryURLStr)
 
 	isShare := false
-	if fileURLPart.ShareName != "" && fileURLPart.DirectoryOrFilePath == "" {
+	if fileURLParts.ShareName != "" && fileURLParts.DirectoryOrFilePath == "" {
 		isShare = true
 		// This is a share
-		shareURL := azfile.NewShareURL(*u, p)
-		_, err := shareURL.Create(context.Background(), azfile.Metadata{}, 0)
+		shareClient, _ := share.NewClientWithNoCredential(shareOrDirectoryURLStr, nil)
+		_, err := shareClient.Create(context.Background(), nil)
 		if ignoreStorageConflictStatus(err) != nil {
 			fmt.Println("fail to create share, ", err)
 			os.Exit(1)
 		}
 	}
 
-	dirURL := azfile.NewDirectoryURL(*u, p) // i.e. root directory, in share's case
+	directoryClient, _ := sharedirectory.NewClientWithNoCredential(shareOrDirectoryURLStr, nil) // i.e. root directory, in share's case
 	if !isShare {
-		_, err := dirURL.Create(context.Background(), azfile.Metadata{}, azfile.SMBProperties{})
+		_, err := directoryClient.Create(context.Background(), nil)
 		if ignoreStorageConflictStatus(err) != nil {
 			fmt.Println("fail to create directory, ", err)
 			os.Exit(1)
@@ -302,25 +281,19 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 	// Finally valdiate if directory with specified URL exists, if doesn't exist, then report create failure.
 	time.Sleep(1 * time.Second)
 
-	_, err = dirURL.GetProperties(context.Background())
+	_, err = directoryClient.GetProperties(context.Background(), nil)
 	if err != nil {
 		fmt.Println("error createShareOrDirectory with URL, ", err)
 		os.Exit(1)
 	}
 }
 
-func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fileHTTPHeaders azfile.FileHTTPHeaders) {
-	url, err := url.Parse(fileURLStr)
-	if err != nil {
-		fmt.Println("error parsing the blob sas ", err)
-		os.Exit(1)
-	}
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-	fileURL := azfile.NewFileURL(*url, p)
+func createFile(fileURLStr string, fileSize uint32, metadata map[string]*string, fileHTTPHeaders *sharefile.HTTPHeaders) {
+	fileClient, _ := sharefile.NewClientWithNoCredential(fileURLStr, nil)
 
 	randomString := createStringWithRandomChars(int(fileSize))
-	if fileHTTPHeaders.ContentType == "" {
-		fileHTTPHeaders.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
+	if fileHTTPHeaders.ContentType == nil {
+		fileHTTPHeaders.ContentType = to.Ptr(strings.Split(http.DetectContentType([]byte(randomString)), ";")[0])
 	}
 
 	// Generate a content MD5 for the new blob if requested
@@ -330,10 +303,15 @@ func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fi
 		fileHTTPHeaders.ContentMD5 = md5hasher.Sum(nil)
 	}
 
-	err = azfile.UploadBufferToAzureFile(context.Background(), []byte(randomString), fileURL, azfile.UploadToAzureFileOptions{
-		FileHTTPHeaders: fileHTTPHeaders,
-		Metadata:        metadata,
-	})
+	_, err := fileClient.Create(context.Background(), int64(fileSize), &sharefile.CreateOptions{HTTPHeaders: fileHTTPHeaders, Metadata: metadata})
+
+	if err != nil {
+		fmt.Printf("error creating the file %v\n", err)
+		os.Exit(1)
+	}
+
+	err = fileClient.UploadBuffer(context.Background(), []byte(randomString), nil)
+
 	if err != nil {
 		fmt.Printf("error uploading the file %v\n", err)
 		os.Exit(1)

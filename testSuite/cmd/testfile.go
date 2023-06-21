@@ -4,15 +4,14 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/spf13/cobra"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"time"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/spf13/cobra"
 )
 
 // TestFileCommand represents the struct to get command
@@ -108,52 +107,48 @@ func verifyFile(testFileCmd TestFileCommand) {
 
 // verifyFileDirUpload verifies the directory recursively uploaded to the share or directory.
 func verifyFileDirUpload(testFileCmd TestFileCommand) {
-	// parse the subject url.
-	sasURL, err := url.Parse(testFileCmd.Subject)
-	if err != nil {
-		// fmt.Println("fail to parse the container sas ", testFileCmd.Subject)
-		os.Exit(1)
-	}
-
-	// as it's a directory validation, regard the sasURL as a directory
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-	directoryURL := azfile.NewDirectoryURL(*sasURL, p)
+	directoryClient, _ := directory.NewClientWithNoCredential(testFileCmd.Subject, nil)
 
 	// get the original dir path, which can be used to get file relative path during enumerating and comparing
-	baseAzureDirPath := azfile.NewFileURLParts(*sasURL).DirectoryOrFilePath
+	fileURLParts, err := file.ParseURL(testFileCmd.Subject)
+	if err != nil {
+		os.Exit(1)
+	}
+	baseAzureDirPath := fileURLParts.DirectoryOrFilePath
 
 	// validate azure directory
-	validateAzureDirWithLocalFile(directoryURL, baseAzureDirPath, testFileCmd.Object, testFileCmd.IsRecursive)
+	validateAzureDirWithLocalFile(directoryClient, baseAzureDirPath, testFileCmd.Object, testFileCmd.IsRecursive)
 }
 
 // recursively validate files in azure directories and sub-directories
-func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzureDirPath string, localBaseDir string, isRecursive bool) {
-	for marker := (azfile.Marker{}); marker.NotDone(); {
+func validateAzureDirWithLocalFile(curAzureDirURL *directory.Client, baseAzureDirPath string, localBaseDir string, isRecursive bool) {
+	pager := curAzureDirURL.NewListFilesAndDirectoriesPager(nil)
+	for pager.More() {
 		// look for all files that in current directory
-		listFile, err := curAzureDirURL.ListFilesAndDirectoriesSegment(context.Background(), marker, azfile.ListFilesAndDirectoriesOptions{})
+		listFile, err := pager.NextPage(context.Background())
 		if err != nil {
 			// fmt.Printf("fail to list files and directories inside the directory. Please check the directory sas, %v\n", err)
 			os.Exit(1)
 		}
 
 		if isRecursive {
-			for _, dirInfo := range listFile.DirectoryItems {
-				newDirURL := curAzureDirURL.NewDirectoryURL(dirInfo.Name)
+			for _, dirInfo := range listFile.Segment.Directories {
+				newDirURL := curAzureDirURL.NewSubdirectoryClient(*dirInfo.Name)
 				validateAzureDirWithLocalFile(newDirURL, baseAzureDirPath, localBaseDir, isRecursive)
 			}
 		}
 
 		// Process the files returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, fileInfo := range listFile.FileItems {
-			curFileURL := curAzureDirURL.NewFileURL(fileInfo.Name)
-			get, err := curFileURL.Download(context.Background(), 0, azfile.CountToEnd, false)
+		for _, fileInfo := range listFile.Segment.Files {
+			curFileURL := curAzureDirURL.NewFileClient(*fileInfo.Name)
+			get, err := curFileURL.DownloadStream(context.Background(), nil)
 
 			if err != nil {
 				fmt.Printf("fail to download the file %s\n", fileInfo.Name)
 				os.Exit(1)
 			}
 
-			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: 3})
+			retryReader := get.NewRetryReader(context.Background(), &file.RetryReaderOptions{MaxRetries: 3})
 
 			// read all bytes.
 			fileBytesDownloaded, err := io.ReadAll(retryReader)
@@ -163,9 +158,14 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 			}
 			retryReader.Close()
 
-			tokens := strings.SplitAfterN(curFileURL.URL().Path, baseAzureDirPath, 2)
+			url, err := url.Parse(curFileURL.URL())
+			if err != nil {
+				fmt.Printf("fail to parse the file URL %s\n", curFileURL.URL())
+				os.Exit(1)
+			}
+			tokens := strings.SplitAfterN(url.Path, baseAzureDirPath, 2)
 			if len(tokens) < 2 {
-				fmt.Printf("fail to get sub directory and file name, file URL '%s', original dir path '%s'\n", curFileURL.String(), baseAzureDirPath)
+				fmt.Printf("fail to get sub directory and file name, file URL '%s', original dir path '%s'\n", curFileURL.URL(), baseAzureDirPath)
 				os.Exit(1)
 			}
 
@@ -205,43 +205,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 			}
 		}
 
-		marker = listFile.NextMarker
 	}
-}
-
-// validateMetadataForFile compares the meta data provided while
-// uploading and metadata with file in the container.
-func validateMetadataForFile(expectedMetaDataString string, actualMetaData azfile.Metadata) bool {
-	if len(expectedMetaDataString) > 0 {
-		// split the meta data string to get the map of key value pair
-		// metadata string is in format key1=value1;key2=value2;key3=value3
-		expectedMetaData := azfile.Metadata{}
-		// split the metadata to get individual keyvalue pair in format key1=value1
-		keyValuePair := strings.Split(expectedMetaDataString, ";")
-		for index := 0; index < len(keyValuePair); index++ {
-			// split the individual key value pair to get key and value
-			keyValue := strings.Split(keyValuePair[index], "=")
-			expectedMetaData[keyValue[0]] = keyValue[1]
-		}
-		// if number of metadata provided while uploading
-		// doesn't match the metadata with file on the container
-		if len(expectedMetaData) != len(actualMetaData) {
-			fmt.Println("number of user given key value pair of the actual metadata differs from key value pair of expected metaData")
-			return false
-		}
-		// iterating through each key value pair of actual metaData and comparing the key value pair in expected metadata
-		for key, value := range actualMetaData {
-			if expectedMetaData[key] != value {
-				fmt.Printf("value of user given key %s is %s in actual data while it is %s in expected metadata\n", key, value, expectedMetaData[key])
-				return false
-			}
-		}
-	} else {
-		if len(actualMetaData) > 0 {
-			return false
-		}
-	}
-	return true
 }
 
 // verifySingleFileUpload verifies the pagefile uploaded or downloaded
@@ -250,32 +214,23 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 
 	fileInfo, err := os.Stat(testFileCmd.Object)
 	if err != nil {
-		fmt.Println("error opening the destination file on local disk ")
+		fmt.Println("error opening the destination localFile on local disk ")
 		os.Exit(1)
 	}
-	file, err := os.Open(testFileCmd.Object)
+	localFile, err := os.Open(testFileCmd.Object)
 	if err != nil {
-		fmt.Println("error opening the file ", testFileCmd.Object)
+		fmt.Println("error opening the localFile ", testFileCmd.Object)
 	}
 
-	// getting the shared access signature of the resource.
-	sourceURL, err := url.Parse(testFileCmd.Subject)
+	fileClient, _ := file.NewClientWithNoCredential(testFileCmd.Subject, nil)
+	get, err := fileClient.DownloadStream(context.Background(), nil)
 	if err != nil {
-		// fmt.Printf("Error parsing the file url source %s\n", testFileCmd.Object)
-		os.Exit(1)
-	}
-
-	// creating the page file url of the resource on container.
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{Retry: azfile.RetryOptions{TryTimeout: time.Minute * 10}})
-	fileURL := azfile.NewFileURL(*sourceURL, p)
-	get, err := fileURL.Download(context.Background(), 0, azfile.CountToEnd, false)
-	if err != nil {
-		fmt.Println("unable to get file properties ", err.Error())
+		fmt.Println("unable to get localFile properties ", err.Error())
 		os.Exit(1)
 	}
 
 	// reading all the bytes downloaded.
-	retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: 3})
+	retryReader := get.NewRetryReader(context.Background(), &file.RetryReaderOptions{MaxRetries: 3})
 	defer retryReader.Close()
 	fileBytesDownloaded, err := io.ReadAll(retryReader)
 	if err != nil {
@@ -287,18 +242,18 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 		// If the fileSize is 0 and the len of downloaded bytes is not 0
 		// validation fails
 		if len(fileBytesDownloaded) != 0 {
-			fmt.Printf("validation failed since the actual file size %d differs from the downloaded file size %d\n", fileInfo.Size(), len(fileBytesDownloaded))
+			fmt.Printf("validation failed since the actual localFile size %d differs from the downloaded localFile size %d\n", fileInfo.Size(), len(fileBytesDownloaded))
 			os.Exit(1)
 		}
-		// If both the actual and downloaded file size is 0,
+		// If both the actual and downloaded localFile size is 0,
 		// validation is successful, no need to match the md5
 		os.Exit(0)
 	}
 
 	// memory mapping the resource on local path.
-	mmap, err := NewMMF(file, false, 0, fileInfo.Size())
+	mmap, err := NewMMF(localFile, false, 0, fileInfo.Size())
 	if err != nil {
-		fmt.Println("error mapping the destination file: ", file, " file size: ", fileInfo.Size(), " Error: ", err.Error())
+		fmt.Println("error mapping the destination localFile: ", localFile, " localFile size: ", fileInfo.Size(), " Error: ", err.Error())
 		os.Exit(1)
 	}
 
@@ -307,18 +262,18 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	actualMd5 := md5.Sum(mmap)
 	expectedMd5 := md5.Sum(fileBytesDownloaded)
 	if actualMd5 != expectedMd5 {
-		fmt.Println("the uploaded file's md5 doesn't matches the actual file's md5 for file ", testFileCmd.Object)
+		fmt.Println("the uploaded localFile's md5 doesn't matches the actual localFile's md5 for localFile ", testFileCmd.Object)
 		os.Exit(1)
 	}
 
-	if testFileCmd.CheckContentMD5 && (get.ContentMD5() == nil || len(get.ContentMD5()) == 0) {
+	if testFileCmd.CheckContentMD5 && (get.ContentMD5 == nil || len(get.ContentMD5) == 0) {
 		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}
 
-	// verify the user given metadata supplied while uploading the file against the metadata actually present in the file
-	if !validateMetadataForFile(testFileCmd.MetaData, get.NewMetadata()) {
-		fmt.Println("meta data does not match between the actual and uploaded file.")
+	// verify the user given metadata supplied while uploading the localFile against the metadata actually present in the localFile
+	if !validateMetadata(testFileCmd.MetaData, get.Metadata) {
+		fmt.Println("meta data does not match between the actual and uploaded localFile.")
 		os.Exit(1)
 	}
 
@@ -330,41 +285,41 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 		expectedContentType = http.DetectContentType(mmap)
 	}
 	expectedContentType = strings.Split(expectedContentType, ";")[0]
-	if !validateString(expectedContentType, get.ContentType()) {
-		str1 := fmt.Sprintf(" %s    %s", expectedContentType, get.ContentType())
-		fmt.Println(str1 + "mismatch content type between actual and user given file content type")
+	if !validateString(expectedContentType, *get.ContentType) {
+		str1 := fmt.Sprintf(" %s    %s", expectedContentType, *get.ContentType)
+		fmt.Println(str1 + "mismatch content type between actual and user given localFile content type")
 		os.Exit(1)
 	}
 
 	//verify the content-encoding
-	if !validateString(testFileCmd.ContentEncoding, get.ContentEncoding()) {
-		fmt.Println("mismatch content encoding between actual and user given file content encoding")
+	if !validateString(testFileCmd.ContentEncoding, *get.ContentEncoding) {
+		fmt.Println("mismatch content encoding between actual and user given localFile content encoding")
 		os.Exit(1)
 	}
 
-	if !validateString(testFileCmd.ContentDisposition, get.ContentDisposition()) {
+	if !validateString(testFileCmd.ContentDisposition, *get.ContentDisposition) {
 		fmt.Println("mismatch content disposition between actual and user given value")
 		os.Exit(1)
 	}
 
-	if !validateString(testFileCmd.ContentLanguage, get.ContentLanguage()) {
+	if !validateString(testFileCmd.ContentLanguage, *get.ContentLanguage) {
 		fmt.Println("mismatch content encoding between actual and user given value")
 		os.Exit(1)
 	}
 
-	if !validateString(testFileCmd.CacheControl, get.CacheControl()) {
+	if !validateString(testFileCmd.CacheControl, *get.CacheControl) {
 		fmt.Println("mismatch cache control between actual and user given value")
 		os.Exit(1)
 	}
 
 	mmap.Unmap()
-	file.Close()
+	localFile.Close()
 
 	// verify the number of pageranges.
 	// this verifies the page-size and azcopy pagefile implementation.
 	if testFileCmd.VerifyBlockOrPageSize {
 		numberOfPages := int(testFileCmd.NumberOfBlocksOrPages)
-		resp, err := fileURL.GetRangeList(context.Background(), 0, azfile.CountToEnd)
+		resp, err := fileClient.GetRangeList(context.Background(), nil)
 		if err != nil {
 			fmt.Println("error getting the range list ", err.Error())
 			os.Exit(1)
