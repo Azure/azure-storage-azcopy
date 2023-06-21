@@ -42,6 +42,7 @@ type fileAccountTraverser struct {
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 	trailingDot common.TrailingDotOption
+	destination *common.Location
 }
 
 func (t *fileAccountTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -95,7 +96,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range shareList {
 		shareURL := t.accountURL.NewShareURL(v).URL()
-		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.trailingDot)
+		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.getProperties, t.incrementEnumerationCounter, t.trailingDot, t.destination)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -110,7 +111,7 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption) (t *fileAccountTraverser) {
+func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileAccountTraverser) {
 	fURLparts := azfile.NewFileURLParts(*rawURL)
 	sPattern := fURLparts.ShareName
 
@@ -118,6 +119,6 @@ func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 		fURLparts.ShareName = ""
 	}
 
-	t = &fileAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern, getProperties: getProperties, trailingDot: trailingDot}
+	t = &fileAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern, getProperties: getProperties, trailingDot: trailingDot, destination: destination}
 	return
 }

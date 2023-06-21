@@ -168,7 +168,9 @@ func init() {
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
 	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "delimiter (;) separated values of properties required in list output.")
-	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Enabled by default. Options for trailing dot support in file share. Available options: Enable, Disable. Choose disable to go back to legacy (potentially unsafe) treatment of trailing dot files.")
+	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. "+
+		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
+		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 	listContainerCmd.PersistentFlags().UintVar(&raw.directoryDepth, "directory-depth", 1e9, "Enabled by default with max Directory depth. User can Input a postive Integer with directory depth considering root directory depth as zero")
 
 	rootCmd.AddCommand(listContainerCmd)
@@ -243,7 +245,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 	parallel.DirectoryDepth = cooked.directoryDepth
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil)
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
