@@ -34,7 +34,7 @@ func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoP
 			return fmt.Errorf("attempted to read SMB properties: %w", err)
 		}
 		// This is a safe conversion.
-		attr := fileAttributesToUint32(*attribs)
+		attr := FileAttributesToUint32(*attribs)
 		xattrbuf := make([]byte, 4)
 		binary.LittleEndian.PutUint32(xattrbuf, attr)
 

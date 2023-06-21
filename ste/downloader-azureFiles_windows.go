@@ -56,7 +56,7 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 			return fmt.Errorf("attempted to read SMB properties: %w", err)
 		}
 		// This is a safe conversion.
-		err = windows.SetFileAttributes(destPtr, fileAttributesToUint32(*attribs))
+		err = windows.SetFileAttributes(destPtr, FileAttributesToUint32(*attribs))
 		if err != nil {
 			return fmt.Errorf("attempted file set attributes: %w", err)
 		}

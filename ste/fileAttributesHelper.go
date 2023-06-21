@@ -37,7 +37,7 @@ const (
 	FileAttributeNoScrubData       uint32 = 131072
 )
 
-func fileAttributesFromUint32(attributes uint32) (*file.NTFSFileAttributes, error) {
+func FileAttributesFromUint32(attributes uint32) (*file.NTFSFileAttributes, error) {
 	attr := file.NTFSFileAttributes{}
 	if attributes&FileAttributeNone != 0 {
 		attr.None = true
@@ -69,7 +69,7 @@ func fileAttributesFromUint32(attributes uint32) (*file.NTFSFileAttributes, erro
 	return &attr, nil
 }
 
-func fileAttributesToUint32(attributes file.NTFSFileAttributes) uint32 {
+func FileAttributesToUint32(attributes file.NTFSFileAttributes) uint32 {
 	var attr uint32
 	if attributes.None {
 		attr |= FileAttributeNone
