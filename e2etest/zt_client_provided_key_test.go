@@ -97,9 +97,19 @@ func TestClient_ProvidedScopeDownload(t *testing.T) {
 }
 
 func TestClient_ProvidedScopeDelete(t *testing.T) {
+	blobRemove := TestFromTo{
+		desc:      "BlobRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
@@ -168,8 +178,18 @@ func TestClient_ProvidedKeyDownload(t *testing.T) {
 }
 
 func TestClient_ProvidedKeyDelete(t *testing.T) {
+	blobRemove := TestFromTo{
+		desc:      "BlobRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		cpkByValue: true,
 	}, nil, testFiles{
