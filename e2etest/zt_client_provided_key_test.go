@@ -35,6 +35,9 @@ import (
 // 2. File <-> Blob (S2S)
 // 3. Blob <-> Local (Download)
 
+// Scenarios to consider for remove
+// 1. Blob <-> Trash (Delete)
+
 func TestClient_ProvidedScopeUpload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
@@ -82,6 +85,21 @@ func TestClient_ProvidedScopeDownload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+		cpkByName: cpkByName,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1", verifyOnlyProps),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestClient_ProvidedScopeDelete(t *testing.T) {
+	cpkByName := "blobgokeytestscope"
+	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
@@ -148,3 +166,19 @@ func TestClient_ProvidedKeyDownload(t *testing.T) {
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
+
+func TestClient_ProvidedKeyDelete(t *testing.T) {
+	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		cpkByValue: true,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1", verifyOnlyProps),
+			folder("dir"),
+			f("dir/file2", verifyOnlyProps),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
