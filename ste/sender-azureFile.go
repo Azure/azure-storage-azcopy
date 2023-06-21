@@ -123,11 +123,11 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	var client URLHolder
 	if info.IsFolderPropertiesTransfer() {
-		//if directoryOrFilePath == "" {
-		//	client = shareClient.NewRootDirectoryClient()
-		//} else {
+		if directoryOrFilePath == "" {
+			client = shareClient.NewRootDirectoryClient()
+		} else {
 			client = shareClient.NewDirectoryClient(directoryOrFilePath)
-		//}
+		}
 	} else {
 		client = shareClient.NewRootDirectoryClient().NewFileClient(directoryOrFilePath)
 	}
