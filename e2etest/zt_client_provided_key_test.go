@@ -108,16 +108,19 @@ func TestClient_ProvidedScopeDelete(t *testing.T) {
 		},
 	}
 	cpkByName := "blobgokeytestscope"
-	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
 	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
-	}, nil, testFiles{
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			h.CreateFile(f("file1", with{cpkByName: cpkByName}), true)
+		},
+	}, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
-			folder(""),
-			f("file1", verifyOnlyProps),
+			f("file1"),
 		},
+		objectTarget: "file1",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -177,6 +180,7 @@ func TestClient_ProvidedKeyDownload(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+
 func TestClient_ProvidedKeyDelete(t *testing.T) {
 	blobRemove := TestFromTo{
 		desc:      "BlobRemove",
@@ -188,17 +192,49 @@ func TestClient_ProvidedKeyDelete(t *testing.T) {
 			common.ELocation.Unknown(),
 		},
 	}
-	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
 	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		cpkByValue: true,
-	}, nil, testFiles{
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			h.CreateFile(f("file1", with{cpkByValue: true}), true)
+			h.CreateFile(folder("dir", with{cpkByValue: true}), true)
+			h.CreateFile(f("dir/file2", with{cpkByValue: true}), true)
+		},
+	}, testFiles{
 		defaultSize: "100K",
 		shouldTransfer: []interface{}{
-			f("file1", verifyOnlyProps),
+			f("file1"),
 			folder("dir"),
-			f("dir/file2", verifyOnlyProps),
+			f("dir/file2"),
 		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestClient_ProvidedKeyDeleteSingleFile(t *testing.T) {
+	blobRemove := TestFromTo{
+		desc:      "BlobRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		cpkByValue: true,
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			h.CreateFile(f("file1", with{cpkByValue: true}), true)
+		},
+	}, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1"),
+		},
+		objectTarget: "file1",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
