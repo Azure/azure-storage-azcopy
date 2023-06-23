@@ -2,7 +2,6 @@ package ste
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,29 +16,29 @@ func localToLocal(jptm IJobPartTransferMgr) {
 	switch info.EntityType {
 	case common.EEntityType.Folder():
 		localToLocal_folder(jptm)
-	case common.EEntityType.FileProperties():
-		//anyToRemote_fileProperties(jptm)
 	case common.EEntityType.File():
 		localToLocal_file(jptm)
 	}
 }
 
 func localToLocal_file(jptm IJobPartTransferMgr) {
-	// step 1. perform initial checks
+	info := jptm.Info()
+	//step 1: Get the source Info
+	fileSize := int64(info.SourceSize)
+	src := info.Source
+
+	// step 2: perform initial checks
 	if jptm.WasCanceled() {
 		/* This is the earliest we detect jptm has been cancelled before scheduling chunks */
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
 		jptm.ReportTransferDone()
 		return
 	}
-	info := jptm.Info()
-	fileSize := int64(info.SourceSize)
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())
 	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone())
 
-	src := info.Source
-	//dst := info.Destination
+	//step 3: Get the source file info
 	sourceFileStat, err := os.Stat(src)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, "Cannot stat source File"+err.Error(), 0)
@@ -76,24 +75,26 @@ func localToLocal_file(jptm IJobPartTransferMgr) {
 			}
 		}
 	}
-
+	//step 4a:
 	//mark destination as modified before we take our first action there (which is to create the destination file)
 	jptm.SetDestinationIsModified()
 
 	common.GetLifecycleMgr().E2EAwaitAllowOpenFiles()
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.OpenLocalSource())
 
+	//step 4b: check the file is regular or not to modify
 	if !sourceFileStat.Mode().IsRegular() {
 		jptm.LogSendError(info.Source, info.Destination, "file is not regular file", 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
+
+	//step5 : Create file for the destination
 	//Although we are transfering the folders but we don't know whether file in that folder will be executed before or after.
 	//As the enumeration is done using parllel workers
-	//todo:creationTImeDownloader file create
 	writeThrough := false
-	var dstFilePtr *os.File
+	var dstFile io.WriteCloser
 
 	// special handling for empty files
 	if fileSize == 0 {
@@ -128,7 +129,7 @@ func localToLocal_file(jptm IJobPartTransferMgr) {
 
 	if strings.EqualFold(info.Destination, common.Dev_Null) {
 		// the user wants to discard the Copy data
-		//dstFile = devNullWriter{}
+		dstFile = devNullWriter{}
 	} else {
 		// Normal scenario, create the destination file as expected
 		// Use pseudo chunk id to allow our usual state tracking mechanism to keep count of how many
@@ -138,23 +139,35 @@ func localToLocal_file(jptm IJobPartTransferMgr) {
 		// to correct name.
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
-		dstFilePtr, err = createDestinationFile_return_filePtr(jptm, info.getDownloadPath(), fileSize, writeThrough)
+		dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(info.getDownloadPath(), fileSize, writeThrough, jptm.GetFolderCreationTracker(), jptm.GetForceIfReadOnly())
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err)
 			return
 		}
 	}
+	//step 6: Initialize the no of chunks as 1, as we are transfering the entire file using 1 chunk processor thread.
 	// tell jptm what to expect, and how to clean up at the end
 	var numChunks uint32 = 1
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithRename(jptm, dstFilePtr) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithRename(jptm, dstFile) })
 
+	//step 7: Create the body for the chunk function
 	body := func() {
 		if info.SourceSize > 0 {
-			_, err = copyFile(jptm.Context(), src, dstFilePtr)
+			bytesWritten, err := copyFile(jptm.Context(), src, dstFile)
+			if err != nil || bytesWritten != fileSize {
+				//transfer is not successful
+				err = removeFile(info.getDownloadPath())
+				if err != nil {
+					jptm.LogSendError(info.Source, info.Destination, "Destination File cannot be deleted"+err.Error(), 0)
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+			}
 		}
 	}
+	//step 8: Create chunk function and schedule it.
 	cf := createChunkFunc(true, jptm, common.NewChunkID(src, 0, info.SourceSize), body)
 	jptm.ScheduleChunks(cf)
 
@@ -177,13 +190,13 @@ func NewReader(ctx context.Context, r io.Reader) io.Reader {
 		r:   r,
 	}
 }
-func copyFile(ctx context.Context, src string, dstFilePtr *os.File) (written int64, err error) {
+func copyFile(ctx context.Context, src string, dstFile io.WriteCloser) (written int64, err error) {
 	source, err := os.Open(src)
 	if err != nil {
 		return 0, err
 	}
 	defer source.Close()
-	return io.Copy(dstFilePtr, NewReader(ctx, source))
+	return io.Copy(dstFile, NewReader(ctx, source))
 }
 
 func removeFile(dst string) error {
@@ -191,15 +204,7 @@ func removeFile(dst string) error {
 	return err
 }
 
-func createDestinationFile_return_filePtr(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool) (file *os.File, err error) {
-	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough, jptm.GetFolderCreationTracker(), jptm.GetForceIfReadOnly())
-	if err != nil {
-		return nil, err
-	}
-	return dstFile, nil
-}
-
-func epilogueWithRename(jptm IJobPartTransferMgr, activeDstFile *os.File) {
+func epilogueWithRename(jptm IJobPartTransferMgr, activeDstFile io.WriteCloser) {
 	info := jptm.Info()
 
 	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
@@ -221,17 +226,6 @@ func epilogueWithRename(jptm IJobPartTransferMgr, activeDstFile *os.File) {
 		}
 
 		if jptm.IsLive() {
-			// check length if enabled (except for dev null and decompression case, where that's impossible)
-			if info.DestLengthValidation && info.Destination != common.Dev_Null && !jptm.ShouldDecompress() {
-				fi, err := common.OSStat(info.getDownloadPath())
-
-				if err != nil {
-					jptm.FailActiveDownload("Download length check", err)
-				} else if fi.Size() != info.SourceSize {
-					jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
-				}
-			}
-
 			// check if we need to rename back to original name. At this point, we're sure the file is completely
 			// downloaded and not corrupt. In fact, post this point we should only log errors and
 			// not fail the transfer.
@@ -249,9 +243,6 @@ func epilogueWithRename(jptm IJobPartTransferMgr, activeDstFile *os.File) {
 
 	// Preserve modified time
 	if jptm.IsLive() {
-		// TODO: the old version of this code did NOT consider it an error to be unable to set the modification date/time
-		// TODO: ...So I have preserved that behavior here.
-		// TODO: question: But is that correct?
 		lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
 		if preserveLastModifiedTime && !info.PreserveSMBInfo {
 			err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
