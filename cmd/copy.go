@@ -682,7 +682,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs || (cooked.isHNStoHNS && cooked.PreservePermissions.IsTruthy())
 
-	if err = crossValidateSymlinksAndPermissions(cooked.FollowSymlinks, cooked.PreservePermissions.IsTruthy()); err != nil {
+	if err = crossValidateSymlinksAndPermissions(cooked.FollowSymlinks, cooked.PreservePermissions.IsTruthy(), cooked.FromTo); err != nil {
 		return cooked, err
 	}
 
@@ -972,8 +972,8 @@ func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
 	return nil
 }
 
-func crossValidateSymlinksAndPermissions(followSymlinks, preservePermissions bool) error {
-	if followSymlinks && preservePermissions {
+func crossValidateSymlinksAndPermissions(followSymlinks, preservePermissions bool, fromTo common.FromTo) error {
+	if followSymlinks && preservePermissions && fromTo != common.EFromTo.LocalFile() {
 		return errors.New("cannot follow symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
 	}
 	return nil

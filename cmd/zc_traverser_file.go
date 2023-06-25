@@ -458,7 +458,7 @@ func (t *fileTraverser) generateDirUrl(fileUrlParts azfile.FileURLParts, relativ
 		relativePath = common.AZCOPY_PATH_SEPARATOR_STRING + relativePath
 	}
 
-	fileUrl.Path = fileUrl.Path + relativePath
+	fileUrl.Path = strings.TrimSuffix(fileUrl.Path, common.AZCOPY_PATH_SEPARATOR_STRING) + relativePath
 	return azfile.NewDirectoryURL(fileUrl, t.p)
 }
 
