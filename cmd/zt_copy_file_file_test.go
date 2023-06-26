@@ -32,8 +32,8 @@ func TestFileCopyS2SWithSingleFile(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	for _, fileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source share with a single file
@@ -86,8 +86,8 @@ func TestFileCopyS2SWithShares(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -132,8 +132,8 @@ func TestFileCopyS2SWithIncludeFlag(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -169,8 +169,8 @@ func TestFileCopyS2SWithExcludeFlag(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -206,8 +206,8 @@ func TestFileCopyS2SWithIncludeAndExcludeFlag(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
@@ -250,8 +250,8 @@ func TestFileCopyS2SWithDirectory(t *testing.T) {
 	fsu := getFSU()
 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	defer deleteShareV1(a, srcShareURL)
+	defer deleteShareV1(a, dstShareURL)
 
 	// set up the source share with numerous files
 	dirName := "dir"

@@ -36,6 +36,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
@@ -193,6 +198,13 @@ func getShareURL(a *assert.Assertions, fsu azfile.ServiceURL) (share azfile.Shar
 	return share, name
 }
 
+func getShareClient(a *assert.Assertions, fsc *fileservice.Client) (share *share.Client, name string) {
+	name = generateShareName()
+	share = fsc.NewShareClient(name)
+
+	return share, name
+}
+
 func generateAzureFileName() string {
 	return generateName(azureFilePrefix, 0)
 }
@@ -277,6 +289,22 @@ func getBlobServiceClient() *blobservice.Client {
 		panic(err)
 	}
 	client, err := blobservice.NewClientWithSharedKeyCredential(u, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+// get file account service client
+func getFileServiceClient() *fileservice.Client {
+	accountName, accountKey := getAccountAndKey()
+	u := fmt.Sprintf("https://%s.file.core.windows.net/", accountName)
+
+	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -384,11 +412,26 @@ func createNewAzureFile(a *assert.Assertions, share azfile.ShareURL, prefix stri
 	return
 }
 
+func createNewShare(a *assert.Assertions, fsc *fileservice.Client) (sc *share.Client, name string) {
+	sc, name = getShareClient(a, fsc)
+
+	_, err := sc.Create(ctx, nil)
+	a.Nil(err)
+
+	return sc, name
+}
+
+func generateParentsForShareFile(a *assert.Assertions, fileClient *sharefile.Client, serviceClient *fileservice.Client) {
+	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileClient, serviceClient, t)
+	a.Nil(err)
+}
+
 func generateParentsForAzureFile(a *assert.Assertions, fileURL azfile.FileURL) {
 	accountName, accountKey := getAccountAndKey()
 	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
 	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRootV1(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}), t)
 	a.Nil(err)
 }
 
@@ -663,18 +706,19 @@ func cleanBlobAccount(a *assert.Assertions, serviceClient *blobservice.Client) {
 	}
 }
 
-func cleanFileAccount(a *assert.Assertions, serviceURL azfile.ServiceURL) {
-	marker := azfile.Marker{}
-	for marker.NotDone() {
-		resp, err := serviceURL.ListSharesSegment(ctx, marker, azfile.ListSharesOptions{})
+func cleanFileAccount(a *assert.Assertions, serviceClient *fileservice.Client) {
+	pager := serviceClient.NewListSharesPager(nil)
+	for pager.More() {
+		resp, err := pager.NextPage(ctx)
 		a.Nil(err)
 
-		for _, v := range resp.ShareItems {
-			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
+		for _, v := range resp.Shares {
+			_, err = serviceClient.NewShareClient(*v.Name).Delete(ctx, nil)
 
 			if err != nil {
-				if stgErr, ok := err.(azfile.StorageError); ok {
-					if stgErr.ServiceCode() == azfile.ServiceCodeShareNotFound {
+				var respErr *azcore.ResponseError
+				if errors.As(err, &respErr) {
+					if respErr.ErrorCode == string(fileerror.ShareNotFound) {
 						continue
 					}
 				}
@@ -682,8 +726,6 @@ func cleanFileAccount(a *assert.Assertions, serviceURL azfile.ServiceURL) {
 				a.Nil(err)
 			}
 		}
-
-		marker = resp.NextMarker
 	}
 
 	time.Sleep(time.Minute)
@@ -715,7 +757,12 @@ func getAlternateFSU() (azfile.ServiceURL, error) {
 	return azfile.NewServiceURL(*fsURL, pipeline), nil
 }
 
-func deleteShare(a *assert.Assertions, share azfile.ShareURL) {
+func deleteShare(a *assert.Assertions, sc *share.Client) {
+	_, err := sc.Delete(ctx, &share.DeleteOptions{DeleteSnapshots: to.Ptr(share.DeleteSnapshotsOptionTypeInclude)})
+	a.Nil(err)
+}
+
+func deleteShareV1(a *assert.Assertions, share azfile.ShareURL) {
 	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
 	a.Nil(err)
 }
@@ -791,6 +838,41 @@ func getBlobServiceClientWithSAS(a *assert.Assertions, credential *blob.SharedKe
 	a.Nil(err)
 
 	client, err = blobservice.NewClientWithNoCredential(sasURL, nil)
+	a.Nil(err)
+
+	return client
+}
+
+func getFileServiceClientWithSAS(a *assert.Assertions, credential *sharefile.SharedKeyCredential) *fileservice.Client {
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/",
+		credential.AccountName())
+	client, err := fileservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+
+	sasURL, err := client.GetSASURL(
+		filesas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		filesas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, Create: true},
+		time.Now().Add(48*time.Hour),
+		nil)
+	a.Nil(err)
+
+	client, err = fileservice.NewClientWithNoCredential(sasURL, nil)
+	a.Nil(err)
+
+	return client
+}
+
+func getShareClientWithSAS(a *assert.Assertions, credential *sharefile.SharedKeyCredential, shareName string) *share.Client {
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s",
+		credential.AccountName(), shareName)
+	client, err := share.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+
+	sasURL, err := client.GetSASURL(
+		filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
+		time.Now().Add(48*time.Hour),
+		nil)
+	a.Nil(err)
+
+	client, err = share.NewClientWithNoCredential(sasURL, nil)
 	a.Nil(err)
 
 	return client
