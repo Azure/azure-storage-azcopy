@@ -172,18 +172,13 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		TryTimeout:    ste.UploadTryTimeout,
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	},
-		policy.TelemetryOptions{
-			ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+	}, policy.TelemetryOptions{
+		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+	}, nil, nil, ste.LogOptions{
+		RequestLogOptions: ste.RequestLogOptions{
+			SyslogDisabled: common.IsForceLoggingDisabled(),
 		},
-		nil,
-		nil, // we don't gather network stats on the credential pipeline
-		ste.LogOptions{
-			RequestLogOptions: ste.RequestLogOptions{
-				SyslogDisabled: common.IsForceLoggingDisabled(),
-			},
-		},
-	)
+	}, nil, nil)
 	credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
 	if isSASExisted := sas.Signature() != ""; isSASExisted {
 		if isMDAccount {
@@ -640,7 +635,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logLevel pipeline.LogLevel) azcore.ClientOptions {
+func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOptions.LogOptions = pipeline.LogOptions{
@@ -653,14 +648,9 @@ func createClientOptions(logLevel pipeline.LogLevel) azcore.ClientOptions {
 		TryTimeout:    ste.UploadTryTimeout,
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	},
-		policy.TelemetryOptions{
-			ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-		},
-		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
-		nil, // we don't gather network stats on the credential pipeline
-		logOptions,
-	)
+	}, policy.TelemetryOptions{
+		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, trailingDot, from)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

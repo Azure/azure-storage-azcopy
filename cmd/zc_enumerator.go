@@ -442,7 +442,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
+		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, nil, nil))
 
 		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
@@ -500,7 +500,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
+		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, nil, nil))
 
 		includeDirectoryStubs = true // DFS is supposed to feed folders in
 		if containerName == "" || strings.Contains(containerName, "*") {

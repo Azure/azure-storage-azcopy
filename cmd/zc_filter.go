@@ -28,11 +28,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+const ISO8601 = "2006-01-02T15:04:05.0000000Z" // must have 0's for fractional seconds, because Files Service requires fixed width
 // Design explanation:
 /*
 Blob type exclusion is required as a part of the copy enumerators refactor. This would be used in Download and S2S scenarios.
@@ -401,7 +400,7 @@ func parseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 
 	// list of ISO-8601 Go-lang formats in descending order of completeness
 	formats := []string{
-		azfile.ISO8601,              // Support AzFile's more accurate format
+		ISO8601,                     // Support AzFile's more accurate format
 		"2006-01-02T15:04:05Z07:00", // equal to time.RFC3339, which in Go parsing is basically "ISO 8601 with nothing optional"
 		"2006-01-02T15:04:05",       // no timezone
 		"2006-01-02T15:04",          // no seconds
