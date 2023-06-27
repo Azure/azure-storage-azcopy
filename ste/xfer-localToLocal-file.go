@@ -239,6 +239,10 @@ func epilogueWithRename(jptm IJobPartTransferMgr, activeDstFile io.WriteCloser) 
 				}
 			}
 		}
+		// We know that file(1chunk) has completed transfer (because this routine was called)
+		// and we know the transfer didn't fail (because just checked its status above),
+		// so it must have succeeded. So make sure its not left "in progress" state
+		jptm.SetStatus(common.ETransferStatus.Success())
 	}
 
 	// Preserve modified time
@@ -254,10 +258,6 @@ func epilogueWithRename(jptm IJobPartTransferMgr, activeDstFile io.WriteCloser) 
 			}
 		}
 	}
-	// We know that file(1chunk) has completed transfer (because this routine was called)
-	// and we know the transfer didn't fail (because just checked its status above),
-	// so it must have succeeded. So make sure its not left "in progress" state
-	jptm.SetStatus(common.ETransferStatus.Success())
 
 	// must always do this, and do it last
 	jptm.EnsureDestinationUnlocked()
