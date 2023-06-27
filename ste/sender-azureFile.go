@@ -579,7 +579,6 @@ func (AzureFileParentDirCreator) getParentDirectoryURLV1(uh URLHolderV1, p pipel
 	u.Path = u.Path[:strings.LastIndex(u.Path, "/")]
 	return azfile.NewDirectoryURL(u, p)
 }
-
 // CreateParentDirToRootV1 creates parent directories of the Azure file if file's parent directory doesn't exist.
 func (d AzureFileParentDirCreator) CreateParentDirToRootV1(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline, t FolderCreationTracker) error {
 	dirURL := d.getParentDirectoryURLV1(fileURL, p)
