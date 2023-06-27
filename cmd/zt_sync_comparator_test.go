@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"sort"
@@ -35,19 +34,19 @@ import (
 // regular file->file sync
 func TestFileSyncS2SWithSingleFile(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	for _, fileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source share with a single file
 		fileList := []string{fileName}
-		scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, fileList)
+		scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 
 		// set up the destination share with the same single file
-		scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileList)
+		scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileList)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -68,7 +67,7 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 		})
 
 		// recreate the source file to have a later last modified time
-		scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, fileList)
+		scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 		mockedRPC.reset()
 
 		runSyncAndVerify(a, raw, func(err error) {
@@ -81,14 +80,14 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 // regular share->share sync but destination is empty, so everything has to be transferred
 func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// set up interceptor
@@ -129,18 +128,18 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 // regular share->share sync but destination is identical to the source, transfers are scheduled based on lmt
 func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc,"")
 	a.NotZero(len(fileList))
 
 	// set up the destination with the exact same files
-	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileList)
+	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -161,7 +160,7 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 	})
 
 	// refresh the source files' last modified time so that they get synced
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, fileList)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -172,23 +171,23 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 // regular share->share sync where destination is missing some files from source, and also has some extra files
 func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// set up the destination with half of the files from source
 	filesAlreadyAtDestination := fileList[0 : len(fileList)/2]
-	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, filesAlreadyAtDestination)
+	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, filesAlreadyAtDestination)
 	expectedOutput := fileList[len(fileList)/2:] // the missing half of source files should be transferred
 
 	// add some extra files that shouldn't be included
-	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, dstShareURL, "extra")
+	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, dstShareClient, fsc, "extra")
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -215,14 +214,14 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 
 		// make sure the extra files were deleted
 		extraFilesFound := false
-		for marker := (azfile.Marker{}); marker.NotDone(); {
-			listResponse, err := dstShareURL.NewRootDirectoryURL().ListFilesAndDirectoriesSegment(ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
+		pager := dstShareClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
+		for pager.More() {
+			listResponse, err := pager.NextPage(ctx)
 			a.Nil(err)
-			marker = listResponse.NextMarker
 
 			// if ever the extra files are found, note it down
-			for _, file := range listResponse.FileItems {
-				if strings.Contains(file.Name, "extra") {
+			for _, file := range listResponse.Segment.Files {
+				if strings.Contains(*file.Name, "extra") {
 					extraFilesFound = true
 				}
 			}
@@ -235,19 +234,19 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 // include flag limits the scope of source/destination comparison
 func TestFileSyncS2SWithIncludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToInclude)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -271,19 +270,19 @@ func TestFileSyncS2SWithIncludeFlag(t *testing.T) {
 // exclude flag limits the scope of source/destination comparison
 func TestFileSyncS2SWithExcludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to exclude
 	filesToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToExclude)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToExclude)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -307,25 +306,25 @@ func TestFileSyncS2SWithExcludeFlag(t *testing.T) {
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToInclude)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special files that we wish to exclude
 	// note that the excluded files also match the include string
 	filesToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToExclude)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToExclude)
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -351,7 +350,7 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 // // validate the bug fix for this scenario
 // func TestFileSyncS2SWithMissingDestination(t *testing.T) {
 //	a := assert.New(t)
-// 	fsu := getFSU()
+// 	fsc := getFileServiceClient()
 // 	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
 // 	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
 // 	defer deleteShareV1(a, srcShareURL)
@@ -386,19 +385,19 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 // there is a type mismatch between the source and destination
 func TestFileSyncS2SMismatchShareAndFile(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// set up the destination share with a single file
 	singleFileName := "single"
-	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, []string{singleFileName})
+	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, []string{singleFileName})
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -433,14 +432,14 @@ func TestFileSyncS2SMismatchShareAndFile(t *testing.T) {
 // share <-> dir sync
 func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// set up interceptor
@@ -451,7 +450,7 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	// construct the raw input to simulate user input
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, srcShareName)
 	dirName := "emptydir"
-	_, err := dstShareURL.NewDirectoryURL(dirName).Create(context.Background(), azfile.Metadata{}, azfile.SMBProperties{})
+	_, err := dstShareClient.NewDirectoryClient(dirName).Create(context.Background(), nil)
 	a.Nil(err)
 	dstDirURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, dstShareName, dirName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstDirURLWithSAS.String())
@@ -485,19 +484,19 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 // regular dir -> dir sync
 func TestFileSyncS2SBetweenDirs(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
 	dirName := "dir"
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, dirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, dirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	a.NotZero(len(fileList))
 
 	// set up the destination with the exact same files
-	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileList)
+	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -520,7 +519,7 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 	})
 
 	// refresh the files' last modified time so that they are newer
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, fileList)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 	mockedRPC.reset()
 	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	runSyncAndVerify(a, raw, func(err error) {
@@ -531,19 +530,19 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 
 func TestDryrunSyncFiletoFile(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	//set up src share
 	filesToInclude := []string{"AzURE2.jpeg", "TestOne.txt"}
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToInclude)
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToInclude)
 
 	//set up dst share
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, dstShareURL)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, dstShareClient)
 	fileToDelete := []string{"testThree.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileToDelete)
+	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileToDelete)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -567,11 +566,11 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				a.True(strings.Contains(msg[i], dstShareURL.String()))
+				a.True(strings.Contains(msg[i], dstShareClient.URL()))
 			} else {
 				a.True(strings.Contains(msg[i], "DRYRUN: copy"))
 				a.True(strings.Contains(msg[i], srcShareName))
-				a.True(strings.Contains(msg[i], dstShareURL.String()))
+				a.True(strings.Contains(msg[i], dstShareClient.URL()))
 			}
 		}
 
@@ -582,7 +581,7 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 
 func TestDryrunSyncLocaltoFile(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	//set up local src
 	blobsToInclude := []string{"AzURE2.jpeg"}
@@ -591,10 +590,10 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, srcDirName, blobsToInclude)
 
 	//set up dst share
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, dstShareURL)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, dstShareClient)
 	fileToDelete := []string{"testThree.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileToDelete)
+	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileToDelete)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -617,11 +616,11 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				a.True(strings.Contains(msg[i], dstShareURL.String()))
+				a.True(strings.Contains(msg[i], dstShareClient.URL()))
 			} else {
 				a.True(strings.Contains(msg[i], "DRYRUN: copy"))
 				a.True(strings.Contains(msg[i], srcDirName))
-				a.True(strings.Contains(msg[i], dstShareURL.String()))
+				a.True(strings.Contains(msg[i], dstShareClient.URL()))
 			}
 		}
 
@@ -633,18 +632,18 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 // regular share->share sync but destination is identical to the source, transfers are scheduled based on lmt
 func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, srcShareURL)
-	defer deleteShareV1(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// set up the destination with the exact same files
-	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileList)
+	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -666,7 +665,7 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	})
 
 	// refresh the source files' last modified time so that they get synced
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, fileList)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 	mockedRPC.reset()
 	currentTime := time.Now().UTC()
 	newTime := currentTime.Add(-time.Hour).UTC() // give extra hour

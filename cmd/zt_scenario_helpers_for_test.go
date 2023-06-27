@@ -31,7 +31,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/stretchr/testify/assert"
@@ -50,7 +50,6 @@ import (
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 const defaultFileSize = 1024
@@ -265,15 +264,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(a *assert.Assertions
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(a *assert.Assertions, shareURL azfile.ShareURL, prefix string) (fileList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(a *assert.Assertions, shareClient *share.Client, serviceClient *fileservice.Client, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, fileName1 := createNewAzureFile(a, shareURL, prefix+"top")
-		_, fileName2 := createNewAzureFile(a, shareURL, prefix+"sub1/")
-		_, fileName3 := createNewAzureFile(a, shareURL, prefix+"sub2/")
-		_, fileName4 := createNewAzureFile(a, shareURL, prefix+"sub1/sub3/sub5/")
-		_, fileName5 := createNewAzureFile(a, shareURL, prefix+specialNames[i])
+		_, fileName1 := createNewShareFile(a, shareClient, serviceClient, prefix+"top")
+		_, fileName2 := createNewShareFile(a, shareClient, serviceClient, prefix+"sub1/")
+		_, fileName3 := createNewShareFile(a, shareClient, serviceClient, prefix+"sub2/")
+		_, fileName4 := createNewShareFile(a, shareClient, serviceClient, prefix+"sub1/sub3/sub5/")
+		_, fileName5 := createNewShareFile(a, shareClient, serviceClient, prefix+specialNames[i])
 
 		fileList[5*i] = fileName1
 		fileList[5*i+1] = fileName2
@@ -418,10 +417,12 @@ func (scenarioHelper) generateGCPObjects(a *assert.Assertions, client *gcpUtils.
 }
 
 // create the demanded files
-func (scenarioHelper) generateFlatFiles(a *assert.Assertions, shareURL azfile.ShareURL, fileList []string) {
+func (scenarioHelper) generateFlatFiles(a *assert.Assertions, shareClient *share.Client, fileList []string) {
 	for _, fileName := range fileList {
-		file := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
-		err := azfile.UploadBufferToAzureFile(ctx, []byte(fileDefaultData), file, azfile.UploadToAzureFileOptions{})
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileName)
+		_, err := fileClient.Create(ctx, int64(len(fileDefaultData)), nil)
+		a.Nil(err)
+		err = fileClient.UploadBuffer(ctx, []byte(fileDefaultData), nil)
 		a.Nil(err)
 	}
 
@@ -506,24 +507,6 @@ func (scenarioHelper) generateShareFilesFromList(a *assert.Assertions, shareClie
 		// create the file itself
 		_, err := fileClient.Create(ctx, defaultAzureFileSizeInBytes, nil)
 		a.Nil(err)
-	}
-
-	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1050)
-}
-
-// create the demanded azure files
-func (scenarioHelper) generateAzureFilesFromList(a *assert.Assertions, shareURL azfile.ShareURL, fileList []string) {
-	for _, filePath := range fileList {
-		file := shareURL.NewRootDirectoryURL().NewFileURL(filePath)
-
-		// create parents first
-		generateParentsForAzureFile(a, file)
-
-		// create the file itself
-		cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
-		a.Nil(err)
-		a.Equal(201, cResp.StatusCode())
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
@@ -680,7 +663,7 @@ func (scenarioHelper) getBlobServiceClientWithSASFromURL(a *assert.Assertions, r
 }
 
 func (scenarioHelper) getFileServiceClientWithSASFromURL(a *assert.Assertions, rawURL string) *fileservice.Client {
-	fileURLParts, err := file.ParseURL(rawURL)
+	fileURLParts, err := sharefile.ParseURL(rawURL)
 	a.Nil(err)
 	fileURLParts.ShareName = ""
 	fileURLParts.ShareSnapshot = ""
@@ -694,18 +677,10 @@ func (scenarioHelper) getFileServiceClientWithSASFromURL(a *assert.Assertions, r
 
 func (scenarioHelper) getFileServiceClientWithSAS(a *assert.Assertions) *fileservice.Client {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
 	a.Nil(err)
 
 	return getFileServiceClientWithSAS(a, credential)
-}
-
-func (scenarioHelper) getRawFileServiceURLWithSAS(a *assert.Assertions) url.URL {
-	accountName, accountKey := getAccountAndKey()
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	a.Nil(err)
-
-	return getFileServiceURLWithSAS(a, *credential).URL()
 }
 
 func (scenarioHelper) getRawAdlsServiceURLWithSAS(a *assert.Assertions) azbfs.ServiceURL {
@@ -786,7 +761,7 @@ func (scenarioHelper) getRawGCPObjectURL(a *assert.Assertions, bucketName string
 
 func (scenarioHelper) getRawFileURLWithSAS(a *assert.Assertions, shareName string, fileName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
 	a.Nil(err)
 	sc := getShareClientWithSAS(a, credential, shareName)
 	fc := sc.NewRootDirectoryClient().NewFileClient(fileName)
@@ -798,9 +773,20 @@ func (scenarioHelper) getRawFileURLWithSAS(a *assert.Assertions, shareName strin
 
 func (scenarioHelper) getRawShareURLWithSAS(a *assert.Assertions, shareName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
-	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
 	a.Nil(err)
 	sc := getShareClientWithSAS(a, credential, shareName)
+
+	u := sc.URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
+}
+
+func (scenarioHelper) getRawFileServiceURLWithSAS(a *assert.Assertions) *url.URL {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
+	a.Nil(err)
+	sc := getFileServiceClientWithSAS(a, credential)
 
 	u := sc.URL()
 	parsedURL, err := url.Parse(u)

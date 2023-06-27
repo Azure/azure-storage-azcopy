@@ -99,17 +99,17 @@ func TestBlobDeleter(t *testing.T) {
 
 func TestFileDeleter(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 	fileName := "extraFile.pdf"
 
 	// set up the file to delete
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShareV1(a, shareURL)
-	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, []string{fileName})
+	shareClient, shareName := createNewShare(a, fsc)
+	defer deleteShare(a, shareClient)
+	scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, []string{fileName})
 
 	// validate that the file exists
-	fileURL := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
-	_, err := fileURL.GetProperties(context.Background())
+	fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileName)
+	_, err := fileClient.GetProperties(context.Background(), nil)
 	a.Nil(err)
 
 	// construct the cooked input to simulate user input
@@ -130,6 +130,6 @@ func TestFileDeleter(t *testing.T) {
 	a.Nil(err)
 
 	// validate that the file was deleted
-	_, err = fileURL.GetProperties(context.Background())
+	_, err = fileClient.GetProperties(context.Background(), nil)
 	a.NotNil(err)
 }
