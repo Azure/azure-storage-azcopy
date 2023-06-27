@@ -21,7 +21,7 @@
 		 --mirror-mode //Currently broken
 
 
-## sync smb -> file
+## Sync smb -> file
 1. simple sync without changes
 2. Sync with changes in the source (added / delted files, added folders)
 3. Sync with changes in the target (added / deleted files or folders)
@@ -32,12 +32,23 @@ For 2 and 3 test with the flags:
 	c. --delete-destination=true
 	d. --recursive=true
 	e. --preserve-permissions=true
+4. Create relative symlink (using windows CMD tool mklink), and play with the permissions using icacls:
 
-## copy smb -> file
+		mklink /D <symlink file or director> <relative path to target>
+		icalcls <symlink name> /grant <user>:(<permission such: R, M, F>) /L
+
+   Test sync using:
+
+		--follow-symlinks
+
+
+## Copy smb -> file
 simple copy from smb -> files with the below flags:
 
-	a. --recursive=true
-	b. --preserve-smb-info=true
+		a. --recursive=true
+		b. --preserve-smb-info=true
+		c. --preserve-smb-permissionss=true
+		d. --follow-symlinks
 
-## comp file -> local \ file
+## Comp file -> local \ file
 simple copy with --recursive=true flag
