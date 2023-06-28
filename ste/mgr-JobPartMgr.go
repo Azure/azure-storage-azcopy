@@ -61,6 +61,7 @@ type IJobPartMgr interface {
 	S2SSourceCredentialInfo() common.CredentialInfo
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
+	S2SSourceTokenCredential() common.SourceTokenCredential
 
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
@@ -245,7 +246,8 @@ type jobPartMgr struct {
 	clientOptions          azcore.ClientOptions
 	s2sSourceCredInfo      common.CredentialInfo
 	s2sSourceClientOptions azcore.ClientOptions
-	credOption             *common.CredentialOpOptions
+	credOption               *common.CredentialOpOptions
+	s2sSourceTokenCredential common.SourceTokenCredential
 
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
@@ -397,7 +399,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.priority = plan.Priority
 
-	jpm.clientInfo()
+	jpm.clientInfo(jobCtx)
 	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
@@ -499,7 +501,7 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) clientInfo() {
+func (jpm *jobPartMgr) clientInfo(ctx context.Context) {
 	jobState := jpm.jobMgr.getInMemoryTransitJobState()
 
 	// Destination credential
@@ -529,6 +531,10 @@ func (jpm *jobPartMgr) clientInfo() {
 		Panic:    jpm.Panic,
 		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
 		Cancel:   jpm.jobMgr.Cancel,
+	}
+
+	if jpm.s2sSourceCredInfo.CredentialType.IsAzureOAuth() {
+		jpm.s2sSourceTokenCredential = common.NewSourceTokenCredential(ctx, jpm.s2sSourceCredInfo, *jpm.credOption)
 	}
 
 	retryOptions := policy.RetryOptions{
@@ -944,6 +950,10 @@ func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
 
 func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {
 	return jpm.s2sSourceCredInfo
+}
+
+func (jpm *jobPartMgr) S2SSourceTokenCredential() common.SourceTokenCredential {
+	return jpm.s2sSourceTokenCredential
 }
 
 func (jpm *jobPartMgr) ClientOptions() azcore.ClientOptions {

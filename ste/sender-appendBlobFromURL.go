@@ -57,12 +57,8 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 		offset := id.OffsetInFile()
-		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
-		if err != nil {
-			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
-			return
-		}
-		_, err = c.destAppendBlobClient.AppendBlockFromURL(c.jptm.Context(), c.srcURL,
+		token := c.jptm.GetS2SSourceTokenCredential()
+		_, err := c.destAppendBlobClient.AppendBlockFromURL(c.jptm.Context(), c.srcURL,
 			&appendblob.AppendBlockFromURLOptions{
 				Range: blob.HTTPRange{Offset: offset, Count: adjustedChunkSize},
 				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},

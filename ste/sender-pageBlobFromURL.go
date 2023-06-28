@@ -120,12 +120,9 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
-		if err != nil {
-			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
-			return
-		}
-		_, err = c.destPageBlobClient.UploadPagesFromURL(enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize,
+
+		token := c.jptm.GetS2SSourceTokenCredential()
+		_, err := c.destPageBlobClient.UploadPagesFromURL(enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize,
 			&pageblob.UploadPagesFromURLOptions{
 				CPKInfo: c.jptm.CpkInfo(),
 				CPKScopeInfo: c.jptm.CpkScopeInfo(),

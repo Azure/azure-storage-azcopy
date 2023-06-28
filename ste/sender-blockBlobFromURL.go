@@ -154,12 +154,9 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
-		if err != nil {
-			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
-			return
-		}
-		_, err = c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
+
+		token := c.jptm.GetS2SSourceTokenCredential()
+		_, err := c.destBlockBlobClient.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL,
 			&blockblob.StageBlockFromURLOptions{
 				Range:                   blob.HTTPRange{Offset: id.OffsetInFile(), Count: adjustedChunkSize},
 				CPKInfo:                 c.jptm.CpkInfo(),
@@ -200,13 +197,9 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		token, err := c.jptm.GetS2SSourceTokenCredential(c.jptm.Context())
-		if err != nil {
-			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
-			return
-		}
 
-		_, err = c.destBlockBlobClient.UploadBlobFromURL(c.jptm.Context(), c.srcURL,
+		token := c.jptm.GetS2SSourceTokenCredential()
+		_, err := c.destBlockBlobClient.UploadBlobFromURL(c.jptm.Context(), c.srcURL,
 			&blockblob.UploadBlobFromURLOptions{
 				HTTPHeaders:             &c.headersToApply,
 				Metadata:                c.metadataToApply,
