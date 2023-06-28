@@ -35,9 +35,6 @@ import (
 // 2. File <-> Blob (S2S)
 // 3. Blob <-> Local (Download)
 
-// Scenarios to consider for remove
-// 1. Blob <-> Trash (Delete)
-
 func TestClient_ProvidedScopeUpload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
@@ -57,6 +54,20 @@ func TestClient_ProvidedScopeUpload(t *testing.T) {
 			f("folder2/file5", verifyOnlyProps),
 			f("file6", verifyOnlyProps),
 		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestClient_ProvidedScopeUploadSingleFile(t *testing.T) {
+	cpkByName := "blobgokeytestscope"
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		cpkByName: cpkByName,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1", verifyOnly{with{cpkByName: cpkByName}}),
+		},
+		objectTarget: "file1",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -96,29 +107,15 @@ func TestClient_ProvidedScopeDownload(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-func TestClient_ProvidedScopeDelete(t *testing.T) {
-	blobRemove := TestFromTo{
-		desc:      "BlobRemove",
-		useAllTos: true,
-		froms: []common.Location{
-			common.ELocation.Blob(),
-		},
-		tos: []common.Location{
-			common.ELocation.Unknown(),
-		},
-	}
+func TestClient_ProvidedScopeDownloadSingleFile(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
-	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive: true,
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
 		cpkByName: cpkByName,
-	}, &hooks{
-		beforeRunJob: func(h hookHelper) {
-			h.CreateFile(f("file1", with{cpkByName: cpkByName}), true)
-		},
-	}, testFiles{
-		defaultSize: "1K",
+	}, nil, testFiles{
+		defaultSize: "100K",
 		shouldTransfer: []interface{}{
-			f("file1"),
+			f("file1", with{cpkByName: cpkByName}),
 		},
 		objectTarget: "file1",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
@@ -142,6 +139,19 @@ func TestClient_ProvidedKeyUpload(t *testing.T) {
 			f("folder2/file5", verifyOnlyProps),
 			f("file6", verifyOnlyProps),
 		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestClient_ProvidedKeyUploadSingleFile(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		cpkByValue: true,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1", verifyOnly{with{cpkByValue: true}}),
+		},
+		objectTarget: "file1",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -180,61 +190,15 @@ func TestClient_ProvidedKeyDownload(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-
-func TestClient_ProvidedKeyDelete(t *testing.T) {
-	blobRemove := TestFromTo{
-		desc:      "BlobRemove",
-		useAllTos: true,
-		froms: []common.Location{
-			common.ELocation.Blob(),
-		},
-		tos: []common.Location{
-			common.ELocation.Unknown(),
-		},
-	}
-	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+func TestClient_ProvidedKeyDownloadSingleFile(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		cpkByValue: true,
-	}, &hooks{
-		beforeRunJob: func(h hookHelper) {
-			h.CreateFile(f("file1", with{cpkByValue: true}), true)
-			h.CreateFile(folder("dir", with{cpkByValue: true}), true)
-			h.CreateFile(f("dir/file2", with{cpkByValue: true}), true)
-		},
-	}, testFiles{
+	}, nil, testFiles{
 		defaultSize: "100K",
 		shouldTransfer: []interface{}{
-			f("file1"),
-			folder("dir"),
-			f("dir/file2"),
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
-
-func TestClient_ProvidedKeyDeleteSingleFile(t *testing.T) {
-	blobRemove := TestFromTo{
-		desc:      "BlobRemove",
-		useAllTos: true,
-		froms: []common.Location{
-			common.ELocation.Blob(),
-		},
-		tos: []common.Location{
-			common.ELocation.Unknown(),
-		},
-	}
-	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:  true,
-		cpkByValue: true,
-	}, &hooks{
-		beforeRunJob: func(h hookHelper) {
-			h.CreateFile(f("file1", with{cpkByValue: true}), true)
-		},
-	}, testFiles{
-		defaultSize: "100K",
-		shouldTransfer: []interface{}{
-			f("file1"),
+			f("file1", with{cpkByValue: true}),
 		},
 		objectTarget: "file1",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
-
