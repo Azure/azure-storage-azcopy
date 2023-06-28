@@ -57,6 +57,20 @@ func TestClient_ProvidedScopeUpload(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestClient_ProvidedScopeUploadSingleFile(t *testing.T) {
+	cpkByName := "blobgokeytestscope"
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		cpkByName: cpkByName,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1", verifyOnly{with{cpkByName: cpkByName}}),
+		},
+		objectTarget: "file1",
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
 func TestClient_ProvidedScopeS2S(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
@@ -93,6 +107,20 @@ func TestClient_ProvidedScopeDownload(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestClient_ProvidedScopeDownloadSingleFile(t *testing.T) {
+	cpkByName := "blobgokeytestscope"
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		cpkByName: cpkByName,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1", with{cpkByName: cpkByName}),
+		},
+		objectTarget: "file1",
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
 func TestClient_ProvidedKeyUpload(t *testing.T) {
 	verifyOnlyProps := verifyOnly{with{cpkByValue: true}}
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
@@ -111,6 +139,19 @@ func TestClient_ProvidedKeyUpload(t *testing.T) {
 			f("folder2/file5", verifyOnlyProps),
 			f("file6", verifyOnlyProps),
 		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestClient_ProvidedKeyUploadSingleFile(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		cpkByValue: true,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1", verifyOnly{with{cpkByValue: true}}),
+		},
+		objectTarget: "file1",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -146,5 +187,18 @@ func TestClient_ProvidedKeyDownload(t *testing.T) {
 			folder("dir"),
 			f("dir/file2", verifyOnlyProps),
 		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestClient_ProvidedKeyDownloadSingleFile(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		cpkByValue: true,
+	}, nil, testFiles{
+		defaultSize: "100K",
+		shouldTransfer: []interface{}{
+			f("file1", with{cpkByValue: true}),
+		},
+		objectTarget: "file1",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
