@@ -533,7 +533,7 @@ func (jpm *jobPartMgr) clientInfo(ctx context.Context) {
 		Cancel:   jpm.jobMgr.Cancel,
 	}
 
-	if jpm.s2sSourceCredInfo.CredentialType.IsAzureOAuth() {
+	if fromTo.To().CanForwardOAuthTokens() && jpm.s2sSourceCredInfo.CredentialType.IsAzureOAuth() {
 		jpm.s2sSourceTokenCredential = common.NewSourceTokenCredential(ctx, jpm.s2sSourceCredInfo, *jpm.credOption)
 	}
 
