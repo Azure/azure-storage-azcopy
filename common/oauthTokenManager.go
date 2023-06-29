@@ -532,10 +532,20 @@ func (credInfo *OAuthTokenInfo) GetTokenStoreCredential() (azcore.TokenCredentia
 }
 
 func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCredential, error) {
+	var id azidentity.ManagedIDKind
+	if credInfo.IdentityInfo.ClientID != "" {
+		id = azidentity.ClientID(credInfo.IdentityInfo.ClientID)
+	} else if credInfo.IdentityInfo.MSIResID != "" {
+		id = azidentity.ResourceID(credInfo.IdentityInfo.ObjectID)
+	} else if credInfo.IdentityInfo.ObjectID != "" {
+		return nil, fmt.Errorf("object ID is not supported for managed identity")
+	}
+
 	tc, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
 			Transport: newAzcopyHTTPClient(),
 		},
+		ID: id,
 	})
 	if err != nil {
 		return nil, err
