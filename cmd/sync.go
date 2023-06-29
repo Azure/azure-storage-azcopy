@@ -268,8 +268,8 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.followSymlinks = raw.FollowSymlinks
-	if cooked.fromTo != common.EFromTo.LocalFile() { // Follow symlinks in sync is supported only for local -> file
-		return cooked, errors.New("cannot follow symlinks for non SMB sync (Sync behaviour for symlink targets is undefined)")
+	if cooked.fromTo != common.EFromTo.LocalFile() || cooked.fromTo != common.EFromTo.LocalBlob() { // Follow symlinks in sync is supported only for local -> file or local -> blob
+		return cooked, errors.New("cannot follow symlinks for non Local -> File / Blob sync (Sync behaviour for symlink targets is undefined)")
 	}
 
 	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, raw.PreservePermissions, cooked.fromTo); err != nil {
