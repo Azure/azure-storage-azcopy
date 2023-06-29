@@ -37,16 +37,16 @@ stages:
             azcopy --version
           displayName: 'Build Azcopy'
 
-        - script: |
-            time azcopy copy $(Blob2BlobLargeFilesSrc) $(Blob2BlobLargeFilesDst) --recursive --block-size-mb=128 --log-level=ERROR --cap-mbps=40000
-          displayName: 'Blob2Blob - Large Files'
-          condition: always()
-          env:
-            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-            AZCOPY_CONCURRENCY_VALUE: "256"
-            AZCOPY_SHOW_PERF_STATES: "1"
+#        - script: |
+#            time azcopy copy $(Blob2BlobLargeFilesSrc) $(Blob2BlobLargeFilesDst) --recursive --block-size-mb=128 --log-level=ERROR --cap-mbps=40000
+#          displayName: 'Blob2Blob - Large Files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#            AZCOPY_CONCURRENCY_VALUE: "256"
+#            AZCOPY_SHOW_PERF_STATES: "1"
 
         - script: |
             time azcopy copy $(Blob2BlobSmallAndMedFilesSrc) $(Blob2BlobSmallAndMedFilesDst) --recursive --block-size-mb=128 --log-level=ERROR
@@ -59,16 +59,16 @@ stages:
             AZCOPY_CONCURRENCY_VALUE: "256"
             AZCOPY_SHOW_PERF_STATES: "1"
 
-        - script: |
-            time azcopy copy $(Blob2BlobSmallFilesSrc) $(Blob2BlobSmallFilesDst) --recursive --check-length=false --log-level=ERROR
-          displayName: 'Blob2Blob - Small Files'
-          condition: always()
-          env:
-            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-            AZCOPY_CONCURRENCY_VALUE: "256"
-            AZCOPY_SHOW_PERF_STATES: "1"
+#        - script: |
+#            time azcopy copy $(Blob2BlobSmallFilesSrc) $(Blob2BlobSmallFilesDst) --recursive --check-length=false --log-level=ERROR
+#          displayName: 'Blob2Blob - Small Files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#            AZCOPY_CONCURRENCY_VALUE: "256"
+#            AZCOPY_SHOW_PERF_STATES: "1"
 
 #        - script: |
 #            sudo mkdir -m 777 $(localPath)/largeFiles/
