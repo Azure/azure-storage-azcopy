@@ -46,7 +46,7 @@ func TestIsSourceDirWithStub(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
@@ -68,10 +68,42 @@ func TestIsSourceDirWithNoStub(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)
+	a.Nil(err)
+}
+
+func TestIsDestDirWithBlobEP(t *testing.T) {
+	a := assert.New(t)
+	bsu := getBSU()
+
+	// Generate source container and blobs
+	containerURL, containerName := createNewContainer(a, bsu)
+	defer deleteContainer(a, containerURL)
+	a.NotNil(containerURL)
+
+	dirName := "dest_dir/"
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+
+	// List
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+
+	isDir, err := blobTraverser.IsDirectory(false)
+	a.True(isDir)
+	a.Nil(err)
+
+	//===========================================================
+	dirName = "dest_file"
+	// List
+	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+
+	isDir, err = blobTraverser.IsDirectory(false)
+	a.False(isDir)
 	a.Nil(err)
 }
 
@@ -92,7 +124,7 @@ func TestIsSourceFileExists(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)
@@ -114,7 +146,7 @@ func TestIsSourceFileDoesNotExist(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)

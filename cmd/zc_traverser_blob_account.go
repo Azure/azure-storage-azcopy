@@ -46,6 +46,8 @@ type blobAccountTraverser struct {
 
 	cpkOptions common.CpkOptions
 	preservePermissions common.PreservePermissionsOption
+
+	isDFS bool
 }
 
 func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
@@ -101,7 +103,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.accountURL.NewContainerURL(v).URL()
-		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false, t.preservePermissions)
+		containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false, t.preservePermissions, t.isDFS)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -116,7 +118,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, preservePermissions common.PreservePermissionsOption) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, preservePermissions common.PreservePermissionsOption, isDFS bool) (t *blobAccountTraverser) {
 	bURLParts := azblob.NewBlobURLParts(*rawURL)
 	cPattern := bURLParts.ContainerName
 
@@ -135,6 +137,7 @@ func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 		s2sPreserveSourceTags:       s2sPreserveSourceTags,
 		cpkOptions:                  cpkOptions,
 		preservePermissions:         preservePermissions,
+		isDFS:			     isDFS,
 	}
 
 	return
