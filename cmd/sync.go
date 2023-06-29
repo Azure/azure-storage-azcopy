@@ -268,7 +268,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.followSymlinks = raw.FollowSymlinks
-	if cooked.fromTo != common.EFromTo.LocalFile() || cooked.fromTo != common.EFromTo.LocalBlob() { // Follow symlinks in sync is supported only for local -> file or local -> blob
+	if cooked.fromTo != common.EFromTo.LocalFile() && cooked.fromTo != common.EFromTo.LocalBlob() { // Follow symlinks in sync is supported only for local -> file or local -> blob
 		return cooked, errors.New("cannot follow symlinks for non Local -> File / Blob sync (Sync behaviour for symlink targets is undefined)")
 	}
 
