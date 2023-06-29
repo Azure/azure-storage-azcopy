@@ -37,20 +37,9 @@ stages:
             azcopy --version
           displayName: 'Build Azcopy'
 
-#        - script: |
-#            time azcopy copy $(Blob2BlobLargeFilesSrc) $(Blob2BlobLargeFilesDst) --recursive --block-size-mb=128 --log-level=ERROR --cap-mbps=40000
-#          displayName: 'Blob2Blob - Large Files'
-#          condition: always()
-#          env:
-#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-#            AZCOPY_CONCURRENCY_VALUE: "256"
-#            AZCOPY_SHOW_PERF_STATES: "1"
-
         - script: |
-            time azcopy copy $(Blob2BlobSmallAndMedFilesSrc) $(Blob2BlobSmallAndMedFilesDst) --recursive --block-size-mb=128 --log-level=ERROR
-          displayName: 'Blob2Blob - Small to Medium sized files'
+            time azcopy copy $(Blob2BlobLargeFilesSrc) $(Blob2BlobLargeFilesDst) --recursive --block-size-mb=128 --log-level=ERROR --cap-mbps=40000
+          displayName: 'Blob2Blob - Large Files'
           condition: always()
           env:
             AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
@@ -59,6 +48,17 @@ stages:
             AZCOPY_CONCURRENCY_VALUE: "256"
             AZCOPY_SHOW_PERF_STATES: "1"
 
+#        - script: |
+#            time azcopy copy $(Blob2BlobSmallAndMedFilesSrc) $(Blob2BlobSmallAndMedFilesDst) --recursive --block-size-mb=128 --log-level=ERROR
+#          displayName: 'Blob2Blob - Small to Medium sized files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#            AZCOPY_CONCURRENCY_VALUE: "256"
+#            AZCOPY_SHOW_PERF_STATES: "1"
+#
 #        - script: |
 #            time azcopy copy $(Blob2BlobSmallFilesSrc) $(Blob2BlobSmallFilesDst) --recursive --check-length=false --log-level=ERROR
 #          displayName: 'Blob2Blob - Small Files'
@@ -80,18 +80,18 @@ stages:
 #            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
 #            AZCOPY_SHOW_PERF_STATES: "1"
 #            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-#
-#        - script: |
-#            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=50 --put-md5=false --delete-test-data=false
-#            sudo rm -rf $(localPath)/*
-#          displayName: 'Upload - Large files'
-#          condition: always()
-#          env:
-#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-#            AZCOPY_SHOW_PERF_STATES: "1"
-#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-#
+
+        - script: |
+            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=50 --put-md5=false --delete-test-data=false
+            sudo rm -rf $(localPath)/*
+          displayName: 'Upload - Large files'
+          condition: always()
+          env:
+            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+            AZCOPY_SHOW_PERF_STATES: "1"
+            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+
 #        - script: |
 #            sudo mkdir -m 777 $(localPath)/smallToMediumFiles/
 #            time azcopy copy $(Blob2BlobSmallAndMedFilesSrc) $(localPath)/smallToMediumFiles --recursive --log-level=ERROR
@@ -102,18 +102,18 @@ stages:
 #            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
 #            AZCOPY_SHOW_PERF_STATES: "1"
 #            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-#
-#        - script: |
-#            time azcopy copy $(localPath)/smallToMediumFiles/ $(Blob2BlobSmallAndMedFilesDst) --recursive --log-level=ERROR
-#            sudo rm -rf $(localPath)/*
-#          displayName: 'Upload - Small to Medium sized files'
-#          condition: always()
-#          env:
-#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-#            AZCOPY_SHOW_PERF_STATES: "1"
-#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-#
+
+        - script: |
+            time azcopy copy $(localPath)/smallToMediumFiles/ $(Blob2BlobSmallAndMedFilesDst) --recursive --log-level=ERROR
+            sudo rm -rf $(localPath)/*
+          displayName: 'Upload - Small to Medium sized files'
+          condition: always()
+          env:
+            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+            AZCOPY_SHOW_PERF_STATES: "1"
+            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+
 #        - script: |
 #            sudo mkdir -m 777 $(localPath)/smallFiles/
 #            time azcopy copy $(Blob2BlobSmallFilesSrc) /dev/null --recursive --check-length=false --log-level=ERROR
@@ -124,17 +124,17 @@ stages:
 #            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
 #            AZCOPY_SHOW_PERF_STATES: "1"
 #            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-#
-#        - script: |
-#            time azcopy bench $(Blob2BlobSmallFilesDst) --size-per-file=5k --file-count=8000000 --check-length=false --log-level=ERROR --delete-test-data=false
-#            sudo rm -rf $(localPath)/*
-#          displayName: 'Upload - Small Files'
-#          condition: always()
-#          env:
-#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-#            AZCOPY_SHOW_PERF_STATES: "1"
-#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+
+        - script: |
+            time azcopy bench $(Blob2BlobSmallFilesDst) --size-per-file=5k --file-count=8000000 --check-length=false --log-level=ERROR --delete-test-data=false
+            sudo rm -rf $(localPath)/*
+          displayName: 'Upload - Small Files'
+          condition: always()
+          env:
+            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+            AZCOPY_SHOW_PERF_STATES: "1"
+            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
 
         - task: PublishBuildArtifacts@1
           condition: always()
