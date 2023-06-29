@@ -70,71 +70,71 @@ stages:
             AZCOPY_CONCURRENCY_VALUE: "256"
             AZCOPY_SHOW_PERF_STATES: "1"
 
-        - script: |
-            sudo mkdir -m 777 $(localPath)/largeFiles/
-            time azcopy copy $(Blob2BlobLargeFilesSrc) /dev/null --recursive --log-level=ERROR
-          displayName: 'Download - Large files'
-          condition: always()
-          env:
-            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-            AZCOPY_SHOW_PERF_STATES: "1"
-            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-
-        - script: |
-            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=50 --put-md5=false --delete-test-data=false
-            sudo rm -rf $(localPath)/*
-          displayName: 'Upload - Large files'
-          condition: always()
-          env:
-            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-            AZCOPY_SHOW_PERF_STATES: "1"
-            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-
-        - script: |
-            sudo mkdir -m 777 $(localPath)/smallToMediumFiles/
-            time azcopy copy $(Blob2BlobSmallAndMedFilesSrc) $(localPath)/smallToMediumFiles --recursive --log-level=ERROR
-          displayName: 'Download - Small to Medium sized files'
-          condition: always()
-          env:
-            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-            AZCOPY_SHOW_PERF_STATES: "1"
-            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-
-        - script: |
-            time azcopy copy $(localPath)/smallToMediumFiles/ $(Blob2BlobSmallAndMedFilesDst) --recursive --log-level=ERROR
-            sudo rm -rf $(localPath)/*
-          displayName: 'Upload - Small to Medium sized files'
-          condition: always()
-          env:
-            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-            AZCOPY_SHOW_PERF_STATES: "1"
-            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-
-        - script: |
-            sudo mkdir -m 777 $(localPath)/smallFiles/
-            time azcopy copy $(Blob2BlobSmallFilesSrc) /dev/null --recursive --check-length=false --log-level=ERROR
-          displayName: 'Download - Small Files'
-          condition: always()
-          env:
-            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-            AZCOPY_SHOW_PERF_STATES: "1"
-            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
-
-        - script: |
-            time azcopy bench $(Blob2BlobSmallFilesDst) --size-per-file=5k --file-count=8000000 --check-length=false --log-level=ERROR --delete-test-data=false
-            sudo rm -rf $(localPath)/*
-          displayName: 'Upload - Small Files'
-          condition: always()
-          env:
-            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
-            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
-            AZCOPY_SHOW_PERF_STATES: "1"
-            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#        - script: |
+#            sudo mkdir -m 777 $(localPath)/largeFiles/
+#            time azcopy copy $(Blob2BlobLargeFilesSrc) /dev/null --recursive --log-level=ERROR
+#          displayName: 'Download - Large files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_SHOW_PERF_STATES: "1"
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#
+#        - script: |
+#            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=50 --put-md5=false --delete-test-data=false
+#            sudo rm -rf $(localPath)/*
+#          displayName: 'Upload - Large files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_SHOW_PERF_STATES: "1"
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#
+#        - script: |
+#            sudo mkdir -m 777 $(localPath)/smallToMediumFiles/
+#            time azcopy copy $(Blob2BlobSmallAndMedFilesSrc) $(localPath)/smallToMediumFiles --recursive --log-level=ERROR
+#          displayName: 'Download - Small to Medium sized files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_SHOW_PERF_STATES: "1"
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#
+#        - script: |
+#            time azcopy copy $(localPath)/smallToMediumFiles/ $(Blob2BlobSmallAndMedFilesDst) --recursive --log-level=ERROR
+#            sudo rm -rf $(localPath)/*
+#          displayName: 'Upload - Small to Medium sized files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_SHOW_PERF_STATES: "1"
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#
+#        - script: |
+#            sudo mkdir -m 777 $(localPath)/smallFiles/
+#            time azcopy copy $(Blob2BlobSmallFilesSrc) /dev/null --recursive --check-length=false --log-level=ERROR
+#          displayName: 'Download - Small Files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_SHOW_PERF_STATES: "1"
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
+#
+#        - script: |
+#            time azcopy bench $(Blob2BlobSmallFilesDst) --size-per-file=5k --file-count=8000000 --check-length=false --log-level=ERROR --delete-test-data=false
+#            sudo rm -rf $(localPath)/*
+#          displayName: 'Upload - Small Files'
+#          condition: always()
+#          env:
+#            AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
+#            AZCOPY_MSI_CLIENT_ID: $(AZCOPY_MSI_CLIENT_ID)
+#            AZCOPY_SHOW_PERF_STATES: "1"
+#            AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
 
         - task: PublishBuildArtifacts@1
           condition: always()
