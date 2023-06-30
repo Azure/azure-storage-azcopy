@@ -48,7 +48,7 @@ func refreshSourceTokenCredential(ctx context.Context, tokenCredential SourceTok
 	newToken, err := credInfo.S2SSourceTokenCredential.GetToken(ctx, policy.TokenRequestOptions{Scopes: scope})
 	if err != nil {
 		// Fail to get new token.
-		if _, ok := err.(adal.TokenRefreshError); ok && strings.Contains(err.Error(), "refresh token has expired") {
+		if strings.Contains(err.Error(), "refresh token has expired") {
 			credOpOptions.logError(fmt.Sprintf("failed to refresh token, OAuth refresh token has expired, please log in with azcopy login command again. (Error details: %v)", err))
 		} else {
 			credOpOptions.logError(fmt.Sprintf("failed to refresh token, please check error details and try to log in with azcopy login command again. (Error details: %v)", err))

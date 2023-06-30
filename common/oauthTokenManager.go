@@ -541,7 +541,7 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 		return nil, fmt.Errorf("object ID is not supported for managed identity")
 	}
 
-	tc, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+	msiTC, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
 			Transport: newAzcopyHTTPClient(),
 		},
@@ -550,6 +550,7 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 	if err != nil {
 		return nil, err
 	}
+	tc := NewManagedIdentityTokenCredential(msiTC)
 	credInfo.TokenCredential = tc
 	return tc, nil
 }
