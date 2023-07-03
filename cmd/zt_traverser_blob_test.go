@@ -107,6 +107,73 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 	a.Nil(err)
 }
 
+func TestIsDestDirWithDFSEP(t *testing.T) {
+	a := assert.New(t)
+	bfsu := GetBFSSU()
+
+	// Generate source container and blobs
+	fileSystemURL, fileSystemName := createNewFilesystem(a, bfsu)
+	defer deleteFilesystem(a, fileSystemURL)
+	a.NotNil(fileSystemURL)
+
+	parentDirName := "dest_dir"
+	parentDirURL := fileSystemURL.NewDirectoryURL(parentDirName)
+	_, err := parentDirURL.Create(ctx, true)
+	a.Nil(err)
+
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+
+	// List
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, fileSystemName, parentDirName)
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true)
+
+	// a directory with name parentDirName exists on target. So irrespective of 
+	// isSource, IsDirectory()  should return true.
+	isDir, err := blobTraverser.IsDirectory(true)
+	a.True(isDir)
+	a.Nil(err)
+
+	isDir, err = blobTraverser.IsDirectory(false)
+	a.True(isDir)
+	a.Nil(err)
+
+	//===================================================================//
+
+	// With a directory that does not exist, without path separator.
+	parentDirName = "dirDoesNotExist"
+	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(a, fileSystemName, parentDirName)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true)
+
+	// The directory does not exist, so IsDirectory()
+	// should return false, in all cases
+	isDir, err = blobTraverser.IsDirectory(true)
+	a.False(isDir)
+	a.Nil(err)
+
+	isDir, err = blobTraverser.IsDirectory(false)
+	a.False(isDir)
+	a.Nil(err)
+
+	//===================================================================//
+
+	// With a directory that does not exist, with path separator
+	parentDirNameWithSeparator := "dirDoesNotExist\\"
+	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(a, fileSystemName, parentDirNameWithSeparator)
+	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true)
+
+	// The directory does not exist, but with a path separator
+	// we should identify it as a directory.
+	isDir, err = blobTraverser.IsDirectory(true)
+	a.True(isDir)
+	a.Nil(err)
+
+	isDir, err = blobTraverser.IsDirectory(false)
+	a.True(isDir)
+	a.Nil(err)
+
+}
+
 func TestIsSourceFileExists(t *testing.T) {
 	a := assert.New(t)
 	bsu := getBSU()
