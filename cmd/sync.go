@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"runtime"
 	"strconv"
@@ -261,7 +262,11 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.followSymlinks = raw.FollowSymlinks
-	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, raw.PreservePermissions /* replace with real value when available */); err != nil {
+	if cooked.fromTo != common.EFromTo.LocalFile() && cooked.fromTo != common.EFromTo.LocalBlob() { // Follow symlinks in sync is supported only for local -> file or local -> blob
+		return cooked, errors.New("cannot follow symlinks for non Local -> File / Blob sync (Sync behaviour for symlink targets is undefined)")
+	}
+
+	if err = crossValidateSymlinksAndPermissions(cooked.followSymlinks, raw.PreservePermissions, cooked.fromTo); err != nil {
 		return cooked, err
 	}
 
@@ -1011,8 +1016,8 @@ func init() {
 	syncCmd.PersistentFlags().MarkHidden("include")
 	syncCmd.PersistentFlags().MarkHidden("exclude")
 
-	// TODO follow sym link is not implemented, clarify behavior first
-	// syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
+	// TODO follow sym link is not implemented for non SMB transfers, clarify behavior first
+	syncCmd.PersistentFlags().BoolVar(&raw.FollowSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
 
 	// TODO sync does not support all BlobAttributes on the command line, this functionality should be added
 
