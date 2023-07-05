@@ -80,3 +80,46 @@ func TestMakeBlobContainerExists(t *testing.T) {
 		a.Nil(err)
 	})
 }
+
+func TestMakeBlobFSFilesystem(t *testing.T) {
+	a := assert.New(t)
+	bsc := GetBFSSU()
+	fsc, name := getFilesystemURL(a, bsc)
+	defer deleteFilesystem(a, fsc)
+
+	bscSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
+	ccSAS := bscSAS.NewFileSystemURL(name)
+
+	args := rawMakeCmdArgs{
+		resourceToCreate: ccSAS.String(),
+	}
+
+	runMakeAndVerify(args, func(err error) {
+		a.Nil(err)
+		_, err = fsc.GetProperties(ctx)
+		a.Nil(err)
+	})
+}
+
+func TestMakeBlobFSFilesystemExists(t *testing.T) {
+	a := assert.New(t)
+	bsc := GetBFSSU()
+	fsc, name := getFilesystemURL(a, bsc)
+	_, err := fsc.Create(ctx)
+	a.Nil(err)
+	defer deleteFilesystem(a, fsc)
+
+	bscSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
+	ccSAS := bscSAS.NewFileSystemURL(name)
+
+	args := rawMakeCmdArgs{
+		resourceToCreate: ccSAS.String(),
+	}
+
+	runMakeAndVerify(args, func(err error) {
+		a.NotNil(err)
+		a.Equal("the container already exists", err.Error())
+		_, err = fsc.GetProperties(ctx)
+		a.Nil(err)
+	})
+}
