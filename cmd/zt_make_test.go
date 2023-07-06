@@ -142,7 +142,7 @@ func TestMakeFileShare(t *testing.T) {
 		a.Nil(err)
 		props, err := sc.GetProperties(ctx)
 		a.Nil(err)
-		a.Equal(5 * (2 ^ 40), props.Quota())
+		a.EqualValues(5120, props.Quota())
 	})
 }
 
@@ -165,7 +165,7 @@ func TestMakeFileShareQuota(t *testing.T) {
 		a.Nil(err)
 		props, err := sc.GetProperties(ctx)
 		a.Nil(err)
-		a.Equal(args.quota, props.Quota())
+		a.EqualValues(args.quota, props.Quota())
 	})
 }
 
