@@ -118,8 +118,77 @@ func TestMakeBlobFSFilesystemExists(t *testing.T) {
 
 	runMakeAndVerify(args, func(err error) {
 		a.NotNil(err)
-		a.Equal("the container already exists", err.Error())
+		a.Equal("the file system already exists", err.Error())
 		_, err = fsc.GetProperties(ctx)
+		a.Nil(err)
+	})
+}
+
+func TestMakeFileShare(t *testing.T) {
+	a := assert.New(t)
+	fsc := getFSU()
+	sc, name := getShareURL(a, fsc)
+	defer deleteShare(a, sc)
+
+	fscSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
+	scSAS := fscSAS
+	scSAS.Path = name
+
+	args := rawMakeCmdArgs{
+		resourceToCreate: scSAS.String(),
+	}
+
+	runMakeAndVerify(args, func(err error) {
+		a.Nil(err)
+		props, err := sc.GetProperties(ctx)
+		a.Nil(err)
+		a.Equal(5 * (2 ^ 40), props.Quota())
+	})
+}
+
+func TestMakeFileShareQuota(t *testing.T) {
+	a := assert.New(t)
+	fsc := getFSU()
+	sc, name := getShareURL(a, fsc)
+	defer deleteShare(a, sc)
+
+	fscSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
+	scSAS := fscSAS
+	scSAS.Path = name
+
+	args := rawMakeCmdArgs{
+		resourceToCreate: scSAS.String(),
+		quota: 5,
+	}
+
+	runMakeAndVerify(args, func(err error) {
+		a.Nil(err)
+		props, err := sc.GetProperties(ctx)
+		a.Nil(err)
+		a.Equal(args.quota, props.Quota())
+	})
+}
+
+func TestMakeFileShareExists(t *testing.T) {
+	a := assert.New(t)
+	fsc := getFSU()
+	sc, name := getShareURL(a, fsc)
+	_, err := sc.Create(ctx, nil, 0)
+	a.Nil(err)
+	defer deleteShare(a, sc)
+
+	fscSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
+	scSAS := fscSAS
+	scSAS.Path = name
+
+	args := rawMakeCmdArgs{
+		resourceToCreate: scSAS.String(),
+	}
+
+	runMakeAndVerify(args, func(err error) {
+		a.NotNil(err)
+		a.Equal("the file share already exists", err.Error())
+		_, err = sc.GetProperties(ctx)
 		a.Nil(err)
 	})
 }
