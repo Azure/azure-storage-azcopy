@@ -200,12 +200,6 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 		srcHNS = true
 	}
 
-	if loc := InferArgumentLocation(raw.Dst); loc == common.ELocation.BlobFS() {
-		raw.Dst = strings.Replace(raw.Dst, ".dfs", ".blob", 1)
-		glcm.Info("Sync operates only on blob endpoint. Switching to use blob endpoint on destination account.")
-		dstHNS = true
-	}
-
 	cooked.isHNSToHNS = srcHNS && dstHNS
 
 	var err error
@@ -217,7 +211,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	switch cooked.fromTo {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.Src, raw.Dst)
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS():
 		cooked.Destination, err = SplitResourceString(raw.Dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
