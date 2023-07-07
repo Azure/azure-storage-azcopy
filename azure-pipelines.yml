@@ -215,8 +215,8 @@ jobs:
         condition: succeededOrFailed()
         inputs:
           codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/coverage.html
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
+          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
 
   - job: Test_On_Ubuntu
     variables:
