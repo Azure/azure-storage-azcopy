@@ -1,6 +1,16 @@
 
 # Change Log
 
+## Version 10.20.0-Preview
+
+### New Features
+1. Migrated to the latest azblob SDK.
+2. Migrated from deprecated ADAL to MSAL.
+3. Deprecated support for object IDs in MSI. Client ID or Resource ID can be used as an alternative.
+
+### Special notes
+1. Due to the migration from ADAL to MSAL, tenant ID must now be set when authorizing with single tenant applications created after 10/15/2018.
+
 ## Version 10.19.0-Preview
 
 ### New Features
