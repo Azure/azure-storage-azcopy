@@ -538,7 +538,7 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 	} else if credInfo.IdentityInfo.MSIResID != "" {
 		id = azidentity.ResourceID(credInfo.IdentityInfo.ObjectID)
 	} else if credInfo.IdentityInfo.ObjectID != "" {
-		return nil, fmt.Errorf("object ID is not supported for managed identity")
+		return nil, fmt.Errorf("object ID is deprecated and no longer supported for managed identity. Please use client ID or resource ID instead")
 	}
 
 	tc, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
