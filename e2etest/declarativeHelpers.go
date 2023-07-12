@@ -533,6 +533,9 @@ type hookHelper interface {
 
 	// GetDestination returns the destination Resource Manager
 	GetDestination() resourceManager
+
+	// GetSource returns the source Resource Manager
+	GetSource() resourceManager
 }
 
 // /////

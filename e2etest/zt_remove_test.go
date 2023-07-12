@@ -21,6 +21,8 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"testing"
@@ -74,7 +76,6 @@ func TestRemove_WithSnapshotsBlob(t *testing.T) {
 		useAllTos: true,
 		froms: []common.Location{
 			common.ELocation.Blob(),
-			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
@@ -83,10 +84,23 @@ func TestRemove_WithSnapshotsBlob(t *testing.T) {
 	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
-
+		beforeRunJob: func(h hookHelper) {
+			blobClient := h.GetSource().(*resourceBlobContainer).containerClient.NewBlobClient("filea")
+			_, err := blobClient.CreateSnapshot(ctx, nil)
+			if err != nil {
+				t.Errorf("error creating snapshot %s", err)
+			}
+		},
+		afterValidation: func(h hookHelper) {
+			blobClient := h.GetSource().(*resourceBlobContainer).containerClient.NewBlobClient("filea")
+			_, err := blobClient.Delete(ctx, &blob.DeleteOptions{DeleteSnapshots: to.Ptr(blob.DeleteSnapshotsOptionTypeInclude)})
+			if err != nil {
+				t.Errorf("error deleting blob %s", err)
+			}
+		},
 	}, testFiles{
 		defaultSize: "1K",
-		shouldTransfer: []interface{}{
+		shouldSkip: []interface{}{
 			f("filea"),
 		},
 		objectTarget: "filea",
