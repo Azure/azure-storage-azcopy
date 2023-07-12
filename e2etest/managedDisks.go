@@ -55,7 +55,7 @@ func (config *ManagedDiskConfig) GetAccess() (*url.URL, error) {
 		return nil, fmt.Errorf("failed to initialize request: %w", err)
 	}
 
-	req.Header["Authorization"] = []string{"Bearer " + config.oauth.OAuthToken()}
+	req.Header["Authorization"] = []string{"Bearer " + config.oauth.Token}
 	req.Header["Content-Type"] = []string{"application/json; charset=utf-8"}
 	req.Header["Accept"] = []string{"application/json; charset=utf-8"}
 
@@ -117,7 +117,7 @@ func (config *ManagedDiskConfig) RevokeAccess() error {
 		return fmt.Errorf("failed to initialize request: %w", err)
 	}
 
-	req.Header["Authorization"] = []string{"Bearer " + config.oauth.OAuthToken()}
+	req.Header["Authorization"] = []string{"Bearer " + config.oauth.Token}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

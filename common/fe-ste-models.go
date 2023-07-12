@@ -1596,7 +1596,7 @@ type CpkOptions struct {
 }
 
 func (options CpkOptions) GetCPKInfo() *blob.CPKInfo {
-	if options.IsSourceEncrypted {
+	if !options.IsSourceEncrypted {
 		return nil
 	} else {
 		return GetCpkInfo(options.CpkInfo)
@@ -1604,7 +1604,7 @@ func (options CpkOptions) GetCPKInfo() *blob.CPKInfo {
 }
 
 func (options CpkOptions) GetCPKScopeInfo() *blob.CPKScopeInfo {
-	if options.IsSourceEncrypted {
+	if !options.IsSourceEncrypted {
 		return nil
 	} else {
 		return GetCpkScopeInfo(options.CpkScopeInfo)
