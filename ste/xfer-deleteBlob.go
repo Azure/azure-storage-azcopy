@@ -84,10 +84,10 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 				jptm.Log(pipeline.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)
 			}
-			// in all other cases, make the transfer as failed
-			transferDone(common.ETransferStatus.Failed(), err)
-		} else {
-			transferDone(common.ETransferStatus.Success(), nil)
 		}
+		// in all other cases, make the transfer as failed
+		transferDone(common.ETransferStatus.Failed(), err)
+	} else {
+		transferDone(common.ETransferStatus.Success(), nil)
 	}
 }
