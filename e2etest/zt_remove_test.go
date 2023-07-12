@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"testing"
 	"time"
@@ -64,5 +65,30 @@ func TestRemove_IncludeAfter(t *testing.T) {
 		// TODO: is that what we really want, or do we want to set write times here?
 		shouldTransfer: recreateFiles,
 		shouldIgnore:   skippedFiles,
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestRemove_WithSnapshotsBlob(t *testing.T) {
+	blobRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.BlobFS(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+	}, &hooks{
+
+	}, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+		objectTarget: "filea",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
