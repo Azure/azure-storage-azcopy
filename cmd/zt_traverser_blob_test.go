@@ -149,16 +149,16 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	// should return false, in all cases
 	isDir, err = blobTraverser.IsDirectory(true)
 	a.False(isDir)
-	a.Nil(err)
+	a.NotNil(err) // Not nil because we get 404 from service
 
 	isDir, err = blobTraverser.IsDirectory(false)
 	a.False(isDir)
-	a.Nil(err)
+	a.NotNil(err) // Not nil because we get 404 from service
 
 	//===================================================================//
 
 	// With a directory that does not exist, with path separator
-	parentDirNameWithSeparator := "dirDoesNotExist\\"
+	parentDirNameWithSeparator := "dirDoesNotExist" + common.OS_PATH_SEPARATOR
 	rawBlobURLWithSAS = scenarioHelper{}.getRawBlobURLWithSAS(a, fileSystemName, parentDirNameWithSeparator)
 	blobTraverser = newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true)
 

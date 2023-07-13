@@ -74,9 +74,15 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	// On HNS accounts, we would still perform this test. The user may have provided directory name without path-separator
-	if !t.isDFS && (isDirDirect || !isSource) {
-		return isDirDirect, nil
+	if isDirDirect { // a container or a path ending in '/' is always directory
+		return true, nil
 	}
+	if !isSource && !t.isDFS {
+		// destination on blob endpoint. If it does not end in '/' it is a file
+		return false, nil
+	}
+
+	// All sources and DFS-destinations we'll look further
 
 	_, _, isDirStub, blobErr := t.getPropertiesIfSingleBlob()
 
