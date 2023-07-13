@@ -186,7 +186,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 func SplitResourceString(raw string, loc common.Location) (common.ResourceString, error) {
 	sasless, sas, err := splitAuthTokenFromResource(raw, loc)
 	if err != nil {
-		return common.ResourceString{}, nil
+		return common.ResourceString{}, err
 	}
 	main, query := splitQueryFromSaslessResource(sasless, loc)
 	return common.ResourceString{
