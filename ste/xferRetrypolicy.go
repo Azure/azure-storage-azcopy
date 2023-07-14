@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -60,6 +61,8 @@ type XferRetryOptions struct {
 	// NOTE: Before setting this field, make sure you understand the issues around reading stale & potentially-inconsistent
 	// data at this webpage: https://docs.microsoft.com/en-us/azure/storage/common/storage-designing-ha-apps-with-ragrs
 	RetryReadsFromSecondaryHost string // Comment this our for non-Blob SDKs
+
+	RetryHTTPErrorConflict bool
 }
 
 func (o XferRetryOptions) retryReadsFromSecondaryHost() string {
@@ -220,6 +223,12 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				switch {
 				case err == nil:
 					action = "NoRetry: successful HTTP request" // no error
+				case response.Response() != nil && response.Response().StatusCode == http.StatusConflict:
+					if o.RetryHTTPErrorConflict && os.Getenv("AZCOPY_DISABLE_CUSTOM_RETRY") == "" {
+						action = "Retry: Custom request"
+					} else {
+						action = "NoRetry"
+					}
 
 				case !tryingPrimary && response != nil && response.Response() != nil && response.Response().StatusCode == http.StatusNotFound:
 					// If attempt was against the secondary & it returned a StatusNotFound (404), then
