@@ -655,6 +655,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 		 fromTo.IsDelete() && fromTo.From() == common.ELocation.Blob(): // ditto for delete
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+		r := xferRetryOption
+		r.RetryHTTPErrorConflict = true
 		jpm.pipeline = NewBlobPipeline(
 			credential,
 			azblob.PipelineOptions{
@@ -663,7 +665,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 					Value: userAgent,
 				},
 			},
-			xferRetryOption,
+			r,
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
