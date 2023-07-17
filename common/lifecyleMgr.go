@@ -37,13 +37,13 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 	}
 
 	// kick off the single routine that processes output
-	go lcmgr.processOutputMessage()
+	// go lcmgr.processOutputMessage()
 
 	// and process input
-	go lcmgr.watchInputs()
+	// go lcmgr.watchInputs()
 
 	// Check if need to do CPU profiling, and do CPU profiling accordingly when azcopy life start.
-	lcmgr.checkAndStartCPUProfiling()
+	// lcmgr.checkAndStartCPUProfiling()
 
 	return
 }()
