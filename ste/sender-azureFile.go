@@ -398,7 +398,10 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		return err
 	}
 
-	_, err = u.dirURL().SetMetadata(u.ctx, u.metadataToApply)
+	err = u.DoWithOverrideReadOnly(u.ctx,
+		func() (interface{}, error) { return u.dirURL().SetMetadata(u.ctx, u.metadataToApply) },
+		u.fileOrDirURL,
+		u.jptm.GetForceIfReadOnly())
 	if err != nil {
 		return err
 	}

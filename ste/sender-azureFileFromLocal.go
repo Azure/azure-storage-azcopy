@@ -99,7 +99,13 @@ func (s *azureFileUploader) GenerateCopyMetadata(id common.ChunkID) chunkFunc {
 	return createChunkFunc(true, s.jptm, id, func() {
 		info := s.jptm.Info()
 
-		_, err := s.fileURL().SetMetadata(s.jptm.Context(), s.metadataToApply)
+		err := s.DoWithOverrideReadOnly(s.ctx,
+			func() (interface{}, error) {
+				return s.fileURL().SetMetadata(s.jptm.Context(), s.metadataToApply)
+			},
+			s.fileOrDirURL,
+			s.jptm.GetForceIfReadOnly())
+
 		if err != nil {
 			s.jptm.FailActiveUpload("Setting file metadata", err)
 			return
