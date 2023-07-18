@@ -144,10 +144,13 @@ func (f FileURL) Delete(ctx context.Context) (*PathDeleteResponse, error) {
 
 // GetProperties returns the file's metadata and properties.
 // For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file-properties.
-func (f FileURL) GetProperties(ctx context.Context) (*PathGetPropertiesResponse, error) {
+func (f FileURL) GetProperties(ctx context.Context, opt string) (*PathGetPropertiesResponse, error) {
 	// Action MUST be "none", not "getStatus" because the latter does not include the MD5, and
 	// sometimes we call this method on things that are actually files
 	action := PathGetPropertiesActionNone
+	if opt != "acl" {
+		action = PathGetPropertiesActionGetAccessControl
+	}
 
 	return f.fileClient.GetProperties(ctx, f.fileSystemName, f.path, action, nil,
 		nil, nil, nil,

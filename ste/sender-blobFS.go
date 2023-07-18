@@ -23,10 +23,11 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -74,7 +75,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 	return &blobFSSenderBase{
 		jptm:                jptm,
-		sip: 				 sip,
+		sip:                 sip,
 		fileOrDirURL:        h,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
@@ -133,7 +134,7 @@ func newBlobFSLastModifiedTimeProvider(props *azbfs.PathGetPropertiesResponse) b
 }
 
 func (u *blobFSSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	props, err := u.fileURL().GetProperties(u.jptm.Context())
+	props, err := u.fileURL().GetProperties(u.jptm.Context(), "")
 	return remoteObjectExists(newBlobFSLastModifiedTimeProvider(props), err)
 }
 
@@ -185,7 +186,7 @@ func (u *blobFSSenderBase) Cleanup() {
 }
 
 func (u *blobFSSenderBase) GetDestinationLength() (int64, error) {
-	prop, err := u.fileURL().GetProperties(u.jptm.Context())
+	prop, err := u.fileURL().GetProperties(u.jptm.Context(), "")
 
 	if err != nil {
 		return -1, err
@@ -216,7 +217,7 @@ func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
 	return err
 }
 
-func (u *blobFSSenderBase) GetBlobURL() azblob.BlobURL{
+func (u *blobFSSenderBase) GetBlobURL() azblob.BlobURL {
 	blobPipeline := u.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline // pull the secondary (blob) pipeline
 	bURLParts := azblob.NewBlobURLParts(u.fileOrDirURL.URL())
 	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".dfs", ".blob") // switch back to blob
@@ -278,11 +279,11 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 	common.AddStatToBlobMetadata(adapter, meta)
 	meta[common.POSIXSymlinkMeta] = "true" // just in case there isn't any metadata
 	blobHeaders := azblob.BlobHTTPHeaders{ // translate headers, since those still apply
-		ContentType: u.creationTimeHeaders.ContentType,
-		ContentEncoding: u.creationTimeHeaders.ContentEncoding,
-		ContentLanguage: u.creationTimeHeaders.ContentLanguage,
+		ContentType:        u.creationTimeHeaders.ContentType,
+		ContentEncoding:    u.creationTimeHeaders.ContentEncoding,
+		ContentLanguage:    u.creationTimeHeaders.ContentLanguage,
 		ContentDisposition: u.creationTimeHeaders.ContentDisposition,
-		CacheControl: u.creationTimeHeaders.CacheControl,
+		CacheControl:       u.creationTimeHeaders.CacheControl,
 	}
 
 	_, err = u.GetBlobURL().ToBlockBlobURL().Upload(
@@ -291,9 +292,9 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 		blobHeaders,
 		meta,
 		azblob.BlobAccessConditions{},
-		azblob.AccessTierNone, // dfs uses default tier
-		nil, // dfs doesn't support tags
-		azblob.ClientProvidedKeyOptions{}, // cpk isn't used for dfs
+		azblob.AccessTierNone,              // dfs uses default tier
+		nil,                                // dfs doesn't support tags
+		azblob.ClientProvidedKeyOptions{},  // cpk isn't used for dfs
 		azblob.ImmutabilityPolicyOptions{}) // dfs doesn't support immutability policy
 
 	return err
