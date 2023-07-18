@@ -148,7 +148,7 @@ func (f FileURL) GetProperties(ctx context.Context, opt string) (*PathGetPropert
 	// Action MUST be "none", not "getStatus" because the latter does not include the MD5, and
 	// sometimes we call this method on things that are actually files
 	action := PathGetPropertiesActionNone
-	if opt != "acl" {
+	if opt == "acl" {
 		action = PathGetPropertiesActionGetAccessControl
 	}
 
