@@ -21,6 +21,9 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"testing"
 	"time"
@@ -64,5 +67,42 @@ func TestRemove_IncludeAfter(t *testing.T) {
 		// TODO: is that what we really want, or do we want to set write times here?
 		shouldTransfer: recreateFiles,
 		shouldIgnore:   skippedFiles,
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestRemove_WithSnapshotsBlob(t *testing.T) {
+	blobRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			blobClient := h.GetSource().(*resourceBlobContainer).containerClient.NewBlobClient("filea")
+			_, err := blobClient.CreateSnapshot(ctx, nil)
+			if err != nil {
+				t.Errorf("error creating snapshot %s", err)
+			}
+		},
+		afterValidation: func(h hookHelper) {
+			blobClient := h.GetSource().(*resourceBlobContainer).containerClient.NewBlobClient("filea")
+			_, err := blobClient.Delete(ctx, &blob.DeleteOptions{DeleteSnapshots: to.Ptr(blob.DeleteSnapshotsOptionTypeInclude)})
+			if err != nil {
+				t.Errorf("error deleting blob %s", err)
+			}
+		},
+	}, testFiles{
+		defaultSize: "1K",
+		shouldSkip: []interface{}{
+			f("filea"),
+		},
+		objectTarget: "filea",
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
