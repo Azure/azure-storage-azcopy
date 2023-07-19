@@ -437,11 +437,11 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(resourceURL, p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions)
+			output = newBlobAccountTraverser(resourceURL, p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, false)
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(resourceURL, p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(resourceURL, p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions)
+			output = newBlobTraverser(resourceURL, p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, false)
 		}
 	case common.ELocation.File():
 		resourceURL, err := resource.FullURL()
@@ -508,11 +508,11 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newBlobAccountTraverser(&blobResourceURL, blobPipeline, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions)
+			output = newBlobAccountTraverser(&blobResourceURL, blobPipeline, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, true)
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(&blobResourceURL, blobPipeline, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(&blobResourceURL, blobPipeline, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions)
+			output = newBlobTraverser(&blobResourceURL, blobPipeline, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true)
 		}
 	case common.ELocation.S3():
 		resourceURL, err := resource.FullURL()

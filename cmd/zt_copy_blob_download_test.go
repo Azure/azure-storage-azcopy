@@ -176,7 +176,7 @@ func TestDownloadAccount(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
@@ -225,7 +225,7 @@ func TestDownloadAccountWildcard(t *testing.T) {
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobAccountTraverser(&rawBSU, p, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
 	processor := func(object StoredObject) error {
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
