@@ -134,7 +134,7 @@ func newBlobFSLastModifiedTimeProvider(props *azbfs.PathGetPropertiesResponse) b
 }
 
 func (u *blobFSSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	props, err := u.fileURL().GetProperties(u.jptm.Context(), "")
+	props, err := u.fileURL().GetProperties(u.jptm.Context())
 	return remoteObjectExists(newBlobFSLastModifiedTimeProvider(props), err)
 }
 
@@ -186,7 +186,7 @@ func (u *blobFSSenderBase) Cleanup() {
 }
 
 func (u *blobFSSenderBase) GetDestinationLength() (int64, error) {
-	prop, err := u.fileURL().GetProperties(u.jptm.Context(), "")
+	prop, err := u.fileURL().GetProperties(u.jptm.Context())
 
 	if err != nil {
 		return -1, err
