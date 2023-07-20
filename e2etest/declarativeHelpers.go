@@ -149,9 +149,9 @@ type params struct {
 	includeAttributes         string
 	excludePath               string
 	excludePattern            string
-	excludeAttributes 		  string
-	forceIfReadOnly   		  bool
-	capMbps           		  float32
+	excludeAttributes         string
+	forceIfReadOnly           bool
+	capMbps                   float32
 	blockSizeMB               float32
 	deleteDestination         common.DeleteDestination // Manual validation is needed.
 	s2sSourceChangeValidation bool
@@ -285,8 +285,8 @@ func (TestFromTo) AllPairs() TestFromTo {
 		desc:                   "AllPairs",
 		useAllTos:              true,
 		suppressAutoFileToFile: true, // not needed for AllPairs
-		froms:                  common.ELocation.AllStandardLocations(),
-		tos:                    common.ELocation.AllStandardLocations(),
+		froms:                  ETestLocation.AllStandardLocations(),
+		tos:                    ETestLocation.AllStandardLocations(),
 	}
 }
 
@@ -295,7 +295,7 @@ func (TestFromTo) AllUploads() TestFromTo {
 	result := TestFromTo{}.AllPairs()
 	result.desc = "AllUploads"
 	result.filter = func(ft common.FromTo) bool {
-		return ft.IsUpload()
+		return TestFromToEnum(ft).IsUpload()
 	}
 	return result
 }
@@ -305,7 +305,7 @@ func (TestFromTo) AllDownloads() TestFromTo {
 	result := TestFromTo{}.AllPairs()
 	result.desc = "AllDownloads"
 	result.filter = func(ft common.FromTo) bool {
-		return ft.IsDownload()
+		return TestFromToEnum(ft).IsDownload()
 	}
 	return result
 }
@@ -315,7 +315,7 @@ func (TestFromTo) AllS2S() TestFromTo {
 	result := TestFromTo{}.AllPairs()
 	result.desc = "AllS2S"
 	result.filter = func(ft common.FromTo) bool {
-		return ft.IsS2S()
+		return TestFromToEnum(ft).IsS2S()
 	}
 	return result
 }
@@ -328,7 +328,7 @@ func (TestFromTo) AllAzureS2S() TestFromTo {
 		isFromAzure := ft.From() == common.ELocation.BlobFS() ||
 			ft.From() == common.ELocation.Blob() ||
 			ft.From() == common.ELocation.File()
-		return ft.IsS2S() && isFromAzure
+		return TestFromToEnum(ft).IsS2S() && isFromAzure
 	}
 	return result
 }
@@ -342,6 +342,7 @@ func (TestFromTo) AllRemove() TestFromTo {
 			common.ELocation.Blob(),
 			common.ELocation.File(),
 			common.ELocation.BlobFS(),
+			common.Location(ETestLocation.SMBMount()),
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
@@ -357,6 +358,7 @@ func (TestFromTo) AllSync() TestFromTo {
 			common.ELocation.Blob(),
 			common.ELocation.File(),
 			common.ELocation.Local(),
+			common.Location(ETestLocation.SMBMount()),
 		},
 		tos: []common.Location{
 			common.ELocation.Blob(),
@@ -418,17 +420,19 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			}
 
 			// parse the combination and see if its valid
-			var fromTo common.FromTo
+			var fromToType TestFromToEnum
 			var err error
 			if to == common.ELocation.Unknown() {
-				err = fromTo.Parse(from.String() + "Trash")
+				err = fromToType.ParseLocation(TestLocation(from).String() + "Trash")
 			} else {
-				err = fromTo.Parse(from.String() + to.String())
+				err = fromToType.ParseLocation(TestLocation(from).String() + TestLocation(to).String())
 			}
 
 			if err != nil {
 				continue // this pairing wasn't valid
 			}
+
+			fromTo := common.FromTo(fromToType)
 
 			// if we are doing sync, skip combos that are not currently valid for sync
 			if op == eOperation.Sync() {
@@ -440,7 +444,8 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 					common.EFromTo.LocalFile(),
 					common.EFromTo.FileLocal(),
 					common.EFromTo.BlobFile(),
-					common.EFromTo.FileBlob():
+					common.EFromTo.FileBlob(),
+					common.FromTo(ETestFromTo.SMBMountFile()):
 					// do nothing, these are fine
 				default:
 					continue // not supported for sync

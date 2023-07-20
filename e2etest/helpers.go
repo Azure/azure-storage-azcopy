@@ -34,13 +34,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go/pkg/credentials"
 	chk "gopkg.in/check.v1"
 
-	"github.com/minio/minio-go"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/ste"
+	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/aymanjarrousms/azure-storage-file-go/azfile"

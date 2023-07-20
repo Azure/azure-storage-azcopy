@@ -100,6 +100,7 @@ type resourceManager interface {
 
 type resourceLocal struct {
 	dirPath string
+	baseDir string
 }
 
 func (r *resourceLocal) createLocation(a asserter, s *scenario) {
@@ -107,7 +108,12 @@ func (r *resourceLocal) createLocation(a asserter, s *scenario) {
 		return
 	}
 
-	r.dirPath = TestResourceFactory{}.CreateLocalDirectory(a)
+	r.baseDir = ""
+	if s.fromTo == common.FromTo(ETestFromTo.SMBMountFile()) {
+		r.baseDir = "/mnt/AzCopyE2ESMB"
+	}
+
+	r.dirPath = TestResourceFactory{}.CreateLocalDirectory(a, r.baseDir)
 	if s.GetModifiableParameters().relativeSourcePath != "" {
 		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
 	}

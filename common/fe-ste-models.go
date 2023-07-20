@@ -246,11 +246,11 @@ var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
 
-func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(0) }
-func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
-func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
-func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
-func (OverwriteOption) PosixProperties() OverwriteOption {return OverwriteOption(4)}
+func (OverwriteOption) True() OverwriteOption            { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption           { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption          { return OverwriteOption(2) }
+func (OverwriteOption) IfSourceNewer() OverwriteOption   { return OverwriteOption(3) }
+func (OverwriteOption) PosixProperties() OverwriteOption { return OverwriteOption(4) }
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)
@@ -470,10 +470,10 @@ func (Location) AllStandardLocations() []Location {
 	}
 }
 
-// fromToValue returns the fromTo enum value for given
+// FromToValue returns the fromTo enum value for given
 // from / To location combination. In 16 bits fromTo
 // value, first 8 bits represents from location
-func fromToValue(from Location, to Location) FromTo {
+func FromToValue(from Location, to Location) FromTo {
 	return FromTo((FromTo(from) << 8) | FromTo(to))
 }
 
@@ -519,40 +519,40 @@ var EFromTo = FromTo(0)
 type FromTo uint16
 
 func (FromTo) Unknown() FromTo   { return FromTo(0) }
-func (FromTo) LocalBlob() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.Blob())) }
-func (FromTo) LocalFile() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.File())) }
-func (FromTo) BlobLocal() FromTo { return FromTo(fromToValue(ELocation.Blob(), ELocation.Local())) }
-func (FromTo) FileLocal() FromTo { return FromTo(fromToValue(ELocation.File(), ELocation.Local())) }
-func (FromTo) BlobPipe() FromTo  { return FromTo(fromToValue(ELocation.Blob(), ELocation.Pipe())) }
-func (FromTo) PipeBlob() FromTo  { return FromTo(fromToValue(ELocation.Pipe(), ELocation.Blob())) }
-func (FromTo) FilePipe() FromTo  { return FromTo(fromToValue(ELocation.File(), ELocation.Pipe())) }
-func (FromTo) PipeFile() FromTo  { return FromTo(fromToValue(ELocation.Pipe(), ELocation.File())) }
-func (FromTo) BlobTrash() FromTo { return FromTo(fromToValue(ELocation.Blob(), ELocation.Unknown())) }
-func (FromTo) FileTrash() FromTo { return FromTo(fromToValue(ELocation.File(), ELocation.Unknown())) }
+func (FromTo) LocalBlob() FromTo { return FromTo(FromToValue(ELocation.Local(), ELocation.Blob())) }
+func (FromTo) LocalFile() FromTo { return FromTo(FromToValue(ELocation.Local(), ELocation.File())) }
+func (FromTo) BlobLocal() FromTo { return FromTo(FromToValue(ELocation.Blob(), ELocation.Local())) }
+func (FromTo) FileLocal() FromTo { return FromTo(FromToValue(ELocation.File(), ELocation.Local())) }
+func (FromTo) BlobPipe() FromTo  { return FromTo(FromToValue(ELocation.Blob(), ELocation.Pipe())) }
+func (FromTo) PipeBlob() FromTo  { return FromTo(FromToValue(ELocation.Pipe(), ELocation.Blob())) }
+func (FromTo) FilePipe() FromTo  { return FromTo(FromToValue(ELocation.File(), ELocation.Pipe())) }
+func (FromTo) PipeFile() FromTo  { return FromTo(FromToValue(ELocation.Pipe(), ELocation.File())) }
+func (FromTo) BlobTrash() FromTo { return FromTo(FromToValue(ELocation.Blob(), ELocation.Unknown())) }
+func (FromTo) FileTrash() FromTo { return FromTo(FromToValue(ELocation.File(), ELocation.Unknown())) }
 func (FromTo) BlobFSTrash() FromTo {
-	return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Unknown()))
+	return FromTo(FromToValue(ELocation.BlobFS(), ELocation.Unknown()))
 }
-func (FromTo) LocalBlobFS() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.BlobFS())) }
-func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Local())) }
-func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }
-func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Blob())) }
-func (FromTo) BlobFile() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.File())) }
-func (FromTo) FileFile() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.File())) }
-func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
-func (FromTo) GCPBlob() FromTo     { return FromTo(fromToValue(ELocation.GCP(), ELocation.Blob())) }
-func (FromTo) BlobNone() FromTo    { return fromToValue(ELocation.Blob(), ELocation.None()) }
-func (FromTo) BlobFSNone() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
-func (FromTo) FileNone() FromTo    { return fromToValue(ELocation.File(), ELocation.None()) }
+func (FromTo) LocalBlobFS() FromTo { return FromTo(FromToValue(ELocation.Local(), ELocation.BlobFS())) }
+func (FromTo) BlobFSLocal() FromTo { return FromTo(FromToValue(ELocation.BlobFS(), ELocation.Local())) }
+func (FromTo) BlobBlob() FromTo    { return FromTo(FromToValue(ELocation.Blob(), ELocation.Blob())) }
+func (FromTo) FileBlob() FromTo    { return FromTo(FromToValue(ELocation.File(), ELocation.Blob())) }
+func (FromTo) BlobFile() FromTo    { return FromTo(FromToValue(ELocation.Blob(), ELocation.File())) }
+func (FromTo) FileFile() FromTo    { return FromTo(FromToValue(ELocation.File(), ELocation.File())) }
+func (FromTo) S3Blob() FromTo      { return FromTo(FromToValue(ELocation.S3(), ELocation.Blob())) }
+func (FromTo) GCPBlob() FromTo     { return FromTo(FromToValue(ELocation.GCP(), ELocation.Blob())) }
+func (FromTo) BlobNone() FromTo    { return FromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo  { return FromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo    { return FromToValue(ELocation.File(), ELocation.None()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
-	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.Blob()))
+	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.Blob()))
 }
 func (FromTo) BenchmarkFile() FromTo {
-	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.File()))
+	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.File()))
 }
 func (FromTo) BenchmarkBlobFS() FromTo {
-	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.BlobFS()))
+	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.BlobFS()))
 }
 
 func (ft FromTo) String() string {

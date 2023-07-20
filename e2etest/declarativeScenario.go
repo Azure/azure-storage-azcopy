@@ -142,8 +142,9 @@ func (s *scenario) assignSourceAndDest() {
 	createTestResource := func(loc common.Location, isSourceAcc bool) resourceManager {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
-		case common.ELocation.Local():
-			return &resourceLocal{common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
+		case common.Location(ETestLocation.SMBMount()),
+			common.ELocation.Local():
+			return &resourceLocal{dirPath: common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, ""), baseDir: ""}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: s.srcAccountType}
 		case common.ELocation.Blob():
@@ -278,8 +279,8 @@ func (s *scenario) validateTransferStates() {
 		panic("validation of deleteDestination behaviour is not yet implemented in the declarative test runner")
 	}
 
-	isSrcEncoded := s.fromTo.From().IsRemote() // TODO: is this right, reviewers?
-	isDstEncoded := s.fromTo.To().IsRemote()   // TODO: is this right, reviewers?
+	isSrcEncoded := TestLocation(s.fromTo.From()).IsRemote() // TODO: is this right, reviewers?
+	isDstEncoded := TestLocation(s.fromTo.To()).IsRemote()   // TODO: is this right, reviewers?
 	srcRoot, dstRoot, expectFolders, expectRootFolder, _ := s.getTransferInfo()
 
 	// test the sets of files in the various statuses
@@ -306,7 +307,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	dstRoot = s.state.dest.getParam(false, false, "")
 
 	// do we expect folder transfers
-	expectFolders = (s.fromTo.From().IsFolderAware() &&
+	expectFolders = (TestLocation(s.fromTo.From()).IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
 		s.p.allowsFolderTransfers()) ||
 		(s.p.preserveSMBPermissions && s.FromTo() == common.EFromTo.BlobBlob())
@@ -323,7 +324,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// Yes, this is arguably inconsistent. But its the way its always been, and it does seem to match user expectations for copies
 		// of that kind.
 		expectRootFolder = false
-	} else if s.fromTo.From().IsLocal() {
+	} else if TestLocation(s.fromTo.From()).IsLocal() {
 		if tf.objectTarget == "" && tf.destTarget == "" {
 			addedDirAtDest = filepath.Base(srcRoot)
 		} else if tf.destTarget != "" {
@@ -339,7 +340,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	}
 
-	if s.fromTo.From() == common.ELocation.Local() {
+	if s.fromTo.From() == common.ELocation.Local() || TestLocation(s.fromTo.From()) == ETestLocation.SMBMount() {
 		srcRoot = common.ToExtendedPath(srcRoot)
 	}
 	if s.fromTo.To() == common.ELocation.Local() {

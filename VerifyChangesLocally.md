@@ -80,3 +80,23 @@ Side Notes:
         *ok      github.com/shyaler/azure-storage-azcopy/v10/azbfs       45.742s coverage: 54.3% of statements*
         *ok      github.com/shyaler/azure-storage-azcopy/v10/sddl        0.088s  coverage: 68.4% of statements*
         *FAIL*
+
+
+# Debug the e2e tests locally
+use the bellow configuration to debug the e2e tests:
+
+        {
+            "request": "launch",
+            "name": "Debug azCopy e2e tests",
+            "type": "go",
+            "mode": "test",
+            "program": "e2etest",
+            "console": "integratedTerminal",
+            "args": ["-test.v", "-test.timeout", "60m"],
+            "asRoot": true,
+            "envFile": "/etc/environment"
+        }
+
+If you want to debug a specific test, use:
+
+         "args": ["-test.v", "-test.timeout", "60m", "test.run", <testName>],

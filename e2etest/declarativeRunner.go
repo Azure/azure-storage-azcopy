@@ -34,14 +34,15 @@ import (
 // See first test in zt_enumeration for an annotated example.
 
 var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
-	common.ELocation.Unknown(): {common.ECredentialType.Unknown(), common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // Delete!
-	common.ELocation.File():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
-	common.ELocation.Blob():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
-	common.ELocation.BlobFS():  {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
-	common.ELocation.Local():   {common.ECredentialType.Anonymous()},
-	common.ELocation.Pipe():    {common.ECredentialType.Anonymous()},
-	common.ELocation.S3():      {common.ECredentialType.S3AccessKey()},
-	common.ELocation.GCP():     {common.ECredentialType.GoogleAppCredentials()},
+	common.ELocation.Unknown():                {common.ECredentialType.Unknown(), common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // Delete!
+	common.ELocation.File():                   {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+	common.ELocation.Blob():                   {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+	common.ELocation.BlobFS():                 {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
+	common.ELocation.Local():                  {common.ECredentialType.Anonymous()},
+	common.ELocation.Pipe():                   {common.ECredentialType.Anonymous()},
+	common.ELocation.S3():                     {common.ECredentialType.S3AccessKey()},
+	common.ELocation.GCP():                    {common.ECredentialType.GoogleAppCredentials()},
+	common.Location(ETestLocation.SMBMount()): {common.ECredentialType.Anonymous()},
 }
 
 var allCredentialTypes []common.CredentialType = nil
@@ -73,7 +74,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 
 	// determine source types
 	var sourceTypes []common.CredentialType
-	if fromTo.IsS2S() && fromTo != common.EFromTo.BlobBlob() {
+	if TestFromToEnum(fromTo).IsS2S() && fromTo != common.EFromTo.BlobBlob() {
 		// source must always be anonymous-- no exceptions until OAuth over S2S is introduced.
 		sourceTypes = []common.CredentialType{common.ECredentialType.Anonymous()}
 	} else {
@@ -144,10 +145,10 @@ func RunScenarios(
 
 			for _, credTypes := range credentialTypes {
 				// Create unique name for generating container names
-				compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
+				compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], TestLocation(fromTo.From()).String()[0], fromTo.To().String()[0])
 				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
 				// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
-				subtestName := fmt.Sprintf("%s-%s", op, fromTo)
+				subtestName := fmt.Sprintf("%s-%s", op, TestFromToEnum(fromTo))
 
 				hsToUse := hooks{}
 				if hs != nil {

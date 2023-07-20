@@ -32,9 +32,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 	"github.com/aymanjarrousms/azure-storage-file-go/azfile"
 	"github.com/google/uuid"
-	"github.com/aymanjarrousms/azure-storage-azcopy/v10/azbfs"
 )
 
 // provide convenient methods to get access to test resources such as accounts, containers/shares, directories
@@ -183,8 +183,14 @@ func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare azfi
 	return resp.Snapshot()
 }
 
-func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+func (TestResourceFactory) CreateLocalDirectory(c asserter, baseDir string) (dstDirName string) {
+	dstDirName, err := ioutil.TempDir(baseDir, "AzCopyLocalTest")
+	c.AssertNoErr(err)
+	return
+}
+
+func (TestResourceFactory) CreateLocalMountDirectory(c asserter) (dstDirName string) {
+	dstDirName, err := ioutil.TempDir("/mnt", "AzCopyE2ESMB")
 	c.AssertNoErr(err)
 	return
 }
