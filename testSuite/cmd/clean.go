@@ -3,11 +3,17 @@ package cmd
 import (
 	gcpUtils "cloud.google.com/go/storage"
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"google.golang.org/api/iterator"
 	"net/http"
@@ -20,7 +26,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 	"github.com/spf13/cobra"
 )
@@ -194,24 +199,16 @@ func cleanBlob(resourceURL string) {
 	}
 }
 
-func cleanShare(shareURLStr string) {
-	u, err := url.Parse(shareURLStr)
-
-	if err != nil {
-		fmt.Println("error parsing the share URL with SAS ", err)
-		os.Exit(1)
-	}
-
-	p := createFilePipeline(*u)
-	shareURL := azfile.NewShareURL(*u, p)
+func cleanShare(resourceURL string) {
+	shareClient := createShareClient(resourceURL)
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Create the share. This will fail if it's already present but this saves us the pain of a container being missing for one reason or another.
-	_, _ = shareURL.Create(ctx, azfile.Metadata{}, 0)
+	_, _ = shareClient.Create(ctx, nil)
 
-	_, err = shareURL.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
+	_, err := shareClient.Delete(ctx, &share.DeleteOptions{DeleteSnapshots: to.Ptr(share.DeleteSnapshotsOptionTypeInclude)})
 	if err != nil {
-		sErr, sErrOk := err.(azfile.StorageError)
-		if sErrOk && sErr.Response().StatusCode != http.StatusNotFound {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) && respErr.StatusCode != http.StatusNotFound {
 			fmt.Fprintf(os.Stdout, "error deleting the share for clean share, error '%v'\n", err)
 			os.Exit(1)
 		}
@@ -220,26 +217,18 @@ func cleanShare(shareURLStr string) {
 	// Sleep seconds to wait the share deletion got succeeded
 	time.Sleep(45 * time.Second)
 
-	_, err = shareURL.Create(ctx, azfile.Metadata{}, 0)
+	_, err = shareClient.Create(ctx, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stdout, "error creating the share for clean share, error '%v'\n", err)
 		os.Exit(1)
 	}
 }
 
-func cleanFile(fileURLStr string) {
-	u, err := url.Parse(fileURLStr)
-
-	if err != nil {
-		fmt.Println("error parsing the file URL with SAS", err)
-		os.Exit(1)
-	}
-
-	p := createFilePipeline(*u)
-	fileURL := azfile.NewFileURL(*u, p)
+func cleanFile(resourceURL string) {
+	fileClient := createShareFileClient(resourceURL)
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	_, err = fileURL.Delete(ctx)
+	_, err := fileClient.Delete(ctx, nil)
 	if err != nil {
 		fmt.Println("error deleting the file ", err)
 		os.Exit(1)
@@ -252,7 +241,8 @@ func createBlobClient(resourceURL string) *blob.Client {
 		fmt.Println("Failed to parse url")
 		os.Exit(1)
 	}
-	blobClient := createBlobServiceClient(resourceURL).NewContainerClient(blobURLParts.ContainerName).NewBlobClient(blobURLParts.BlobName)
+	containerClient := createContainerClient(resourceURL)
+	blobClient := containerClient.NewBlobClient(blobURLParts.BlobName)
 	if blobURLParts.Snapshot != "" {
 		blobClient, err = blobClient.WithSnapshot(blobURLParts.Snapshot)
 		if err != nil {
@@ -322,27 +312,87 @@ func createBlobServiceClient(resourceURL string) *blobservice.Client {
 	return bsc
 }
 
-func createFilePipeline(u url.URL) pipeline.Pipeline {
+func createShareFileClient(resourceURL string) *sharefile.Client {
+	fileURLParts, err := sharefile.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	shareClient := createShareClient(resourceURL)
+	fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileURLParts.DirectoryOrFilePath)
+	return fileClient
+}
+
+func createShareDirectoryClient(resourceURL string) *sharedirectory.Client {
+	fileURLParts, err := sharefile.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	shareClient := createShareClient(resourceURL)
+	if fileURLParts.DirectoryOrFilePath == "" {
+		return shareClient.NewRootDirectoryClient()
+	} else {
+		return shareClient.NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
+	}
+}
+
+func createShareClient(resourceURL string) *share.Client {
+	fileURLParts, err := sharefile.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	sc := createFileServiceClient(resourceURL).NewShareClient(fileURLParts.ShareName)
+	if fileURLParts.ShareSnapshot != "" {
+		sc, err = sc.WithSnapshot(fileURLParts.ShareSnapshot)
+		if err != nil {
+			fmt.Println("Failed to parse snapshot")
+			os.Exit(1)
+		}
+	}
+	return sc
+}
+
+func createFileServiceClient(resourceURL string) *fileservice.Client {
+	fileURLParts, err := sharefile.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	fileURLParts.ShareName = ""
+	fileURLParts.ShareSnapshot = ""
+	fileURLParts.DirectoryOrFilePath = ""
+
+	// create the pipeline, preferring SAS over account name/key
+	if fileURLParts.SAS.Encode() != "" {
+		fsc, err := fileservice.NewClientWithNoCredential(fileURLParts.String(), nil)
+		if err != nil {
+			fmt.Println("Failed to create blob service client")
+			os.Exit(1)
+		}
+		return fsc
+	}
+
+	// Get name and key variables from environment.
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
-	fileURLParts := azfile.NewFileURLParts(u)
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in the environment, and there is no SAS token present
 	if (name == "" && key == "") && fileURLParts.SAS.Encode() == "" {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
 		os.Exit(1)
 	}
-
-	// create the pipeline, preferring SAS over account name/key
-	if fileURLParts.SAS.Encode() != "" {
-		return azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-	}
-
-	c, err := azfile.NewSharedKeyCredential(name, key)
+	c, err := sharefile.NewSharedKeyCredential(name, key)
 	if err != nil {
 		fmt.Println("Failed to create shared key credential!")
 		os.Exit(1)
 	}
-	return azfile.NewPipeline(c, azfile.PipelineOptions{})
+	fsc, err := fileservice.NewClientWithSharedKeyCredential(fileURLParts.String(), c, nil)
+	if err != nil {
+		fmt.Println("Failed to create blob service client")
+		os.Exit(1)
+	}
+	return fsc
 }
 
 func createBlobFSPipeline(u url.URL) pipeline.Pipeline {
@@ -434,33 +484,25 @@ func cleanBlobAccount(resourceURL string) {
 }
 
 func cleanFileAccount(resourceURL string) {
-	accountURLBase, err := url.Parse(resourceURL)
-
-	if err != nil {
-		fmt.Println("error parsing the account sas ", err)
-		os.Exit(1)
-	}
-
-	p := createFilePipeline(*accountURLBase)
-	accountURL := azfile.NewServiceURL(*accountURLBase, p)
+	serviceClient := createFileServiceClient(resourceURL)
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// perform a list account
-	for marker := (azfile.Marker{}); marker.NotDone(); {
+	pager := serviceClient.NewListSharesPager(nil)
+	for pager.More() {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		lResp, err := accountURL.ListSharesSegment(ctx, marker, azfile.ListSharesOptions{})
+		lResp, err := pager.NextPage(ctx)
 		if err != nil {
 			fmt.Println("error listing shares, please check the share sas, ", err)
 			os.Exit(1)
 		}
 
-		for _, shareItem := range lResp.ShareItems {
-			_, err := accountURL.NewShareURL(shareItem.Name).Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
+		for _, shareItem := range lResp.Shares {
+			_, err := serviceClient.NewShareClient(*shareItem.Name).Delete(ctx, &share.DeleteOptions{DeleteSnapshots: to.Ptr(share.DeleteSnapshotsOptionTypeInclude)})
 			if err != nil {
 				fmt.Println("error deleting the share from account, ", err)
 				os.Exit(1)
 			}
 		}
-		marker = lResp.NextMarker
 	}
 }
 
