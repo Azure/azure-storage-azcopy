@@ -571,7 +571,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, blobList[0]).URL()
 		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
-		blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, false, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, false, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 		// invoke the blob traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -713,7 +713,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawContainerURLWithSAS := scenarioHelper{}.getContainerClientWithSAS(a, containerName).URL()
 		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawContainerURLWithSAS)
-		blobTraverser := newBlobTraverser(rawContainerURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		blobTraverser := newBlobTraverser(rawContainerURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -862,7 +862,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawVirDirURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, virDirName).URL()
 		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawVirDirURLWithSAS)
-		blobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		blobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 		// invoke the local traversal with a dummy processor
 		blobDummyProcessor := dummyProcessor{}
@@ -959,10 +959,10 @@ func TestSerialAndParallelBlobTraverser(t *testing.T) {
 		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 		rawVirDirURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, virDirName).URL()
 		serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawVirDirURLWithSAS)
-		parallelBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		parallelBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 		// construct a serial blob traverser
-		serialBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+		serialBlobTraverser := newBlobTraverser(rawVirDirURLWithSAS, serviceClientWithSAS, ctx, isRecursiveOn, false, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 		serialBlobTraverser.parallelListing = false
 
 		// invoke the parallel traversal with a dummy processor

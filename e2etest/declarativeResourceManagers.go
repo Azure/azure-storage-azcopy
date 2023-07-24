@@ -273,7 +273,7 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 		},
 	}
 
-	if s.fromTo.IsDownload() {
+	if s.fromTo.IsDownload()|| s.fromTo.IsDelete() {
 		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
