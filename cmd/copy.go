@@ -600,8 +600,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo {
 		// We only support transfer from source encrypted by user key when user wishes to download.
 		// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
-		if cooked.FromTo.IsDownload() {
-			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download scenario. " +
+		if cooked.FromTo.IsDownload() || cooked.FromTo.IsDelete() {
+			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download or delete scenario. " +
 				"Assuming source is encrypted.")
 			cpkOptions.IsSourceEncrypted = true
 		}
