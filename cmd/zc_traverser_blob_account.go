@@ -42,6 +42,8 @@ type blobAccountTraverser struct {
 
 	cpkOptions          common.CpkOptions
 	preservePermissions common.PreservePermissionsOption
+
+	isDFS bool
 }
 
 func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
@@ -92,7 +94,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.serviceClient.NewContainerClient(v).URL()
-		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false, t.preservePermissions)
+		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false, t.preservePermissions, t.isDFS)
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
@@ -107,7 +109,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(serviceClient *service.Client, container string, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, preservePermissions common.PreservePermissionsOption) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(serviceClient *service.Client, container string, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, preservePermissions common.PreservePermissionsOption, isDFS bool) (t *blobAccountTraverser) {
 	t = &blobAccountTraverser{
 		ctx:                         ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
@@ -117,6 +119,7 @@ func newBlobAccountTraverser(serviceClient *service.Client, container string, ct
 		s2sPreserveSourceTags:       s2sPreserveSourceTags,
 		cpkOptions:                  cpkOptions,
 		preservePermissions:         preservePermissions,
+		isDFS:			             isDFS,
 	}
 
 	return
