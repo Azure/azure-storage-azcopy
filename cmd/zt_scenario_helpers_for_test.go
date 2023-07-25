@@ -223,10 +223,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForWASB(a *assert.Assertions, 
 	createNewDirectoryStub(a, containerURL, prefix+"sub1/sub3/sub5")
 	createNewDirectoryStub(a, containerURL, prefix+"sub2")
 
-	for _, dirPath := range []string{prefix + "sub1", prefix + "sub1/sub3", prefix + "sub1/sub3/sub5", prefix + "sub2"} {
-		blobList = append(blobList, dirPath)
-	}
-
+	blobList = append(blobList, []string{prefix + "sub1", prefix + "sub1/sub3", prefix + "sub1/sub3/sub5", prefix + "sub2"}...)
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 	return
