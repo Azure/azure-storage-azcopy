@@ -108,7 +108,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	// construct a blob account traverser
 	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -118,7 +118,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	// construct a file account traverser
 	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -278,7 +278,8 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
 	rawBSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None())
+	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
+
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -289,7 +290,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
 	rawFSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable())
+	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}

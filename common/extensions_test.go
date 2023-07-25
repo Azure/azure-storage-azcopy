@@ -115,15 +115,11 @@ func TestRedaction(t *testing.T) {
 	for input, expectedOutput := range redactionTests {
 		queryKeyNeedRedact := "sig"
 		expectedOutputParams := make([]string, 0)
-		for _, param := range strings.Split(expectedOutput, "&") {
-			expectedOutputParams = append(expectedOutputParams, param)
-		}
+		expectedOutputParams = append(expectedOutputParams, strings.Split(expectedOutput, "&")...)
 
 		isRedacted, actualOutput := RedactSecretQueryParam(input, queryKeyNeedRedact)
 		actualOutputParams := make([]string, 0)
-		for _, param := range strings.Split(actualOutput, "&") {
-			actualOutputParams = append(actualOutputParams, param)
-		}
+		actualOutputParams = append(actualOutputParams, strings.Split(actualOutput, "&")...)
 
 		a.Equal(len(actualOutputParams), len(expectedOutputParams))
 

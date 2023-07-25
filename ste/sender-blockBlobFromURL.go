@@ -69,9 +69,8 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateCreateEmptyBlob(id)
 	}
-	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl with the exception of files
-	fromTo := c.blockBlobSenderBase.jptm.FromTo()
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) && fromTo.From() != common.ELocation.File() {
+	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(azblob.BlockBlobMaxUploadBlobBytes) {
 		/*
 		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
 		 * invalid error from service due to PutBlockFromUrl.

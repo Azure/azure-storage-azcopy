@@ -47,7 +47,7 @@ func TestValidateSourceDirThatExists(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
@@ -77,7 +77,7 @@ func TestValidateSourceDirDoesNotExist(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
@@ -108,7 +108,7 @@ func TestValidateSourceFileExists(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
@@ -132,7 +132,7 @@ func TestValidateSourceFileDoesNotExist(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
@@ -156,7 +156,7 @@ func TestValidateSourceWithWildCard(t *testing.T) {
 
 	// List
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None())
+	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: true, Recursive: false}

@@ -64,6 +64,8 @@ type blobTraverser struct {
 	includeSnapshot bool
 
 	includeVersion bool
+
+	isDFS bool
 }
 
 func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -71,9 +73,16 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
-	if isDirDirect || !isSource {
-		return isDirDirect, nil
+	// On HNS accounts, we would still perform this test. The user may have provided directory name without path-separator
+	if isDirDirect { // a container or a path ending in '/' is always directory
+		return true, nil
 	}
+	if !isSource && !t.isDFS {
+		// destination on blob endpoint. If it does not end in '/' it is a file
+		return false, nil
+	}
+
+	// All sources and DFS-destinations we'll look further
 
 	_, _, isDirStub, blobErr := t.getPropertiesIfSingleBlob()
 
@@ -523,7 +532,7 @@ func (t *blobTraverser) serialList(containerURL azblob.ContainerURL, containerNa
 	return nil
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, preservePermissions common.PreservePermissionsOption) (t *blobTraverser) {
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, preservePermissions common.PreservePermissionsOption, isDFS bool) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
@@ -538,6 +547,7 @@ func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
 		preservePermissions: 		 preservePermissions,
+		isDFS:			     isDFS,	
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

@@ -600,8 +600,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if cpkOptions.CpkScopeInfo != "" || cpkOptions.CpkInfo {
 		// We only support transfer from source encrypted by user key when user wishes to download.
 		// Due to service limitation, S2S transfer is not supported for source encrypted by user key.
-		if cooked.FromTo.IsDownload() {
-			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download scenario. " +
+		if cooked.FromTo.IsDownload() || cooked.FromTo.IsDelete() {
+			glcm.Info("Client Provided Key (CPK) for encryption/decryption is provided for download or delete scenario. " +
 				"Assuming source is encrypted.")
 			cpkOptions.IsSourceEncrypted = true
 		}
@@ -721,10 +721,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
@@ -740,10 +736,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
-		}
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -796,10 +788,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.FromTo.From() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
-		}
 	case common.EFromTo.BlobFile(),
 		common.EFromTo.S3Blob(),
 		common.EFromTo.BlobBlob(),
@@ -827,10 +815,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
 			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while copying from service to service")
-		}
-		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
-		if cooked.FromTo.To() != common.ELocation.File() && raw.trailingDot != "" {
-			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
 		}
 	}
 	if err = validatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
@@ -2052,7 +2036,9 @@ func init() {
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
-	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Enabled by default. Options for trailing dot support in file share. Available options: Enable, Disable. Choose disable to go back to legacy (potentially unsafe) treatment of trailing dot files.")
+	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. " +
+		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation." +
+		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
