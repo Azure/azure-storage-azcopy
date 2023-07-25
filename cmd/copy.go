@@ -676,10 +676,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs
 
-	if err = crossValidateSymlinksAndPermissions(cooked.SymlinkHandling, cooked.preservePermissions.IsTruthy()); err != nil {
-		return cooked, err
-	}
-
 	cooked.backupMode = raw.backupMode
 	if err = validateBackupMode(cooked.backupMode, cooked.FromTo); err != nil {
 		return cooked, err
@@ -985,13 +981,6 @@ func validateSymlinkHandlingMode(symlinkHandling common.SymlinkHandlingType, fro
 	}
 
 	return nil // other older symlink handling modes can work on all OSes
-}
-
-func crossValidateSymlinksAndPermissions(symlinkHandling common.SymlinkHandlingType, preservePermissions bool) error {
-	if symlinkHandling != common.ESymlinkHandlingType.Skip() && preservePermissions {
-		return errors.New("cannot handle symlinks when preserving permissions (since the correct permission inheritance behaviour for symlink targets is undefined)")
-	}
-	return nil
 }
 
 func validateBackupMode(backupMode bool, fromTo common.FromTo) error {
