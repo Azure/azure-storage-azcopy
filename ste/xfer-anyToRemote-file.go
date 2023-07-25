@@ -524,7 +524,8 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
 	}
 	if jptm.IsLive() {
-		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
+		if _, isS2SCopier := s.(s2sCopier);
+			sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {
@@ -536,6 +537,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
 				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
+				jptm.Log(pipeline.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}

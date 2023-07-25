@@ -62,7 +62,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	// we still count this delete operation as successful since we accomplished the desired outcome
 	_, err := blobClient.Delete(jptm.Context(), &blob.DeleteOptions{
 		DeleteSnapshots: jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(),
-		BlobDeleteType: jptm.PermanentDeleteOption().ToPermanentDeleteOptionType(),
+		BlobDeleteType:  jptm.PermanentDeleteOption().ToPermanentDeleteOptionType(),
 	})
 	if err != nil {
 		var respErr *azcore.ResponseError
@@ -70,7 +70,6 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 			// if the delete failed with err 404, i.e resource not found, then mark the transfer as success.
 			if respErr.StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
-			}
 				return
 			}
 			// if the delete failed because the blob has snapshots, then skip it
@@ -85,6 +84,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 				jptm.Log(pipeline.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)
 			}
+		}
 		// in all other cases, make the transfer as failed
 		transferDone(common.ETransferStatus.Failed(), err)
 	} else {

@@ -127,7 +127,11 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		}
 	case common.ELocation.File():
 		shareClient := common.CreateShareClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
-		if _, err = shareClient.Create(ctx, &share.CreateOptions{Quota: &cookedArgs.quota}); err != nil {
+		quota := &cookedArgs.quota
+		if quota != nil && *quota == 0 {
+			quota = nil
+		}
+		if _, err = shareClient.Create(ctx, &share.CreateOptions{Quota: quota}); err != nil {
 			// print a nicer error message if share already exists
 			if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
 				return fmt.Errorf("the file share already exists")
