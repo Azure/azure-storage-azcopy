@@ -36,6 +36,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
 	"io"
 	"net/url"
@@ -52,7 +57,6 @@ import (
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 const defaultFileSize = 1024
@@ -319,15 +323,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, filesyst
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, shareURL azfile.ShareURL, prefix string) (fileList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c asserter, shareClient *share.Client, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, fileName1 := createNewAzureFile(c, shareURL, prefix+"top")
-		_, fileName2 := createNewAzureFile(c, shareURL, prefix+"sub1/")
-		_, fileName3 := createNewAzureFile(c, shareURL, prefix+"sub2/")
-		_, fileName4 := createNewAzureFile(c, shareURL, prefix+"sub1/sub3/sub5/")
-		_, fileName5 := createNewAzureFile(c, shareURL, prefix+specialNames[i])
+		_, fileName1 := createNewAzureFile(c, shareClient, prefix+"top")
+		_, fileName2 := createNewAzureFile(c, shareClient, prefix+"sub1/")
+		_, fileName3 := createNewAzureFile(c, shareClient, prefix+"sub2/")
+		_, fileName4 := createNewAzureFile(c, shareClient, prefix+"sub1/sub3/sub5/")
+		_, fileName5 := createNewAzureFile(c, shareClient, prefix+specialNames[i])
 
 		fileList[5*i] = fileName1
 		fileList[5*i+1] = fileName2
@@ -356,14 +360,14 @@ func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c asserter, serv
 	}
 }
 
-func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceURL azfile.ServiceURL, shareList []string, fileList []*testObject) {
+func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceClient *fileservice.Client, shareList []string, fileList []*testObject) {
 	for _, shareName := range shareList {
-		sURL := serviceURL.NewShareURL(shareName)
-		_, err := sURL.Create(ctx, azfile.Metadata{}, 0)
+		sURL := serviceClient.NewShareClient(shareName)
+		_, err := sURL.Create(ctx, nil)
 		c.AssertNoErr(err)
 
 		s.generateAzureFilesFromList(c, &generateAzureFilesFromListOptions{
-			shareURL:    sURL,
+			shareClient:    sURL,
 			fileList:    fileList,
 			defaultSize: defaultStringFileSize,
 		})
@@ -667,7 +671,7 @@ func (s scenarioHelper) downloadBlobContent(a asserter, options downloadContentO
 	destData, err := io.ReadAll(downloadResp.Body)
 	defer downloadResp.Body.Close()
 	a.AssertNoErr(err)
-	return destData[:]
+	return destData
 }
 
 func (scenarioHelper) generatePageBlobsFromList(c asserter, containerClient *container.Client, blobList []string, data string) {
@@ -733,10 +737,10 @@ func (scenarioHelper) generateObjects(c asserter, client *minio.Client, bucketNa
 }
 
 // create the demanded files
-func (scenarioHelper) generateFlatFiles(c asserter, shareURL azfile.ShareURL, fileList []string) {
+func (scenarioHelper) generateFlatFiles(c asserter, shareClient *share.Client, fileList []string) {
 	for _, fileName := range fileList {
-		file := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
-		err := azfile.UploadBufferToAzureFile(ctx, []byte(fileDefaultData), file, azfile.UploadToAzureFileOptions{})
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(fileName)
+		err := fileClient.UploadBuffer(ctx, []byte(fileDefaultData), nil)
 		c.AssertNoErr(err)
 	}
 
@@ -782,7 +786,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c asserter, client *mini
 }
 
 type generateAzureFilesFromListOptions struct {
-	shareURL    azfile.ShareURL
+	shareClient *share.Client
 	fileList    []*testObject
 	defaultSize string
 }
@@ -793,29 +797,32 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 		ad := filesResourceAdapter{f}
 		if f.isFolder() {
 			// make sure the dir exists
-			file := options.shareURL.NewRootDirectoryURL().NewFileURL(path.Join(f.name, "dummyChild"))
+			file := options.shareClient.NewRootDirectoryClient().NewFileClient(path.Join(f.name, "dummyChild"))
 			generateParentsForAzureFile(c, file)
 
-			dir := options.shareURL.NewRootDirectoryURL().NewDirectoryURL(f.name)
+			dir := options.shareClient.NewRootDirectoryClient().NewSubdirectoryClient(f.name)
 
 			// set its metadata if any
 			if f.creationProperties.nameValueMetadata != nil {
-				_, err := dir.SetMetadata(context.TODO(), ad.toMetadata())
+				_, err := dir.SetMetadata(context.TODO(), &directory.SetMetadataOptions{Metadata: ad.obj.creationProperties.nameValueMetadata})
 				c.AssertNoErr(err)
 			}
 
 			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil || f.creationProperties.lastWriteTime != nil {
-				_, err := dir.SetProperties(ctx, ad.toHeaders(c, options.shareURL).SMBProperties)
+				_, err := dir.SetProperties(ctx, &directory.SetPropertiesOptions{
+					FileSMBProperties: ad.toSMBProperties(c),
+					FilePermissions: ad.toPermissions(c, options.shareClient),
+				})
 				c.AssertNoErr(err)
 
 				if f.creationProperties.smbPermissionsSddl != nil {
-					prop, err := dir.GetProperties(ctx)
+					prop, err := dir.GetProperties(ctx, nil)
 					c.AssertNoErr(err)
 
-					perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
+					perm, err := options.shareClient.GetPermission(ctx, *prop.FilePermissionKey, nil)
 					c.AssertNoErr(err)
 
-					dest, _ := sddl.ParseSDDL(perm.Permission)
+					dest, _ := sddl.ParseSDDL(*perm.Permission)
 					source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
 
 					c.Assert(dest.Compare(source), equals(), true)
@@ -832,10 +839,10 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			// TODO: I'm pretty sure we don't prserve lastWritetime or contentProperties (headers) for folders, so the above if statement doesn't test those
 			//    Is that the correct decision?
 		} else if f.creationProperties.entityType == common.EEntityType.File() {
-			file := options.shareURL.NewRootDirectoryURL().NewFileURL(f.name)
+			fileClient := options.shareClient.NewRootDirectoryClient().NewFileClient(f.name)
 
 			// create parents first
-			generateParentsForAzureFile(c, file)
+			generateParentsForAzureFile(c, fileClient)
 
 			// create the file itself
 			fileSize := int64(f.creationProperties.sizeBytes(c, options.defaultSize))
@@ -858,13 +865,15 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 				f.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 			}
 
-			headers := ad.toHeaders(c, options.shareURL)
-
-			cResp, err := file.Create(ctx, fileSize, headers, ad.toMetadata())
+			_, err := fileClient.Create(ctx, fileSize, &sharefile.CreateOptions{
+				SMBProperties: ad.toSMBProperties(c),
+				Permissions: ad.toPermissions(c, options.shareClient),
+				HTTPHeaders: ad.toHeaders(),
+				Metadata: ad.obj.creationProperties.nameValueMetadata,
+			})
 			c.AssertNoErr(err)
-			c.Assert(cResp.StatusCode(), equals(), 201)
 
-			_, err = file.UploadRange(context.Background(), 0, contentR, nil)
+			_, err = fileClient.UploadRange(context.Background(), 0, contentR, nil)
 			if err == nil {
 				c.Failed()
 			}
@@ -882,17 +891,21 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 				*/
 
-				_, err := file.SetHTTPHeaders(ctx, headers)
+				_, err := fileClient.SetHTTPHeaders(ctx, &sharefile.SetHTTPHeadersOptions{
+					HTTPHeaders: ad.toHeaders(),
+					SMBProperties: ad.toSMBProperties(c),
+					Permissions: ad.toPermissions(c, options.shareClient),
+				})
 				c.AssertNoErr(err)
 
 				if f.creationProperties.smbPermissionsSddl != nil {
-					prop, err := file.GetProperties(ctx)
+					prop, err := fileClient.GetProperties(ctx, nil)
 					c.AssertNoErr(err)
 
-					perm, err := options.shareURL.GetPermission(ctx, prop.FilePermissionKey())
+					perm, err := options.shareClient.GetPermission(ctx, *prop.FilePermissionKey, nil)
 					c.AssertNoErr(err)
 
-					dest, _ := sddl.ParseSDDL(perm.Permission)
+					dest, _ := sddl.ParseSDDL(*perm.Permission)
 					source, _ := sddl.ParseSDDL(*f.creationProperties.smbPermissionsSddl)
 
 					c.Assert(dest.Compare(source), equals(), true)
@@ -909,126 +922,117 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile.ShareURL) map[string]*objectProperties {
-	var dirQ []azfile.DirectoryURL
+func (s scenarioHelper) enumerateShareFileProperties(a asserter, sc *share.Client) map[string]*objectProperties {
+	var dirQ []*directory.Client
 	result := make(map[string]*objectProperties)
 
-	root := shareURL.NewRootDirectoryURL()
-	rootProps, err := root.GetProperties(ctx)
+	root := sc.NewRootDirectoryClient()
+	rootProps, err := root.GetProperties(ctx, nil)
 	a.AssertNoErr(err)
-	rootAttr := uint32(azfile.ParseFileAttributeFlagsString(rootProps.FileAttributes()))
+	rootAttr, err := sharefile.ParseNTFSFileAttributes(rootProps.FileAttributes)
+	a.AssertNoErr(err)
 	var rootPerm *string
-	if permKey := rootProps.FilePermissionKey(); permKey != "" {
-		sharePerm, err := shareURL.GetPermission(ctx, permKey)
+	if permKey := rootProps.FilePermissionKey; permKey != nil {
+		sharePerm, err := sc.GetPermission(ctx, *permKey, nil)
 		a.AssertNoErr(err, "Failed to get permissions from key")
 
-		rootPerm = &sharePerm.Permission
+		rootPerm = sharePerm.Permission
 	}
 	result[""] = &objectProperties{
 		entityType:         common.EEntityType.Folder(),
 		smbPermissionsSddl: rootPerm,
-		smbAttributes:      &rootAttr,
+		smbAttributes: to.Ptr(ste.FileAttributesToUint32(*rootAttr)),
 	}
 
 	dirQ = append(dirQ, root)
 	for i := 0; i < len(dirQ); i++ {
 		currentDirURL := dirQ[i]
-		for marker := (azfile.Marker{}); marker.NotDone(); {
-			lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(context.TODO(), marker, azfile.ListFilesAndDirectoriesOptions{})
+		pager := currentDirURL.NewListFilesAndDirectoriesPager(nil)
+		for pager.More() {
+			lResp, err := pager.NextPage(context.TODO())
 			a.AssertNoErr(err)
 
 			// Process the files and folders we listed
-			for _, fileInfo := range lResp.FileItems {
-				fileURL := currentDirURL.NewFileURL(fileInfo.Name)
-				fProps, err := fileURL.GetProperties(context.TODO())
+			for _, fileInfo := range lResp.Segment.Files {
+				fileURL := currentDirURL.NewFileClient(*fileInfo.Name)
+				fProps, err := fileURL.GetProperties(context.TODO(), nil)
 				a.AssertNoErr(err)
 
 				// Construct the properties object
-				fileSize := fProps.ContentLength()
-				creationTime, err := time.Parse(azfile.ISO8601, fProps.FileCreationTime())
-				a.AssertNoErr(err)
-				lastWriteTime, err := time.Parse(azfile.ISO8601, fProps.FileLastWriteTime())
-				a.AssertNoErr(err)
-				contentHeader := fProps.NewHTTPHeaders()
 				h := contentHeaders{
-					cacheControl:       &contentHeader.CacheControl,
-					contentDisposition: &contentHeader.ContentDisposition,
-					contentEncoding:    &contentHeader.ContentEncoding,
-					contentLanguage:    &contentHeader.ContentLanguage,
-					contentType:        &contentHeader.ContentType,
-					contentMD5:         contentHeader.ContentMD5,
+					cacheControl:       fProps.CacheControl,
+					contentDisposition: fProps.ContentDisposition,
+					contentEncoding:    fProps.ContentEncoding,
+					contentLanguage:    fProps.ContentLanguage,
+					contentType:        fProps.ContentType,
+					contentMD5:         fProps.ContentMD5,
 				}
-				fileAttrs := uint32(azfile.ParseFileAttributeFlagsString(fProps.FileAttributes()))
-				permissionKey := fProps.FilePermissionKey()
+				attr, err := sharefile.ParseNTFSFileAttributes(fProps.FileAttributes)
+				a.AssertNoErr(err)
+				fileAttrs := ste.FileAttributesToUint32(*attr)
+				permissionKey := fProps.FilePermissionKey
 
 				var perm string
-				if permissionKey != "" {
-					sharePerm, err := shareURL.GetPermission(ctx, permissionKey)
+				if permissionKey != nil {
+					sharePerm, err := sc.GetPermission(ctx, *permissionKey, nil)
 					a.AssertNoErr(err, "Failed to get permissions from key")
 
-					perm = sharePerm.Permission
+					perm = *sharePerm.Permission
 				}
 
 				props := objectProperties{
 					entityType:         common.EEntityType.File(), // only enumerating files in list call
-					size:               &fileSize,
-					nameValueMetadata:  common.FromAzFileMetadataToCommonMetadata(fProps.NewMetadata()),
+					size:               fProps.ContentLength,
+					nameValueMetadata:  fProps.Metadata,
 					contentHeaders:     &h,
-					creationTime:       &creationTime,
-					lastWriteTime:      &lastWriteTime,
+					creationTime:       fProps.FileCreationTime,
+					lastWriteTime:      fProps.FileLastWriteTime,
 					smbAttributes:      &fileAttrs,
 					smbPermissionsSddl: &perm,
 				}
 
-				relativePath := lResp.DirectoryPath + "/"
+				relativePath := *lResp.DirectoryPath + "/"
 				if relativePath == "/" {
 					relativePath = ""
 				}
-				result[relativePath+fileInfo.Name] = &props
+				result[relativePath+*fileInfo.Name] = &props
 			}
 
-			for _, dirInfo := range lResp.DirectoryItems {
-				dirURL := currentDirURL.NewDirectoryURL(dirInfo.Name)
-				dProps, err := dirURL.GetProperties(context.TODO())
+			for _, dirInfo := range lResp.Segment.Directories {
+				dirURL := currentDirURL.NewSubdirectoryClient(*dirInfo.Name)
+				dProps, err := dirURL.GetProperties(context.TODO(), nil)
 				a.AssertNoErr(err)
 
 				// Construct the properties object
-				creationTime, err := time.Parse(azfile.ISO8601, dProps.FileCreationTime())
-				a.AssertNoErr(err)
-				lastWriteTime, err := time.Parse(azfile.ISO8601, dProps.FileLastWriteTime())
-				a.AssertNoErr(err)
-
 				// Grab the permissions
-				permKey := dProps.FilePermissionKey()
+				permissionKey := dProps.FilePermissionKey
 
 				var perm string
-				if permKey != "" {
-					permResp, err := shareURL.GetPermission(ctx, permKey)
+				if permissionKey != nil {
+					sharePerm, err := sc.GetPermission(ctx, *permissionKey, nil)
 					a.AssertNoErr(err, "Failed to get permissions from key")
 
-					perm = permResp.Permission
+					perm = *sharePerm.Permission
 				}
 
 				// Set up properties
 				props := objectProperties{
 					entityType:         common.EEntityType.Folder(), // Only enumerating directories in list call
-					nameValueMetadata:  common.FromAzFileMetadataToCommonMetadata(dProps.NewMetadata()),
-					creationTime:       &creationTime,
-					lastWriteTime:      &lastWriteTime,
+					nameValueMetadata:  dProps.Metadata,
+					creationTime:       dProps.FileCreationTime,
+					lastWriteTime:      dProps.FileLastWriteTime,
 					smbPermissionsSddl: &perm,
 				}
 
 				// get the directory name properly
-				relativePath := lResp.DirectoryPath + "/"
+				relativePath := *lResp.DirectoryPath + "/"
 				if relativePath == "/" {
 					relativePath = ""
 				}
-				result[relativePath+dirInfo.Name] = &props
+				result[relativePath+*dirInfo.Name] = &props
 
 				dirQ = append(dirQ, dirURL)
 			}
-
-			marker = lResp.NextMarker
 		}
 	}
 
@@ -1036,16 +1040,13 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, shareURL azfile
 }
 
 func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentOptions) []byte {
-	fileURL := options.shareURL.NewRootDirectoryURL().NewFileURL(options.resourceRelPath)
-	downloadResp, err := fileURL.Download(ctx, 0, azfile.CountToEnd, false)
+	fileURL := options.shareClient.NewRootDirectoryClient().NewFileClient(options.resourceRelPath)
+	downloadResp, err := fileURL.DownloadStream(ctx, nil)
 	a.AssertNoErr(err)
 
-	retryReader := downloadResp.Body(azfile.RetryReaderOptions{})
-	defer retryReader.Close() // The client must close the response body when finished with it
-
-	destData, err := io.ReadAll(retryReader)
+	destData, err := io.ReadAll(downloadResp.Body)
+	defer downloadResp.Body.Close()
 	a.AssertNoErr(err)
-	downloadResp.Body(azfile.RetryReaderOptions{})
 	return destData
 }
 
@@ -1121,12 +1122,12 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c asserter) string {
 	return getBlobServiceURLWithSAS(c, credential).URL()
 }
 
-func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) url.URL {
+func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) string {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := sharefile.NewSharedKeyCredential(accountName, accountKey)
 	c.AssertNoErr(err)
 
-	return getFileServiceURLWithSAS(c, *credential).URL()
+	return getFileServiceURLWithSAS(c, credential).URL()
 }
 
 func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
@@ -1181,20 +1182,4 @@ func (scenarioHelper) getRawS3ObjectURL(c asserter, region string, bucketName st
 	c.AssertNoErr(err)
 
 	return *fullURL
-}
-
-func (scenarioHelper) getRawFileURLWithSAS(c asserter, shareName string, fileName string) url.URL {
-	credential, err := getGenericCredentialForFile("")
-	c.AssertNoErr(err)
-	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
-	fileURLWithSAS := shareURLWithSAS.NewRootDirectoryURL().NewFileURL(fileName)
-	return fileURLWithSAS.URL()
-}
-
-func (scenarioHelper) getRawShareURLWithSAS(c asserter, shareName string) url.URL {
-	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	c.AssertNoErr(err)
-	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
-	return shareURLWithSAS.URL()
 }

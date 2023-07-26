@@ -39,7 +39,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -1077,18 +1076,6 @@ func (m Metadata) Clone() Metadata {
 
 	for k, v := range m {
 		out[k] = v
-	}
-
-	return out
-}
-
-// FromAzFileMetadataToCommonMetadata converts azfile's metadata to common metadata.
-func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
-	out := make(Metadata)
-
-	for k, v := range m {
-		value := v
-		out[k] = &value
 	}
 
 	return out

@@ -23,10 +23,17 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"net/url"
@@ -38,7 +45,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/google/uuid"
 )
 
@@ -60,17 +66,23 @@ func (TestResourceFactory) GetBlobServiceURL(accountType AccountType) *blobservi
 	return bsc
 }
 
-func (TestResourceFactory) GetFileServiceURL(accountType AccountType) azfile.ServiceURL {
+func (TestResourceFactory) GetFileServiceURL(accountType AccountType) *fileservice.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
-	u, _ := url.Parse(fmt.Sprintf("https://%s.file.core.windows.net/", accountName))
+	resourceURL := fmt.Sprintf("https://%s.file.core.windows.net/", accountName)
 
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
 		panic(err)
 	}
-	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable(), common.ELocation.File())
-
-	return azfile.NewServiceURL(*u, p)
+	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(to.Ptr(common.ETrailingDotOption.Enable()), nil)}
+	clientOptions := azcore.ClientOptions{
+		PerRetryPolicies: perRetryPolicies,
+	}
+	fsc, err := fileservice.NewClientWithSharedKeyCredential(resourceURL, credential, &fileservice.ClientOptions{ClientOptions: clientOptions})
+	if err != nil {
+		panic(err)
+	}
+	return fsc
 }
 
 func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.ServiceURL {
@@ -123,30 +135,27 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 	return client
 }
 
-func (TestResourceFactory) GetFileShareULWithSAS(c asserter, accountType AccountType, containerName string) azfile.ShareURL {
+func (TestResourceFactory) GetFileShareURLWithSAS(c asserter, accountType AccountType, containerName string) *share.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := file.NewSharedKeyCredential(accountName, accountKey)
+	c.AssertNoErr(err)
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s", credential.AccountName(), containerName)
+	client, err := share.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 	c.AssertNoErr(err)
 
-	sasQueryParams, err := azfile.FileSASSignatureValues{
-		Protocol:    azfile.SASProtocolHTTPS,
-		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
-		ShareName:   containerName,
-		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
-	}.NewSASQueryParameters(credential)
+	sasURL, err := client.GetSASURL(
+		filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
+		time.Now().Add(48 * time.Hour),
+		nil)
+	c.AssertNoErr(err)
+	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(to.Ptr(common.ETrailingDotOption.Enable()), nil)}
+	clientOptions := azcore.ClientOptions{
+		PerRetryPolicies: perRetryPolicies,
+	}
+	client, err = share.NewClientWithNoCredential(sasURL, &share.ClientOptions{ClientOptions: clientOptions})
 	c.AssertNoErr(err)
 
-	// construct the url from scratch
-	qp := sasQueryParams.Encode()
-	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s?%s",
-		credential.AccountName(), containerName, qp)
-
-	// convert the raw url and validate it was parsed successfully
-	fullURL, err := url.Parse(rawURL)
-	c.AssertNoErr(err)
-
-	p := ste.NewFilePipeline(credential, azfile.PipelineOptions{}, azfile.RetryOptions{}, nil, ste.NewAzcopyHTTPClient(20), nil, common.ETrailingDotOption.Enable(), common.ELocation.File())
-	return azfile.NewShareURL(*fullURL, p)
+	return client
 }
 
 func (TestResourceFactory) GetBlobURLWithSAS(c asserter, accountType AccountType, containerName string, blobName string) *blob.Client {
@@ -164,22 +173,21 @@ func (TestResourceFactory) CreateNewContainer(c asserter, publicAccess *containe
 	return cc, name, TestResourceFactory{}.GetContainerURLWithSAS(c, accountType, name).URL()
 }
 
-const defaultShareQuotaGB = 512
+const defaultShareQuotaGB = int32(512)
 
-func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountType) (fileShare azfile.ShareURL, name string, rawSasURL url.URL) {
+func (TestResourceFactory) CreateNewFileShare(c asserter, accountType AccountType) (fileShare *share.Client, name string, rawSasURL string) {
 	name = TestResourceNameGenerator{}.GenerateContainerName(c)
-	fileShare = TestResourceFactory{}.GetFileServiceURL(accountType).NewShareURL(name)
+	fileShare = TestResourceFactory{}.GetFileServiceURL(accountType).NewShareClient(name)
 
-	cResp, err := fileShare.Create(context.Background(), nil, defaultShareQuotaGB)
+	_, err := fileShare.Create(context.Background(), &share.CreateOptions{Quota: to.Ptr(defaultShareQuotaGB)})
 	c.AssertNoErr(err)
-	c.Assert(cResp.StatusCode(), equals(), 201)
-	return fileShare, name, TestResourceFactory{}.GetFileShareULWithSAS(c, accountType, name).URL()
+	return fileShare, name, TestResourceFactory{}.GetFileShareURLWithSAS(c, accountType, name).URL()
 }
 
-func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare azfile.ShareURL) (snapshotID string) {
-	resp, err := fileShare.CreateSnapshot(context.TODO(), azfile.Metadata{})
+func (TestResourceFactory) CreateNewFileShareSnapshot(c asserter, fileShare *share.Client) (snapshotID string) {
+	resp, err := fileShare.CreateSnapshot(context.TODO(), nil)
 	c.AssertNoErr(err)
-	return resp.Snapshot()
+	return *resp.Snapshot
 }
 
 func (TestResourceFactory) CreateLocalDirectory(c asserter) (dstDirName string) {
