@@ -173,7 +173,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	// Set last write time to the minimum time to enable retry copy on next sync
 	// Source last write time will be set in epilogue
-	if info.ShouldTransferLastWriteTime() && u.jptm.Info().PreserveSMBInfo {
+	if u.jptm.Info().PreserveSMBInfo && u.headersToApply.FileLastWriteTime != nil {
 		minimalLwt := time.Unix(0, 0)
 		creationHeaders.FileLastWriteTime = &minimalLwt
 	}
@@ -324,10 +324,8 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo, destU
 		attribs := smbProps.FileAttributes()
 		u.headersToApply.FileAttributes = &attribs
 
-		if info.ShouldTransferLastWriteTime() {
-			lwTime := smbProps.FileLastWriteTime()
-			u.headersToApply.FileLastWriteTime = &lwTime
-		}
+		lwTime := smbProps.FileLastWriteTime()
+		u.headersToApply.FileLastWriteTime = &lwTime
 
 		creationTime := smbProps.FileCreationTime()
 		u.headersToApply.FileCreationTime = &creationTime

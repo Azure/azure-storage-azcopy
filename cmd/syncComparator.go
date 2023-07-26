@@ -585,6 +585,13 @@ func (f *syncDestinationComparator) HasFileChangedSinceLastSyncUsingTargetCompar
 	if !folder && (to.size != so.size || so.lastModifiedTime.UnixNano() != to.lastModifiedTime.UnixNano()) {
 		return true, true
 	} else {
+		if folder && so.lastModifiedTime.UnixNano() != to.lastModifiedTime.UnixNano() {
+			if f.metaDataOnlySync {
+				return false, true
+			} else {
+				return true, true
+			}
+		}
 		//
 		// If we come here, we are sure that the source and target objects we are looking at refer to the same object (else it’s highly unlikely
 		// that size and mtime both are equal). Now we need to find out if the source object could have its metadata updated after last sync.
