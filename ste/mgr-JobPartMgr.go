@@ -6,6 +6,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
@@ -20,7 +21,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -150,7 +150,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newColdTierPolicy(), newTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newColdTierPolicy(), NewTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
@@ -189,30 +189,6 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 		}),
 		newXferStatsPolicyFactory(statsAcc))
 
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
-}
-
-// NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption, from common.Location) pipeline.Pipeline {
-	if c == nil {
-		panic("c can't be nil")
-	}
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azfile.NewTelemetryPolicyFactory(o.Telemetry),
-		azfile.NewUniqueRequestIDPolicyFactory(),
-		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
-		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
-		NewVersionPolicyFactory(),
-		NewTrailingDotPolicyFactory(trailingDot, from),
-		c,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewRequestLogPolicyFactory(RequestLogOptions{
-			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			SyslogDisabled:               common.IsForceLoggingDisabled(),
-		}),
-		newXferStatsPolicyFactory(statsAcc),
-	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
@@ -553,10 +529,24 @@ func (jpm *jobPartMgr) clientInfo() {
 	networkStats := jpm.jobMgr.PipelineNetworkStats()
 	logOptions := LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()}
 
-	// TODO : Add trailing dot when migrating ste azfile.
-	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, nil, nil)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, nil, nil)
-}
+	var sourceTrailingDot *common.TrailingDotOption
+	var trailingDot *common.TrailingDotOption
+	var from *common.Location
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
+		sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+	}
+	if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
+		fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
+		fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
+		fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
+		fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
+		trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+		if fromTo.IsS2S() {
+			from = to.Ptr(fromTo.From())
+		}
+	}
+	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, sourceTrailingDot, nil)
+	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)}
 
 func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
@@ -615,27 +605,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				statsAccForSip)
 		}
 	}
-	// Set up a source pipeline for files if necessary
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
-		jpm.sourceProviderPipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{
-					Value: userAgent,
-				},
-			}, azfile.RetryOptions{
-			Policy:        azfile.RetryPolicyExponential,
-			MaxTries:      UploadMaxTries,
-			TryTimeout:    UploadTryTimeout,
-			RetryDelay:    UploadRetryDelay,
-			MaxRetryDelay: UploadMaxRetryDelay,
-		}, jpm.pacer,
-		jpm.jobMgr.HttpClient(),
-		statsAccForSip,
-		jpm.planMMF.Plan().DstFileData.TrailingDot,
-		fromTo.From())
-	}
 
 	switch {
 	case fromTo.IsS2S() && (fromTo.To() == common.ELocation.Blob() || fromTo.To() == common.ELocation.BlobFS()), // destination determines pipeline for S2S, blobfs uses blob for S2S
@@ -679,31 +648,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
-	case fromTo.IsS2S() && fromTo.To() == common.ELocation.File(),
-	     fromTo.IsUpload() && fromTo.To() == common.ELocation.File(),
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.File(),
-		 fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File(),
-		 fromTo.IsDelete() && fromTo.From() == common.ELocation.File():
-		jpm.pipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			azfile.RetryOptions{
-				Policy:        azfile.RetryPolicyExponential,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay,
-			},
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats(),
-			jpm.planMMF.Plan().DstFileData.TrailingDot,
-			fromTo.From())
 	}
 }
 

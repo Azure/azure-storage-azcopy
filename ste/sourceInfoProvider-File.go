@@ -22,23 +22,21 @@ package ste
 
 import (
 	"context"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"sync"
 	"time"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type richSMBPropertyHolder interface {
-	azfile.SMBPropertyHolder
+type shareFilePropertyProvider interface {
+	FileCreationTime() time.Time
+	FileLastWriteTime() time.Time
+	FileAttributes() (*file.NTFSFileAttributes, error)
 	FilePermissionKey() string
-	NewMetadata() azfile.Metadata
+	Metadata() map[string]*string
 	LastModified() time.Time
-}
-
-type contentPropsProvider interface {
 	CacheControl() string
 	ContentDisposition() string
 	ContentEncoding() string
@@ -47,12 +45,116 @@ type contentPropsProvider interface {
 	ContentMD5() []byte
 }
 
+type fileGetPropertiesAdapter struct {
+	GetProperties file.GetPropertiesResponse
+}
+
+func (f fileGetPropertiesAdapter) CacheControl() string {
+	return common.IffNotNil(f.GetProperties.CacheControl, "")
+}
+
+func (f fileGetPropertiesAdapter) ContentDisposition() string {
+	return common.IffNotNil(f.GetProperties.ContentDisposition, "")
+}
+
+func (f fileGetPropertiesAdapter) ContentEncoding() string {
+	return common.IffNotNil(f.GetProperties.ContentEncoding, "")
+}
+
+func (f fileGetPropertiesAdapter) ContentLanguage() string {
+	return common.IffNotNil(f.GetProperties.ContentLanguage, "")
+}
+
+func (f fileGetPropertiesAdapter) ContentType() string {
+	return common.IffNotNil(f.GetProperties.ContentType, "")
+}
+
+func (f fileGetPropertiesAdapter) ContentMD5() []byte {
+	return f.GetProperties.ContentMD5
+}
+
+func (f fileGetPropertiesAdapter) FileCreationTime() time.Time {
+	return common.IffNotNil(f.GetProperties.FileCreationTime, time.Time{})
+}
+
+func (f fileGetPropertiesAdapter) FileLastWriteTime() time.Time {
+	return common.IffNotNil(f.GetProperties.FileLastWriteTime, time.Time{})
+}
+
+func (f fileGetPropertiesAdapter) FileAttributes() (*file.NTFSFileAttributes, error) {
+	return file.ParseNTFSFileAttributes(f.GetProperties.FileAttributes)
+}
+
+func (f fileGetPropertiesAdapter) FilePermissionKey() string {
+	return common.IffNotNil(f.GetProperties.FilePermissionKey, "")
+}
+
+func (f fileGetPropertiesAdapter) Metadata() map[string]*string {
+	return f.GetProperties.Metadata
+}
+
+func (f fileGetPropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(f.GetProperties.LastModified, time.Time{})
+}
+
+type directoryGetPropertiesAdapter struct {
+	GetProperties directory.GetPropertiesResponse
+}
+
+func (d directoryGetPropertiesAdapter) CacheControl() string {
+	return ""
+}
+
+func (d directoryGetPropertiesAdapter) ContentDisposition() string {
+	return ""
+}
+
+func (d directoryGetPropertiesAdapter) ContentEncoding() string {
+	return ""
+}
+
+func (d directoryGetPropertiesAdapter) ContentLanguage() string {
+	return ""
+}
+
+func (d directoryGetPropertiesAdapter) ContentType() string {
+	return ""
+}
+
+func (d directoryGetPropertiesAdapter) ContentMD5() []byte {
+	return make([]byte, 0)
+}
+
+func (d directoryGetPropertiesAdapter) FileCreationTime() time.Time {
+	return common.IffNotNil(d.GetProperties.FileCreationTime, time.Time{})
+}
+
+func (d directoryGetPropertiesAdapter) FileLastWriteTime() time.Time {
+	return common.IffNotNil(d.GetProperties.FileLastWriteTime, time.Time{})
+}
+
+func (d directoryGetPropertiesAdapter) FileAttributes() (*file.NTFSFileAttributes, error) {
+	return file.ParseNTFSFileAttributes(d.GetProperties.FileAttributes)
+}
+
+func (d directoryGetPropertiesAdapter) FilePermissionKey() string {
+	return common.IffNotNil(d.GetProperties.FilePermissionKey, "")
+}
+
+func (d directoryGetPropertiesAdapter) Metadata() map[string]*string {
+	return d.GetProperties.Metadata
+}
+
+func (d directoryGetPropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(d.GetProperties.LastModified, time.Time{})
+}
+
 // Source info provider for Azure blob
 type fileSourceInfoProvider struct {
 	ctx                 context.Context
 	cachedPermissionKey string
 	cacheOnce           *sync.Once
-	cachedProperties    richSMBPropertyHolder // use interface because may be file or directory properties
+	cachedProperties    shareFilePropertyProvider // use interface because may be file or directory properties
 	defaultRemoteSourceInfoProvider
 }
 
@@ -68,23 +170,21 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: jptm.Context(), cacheOnce: &sync.Once{}}, nil
 }
 
-func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, error) {
-	presigned, err := p.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-	sourceURL, err := url.Parse(presigned)
+func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
+	source, err := p.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
 	}
 
 	switch p.EntityType() {
 	case common.EEntityType.File():
-		fileURL := azfile.NewFileURL(*sourceURL, p.jptm.SourceProviderPipeline())
-		return fileURL.GetProperties(p.ctx)
+		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+		props, err := fileClient.GetProperties(p.ctx, nil)
+		return &fileGetPropertiesAdapter{props}, err
 	case common.EEntityType.Folder():
-		dirURL := azfile.NewDirectoryURL(*sourceURL, p.jptm.SourceProviderPipeline())
-		return dirURL.GetProperties(p.ctx)
+		directoryClient := common.CreateShareDirectoryClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+		props, err := directoryClient.GetProperties(p.ctx, nil)
+		return &directoryGetPropertiesAdapter{props}, err
 	default:
 		panic("unexpected case")
 	}
@@ -92,7 +192,7 @@ func (p *fileSourceInfoProvider) getFreshProperties() (richSMBPropertyHolder, er
 
 // cached because we use it for both GetSMBProperties and GetSDDL, and in some cases (e.g. small files,
 // or enough transactions that transaction costs matter) saving IOPS matters
-func (p *fileSourceInfoProvider) getCachedProperties() (richSMBPropertyHolder, error) {
+func (p *fileSourceInfoProvider) getCachedProperties() (shareFilePropertyProvider, error) {
 	var err error
 
 	p.cacheOnce.Do(func() {
@@ -103,9 +203,7 @@ func (p *fileSourceInfoProvider) getCachedProperties() (richSMBPropertyHolder, e
 }
 
 func (p *fileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
-	cachedProps, err := p.getCachedProperties()
-
-	return &azfile.SMBPropertyAdapter{PropertySource: cachedProps}, err
+	return p.getCachedProperties()
 }
 
 func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
@@ -121,17 +219,16 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 
 	// Call into SIPM and grab our SDDL string.
 	sipm := p.jptm.SecurityInfoPersistenceManager()
-	presigned, err := p.PreSignedSourceURL()
+	source, err := p.PreSignedSourceURL()
 	if err != nil {
 		return "", err
 	}
-	sourceURL, err := url.Parse(presigned)
+	fURLParts, err := file.ParseURL(source)
 	if err != nil {
 		return "", err
 	}
-	fURLParts := azfile.NewFileURLParts(*sourceURL)
 	fURLParts.DirectoryOrFilePath = ""
-	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.URL(), p.jptm.SourceProviderPipeline())
+	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.String(), p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 
 	return sddlString, err
 }
@@ -154,22 +251,21 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 
 		switch p.EntityType() {
 		case common.EEntityType.File():
-			fileProps := properties.(contentPropsProvider)
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{
-					ContentType:        fileProps.ContentType(),
-					ContentEncoding:    fileProps.ContentEncoding(),
-					ContentDisposition: fileProps.ContentDisposition(),
-					ContentLanguage:    fileProps.ContentLanguage(),
-					CacheControl:       fileProps.CacheControl(),
-					ContentMD5:         fileProps.ContentMD5(),
+					ContentType:        properties.ContentType(),
+					ContentEncoding:    properties.ContentEncoding(),
+					ContentDisposition: properties.ContentDisposition(),
+					ContentLanguage:    properties.ContentLanguage(),
+					CacheControl:       properties.CacheControl(),
+					ContentMD5:         properties.ContentMD5(),
 				},
-				SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+				SrcMetadata: properties.Metadata(),
 			}
 		case common.EEntityType.Folder():
 			srcProperties = &SrcProperties{
 				SrcHTTPHeaders: common.ResourceHTTPHeaders{}, // no contentType etc for folders
-				SrcMetadata:    common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+				SrcMetadata:    properties.Metadata(),
 			}
 		default:
 			panic("unsupported entity type")

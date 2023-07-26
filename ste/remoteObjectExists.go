@@ -24,6 +24,7 @@ import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"time"
@@ -43,6 +44,14 @@ type blobPropertiesResponseAdapter struct {
 }
 
 func (a blobPropertiesResponseAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
+type filePropertiesResponseAdapter struct {
+	sharefile.GetPropertiesResponse
+}
+
+func (a filePropertiesResponseAdapter) LastModified() time.Time {
 	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 

@@ -2,11 +2,13 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"sync"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/golang/groupcache/lru"
 )
 
@@ -33,12 +35,11 @@ func newSecurityInfoPersistenceManager(ctx context.Context) *securityInfoPersist
 // Technically, yes, GetSDDLFromID can be used in conjunction with PutSDDL.
 // Being realistic though, GetSDDLFromID will only be called when downloading,
 // and PutSDDL will only be called when uploading/doing S2S.
-func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareURL azfile.ShareURL) (string, error) {
-	fileURLParts := azfile.NewFileURLParts(shareURL.URL())
-	fileURLParts.SAS = azfile.SASQueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
-	rawfURL := fileURLParts.URL()
+func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareClient *share.Client) (string, error) {
+	fileURLParts, err := file.ParseURL(shareClient.URL())
+	fileURLParts.SAS = filesas.QueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
 
-	sddlKey := rawfURL.String() + "|SDDL|" + sddlString
+	sddlKey := fileURLParts.String() + "|SDDL|" + sddlString
 
 	// Acquire a read lock.
 	sipm.sipmMu.RLock()
@@ -52,13 +53,13 @@ func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareURL 
 		return id.(string), nil
 	}
 
-	cResp, err := shareURL.CreatePermission(sipm.ctx, sddlString)
+	cResp, err := shareClient.CreatePermission(sipm.ctx, sddlString, nil)
 
 	if err != nil {
 		return "", err
 	}
 
-	permKey := cResp.FilePermissionKey()
+	permKey := *cResp.FilePermissionKey
 
 	sipm.sipmMu.Lock()
 	sipm.cache.Add(sddlKey, permKey)
@@ -67,12 +68,13 @@ func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareURL 
 	return permKey, nil
 }
 
-func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL url.URL, p pipeline.Pipeline) (string, error) {
-	fileURLParts := azfile.NewFileURLParts(shareURL)
-	fileURLParts.SAS = azfile.SASQueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
-	rawfURL := fileURLParts.URL()
-
-	sddlKey := rawfURL.String() + "|ID|" + id
+func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL string, credInfo common.CredentialInfo, credOpOptions *common.CredentialOpOptions, clientOptions azcore.ClientOptions) (string, error) {
+	fileURLParts, err := filesas.ParseURL(shareURL)
+	if err != nil {
+		return "", err
+	}
+	fileURLParts.SAS = filesas.QueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
+	sddlKey := fileURLParts.String() + "|ID|" + id
 
 	sipm.sipmMu.Lock()
 	// fetch from the cache
@@ -84,24 +86,27 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL ur
 		return perm.(string), nil
 	}
 
-	actionableShareURL := azfile.NewShareURL(shareURL, p)
+	actionableShareURL := common.CreateShareClient(shareURL, credInfo, credOpOptions, clientOptions)
 	// to clarify, the GetPermission call only works against the share root, and not against a share snapshot
 	// if we detect that the source is a snapshot, we simply get rid of the snapshot value
 	if len(fileURLParts.ShareSnapshot) != 0 {
-		fileURLParts := azfile.NewFileURLParts(shareURL)
+		fileURLParts, err := filesas.ParseURL(shareURL)
+		if err != nil {
+			return "", err
+		}
 		fileURLParts.ShareSnapshot = "" // clear the snapshot value
-		actionableShareURL = azfile.NewShareURL(fileURLParts.URL(), p)
+		actionableShareURL = common.CreateShareClient(fileURLParts.String(), credInfo, credOpOptions, clientOptions)
 	}
 
-	si, err := actionableShareURL.GetPermission(sipm.ctx, id)
+	si, err := actionableShareURL.GetPermission(sipm.ctx, id, nil)
 	if err != nil {
 		return "", err
 	}
 
 	sipm.sipmMu.Lock()
 	// If we got the permission fine, commit to the cache.
-	sipm.cache.Add(sddlKey, si.Permission)
+	sipm.cache.Add(sddlKey, *si.Permission)
 	sipm.sipmMu.Unlock()
 
-	return si.Permission, nil
+	return *si.Permission, nil
 }

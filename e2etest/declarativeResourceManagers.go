@@ -23,6 +23,8 @@ package e2etest
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"net/url"
 	"os"
@@ -31,7 +33,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 func assertNoStripTopDir(stripTopDir bool) {
@@ -53,7 +54,7 @@ type downloadBlobContentOptions struct {
 }
 
 type downloadFileContentOptions struct {
-	shareURL azfile.ShareURL
+	shareClient *share.Client
 }
 
 // TODO: any better names for this?
@@ -362,15 +363,17 @@ func (r *resourceBlobContainer) createSourceSnapshot(a asserter) {
 
 type resourceAzureFileShare struct {
 	accountType AccountType
-	shareURL    *azfile.ShareURL // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
+	shareClient *share.Client // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
 	rawSasURL   *url.URL
 	snapshotID  string // optional, use a snapshot as the location instead
 }
 
 func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
-	r.shareURL = &su
-	r.rawSasURL = &rawSasURL
+	r.shareClient = su
+	rawURL, err := url.Parse(rawSasURL)
+	a.AssertNoErr(err)
+	r.rawSasURL = rawURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
 		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
 	}
@@ -378,7 +381,7 @@ func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 
 func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource bool) {
 	scenarioHelper{}.generateAzureFilesFromList(a, &generateAzureFilesFromListOptions{
-		shareURL:    *r.shareURL,
+		shareClient: r.shareClient,
 		fileList:    s.fs.allObjects(isSource),
 		defaultSize: s.fs.defaultSize,
 	})
@@ -386,30 +389,30 @@ func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource b
 
 func (r *resourceAzureFileShare) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
 	scenarioHelper{}.generateAzureFilesFromList(a, &generateAzureFilesFromListOptions{
-		shareURL:    *r.shareURL,
+		shareClient: r.shareClient,
 		fileList:    []*testObject{o},
 		defaultSize: s.fs.defaultSize,
 	})
 }
 
 func (r *resourceAzureFileShare) cleanup(a asserter) {
-	if r.shareURL != nil {
-		deleteShare(a, *r.shareURL)
+	if r.shareClient != nil {
+		deleteShare(a, r.shareClient)
 	}
 }
 
 func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFile string) string {
 	assertNoStripTopDir(stripTopDir)
-	var param url.URL
+	var uri string
 	if withSas {
-		param = *r.rawSasURL
+		uri = r.rawSasURL.String()
 	} else {
-		param = r.shareURL.URL()
+		uri = r.shareClient.URL()
 	}
 
 	// append the snapshot ID if present
 	if r.snapshotID != "" || withFile != "" {
-		parts := azfile.NewFileURLParts(param)
+		parts, _ := file.ParseURL(uri)
 		if r.snapshotID != "" {
 			parts.ShareSnapshot = r.snapshotID
 		}
@@ -417,10 +420,10 @@ func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFi
 		if withFile != "" {
 			parts.DirectoryOrFilePath = withFile
 		}
-		param = parts.URL()
+		uri = parts.String()
 	}
 
-	return param.String()
+	return uri
 }
 
 func (r *resourceAzureFileShare) getSAS() string {
@@ -438,20 +441,20 @@ func (r *resourceAzureFileShare) appendSourcePath(filePath string, useSas bool) 
 }
 
 func (r *resourceAzureFileShare) getAllProperties(a asserter) map[string]*objectProperties {
-	return scenarioHelper{}.enumerateShareFileProperties(a, *r.shareURL)
+	return scenarioHelper{}.enumerateShareFileProperties(a, r.shareClient)
 }
 
 func (r *resourceAzureFileShare) downloadContent(a asserter, options downloadContentOptions) []byte {
 	return scenarioHelper{}.downloadFileContent(a, downloadContentOptions{
 		resourceRelPath: options.resourceRelPath,
 		downloadFileContentOptions: downloadFileContentOptions{
-			shareURL: *r.shareURL,
+			shareClient: r.shareClient,
 		},
 	})
 }
 
 func (r *resourceAzureFileShare) createSourceSnapshot(a asserter) {
-	r.snapshotID = TestResourceFactory{}.CreateNewFileShareSnapshot(a, *r.shareURL)
+	r.snapshotID = TestResourceFactory{}.CreateNewFileShareSnapshot(a, r.shareClient)
 }
 
 // //
