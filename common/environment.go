@@ -145,7 +145,7 @@ func (EnvironmentVariable) ManagedIdentityClientID() EnvironmentVariable {
 func (EnvironmentVariable) ManagedIdentityObjectID() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_MSI_OBJECT_ID",
-		Description: "Object ID for user-assigned identity. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+		Description: "Object ID for user-assigned identity. This parameter is deprecated. Please use client id or resource id.",
 	}
 }
 

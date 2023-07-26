@@ -867,3 +867,7 @@ func (s *scenario) GetAsserter() asserter {
 func (s *scenario) GetDestination() resourceManager {
 	return s.state.dest
 }
+
+func (s *scenario) GetSource() resourceManager {
+	return s.state.source
+}
