@@ -812,7 +812,35 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
 			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while copying from service to service")
 		}
+		// cooked.trailingDot is enabled by default, so checking raw.trailingDot
+		if cooked.FromTo.To() != common.ELocation.File() && raw.trailingDot != "" {
+			return cooked, fmt.Errorf("trailing-dot is only support for operations on file share accounts")
+		}
+	case common.EFromTo.LocalLocal():
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.pageBlobTier != common.EPageBlobTier.None() {
+			return cooked, fmt.Errorf("blob-tier is not supported while downloading")
+		}
+		if cooked.noGuessMimeType {
+			return cooked, fmt.Errorf("no-guess-mime-type is not supported while downloading")
+		}
+		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
+			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while downloading")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while downloading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while downloading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while downloading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
+		}
 	}
+
 	if err = validatePutMd5(cooked.putMd5, cooked.FromTo); err != nil {
 		return cooked, err
 	}

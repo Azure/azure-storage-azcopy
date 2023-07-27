@@ -64,6 +64,8 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, df downloaderFactory)
 type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
+type newJobXferWithLocaltoLocal = func(jptm IJobPartTransferMgr)
+
 // Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
@@ -75,6 +77,12 @@ func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df dow
 func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFactory, sipf sourceInfoProviderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
 		targetFunction(jptm, pipeline, pacer, sf, sipf)
+	}
+}
+
+func parameterizedLocalCopy(targetFunction newJobXferWithLocaltoLocal) newJobXfer {
+	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
+		targetFunction(jptm)
 	}
 }
 
@@ -157,6 +165,9 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		return DeleteHNSResource
 	case common.EFromTo.BlobNone(), common.EFromTo.BlobFSNone(), common.EFromTo.FileNone():
 		return SetProperties
+	case common.EFromTo.LocalLocal():
+		//TODO: check upload/Download
+		return parameterizedLocalCopy(localToLocal)
 	default:
 		if fromTo.IsDownload() {
 			return parameterizeDownload(remoteToLocal, getDownloader(fromTo.From()))
