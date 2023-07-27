@@ -403,7 +403,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				noAttrib := sharefile.NTFSFileAttributes{None: true}
 				_, err = fileClient.SetHTTPHeaders(b.ctx, &sharefile.SetHTTPHeadersOptions{SMBProperties: &sharefile.SMBProperties{Attributes: &noAttrib}})
 				if err == nil {
-					_, err = fileClient.Delete(b.ctx, nil)
+					_, err = fileClient.Delete(b.ctx, nil) //nolint:staticcheck
 				} else {
 					msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
 					glcm.Info(msg + "; check the scanning log file for more details")

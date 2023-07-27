@@ -359,7 +359,7 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo) (stag
 				if panicerr := recover(); panicerr != nil {
 					stage = "Reading SMB properties"
 
-					attr, err := smbProps.FileAttributes()
+					attr, _ := smbProps.FileAttributes()
 					lwt := smbProps.FileLastWriteTime()
 					fct := smbProps.FileCreationTime()
 
@@ -368,7 +368,7 @@ func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo) (stag
 			}()
 		}
 
-		attribs, err := smbProps.FileAttributes()
+		attribs, _ := smbProps.FileAttributes()
 		u.smbPropertiesToApply.Attributes = attribs
 
 		if info.ShouldTransferLastWriteTime() {
