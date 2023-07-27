@@ -32,7 +32,6 @@ require github.com/stretchr/testify v1.8.1
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.3.0
-	github.com/Azure/azure-storage-file-go v0.8.0
 	github.com/Azure/go-autorest/autorest/date v0.3.0
 )
 
