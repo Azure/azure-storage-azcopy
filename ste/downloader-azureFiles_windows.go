@@ -41,7 +41,7 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 	if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
 		defer func() { // recover from potential panics and output raw properties for debug purposes; will cover the return call to setAttributes
 			if panicerr := recover(); panicerr != nil {
-				attr, err := propHolder.FileAttributes()
+				attr, _ := propHolder.FileAttributes()
 				lwt := propHolder.FileLastWriteTime()
 				fct := propHolder.FileCreationTime()
 
@@ -51,10 +51,7 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 	}
 
 	setAttributes := func() error {
-		attribs, err := propHolder.FileAttributes()
-		if err != nil {
-			return fmt.Errorf("attempted to read SMB properties: %w", err)
-		}
+		attribs, _ := propHolder.FileAttributes()
 		// This is a safe conversion.
 		err = windows.SetFileAttributes(destPtr, FileAttributesToUint32(*attribs))
 		if err != nil {
