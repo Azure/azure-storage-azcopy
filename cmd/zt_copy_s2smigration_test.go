@@ -1267,13 +1267,13 @@ func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
 func TestS2SCopyFromSingleAzureFileToBlobContainer(t *testing.T) {
 	a := assert.New(t)
 	bsc := getBlobServiceClient()
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	a.NotNil(srcShareURL)
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	a.NotNil(srcShareClient)
 
-	scenarioHelper{}.generateFlatFiles(a, srcShareURL, []string{"file"})
+	scenarioHelper{}.generateFlatFiles(a, srcShareClient, []string{"file"})
 
 	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
 	defer deleteContainer(a, dstContainerClient)

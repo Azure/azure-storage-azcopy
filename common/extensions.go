@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 // ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -82,22 +80,6 @@ func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) 
 	}
 
 	return sigFound, values.Encode()
-}
-
-// ///////////////////////////////////////////////////////////////////////////////////////////////
-type FileURLPartsExtension struct {
-	azfile.FileURLParts
-}
-
-func (parts FileURLPartsExtension) GetShareURL() url.URL {
-	parts.DirectoryOrFilePath = ""
-	return parts.URL()
-}
-
-func (parts FileURLPartsExtension) GetServiceURL() url.URL {
-	parts.ShareName = ""
-	parts.DirectoryOrFilePath = ""
-	return parts.URL()
 }
 
 // ///////////////////////////////////////////////////////////////////////////////////////////////

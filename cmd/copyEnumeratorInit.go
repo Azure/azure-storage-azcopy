@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"log"
 	"net/url"
@@ -20,8 +22,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -446,7 +446,13 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	options := createClientOptions(logLevel.ToPipelineLogLevel())
+	var trailingDot *common.TrailingDotOption
+	var from *common.Location
+	if cca.FromTo.To() == common.ELocation.File() {
+		trailingDot = &cca.trailingDot
+		from = to.Ptr(cca.FromTo.From())
+	}
+	options := createClientOptions(logLevel.ToPipelineLogLevel(), trailingDot, from)
 	// TODO: we can pass cred here as well
 	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel(), cca.trailingDot, cca.FromTo.From())
 	if err != nil {
@@ -488,30 +494,21 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		dstURL, err := url.Parse(accountRoot)
+		fsc := common.CreateFileServiceClient(accountRoot, dstCredInfo, nil, options)
+		sc := fsc.NewShareClient(containerName)
 
-		if err != nil {
-			return err
-		}
-
-		fsu := azfile.NewServiceURL(*dstURL, dstPipeline)
-		shareURL := fsu.NewShareURL(containerName)
-		_, err = shareURL.GetProperties(ctx)
+		_, err = sc.GetProperties(ctx, nil)
 		if err == nil {
 			return err
 		}
 
 		// Create a destination share with the default service quota
 		// TODO: Create a flag for the quota
-		_, err = shareURL.Create(ctx, azfile.Metadata{}, 0)
-
-		if stgErr, ok := err.(azfile.StorageError); ok {
-			if stgErr.ServiceCode() != azfile.ServiceCodeShareAlreadyExists {
-				return err
-			}
-		} else {
-			return err
+		_, err = sc.Create(ctx, nil)
+		if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
+			return nil
 		}
+		return err
 	case common.ELocation.BlobFS():
 		// TODO: Implement blobfs container creation
 		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())

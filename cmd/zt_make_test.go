@@ -126,8 +126,8 @@ func TestMakeBlobFSFilesystemExists(t *testing.T) {
 
 func TestMakeFileShare(t *testing.T) {
 	a := assert.New(t)
-	fsc := getFSU()
-	sc, name := getShareURL(a, fsc)
+	fsc := getFileServiceClient()
+	sc, name := getShareClient(a, fsc)
 	defer deleteShare(a, sc)
 
 	fscSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
@@ -140,16 +140,16 @@ func TestMakeFileShare(t *testing.T) {
 
 	runMakeAndVerify(args, func(err error) {
 		a.Nil(err)
-		props, err := sc.GetProperties(ctx)
+		props, err := sc.GetProperties(ctx, nil)
 		a.Nil(err)
-		a.EqualValues(5120, props.Quota())
+		a.EqualValues(5120, *props.Quota)
 	})
 }
 
 func TestMakeFileShareQuota(t *testing.T) {
 	a := assert.New(t)
-	fsc := getFSU()
-	sc, name := getShareURL(a, fsc)
+	fsc := getFileServiceClient()
+	sc, name := getShareClient(a, fsc)
 	defer deleteShare(a, sc)
 
 	fscSAS := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
@@ -163,17 +163,17 @@ func TestMakeFileShareQuota(t *testing.T) {
 
 	runMakeAndVerify(args, func(err error) {
 		a.Nil(err)
-		props, err := sc.GetProperties(ctx)
+		props, err := sc.GetProperties(ctx, nil)
 		a.Nil(err)
-		a.EqualValues(args.quota, props.Quota())
+		a.EqualValues(args.quota, *props.Quota)
 	})
 }
 
 func TestMakeFileShareExists(t *testing.T) {
 	a := assert.New(t)
-	fsc := getFSU()
-	sc, name := getShareURL(a, fsc)
-	_, err := sc.Create(ctx, nil, 0)
+	fsc := getFileServiceClient()
+	sc, name := getShareClient(a, fsc)
+	_, err := sc.Create(ctx, nil)
 	a.Nil(err)
 	defer deleteShare(a, sc)
 
@@ -188,7 +188,7 @@ func TestMakeFileShareExists(t *testing.T) {
 	runMakeAndVerify(args, func(err error) {
 		a.NotNil(err)
 		a.Equal("the file share already exists", err.Error())
-		_, err = sc.GetProperties(ctx)
+		_, err = sc.GetProperties(ctx, nil)
 		a.Nil(err)
 	})
 }

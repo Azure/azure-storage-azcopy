@@ -22,10 +22,10 @@ package ste
 
 import (
 	"errors"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -117,32 +117,32 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
-		info := jptm.Info()
-		u, _ := url.Parse(info.Source)
-		srcFileURL := azfile.NewFileURL(*u, srcPipeline)
+		source := jptm.Info().Source
+		fileClient := common.CreateShareFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
-		get, err := srcFileURL.Download(jptm.Context(), id.OffsetInFile(), length, false)
+		// TODO : Why no enriched context here? enrichedContext := withRetryNotification(jptm.Context(), bd.filePacer)
+		get, err := fileClient.DownloadStream(jptm.Context(), &file.DownloadStreamOptions{Range: file.HTTPRange{Offset: id.OffsetInFile(), Count: length}})
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
 		}
 
 		// Verify that the file has not been changed via a client side LMT check
-		getLocation := get.LastModified().Location()
-		if !get.LastModified().Equal(jptm.LastModifiedTime().In(getLocation)) {
+		getLMT := get.LastModified.In(time.FixedZone("GMT", 0))
+		if !getLMT.Equal(jptm.LastModifiedTime().In(time.FixedZone("GMT", 0))) {
 			jptm.FailActiveDownload("Azure File modified during transfer",
-				errors.New("Azure File modified during transfer"))
+				errors.New("azure File modified during transfer"))
 		}
 
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		retryReader := get.Body(azfile.RetryReaderOptions{
-			MaxRetryRequests: MaxRetryPerDownloadBody,
-			NotifyFailedRead: common.NewV1ReadLogFunc(jptm, u),
+		retryReader := get.NewRetryReader(jptm.Context(), &file.RetryReaderOptions{
+			MaxRetries:   MaxRetryPerDownloadBody,
+			OnFailedRead: common.NewFileReadLogFunc(jptm, source),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

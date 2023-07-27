@@ -24,12 +24,15 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"time"
 )
 
 var noContentProps = emptyPropertiesAdapter{}
 var noBlobProps = emptyPropertiesAdapter{}
-var noMetdata common.Metadata = nil
+var noMetadata common.Metadata = nil
 
 // emptyPropertiesAdapter supplies empty (zero-like) values
 // for all methods in contentPropsProvider and blobPropsProvider
@@ -194,4 +197,92 @@ func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
 
 func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
 	return common.IffNotNil(a.BlobProperties.ArchiveStatus, "")
+}
+
+type shareFilePropertiesAdapter struct {
+	*sharefile.GetPropertiesResponse
+}
+
+func (a shareFilePropertiesAdapter) Metadata() common.Metadata {
+	return a.GetPropertiesResponse.Metadata
+}
+
+func (a shareFilePropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
+func (a shareFilePropertiesAdapter) FileLastWriteTime() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
+}
+
+func (a shareFilePropertiesAdapter) CacheControl() string {
+	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentDisposition() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentEncoding() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentLanguage() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentType() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentType, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentMD5() []byte {
+	return a.GetPropertiesResponse.ContentMD5
+}
+
+func (a shareFilePropertiesAdapter) ContentLength() int64 {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
+}
+
+type shareDirectoryPropertiesAdapter struct {
+	*sharedirectory.GetPropertiesResponse
+}
+
+func (a shareDirectoryPropertiesAdapter) Metadata() common.Metadata {
+	return a.GetPropertiesResponse.Metadata
+}
+
+func (a shareDirectoryPropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
+func (a shareDirectoryPropertiesAdapter) FileLastWriteTime() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
+}
+
+func (a shareDirectoryPropertiesAdapter) CacheControl() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentDisposition() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentEncoding() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentLanguage() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentType() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentMD5() []byte {
+	return make([]byte, 0)
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentLength() int64 {
+	return 0
 }

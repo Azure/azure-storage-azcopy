@@ -39,8 +39,6 @@ import (
 	"github.com/minio/minio-go/pkg/s3utils"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -172,18 +170,13 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		TryTimeout:    ste.UploadTryTimeout,
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	},
-		policy.TelemetryOptions{
-			ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+	}, policy.TelemetryOptions{
+		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+	}, nil, nil, ste.LogOptions{
+		RequestLogOptions: ste.RequestLogOptions{
+			SyslogDisabled: common.IsForceLoggingDisabled(),
 		},
-		nil,
-		nil, // we don't gather network stats on the credential pipeline
-		ste.LogOptions{
-			RequestLogOptions: ste.RequestLogOptions{
-				SyslogDisabled: common.IsForceLoggingDisabled(),
-			},
-		},
-	)
+	}, nil, nil)
 	credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
 	if isSASExisted := sas.Signature() != ""; isSASExisted {
 		if isMDAccount {
@@ -640,7 +633,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logLevel pipeline.LogLevel) azcore.ClientOptions {
+func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOptions.LogOptions = pipeline.LogOptions{
@@ -653,14 +646,9 @@ func createClientOptions(logLevel pipeline.LogLevel) azcore.ClientOptions {
 		TryTimeout:    ste.UploadTryTimeout,
 		RetryDelay:    ste.UploadRetryDelay,
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	},
-		policy.TelemetryOptions{
-			ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-		},
-		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
-		nil, // we don't gather network stats on the credential pipeline
-		logOptions,
-	)
+	}, policy.TelemetryOptions{
+		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, trailingDot, from)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
@@ -698,28 +686,4 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, l
 		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
 		nil, // we don't gather network stats on the credential pipeline
 	), nil
-}
-
-// TODO note: ctx and credInfo are ignored at the moment because we only support SAS for Azure File
-func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel, trailingDot common.TrailingDotOption, from common.Location) (pipeline.Pipeline, error) {
-	logOption := pipeline.LogOptions{}
-	if azcopyScanningLogger != nil {
-		logOption = pipeline.LogOptions{
-			Log:       azcopyScanningLogger.Log,
-			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
-		}
-	}
-
-	return ste.NewFilePipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{
-		Telemetry: azfile.TelemetryOptions{
-			Value: glcm.AddUserAgentPrefix(common.UserAgent),
-		},
-		Log: logOption,
-	}, azfile.RetryOptions{
-		Policy:        azfile.RetryPolicyExponential,
-		MaxTries:      ste.UploadMaxTries,
-		TryTimeout:    ste.UploadTryTimeout,
-		RetryDelay:    ste.UploadRetryDelay,
-		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	}, nil, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, trailingDot, from), nil
 }

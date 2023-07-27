@@ -5,7 +5,7 @@ package ste
 
 import (
 	"fmt"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,7 +14,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/hillu/go-ntdll"
 
 	"golang.org/x/sys/windows"
@@ -42,11 +41,9 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 	if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
 		defer func() { // recover from potential panics and output raw properties for debug purposes; will cover the return call to setAttributes
 			if panicerr := recover(); panicerr != nil {
-				pAdapt := propHolder.(*azfile.SMBPropertyAdapter)
-
-				attr := pAdapt.PropertySource.FileAttributes()
-				lwt := pAdapt.PropertySource.FileLastWriteTime()
-				fct := pAdapt.PropertySource.FileCreationTime()
+				attr, err := propHolder.FileAttributes()
+				lwt := propHolder.FileLastWriteTime()
+				fct := propHolder.FileCreationTime()
 
 				err = fmt.Errorf("failed to read SMB properties (%w)! Raw data: attr: `%s` lwt: `%s`, fct: `%s`", err, attr, lwt, fct)
 			}
@@ -54,9 +51,12 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 	}
 
 	setAttributes := func() error {
-		attribs := propHolder.FileAttributes()
+		attribs, err := propHolder.FileAttributes()
+		if err != nil {
+			return fmt.Errorf("attempted to read SMB properties: %w", err)
+		}
 		// This is a safe conversion.
-		err := windows.SetFileAttributes(destPtr, uint32(attribs))
+		err = windows.SetFileAttributes(destPtr, FileAttributesToUint32(*attribs))
 		if err != nil {
 			return fmt.Errorf("attempted file set attributes: %w", err)
 		}
@@ -252,12 +252,11 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 
 // TODO: this method may become obsolete if/when we are able to get permissions from the share root
 func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
-	u, err := url.Parse(source)
+	fileURLParts, err := file.ParseURL(source)
 	if err != nil {
 		return false
 	}
-	f := azfile.NewFileURLParts(*u)
-	path := f.DirectoryOrFilePath
+	path := fileURLParts.DirectoryOrFilePath
 	sep := common.DeterminePathSeparator(path)
 	splitPath := strings.Split(strings.Trim(path, sep), sep)
 	return path != "" && len(splitPath) == 1

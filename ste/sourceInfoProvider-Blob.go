@@ -90,7 +90,7 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 
 	symlinkBuf, err := io.ReadAll(resp.NewRetryReader(ctx, &blob.RetryReaderOptions{
 		MaxRetries:   5,
-		OnFailedRead: common.NewReadLogFunc(p.jptm, source),
+		OnFailedRead: common.NewBlobReadLogFunc(p.jptm, source),
 	}))
 	if err != nil {
 		return "", err

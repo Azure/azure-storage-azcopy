@@ -585,7 +585,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						fi.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 						noBlobProps,
-						noMetdata,
+						noMetadata,
 						"", // Local has no such thing as containers
 					),
 					processor, // the original processor is wrapped in the mutex processor.
@@ -666,7 +666,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				singleFileInfo.Size(),
 				noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 				noBlobProps,
-				noMetdata,
+				noMetadata,
 				"", // Local has no such thing as containers
 			),
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -720,7 +720,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 						noBlobProps,
-						noMetdata,
+						noMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -796,7 +796,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 						noBlobProps,
-						noMetdata,
+						noMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper

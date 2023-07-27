@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type ErrorEx struct {
@@ -20,8 +19,6 @@ func (errex ErrorEx) ErrorCodeAndString() (string, int, string) {
 		return respErr.ErrorCode, respErr.StatusCode, respErr.RawResponse.Status
 	}
 	switch e := interface{}(errex.error).(type) {
-	case azfile.StorageError:
-		return string(e.ServiceCode()), e.Response().StatusCode, e.Response().Status
 	case azbfs.StorageError:
 		return string(e.ServiceCode()), e.Response().StatusCode, e.Response().Status
 	default:

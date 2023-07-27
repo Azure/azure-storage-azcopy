@@ -2,17 +2,20 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func DeleteFile(jptm IJobPartTransferMgr, _ pipeline.Pipeline, _ pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
@@ -21,7 +24,8 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	}
 
 	info := jptm.Info()
-	srcUrl, _ := url.Parse(info.Source)
+	source := info.Source
+	srcURL, _ := url.Parse(source)
 
 	// Register existence with the deletion manager. Do it now, before we make the chunk funcs,
 	// to maximize the extent to which the manager knows about as many children as possible (i.e.
@@ -31,18 +35,17 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	// and then we find more children in the plan files. Such failed attempts are harmless, but cause
 	// unnecessary network round trips.
 	// We must do this for all entity types, because even folders are children of their parents
-	jptm.FolderDeletionManager().RecordChildExists(srcUrl)
+	jptm.FolderDeletionManager().RecordChildExists(srcURL)
 
 	if info.EntityType == common.EEntityType.Folder() {
-
-		au := azfile.NewFileURLParts(*srcUrl)
-		isFileShareRoot := au.DirectoryOrFilePath == ""
+		fileURLParts, _ := file.ParseURL(source)
+		isFileShareRoot := fileURLParts.DirectoryOrFilePath == ""
 		if !isFileShareRoot {
 			jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "Queuing folder, to be deleted after it's children are deleted")
 			jptm.FolderDeletionManager().RequestDeletion(
-				srcUrl,
+				srcURL,
 				func(ctx context.Context, logger common.ILogger) bool {
-					return doDeleteFolder(ctx, info.Source, p, jptm, logger)
+					return doDeleteFolder(ctx, source, jptm, logger)
 				},
 			)
 		}
@@ -58,26 +61,25 @@ func DeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	} else {
 		// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 		// smaller "transfer initiation pool", where this code runs.
-		id := common.NewChunkID(info.Source, 0, 0)
-		cf := createChunkFunc(true, jptm, id, func() { doDeleteFile(jptm, p) })
+		id := common.NewChunkID(source, 0, 0)
+		cf := createChunkFunc(true, jptm, id, func() { doDeleteFile(jptm) })
 		jptm.ScheduleChunks(cf)
 	}
 }
 
-func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
-
+func doDeleteFile(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
-	// Get the source file url of file to delete
-	srcUrl, _ := url.Parse(info.Source)
+	source := info.Source
+	srcURL, _ := url.Parse(source)
 
-	srcFileUrl := azfile.NewFileURL(*srcUrl, p)
+	srcFileClient := common.CreateShareFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
 	transferDone := func(status common.TransferStatus, err error) {
 		if status == common.ETransferStatus.Success() {
-			jptm.FolderDeletionManager().RecordChildDeleted(srcUrl)
+			jptm.FolderDeletionManager().RecordChildDeleted(srcURL)
 			// TODO: doing this only on success raises the possibility of the
 			//   FolderDeletionManager's internal map growing rather large if there are lots of failures
 			//   on a big folder tree. Is living with that preferable to the "incorrectness" of calling
@@ -101,19 +103,20 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	// Delete the source file
 	helper := &azureFileSenderBase{}
 	err := helper.DoWithOverrideReadOnly(jptm.Context(),
-		func() (interface{}, error) { return srcFileUrl.Delete(jptm.Context()) },
-		srcFileUrl,
+		func() (interface{}, error) { return srcFileClient.Delete(jptm.Context(), nil) },
+		srcFileClient,
 		jptm.GetForceIfReadOnly())
 	if err != nil {
-		// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
-		if strErr, ok := err.(azfile.StorageError); ok {
-			if strErr.Response().StatusCode == http.StatusNotFound {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
+			if respErr.StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
 				return
 			}
 			// If the status code was 403, it means there was an authentication error and we exit.
 			// User can resume the job if completely ordered with a new sas.
-			if strErr.Response().StatusCode == http.StatusForbidden {
+			if respErr.StatusCode == http.StatusForbidden {
 				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
 				jptm.Log(pipeline.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)
@@ -125,35 +128,34 @@ func doDeleteFile(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 }
 
-func doDeleteFolder(ctx context.Context, folder string, p pipeline.Pipeline, jptm IJobPartTransferMgr, logger common.ILogger) bool {
-
-	u, err := url.Parse(folder)
+func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr, logger common.ILogger) bool {
+	fileURLParts, err := file.ParseURL(folder)
 	if err != nil {
 		return false
 	}
 
-	loggableName := u.Path
+	loggableName := fileURLParts.DirectoryOrFilePath
 
 	logger.Log(pipeline.LogDebug, "About to attempt to delete folder "+loggableName)
 
-	dirUrl := azfile.NewDirectoryURL(*u, p)
+	srcDirClient := common.CreateShareDirectoryClient(folder, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	helper := &azureFileSenderBase{}
 	err = helper.DoWithOverrideReadOnly(ctx,
-		func() (interface{}, error) { return dirUrl.Delete(ctx) },
-		dirUrl,
+		func() (interface{}, error) { return srcDirClient.Delete(ctx, nil) },
+		srcDirClient,
 		jptm.GetForceIfReadOnly())
 	if err == nil {
 		logger.Log(pipeline.LogInfo, "Empty folder deleted "+loggableName) // not using capitalized DELETE SUCCESSFUL here because we can't use DELETE ERROR for folder delete failures (since there may be a retry if we delete more files, but we don't know that at time of logging)
 		return true
 	}
-
-	// If the delete failed with err 404, i.e resource not found, then consider the deletion a success. (It's already gone)
-	if strErr, ok := err.(azfile.StorageError); ok {
-		if strErr.Response().StatusCode == http.StatusNotFound {
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		// If the delete failed with err 404, i.e resource not found, then consider the deletion a success. (It's already gone)
+		if respErr.StatusCode == http.StatusNotFound {
 			logger.Log(pipeline.LogDebug, "Folder already gone before call to delete "+loggableName)
 			return true
 		}
-		if strErr.ServiceCode() == azfile.ServiceCodeDirectoryNotEmpty {
+		if fileerror.HasCode(err, fileerror.DirectoryNotEmpty) {
 			logger.Log(pipeline.LogInfo, "Folder not deleted because it's not empty yet. Will retry if this job deletes more files from it. Folder name: "+loggableName)
 			return false
 		}
