@@ -145,7 +145,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL *directory.Client, baseAzureDi
 			get, err := curFileURL.DownloadStream(context.Background(), nil)
 
 			if err != nil {
-				fmt.Printf("fail to download the file %s\n", fileInfo.Name)
+				fmt.Printf("fail to download the file %s\n", *fileInfo.Name)
 				os.Exit(1)
 			}
 
@@ -154,7 +154,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL *directory.Client, baseAzureDi
 			// read all bytes.
 			fileBytesDownloaded, err := io.ReadAll(retryReader)
 			if err != nil {
-				fmt.Printf("fail to read the body of file %s downloaded and failed with error %s\n", fileInfo.Name, err.Error())
+				fmt.Printf("fail to read the body of file %s downloaded and failed with error %s\n", *fileInfo.Name, err.Error())
 				os.Exit(1)
 			}
 			retryReader.Close()

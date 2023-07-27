@@ -256,6 +256,10 @@ func createBlob(blobURL string, blobSize uint32, metadata map[string]*string, bl
 
 func createShareOrDirectory(shareOrDirectoryURLStr string) {
 	fileURLParts, err := sharefile.ParseURL(shareOrDirectoryURLStr)
+	if err != nil {
+		fmt.Println("error createShareOrDirectory with URL, ", err)
+		os.Exit(1)
+	}
 
 	isShare := false
 	if fileURLParts.ShareName != "" && fileURLParts.DirectoryOrFilePath == "" {

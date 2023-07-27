@@ -10,7 +10,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
@@ -323,19 +322,19 @@ func createShareFileClient(resourceURL string) *sharefile.Client {
 	return fileClient
 }
 
-func createShareDirectoryClient(resourceURL string) *sharedirectory.Client {
-	fileURLParts, err := sharefile.ParseURL(resourceURL)
-	if err != nil {
-		fmt.Println("Failed to parse url")
-		os.Exit(1)
-	}
-	shareClient := createShareClient(resourceURL)
-	if fileURLParts.DirectoryOrFilePath == "" {
-		return shareClient.NewRootDirectoryClient()
-	} else {
-		return shareClient.NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
-	}
-}
+//func createShareDirectoryClient(resourceURL string) *sharedirectory.Client {
+//	fileURLParts, err := sharefile.ParseURL(resourceURL)
+//	if err != nil {
+//		fmt.Println("Failed to parse url")
+//		os.Exit(1)
+//	}
+//	shareClient := createShareClient(resourceURL)
+//	if fileURLParts.DirectoryOrFilePath == "" {
+//		return shareClient.NewRootDirectoryClient()
+//	} else {
+//		return shareClient.NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
+//	}
+//}
 
 func createShareClient(resourceURL string) *share.Client {
 	fileURLParts, err := sharefile.ParseURL(resourceURL)

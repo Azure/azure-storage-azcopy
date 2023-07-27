@@ -37,6 +37,9 @@ func newSecurityInfoPersistenceManager(ctx context.Context) *securityInfoPersist
 // and PutSDDL will only be called when uploading/doing S2S.
 func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareClient *share.Client) (string, error) {
 	fileURLParts, err := file.ParseURL(shareClient.URL())
+	if err != nil {
+		return "", err
+	}
 	fileURLParts.SAS = filesas.QueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
 
 	sddlKey := fileURLParts.String() + "|SDDL|" + sddlString
