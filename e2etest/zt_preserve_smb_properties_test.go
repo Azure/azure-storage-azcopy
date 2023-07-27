@@ -5,6 +5,7 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +18,6 @@ const SampleSDDL = "O:<placeholder>G:<placeholder>D:AI(A;ID;FA;;;SY)(A;ID;FA;;;B
 const RootSampleSDDL = "O:<placeholder>G:<placeholder>D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;<placeholder>)S:NO_ACCESS_CONTROL"
 const FolderSampleSDDL = "O:<placeholder>G:<placeholder>D:AI(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;FA;;;<placeholder>)S:NO_ACCESS_CONTROL"
 const SampleSDDLPlaceHolder = "<placeholder>"
-const ISO8601 = "2006-01-02T15:04:05.0000000Z07:00"
 
 func AdjustSDDLToLocal(sample, placeholder string) (sddlOut string, err error) {
 	nameBuffer := make([]uint16, 50)
@@ -158,7 +158,7 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 		beforeRunJob: func(h hookHelper) {
 			// Pause for a includeAfter time
 			time.Sleep(5 * time.Second)
-			h.GetModifiableParameters().includeAfter = time.Now().Format(ISO8601)
+			h.GetModifiableParameters().includeAfter = time.Now().Format(cmd.ISO8601)
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
 			// So that when validating, our validation can be sure that the right datetime has ended up in the right
 			// field
