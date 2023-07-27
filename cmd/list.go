@@ -25,6 +25,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -44,7 +45,7 @@ type rawListCmdArgs struct {
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
-	trailingDot 	string
+	trailingDot     string
 }
 
 type validProperty string
@@ -84,14 +85,57 @@ func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty
 	return parsedProperties
 }
 
-func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
+// returns result of stripping and if striptopdir is enabled
+// if nothing happens, the original source is returned
+func (raw *rawListCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
+	result = raw.sourcePath
+	resourceURL, err := url.Parse(result)
+	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
+
+	if err != nil {
+		err = fmt.Errorf("failed to parse url %s; %s", result, err)
+		return
+	}
+
+	if strings.Contains(gURLParts.GetContainerName(), "*") {
+		// Disallow container name search and object specifics
+		if gURLParts.GetObjectName() != "" {
+			err = errors.New("cannot combine a specific object name with an account-level search")
+			return
+		}
+
+		// Return immediately here because we know this will be safe.
+		return
+	}
+
+	// Trim the trailing /*.
+	if strings.HasSuffix(resourceURL.RawPath, "/*") {
+		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")
+		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
+		stripTopDir = true
+	}
+
+	// Ensure there aren't any extra *s floating around.
+	if strings.Contains(resourceURL.RawPath, "*") {
+		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
+		return
+	}
+
+	result = resourceURL.String()
+
+	return
+}
+
+func (raw rawListCmdArgs) cook() (cookedListCmdArgs, bool, bool, error) {
+	stripTopDir := false //default value for list command
+	recursive := true    //default value for list command
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
 	location := InferArgumentLocation(raw.sourcePath)
 	// Only support listing for Azure locations
 	if location != location.Blob() && location != location.File() && location != location.BlobFS() {
-		return cooked, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
+		return cooked, recursive, stripTopDir, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
 	}
 	cooked.sourcePath = raw.sourcePath
 	cooked.MachineReadable = raw.MachineReadable
@@ -100,14 +144,23 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked.location = location
 	err := cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
-		return cooked, err
+		return cooked, recursive, stripTopDir, err
+	}
+
+	newPath, stripTopDir, err := raw.stripTrailingWildcardOnRemoteSource(location)
+	if err != nil {
+		return cooked, recursive, stripTopDir, err
+	}
+	if stripTopDir {
+		recursive = false
+		cooked.sourcePath = newPath
 	}
 
 	if raw.Properties != "" {
 		cooked.properties = raw.parseProperties(raw.Properties)
 	}
 
-	return cooked, nil
+	return cooked, recursive, stripTopDir, nil
 }
 
 type cookedListCmdArgs struct {
@@ -118,7 +171,7 @@ type cookedListCmdArgs struct {
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
-	trailingDot 	common.TrailingDotOption
+	trailingDot     common.TrailingDotOption
 }
 
 var raw rawListCmdArgs
@@ -146,12 +199,12 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			cooked, err := raw.cook()
+			cooked, recursive, stripTopDir, err := raw.cook()
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 				return
 			}
-			err = cooked.HandleListContainerCommand()
+			err = cooked.HandleListContainerCommand(recursive, stripTopDir)
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -164,8 +217,8 @@ func init() {
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
 	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "delimiter (;) separated values of properties required in list output.")
-	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. " +
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation." +
+	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. "+
+		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	rootCmd.AddCommand(listContainerCmd)
@@ -204,7 +257,7 @@ func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
 }
 
 // HandleListContainerCommand handles the list container command
-func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
+func (cooked cookedListCmdArgs) HandleListContainerCommand(recursive bool, stripTopDir bool) (err error) {
 	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -239,7 +292,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil)
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, recursive, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogNone, common.CpkOptions{}, nil, stripTopDir, cooked.trailingDot, nil, nil)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
