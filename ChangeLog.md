@@ -1,15 +1,45 @@
 
 # Change Log
 
-## Version 10.20.0-Preview
+## Version 10.21.0-Preview
 
 ### New Features
+
 1. Migrated to the latest [azblob SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob).
 2. Migrated from deprecated ADAL to MSAL through the latest [azidentity SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity).
 3. Deprecated support for object IDs in MSI. Client ID or Resource ID can be used as an alternative.
 
 ### Special notes
+
 1. Due to the migration from ADAL to MSAL, tenant ID must now be set when authorizing with single tenant applications created after 10/15/2018.
+
+## Version 10.20.0
+
+### New Features
+
+1. Force small blobs to use PutBlob for any source.
+2. Support to delete CPK encrypted blobs.
+3. Support to follow symlinks when `--preserve-smb-permissions` is enabled.
+4. Support to return LMT data on `list` command for Azure Files.
+
+### Bug Fixes
+
+1. Fixed an issue where source trailing dot header was passed when source for a S2S copy is not file service
+2. Gracefully handle File Share trailing dot paths to Windows/Blob (that do not support trailing dot) by skipping such files
+3. Allow trailing dot option to be ignored instead of erroring out in situations it does not apply.
+4. Issue [#2186](https://github.com/Azure/azure-storage-azcopy/issues/2186) where AzCopy would panic when using `--include-before` and `--include-after` flags on remove file share resources.
+5. Issue [#2183](https://github.com/Azure/azure-storage-azcopy/issues/2183) where AzCopy would panic when providing Azure Files URLs with no SAS token.
+6. Fixed a bug where AzCopy would automatically assume a HNS path to be a file if the path did not have a slash terminator.
+7. Fixed an issue where `--skip-version-check` would not be honored for `login`,` logout`, `help` commands. [#2299](https://github.com/Azure/azure-storage-azcopy/issues/2299)
+
+### Documentation
+
+1. Add a log for LMTs when a mismatch is encountered.
+2. Added documentation indicating the `login` and `logout` commands will be deprecated in the future.
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
 
 ## Version 10.19.0-Preview
 

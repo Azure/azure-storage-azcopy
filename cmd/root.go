@@ -191,13 +191,15 @@ func Execute(logPathFolder, jobPlanFolder string, maxFileAndSocketHandles int, j
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		// our commands all control their own life explicitly with the lifecycle manager
-		// only commands that don't explicitly exit actually reach this point (e.g. help commands and login commands)
-		select {
-		case <-beginDetectNewVersion():
-			// noop
-		case <-time.After(time.Second * 8):
-			// don't wait too long
+		if !azcopySkipVersionCheck {
+			// our commands all control their own life explicitly with the lifecycle manager
+			// only commands that don't explicitly exit actually reach this point (e.g. help commands and login commands)
+			select {
+			case <-beginDetectNewVersion():
+				// noop
+			case <-time.After(time.Second * 8):
+				// don't wait too long
+			}
 		}
 		glcm.Exit(nil, common.EExitCode.Success())
 	}
