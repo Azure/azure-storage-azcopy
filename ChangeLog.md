@@ -5,6 +5,7 @@
 
 ### New Features
 
+***Mac M1/ARM64 Support***
 1. Force small blobs to use PutBlob for any source.
 2. Support to delete CPK encrypted blobs.
 3. Support to follow symlinks when `--preserve-smb-permissions` is enabled.
