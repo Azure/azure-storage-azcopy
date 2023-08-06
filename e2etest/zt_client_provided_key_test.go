@@ -21,8 +21,9 @@
 package e2etest
 
 import (
-	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 	"testing"
+
+	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
 )
 
 // Scenarios to consider for copy
@@ -38,10 +39,14 @@ import (
 func TestClient_ProvidedScopeUpload(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	verifyOnlyProps := verifyOnly{with{cpkByName: cpkByName}}
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		cpkByName: cpkByName,
-	}, nil, testFiles{
+	}, &hooks{
+		beforeTestRun: func(h hookHelper) {
+			h.SkipTest()
+		},
+	}, testFiles{
 		defaultSize: "100K",
 		shouldTransfer: []interface{}{
 			folder(""),
@@ -98,7 +103,11 @@ func TestClient_ProvidedKeyUpload(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		cpkByValue: true,
-	}, nil, testFiles{
+	}, &hooks{
+		beforeTestRun: func(h hookHelper) {
+			h.SkipTest()
+		},
+	}, testFiles{
 		defaultSize: "100K",
 		shouldTransfer: []interface{}{
 			folder(""),

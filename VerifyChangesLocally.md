@@ -100,3 +100,6 @@ use the bellow configuration to debug the e2e tests:
 If you want to debug a specific test, use:
 
          "args": ["-test.v", "-test.timeout", "60m", "test.run", <testName>],
+
+
+Please notice: All the tests should pass successfully

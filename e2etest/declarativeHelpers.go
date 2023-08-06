@@ -292,7 +292,7 @@ func (TestFromTo) AllPairs() TestFromTo {
 
 // AllUploads represents the subset of AllPairs that are uploads
 func (TestFromTo) AllUploads() TestFromTo {
-	result := TestFromTo{}.AllPairs()
+	result := TestFromToEx{}.AllPairs()
 	result.desc = "AllUploads"
 	result.filter = func(ft common.FromTo) bool {
 		return TestFromToEnum(ft).IsUpload()
@@ -302,7 +302,7 @@ func (TestFromTo) AllUploads() TestFromTo {
 
 // AllDownloads represents the subset of AllPairs that are downloads
 func (TestFromTo) AllDownloads() TestFromTo {
-	result := TestFromTo{}.AllPairs()
+	result := TestFromToEx{}.AllPairs()
 	result.desc = "AllDownloads"
 	result.filter = func(ft common.FromTo) bool {
 		return TestFromToEnum(ft).IsDownload()
@@ -312,7 +312,7 @@ func (TestFromTo) AllDownloads() TestFromTo {
 
 // AllS2S represents the subset of AllPairs that are S2S transfers
 func (TestFromTo) AllS2S() TestFromTo {
-	result := TestFromTo{}.AllPairs()
+	result := TestFromToEx{}.AllPairs()
 	result.desc = "AllS2S"
 	result.filter = func(ft common.FromTo) bool {
 		return TestFromToEnum(ft).IsS2S()
@@ -322,7 +322,7 @@ func (TestFromTo) AllS2S() TestFromTo {
 
 // AllAzureS2S is like AllS2S, but it excludes non-Azure sources. (No need to exclude non-Azure destinations, since AzCopy doesn't have those)
 func (TestFromTo) AllAzureS2S() TestFromTo {
-	result := TestFromTo{}.AllPairs()
+	result := TestFromToEx{}.AllPairs()
 	result.desc = "AllAzureS2S"
 	result.filter = func(ft common.FromTo) bool {
 		isFromAzure := ft.From() == common.ELocation.BlobFS() ||
@@ -372,7 +372,7 @@ func (TestFromTo) AllSync() TestFromTo {
 // Generally avoid this method, because it does not automatically pick up new pairs as we add new supported
 // resource types to AzCopy.
 func (TestFromTo) Other(values ...common.FromTo) TestFromTo {
-	result := TestFromTo{}.AllPairs()
+	result := TestFromToEx{}.AllPairs()
 	result.desc = "Other"
 	result.filter = func(ft common.FromTo) bool {
 		for _, v := range values {
@@ -504,6 +504,8 @@ type hookHelper interface {
 	FromTo() common.FromTo
 
 	Operation() Operation
+
+	DestinationCredentialType() common.CredentialType
 
 	// GetModifiableParameters returns a pointer to the AzCopy parameters that will be used in the scenario
 	GetModifiableParameters() *params
