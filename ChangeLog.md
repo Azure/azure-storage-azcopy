@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.20.1
+
+### Bug fixes
+
+1. Fix LMT data on `list` command for Azure Files.
+
 ## Version 10.20.0
 
 ### New Features
