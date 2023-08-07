@@ -2,7 +2,6 @@
 # Change Log
 
 ## Version 10.21.0-Preview
-
 ### New Features
 
 1. Migrated to the latest [azblob SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob).
@@ -12,6 +11,10 @@
 ### Special notes
 
 1. Due to the migration from ADAL to MSAL, tenant ID must now be set when authorizing with single tenant applications created after 10/15/2018.
+
+### Bug Fixes
+
+1. Fixed an issue where LMT data is not returned on `list` command for Azure Files.
 
 ## Version 10.20.0
 
