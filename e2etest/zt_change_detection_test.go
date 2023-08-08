@@ -33,8 +33,8 @@ import (
 // The latter differs between upload and download.
 func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 	RunScenarios(t,
-		eOperation.CopyAndSync(),
-		eTestFromTo.AllPairs(),
+		eOperation.Copy(),
+		TestFromToEx{}.AllPairs(),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -43,7 +43,43 @@ func TestChange_DetectFileChangedDuringTransfer(t *testing.T) {
 		}, &hooks{
 			beforeRunJob: func(h hookHelper) {
 				ft := h.FromTo()
-				if ft.IsS2S() && h.Operation() == eOperation.Copy() {
+				if TestFromToEnum(ft).IsS2S() && h.Operation() == eOperation.Copy() {
+					// in Copy, s2s change detection is not enabled by default.
+					// (Whereas in Sync, it is is, so we don't need to, and cannot, set it.)
+					h.GetModifiableParameters().s2sSourceChangeValidation = true
+				}
+			},
+			beforeOpenFirstFile: func(h hookHelper) {
+				// Re-create the source files (over top of what AzCopy has already scanned, but has not yet started to transfer)
+				// This will give them new LMTs
+				time.Sleep(2 * time.Second) // make sure the new LMTs really will be different
+				h.CreateFiles(h.GetTestFiles(), true, true, false)
+			},
+		}, testFiles{
+			defaultSize: "1k",
+			shouldTransfer: []interface{}{
+				folder(""), // the root folder should transfer between folder-aware locations
+			},
+			shouldFail: []interface{}{
+				f("filea", withError{"File modified since transfer scheduled"}),
+			},
+		}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestChange_DetectFileChangedDuringSyncTransfer(t *testing.T) {
+	RunScenarios(t,
+		eOperation.Sync(),
+		TestFromToEx{}.AllPairs(),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:   true,
+			stripTopDir: true,
+		}, &hooks{
+			beforeRunJob: func(h hookHelper) {
+				ft := h.FromTo()
+				if TestFromToEnum(ft).IsS2S() && h.Operation() == eOperation.Copy() {
 					// in Copy, s2s change detection is not enabled by default.
 					// (Whereas in Sync, it is is, so we don't need to, and cannot, set it.)
 					h.GetModifiableParameters().s2sSourceChangeValidation = true

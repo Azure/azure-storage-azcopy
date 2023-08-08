@@ -4,13 +4,34 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/google/uuid"
 	"github.com/aymanjarrousms/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 func TestResume_Generic(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Resume(), eTestFromTo.AllSync(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Copy()|eOperation.Resume(), TestFromToEx{}.AllSync(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
+		debugSkipFiles: []string{
+			"/fileb",
+			"/filec",
+		},
+	}, nil, testFiles{
+		defaultSize: "1K",
+
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("filea"),
+			f("fileb"),
+			f("filec"),
+			f("filed"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestResume_SyncGeneric(t *testing.T) {
+	RunScenarios(t, eOperation.Sync()|eOperation.Resume(), TestFromToEx{}.AllSync(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		stripTopDir: true,
 		debugSkipFiles: []string{
 			"/fileb",
 			"/filec",

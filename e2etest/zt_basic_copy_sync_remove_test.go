@@ -28,9 +28,15 @@ import (
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
 func TestBasic_CopyUploadSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, allCredentialTypes, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, allCredentialTypes, params{
 		recursive: true,
-	}, nil, testFiles{
+	}, &hooks{
+		beforeTestRun: func(h hookHelper) {
+			if h.FromTo() == common.EFromTo.LocalBlob() && h.DestinationCredentialType() == common.ECredentialType.OAuthToken() {
+				h.SkipTest()
+			}
+		},
+	}, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
 			folder(""),
@@ -39,9 +45,40 @@ func TestBasic_CopyUploadSingleBlob(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestBasic_SyncUploadSingleBlob(t *testing.T) {
+	RunScenarios(t, eOperation.Sync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, allCredentialTypes, params{
+		recursive:   true,
+		stripTopDir: true,
+	}, &hooks{
+		beforeTestRun: func(h hookHelper) {
+			if h.FromTo() == common.EFromTo.LocalBlob() && h.DestinationCredentialType() == common.ECredentialType.OAuthToken() {
+				h.SkipTest()
+			}
+		},
+	}, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			f("file1.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
 func TestBasic_CopyUploadEmptyBlob(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "0K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_SyncUploadEmptyBlob(t *testing.T) {
+	RunScenarios(t, eOperation.Sync(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		stripTopDir: true,
 	}, nil, testFiles{
 		defaultSize: "0K",
 		shouldTransfer: []interface{}{
@@ -146,8 +183,27 @@ func TestBasic_CopyS2SLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyUploadDir(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1M",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1"),
+			f("file2"),
+			folder("folder1"),
+			folder("folder2"),
+			f("folder1/file1"),
+			f("folder1/file2"),
+			f("folder2/file3"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_SyncUploadDir(t *testing.T) {
+	RunScenarios(t, eOperation.Sync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		stripTopDir: true,
 	}, nil, testFiles{
 		defaultSize: "1M",
 		shouldTransfer: []interface{}{
@@ -201,7 +257,7 @@ func TestBasic_CopyS2SDir(t *testing.T) {
 
 // ================================  Remove: File, Folder, and Container  ==============================================
 func TestBasic_CopyRemoveFile(t *testing.T) {
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), TestFromToEx{}.AllRemove(), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
 		relativeSourcePath: "file2.txt",
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -234,7 +290,7 @@ func TestBasic_CopyRemoveLargeFile(t *testing.T) {
 
 func TestBasic_CopyRemoveFolder(t *testing.T) {
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), TestFromToEx{}.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "folder2/",
 	}, nil, testFiles{

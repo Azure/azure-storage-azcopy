@@ -134,3 +134,82 @@ func (ft TestFromToEnum) IsS2S() bool {
 	fromTo := common.FromTo(ft)
 	return fromTo.IsS2S()
 }
+
+// Temporary functions to disable all the not supported scenarios by azCopy fork
+// Just for focusing on the supported scenarios - to be covered by the tests
+type TestFromToEx TestFromTo
+
+// AllSourcesToOneDest means use all possible sources, and test each source to one destination (generally Blob is the destination,
+// except for sources that don't support Blob, in which case, a download to local is done).
+// Use this for tests that are primarily about enumeration of the source (rather than support for a wide range of destinations)
+func (TestFromToEx) AllSourcesToOneDest() TestFromTo {
+	return TestFromTo{
+		desc:      "AllSourcesToOneDest",
+		useAllTos: false,
+		froms: []common.Location{
+			common.ELocation.Local(),
+			common.Location(ETestLocation.SMBMount()),
+		},
+		tos: []common.Location{
+			common.ELocation.Blob(), // auto-replaced with File when source is File
+			common.ELocation.Local(),
+		},
+	}
+}
+
+// AllPairs tests literally all Source/Dest pairings that are supported by AzCopy.
+// Use this sparingly, because it runs a lot of cases. Prefer AllSourcesToOneDest or AllSourcesDownAndS2S or similar.
+func (TestFromToEx) AllPairs() TestFromTo {
+	return TestFromTo{
+		desc:                   "AllPairs",
+		useAllTos:              true,
+		suppressAutoFileToFile: true, // not needed for AllPairs
+		froms: []common.Location{
+			common.ELocation.Local(),
+			common.Location(ETestLocation.SMBMount()),
+		},
+		tos: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+		},
+	}
+}
+
+// AllRemove represents the subset of AllPairs that are remove/delete
+func (TestFromToEx) AllRemove() TestFromTo {
+	return TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms:     []common.Location{},
+		tos:       []common.Location{},
+	}
+}
+
+func (TestFromToEx) AllSync() TestFromTo {
+	return TestFromTo{
+		desc:      "AllSync",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Local(),
+			common.Location(ETestLocation.SMBMount()),
+		},
+		tos: []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.File(),
+		},
+	}
+}
+
+func (TestFromToEx) AllSMB() TestFromTo {
+	return TestFromTo{
+		desc:                   "ALLSMB",
+		useAllTos:              true,
+		suppressAutoFileToFile: true, // not needed for AllPairs
+		froms: []common.Location{
+			common.Location(ETestLocation.SMBMount()),
+		},
+		tos: []common.Location{
+			common.ELocation.File(),
+		},
+	}
+}

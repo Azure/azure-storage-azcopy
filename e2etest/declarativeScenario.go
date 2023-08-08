@@ -594,6 +594,10 @@ func (s *scenario) FromTo() common.FromTo {
 	return s.fromTo
 }
 
+func (s *scenario) DestinationCredentialType() common.CredentialType {
+	return s.credTypes[1]
+}
+
 func (s *scenario) Operation() Operation {
 	return s.operation
 }
