@@ -2,15 +2,19 @@
 # Change Log
 
 ## Version 10.21.0-Preview
+
 ### New Features
 
 1. Migrated to the latest [azblob SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob).
-2. Migrated from deprecated ADAL to MSAL through the latest [azidentity SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity).
-3. Deprecated support for object IDs in MSI. Client ID or Resource ID can be used as an alternative.
+2. Migrated to the latest [azfile SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azfile).
+3. Migrated from deprecated ADAL to MSAL through the latest [azidentity SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity).
+4. Deprecated support for object IDs in MSI. Client ID or Resource ID can be used as an alternative.
 
 ### Special notes
 
 1. Due to the migration from ADAL to MSAL, tenant ID must now be set when authorizing with single tenant applications created after 10/15/2018.
+
+## Version 10.20.1
 
 ### Bug Fixes
 
@@ -20,6 +24,7 @@
 
 ### New Features
 
+1. Mac M1/ARM64 Support
 1. Force small blobs to use PutBlob for any source.
 2. Support to delete CPK encrypted blobs.
 3. Support to follow symlinks when `--preserve-smb-permissions` is enabled.
