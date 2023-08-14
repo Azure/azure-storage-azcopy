@@ -652,38 +652,3 @@ func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.Trailin
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
-
-func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
-	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
-		// LogInfo:  glcm.Info, //Comment out for debugging
-		LogError: glcm.Info,
-	})
-
-	logOption := pipeline.LogOptions{}
-	if azcopyScanningLogger != nil {
-		logOption = pipeline.LogOptions{
-			Log:       azcopyScanningLogger.Log,
-			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
-		}
-	}
-
-	return ste.NewBlobFSPipeline(
-		credential,
-		azbfs.PipelineOptions{
-			Telemetry: azbfs.TelemetryOptions{
-				Value: glcm.AddUserAgentPrefix(common.UserAgent),
-			},
-			Log: logOption,
-		},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		},
-		nil,
-		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
-		nil, // we don't gather network stats on the credential pipeline
-	), nil
-}
