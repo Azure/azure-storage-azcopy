@@ -118,7 +118,7 @@ func TestMakeBlobFSFilesystemExists(t *testing.T) {
 
 	runMakeAndVerify(args, func(err error) {
 		a.NotNil(err)
-		a.Equal("the file system already exists", err.Error())
+		a.Equal("the filesystem already exists", err.Error())
 		_, err = fsc.GetProperties(ctx)
 		a.Nil(err)
 	})
