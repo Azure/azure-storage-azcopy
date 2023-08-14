@@ -32,8 +32,8 @@ func TestCPKEncryptionInputTest(t *testing.T) {
 	mockedRPC.init()
 
 	dirPath := "this/is/a/dummy/path"
-	rawDFSEndpointWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
-	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.String())
+	rawDFSEndpointWithSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
+	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.DFSURL())
 	raw.recursive = true
 	raw.cpkInfo = true
 
