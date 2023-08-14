@@ -24,13 +24,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -200,19 +199,15 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		return p.String(), err
 
 	case common.ELocation.BlobFS():
-		u, err := url.Parse(target)
+		p, err := azdatalake.ParseURL(target)
 		if err != nil {
 			return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
 		}
-
-		var result url.URL
-		p := azbfs.NewBfsURLParts(*u)
-		if p.FileSystemName == "" || p.DirectoryOrFilePath != "" {
-			return "", errors.New("the blobFS target must be a file system")
+		if p.FilesystemName == "" || p.PathName != "" {
+			return "", errors.New("the blobFS target must be a filesystem")
 		}
-		p.DirectoryOrFilePath = virtualDir
-		result = p.URL()
-		return result.String(), nil
+		p.PathName = virtualDir
+		return p.String(), err
 	default:
 		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLS Gen2")
 	}

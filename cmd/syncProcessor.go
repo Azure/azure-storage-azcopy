@@ -28,10 +28,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"net/url"
@@ -281,10 +281,6 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	p, err := InitPipeline(ctx, cca.fromTo.To(), cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel(), cca.trailingDot, cca.fromTo.From())
-	if err != nil {
-		return nil, err
-	}
 	var trailingDot *common.TrailingDotOption
 	var from *common.Location
 	if cca.fromTo.To() == common.ELocation.File() {
@@ -294,13 +290,12 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 
 	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel(), trailingDot, from)
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
 	rootURL        *url.URL
-	p              pipeline.Pipeline
 	credInfo       common.CredentialInfo
 	clientOptions  azcore.ClientOptions
 	ctx            context.Context
@@ -310,10 +305,9 @@ type remoteResourceDeleter struct {
 	forceIfReadOnly bool
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, credInfo common.CredentialInfo, clientOptions azcore.ClientOptions, ctx context.Context, targetLocation common.Location, fpo common.FolderPropertyOption, forceIfReadOnly bool) *remoteResourceDeleter {
+func newRemoteResourceDeleter(rawRootURL *url.URL, credInfo common.CredentialInfo, clientOptions azcore.ClientOptions, ctx context.Context, targetLocation common.Location, fpo common.FolderPropertyOption, forceIfReadOnly bool) *remoteResourceDeleter {
 	return &remoteResourceDeleter{
 		rootURL:        rawRootURL,
-		p:              p,
 		credInfo:       credInfo,
 		clientOptions:  clientOptions,
 		ctx:            ctx,
@@ -349,9 +343,16 @@ func (b *remoteResourceDeleter) getObjectURL(object StoredObject) (url url.URL) 
 		}
 		url = *u
 	case common.ELocation.BlobFS():
-		blobFSURLParts := azbfs.NewBfsURLParts(*b.rootURL)
-		blobFSURLParts.DirectoryOrFilePath = path.Join(blobFSURLParts.DirectoryOrFilePath, object.relativePath)
-		url = blobFSURLParts.URL()
+		datalakeURLParts, err := azdatalake.ParseURL(b.rootURL.String())
+		if err != nil {
+			panic(err)
+		}
+		datalakeURLParts.PathName = path.Join(datalakeURLParts.PathName, object.relativePath)
+		u, err := url.Parse(datalakeURLParts.String())
+		if err != nil {
+			panic(err)
+		}
+		url = *u
 	default:
 		panic("unexpected location")
 	}
@@ -382,7 +383,6 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 
 			blobClient := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
 			_, err = blobClient.Delete(b.ctx, nil)
-			return err
 		case common.ELocation.File():
 			fileURLParts, err := sharefile.ParseURL(b.rootURL.String())
 			if err != nil {
@@ -413,10 +413,13 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				}
 			}
 		case common.ELocation.BlobFS():
-			bfsURLParts := azbfs.NewBfsURLParts(*b.rootURL)
-			bfsURLParts.DirectoryOrFilePath = path.Join(bfsURLParts.DirectoryOrFilePath, object.relativePath)
-			fileURL := azbfs.NewFileURL(bfsURLParts.URL(), b.p)
-			_, err = fileURL.Delete(b.ctx)
+			datalakeURLParts, err := azdatalake.ParseURL(b.rootURL.String())
+			if err != nil {
+				return err
+			}
+			datalakeURLParts.PathName = path.Join(datalakeURLParts.PathName, object.relativePath)
+			fileClient := common.CreateDatalakeFileClient(datalakeURLParts.String(), b.credInfo, nil, b.clientOptions)
+			_, err = fileClient.Delete(b.ctx, nil)
 		default:
 			panic("not implemented, check your code")
 		}
@@ -469,8 +472,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 					}
 				}
 			case common.ELocation.BlobFS():
-				dirURL := azbfs.NewDirectoryURL(objectURL, b.p)
-				_, err = dirURL.Delete(ctx, nil, false)
+				directoryClient := common.CreateDatalakeDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
+				_, err = directoryClient.Delete(ctx, nil)
 			default:
 				panic("not implemented, check your code")
 			}

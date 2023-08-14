@@ -104,7 +104,6 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		true,
 		common.ETrailingDotOption.Enable(),
 		nil,
-		nil,
 	)
 	a.Nil(err)
 
