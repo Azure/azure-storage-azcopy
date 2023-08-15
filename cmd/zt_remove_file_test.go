@@ -30,15 +30,15 @@ import (
 
 func TestRemoveSingleFile(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	fsc := getFileServiceClient()
+	shareClient, shareName := createNewShare(a, fsc)
+	defer deleteShare(a, shareClient)
 
 	for _, fileName := range []string{"top/mid/low/singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the share with a single file
 		fileList := []string{fileName}
-		scenarioHelper{}.generateAzureFilesFromList(a, shareURL, fileList)
-		a.NotNil(shareURL)
+		scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, fileList)
+		a.NotNil(shareClient)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -60,13 +60,13 @@ func TestRemoveSingleFile(t *testing.T) {
 
 func TestRemoveFilesUnderShare(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	a.NotNil(shareURL)
+	shareClient, shareName := createNewShare(a, fsc)
+	defer deleteShare(a, shareClient)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, "")
+	a.NotNil(shareClient)
 	a.NotZero(len(fileList))
 
 	// set up interceptor
@@ -112,14 +112,14 @@ func TestRemoveFilesUnderShare(t *testing.T) {
 
 func TestRemoveFilesUnderDirectory(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 	dirName := "dir1/dir2/dir3/"
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName)
-	a.NotNil(shareURL)
+	shareClient, shareName := createNewShare(a, fsc)
+	defer deleteShare(a, shareClient)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, dirName)
+	a.NotNil(shareClient)
 	a.NotZero(len(fileList))
 
 	// set up interceptor
@@ -169,18 +169,18 @@ func TestRemoveFilesUnderDirectory(t *testing.T) {
 // include flag limits the scope of the delete
 func TestRemoveFilesWithIncludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	defer deleteShare(a, shareURL)
-	a.NotNil(shareURL)
+	shareClient, shareName := createNewShare(a, fsc)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, "")
+	defer deleteShare(a, shareClient)
+	a.NotNil(shareClient)
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, filesToInclude)
+	scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, filesToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -203,18 +203,18 @@ func TestRemoveFilesWithIncludeFlag(t *testing.T) {
 // exclude flag limits the scope of the delete
 func TestRemoveFilesWithExcludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	defer deleteShare(a, shareURL)
-	a.NotNil(shareURL)
+	shareClient, shareName := createNewShare(a, fsc)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, "")
+	defer deleteShare(a, shareClient)
+	a.NotNil(shareClient)
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to exclude
 	filesToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, filesToExclude)
+	scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, filesToExclude)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -237,24 +237,24 @@ func TestRemoveFilesWithExcludeFlag(t *testing.T) {
 // include and exclude flag can work together to limit the scope of the delete
 func TestRemoveFilesWithIncludeAndExcludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	defer deleteShare(a, shareURL)
-	a.NotNil(shareURL)
+	shareClient, shareName := createNewShare(a, fsc)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, "")
+	defer deleteShare(a, shareClient)
+	a.NotNil(shareClient)
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, filesToInclude)
+	scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, filesToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special files that we wish to exclude
 	// note that the excluded files also match the include string
 	filesToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, filesToExclude)
+	scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, filesToExclude)
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -278,15 +278,15 @@ func TestRemoveFilesWithIncludeAndExcludeFlag(t *testing.T) {
 // note: list-of-files flag is used
 func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 	dirName := "megadir"
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	a.NotNil(shareURL)
-	defer deleteShare(a, shareURL)
-	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	filesUnderTopDir := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName+"/")
+	shareClient, shareName := createNewShare(a, fsc)
+	a.NotNil(shareClient)
+	defer deleteShare(a, shareClient)
+	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, "")
+	filesUnderTopDir := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, dirName+"/")
 	combined := append(individualFilesList, filesUnderTopDir...)
 	a.NotZero(len(combined))
 
@@ -346,25 +346,25 @@ func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 // include and exclude flag can work together to limit the scope of the delete
 func TestRemoveListOfFilesWithIncludeAndExclude(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 	dirName := "megadir"
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	a.NotNil(shareURL)
-	defer deleteShare(a, shareURL)
-	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName+"/")
+	shareClient, shareName := createNewShare(a, fsc)
+	a.NotNil(shareClient)
+	defer deleteShare(a, shareClient)
+	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, "")
+	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, dirName+"/")
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, filesToInclude)
+	scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, filesToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special files that we wish to exclude
 	// note that the excluded files also match the include string
 	filesToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, shareURL, filesToExclude)
+	scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, filesToExclude)
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -404,15 +404,15 @@ func TestRemoveListOfFilesWithIncludeAndExclude(t *testing.T) {
 
 func TestRemoveSingleFileWithFromTo(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
+	fsc := getFileServiceClient()
+	shareClient, shareName := createNewShare(a, fsc)
+	defer deleteShare(a, shareClient)
 
 	for _, fileName := range []string{"top/mid/low/singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the share with a single file
 		fileList := []string{fileName}
-		scenarioHelper{}.generateAzureFilesFromList(a, shareURL, fileList)
-		a.NotNil(shareURL)
+		scenarioHelper{}.generateShareFilesFromList(a, shareClient, fsc, fileList)
+		a.NotNil(shareClient)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -435,13 +435,13 @@ func TestRemoveSingleFileWithFromTo(t *testing.T) {
 
 func TestRemoveFilesUnderShareWithFromTo(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, "")
-	a.NotNil(shareURL)
+	shareClient, shareName := createNewShare(a, fsc)
+	defer deleteShare(a, shareClient)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, "")
+	a.NotNil(shareClient)
 	a.NotZero(len(fileList))
 
 	// set up interceptor
@@ -488,14 +488,14 @@ func TestRemoveFilesUnderShareWithFromTo(t *testing.T) {
 
 func TestRemoveFilesUnderDirectoryWithFromTo(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
+	fsc := getFileServiceClient()
 	dirName := "dir1/dir2/dir3/"
 
 	// set up the share with numerous files
-	shareURL, shareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, shareURL)
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareURL, dirName)
-	a.NotNil(shareURL)
+	shareClient, shareName := createNewShare(a, fsc)
+	defer deleteShare(a, shareClient)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, shareClient, fsc, dirName)
+	a.NotNil(shareClient)
 	a.NotZero(len(fileList))
 
 	// set up interceptor

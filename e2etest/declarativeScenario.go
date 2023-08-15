@@ -23,6 +23,7 @@ package e2etest
 import (
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"io"
 	"io/fs"
 	"net/url"
@@ -34,7 +35,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
@@ -248,7 +248,7 @@ func (s *scenario) assignSourceAndDest() {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{common.IffString(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
+			return &resourceLocal{common.Iff(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: accType}
 		case common.ELocation.Blob():
@@ -306,7 +306,7 @@ func (s *scenario) runAzCopy(logDirectory string) {
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
-		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.IffString(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.Iff(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		afterStart, s.chToStdin, logDirectory)
 
@@ -331,7 +331,7 @@ func (s *scenario) resumeAzCopy(logDir string) {
 	defer close(s.chToStdin)
 
 	r := newTestRunner()
-	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == azblob.PublicAccessNone && sas != "" {
+	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == nil && sas != "" {
 		r.flags["source-sas"] = sas
 	}
 	if sas := s.state.dest.getSAS(); sas != "" {
@@ -572,7 +572,7 @@ func (s *scenario) validateContent() {
 	}
 }
 
-func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]string) {
+func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]*string) {
 	if !s.p.preservePOSIXProperties {
 		return
 	}
@@ -592,7 +592,7 @@ func (s *scenario) validatePOSIXProperties(f *testObject, metadata map[string]st
 	s.a.Assert(f.verificationProperties.posixProperties.EquivalentToStatAdapter(adapter), equals(), "", "POSIX properties were mismatched")
 }
 
-func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
+func (s *scenario) validateSymlink(f *testObject, metadata map[string]*string) {
 	c := s.GetAsserter()
 
 	prepareSymlinkForComparison := func(oldName string) string {
@@ -600,12 +600,12 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 		case common.EFromTo.LocalBlob():
 			source := s.state.source.(*resourceLocal)
 
-			return strings.TrimPrefix(oldName, source.dirPath + common.OS_PATH_SEPARATOR)
+			return strings.TrimPrefix(oldName, source.dirPath+common.OS_PATH_SEPARATOR)
 		case common.EFromTo.BlobLocal():
 			dest := s.state.dest.(*resourceLocal)
 			_, _, _, _, addedDirAtDest := s.getTransferInfo()
 
-			return strings.TrimPrefix(oldName, path.Join(dest.dirPath, addedDirAtDest) + common.OS_PATH_SEPARATOR)
+			return strings.TrimPrefix(oldName, path.Join(dest.dirPath, addedDirAtDest)+common.OS_PATH_SEPARATOR)
 		case common.EFromTo.BlobBlob():
 			return oldName // no adjustment necessary
 		default:
@@ -624,7 +624,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 			symlinkDest := path.Join(dest.(*resourceLocal).dirPath, addedDirAtDest, f.name)
 			stat, err := os.Lstat(symlinkDest)
 			c.AssertNoErr(err)
-			c.Assert(stat.Mode() & os.ModeSymlink, equals(), os.ModeSymlink, "the file is not a symlink")
+			c.Assert(stat.Mode()&os.ModeSymlink, equals(), os.ModeSymlink, "the file is not a symlink")
 
 			oldName, err := os.Readlink(symlinkDest)
 			c.AssertNoErr(err)
@@ -632,7 +632,7 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 		case common.ELocation.Blob():
 			val, ok := metadata[common.POSIXSymlinkMeta]
 			c.Assert(ok, equals(), true)
-			c.Assert(val, equals(), "true")
+			c.Assert(*val, equals(), "true")
 
 			content := dest.downloadContent(c, downloadContentOptions{
 				resourceRelPath: fixSlashes(path.Join(addedDirAtDest, f.name), common.ELocation.Blob()),
@@ -649,20 +649,29 @@ func (s *scenario) validateSymlink(f *testObject, metadata map[string]string) {
 	}
 }
 
+func metadataWithProperCasing(original map[string]*string) map[string]*string {
+	result := make(map[string]*string)
+	for k, v := range original {
+		result[strings.ToLower(k)] = v
+	}
+	return result
+}
+
 // // Individual property validation routines
-func (s *scenario) validateMetadata(expected, actual map[string]string) {
-	for _,v := range common.AllLinuxProperties { // properties are evaluated elsewhere
+func (s *scenario) validateMetadata(expected, actual map[string]*string) {
+	for _, v := range common.AllLinuxProperties { // properties are evaluated elsewhere
 		delete(expected, v)
 		delete(actual, v)
 	}
 
 	s.a.Assert(len(actual), equals(), len(expected), "Both should have same number of metadata entries")
+	cased := metadataWithProperCasing(actual)
 	for key := range expected {
 		exValue := expected[key]
-		actualValue, ok := actual[key]
+		actualValue, ok := cased[key]
 		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", key))
 		if ok {
-			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, exValue, actualValue))
+			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, *exValue, *actualValue))
 		}
 	}
 }
@@ -679,7 +688,7 @@ func (s *scenario) validateADLSACLs(expected, actual *string) {
 	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Expected Gen 2 ACL: %s but found: %s", *expected, *actual))
 }
 
-func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
+func (s *scenario) validateCPKByScope(expected, actual *blob.CPKScopeInfo) {
 	if expected == nil && actual == nil {
 		return
 	}
@@ -691,7 +700,7 @@ func (s *scenario) validateCPKByScope(expected, actual *common.CpkScopeInfo) {
 		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionScope, actual.EncryptionScope))
 }
 
-func (s *scenario) validateCPKByValue(expected, actual *common.CpkInfo) {
+func (s *scenario) validateCPKByValue(expected, actual *blob.CPKInfo) {
 	if expected == nil && actual == nil {
 		return
 	}
@@ -700,8 +709,8 @@ func (s *scenario) validateCPKByValue(expected, actual *common.CpkInfo) {
 		return
 	}
 
-	s.a.Assert(expected.EncryptionKeySha256, equals(), actual.EncryptionKeySha256,
-		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionKeySha256, actual.EncryptionKeySha256))
+	s.a.Assert(expected.EncryptionKeySHA256, equals(), actual.EncryptionKeySHA256,
+		fmt.Sprintf("Expected encryption scope is: '%v' but found: '%v'", expected.EncryptionKeySHA256, actual.EncryptionKeySHA256))
 }
 
 // Validate blob tags
@@ -857,4 +866,8 @@ func (s *scenario) GetAsserter() asserter {
 
 func (s *scenario) GetDestination() resourceManager {
 	return s.state.dest
+}
+
+func (s *scenario) GetSource() resourceManager {
+	return s.state.source
 }

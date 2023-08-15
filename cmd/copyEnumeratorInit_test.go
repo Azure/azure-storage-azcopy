@@ -24,7 +24,6 @@ import (
 	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -32,22 +31,22 @@ import (
 // ============================================= BLOB TRAVERSER TESTS =======================================
 func TestValidateSourceDirThatExists(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	dirName := "source_dir"
-	createNewDirectoryStub(a, containerURL, dirName)
+	createNewDirectoryStub(a, cc, dirName)
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
@@ -63,21 +62,21 @@ func TestValidateSourceDirThatExists(t *testing.T) {
 
 func TestValidateSourceDirDoesNotExist(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	dirName := "source_dir/"
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
@@ -93,22 +92,22 @@ func TestValidateSourceDirDoesNotExist(t *testing.T) {
 
 func TestValidateSourceFileExists(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	fileName := "source_file"
-	_, fileName = createNewBlockBlob(a, containerURL, fileName)
+	_, fileName = createNewBlockBlob(a, cc, fileName)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
@@ -118,21 +117,21 @@ func TestValidateSourceFileExists(t *testing.T) {
 
 func TestValidateSourceFileDoesNotExist(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	fileName := "source_file"
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, fileName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, fileName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	cca := CookedCopyCmdArgs{StripTopDir: false, Recursive: false}
 	err := cca.validateSourceDir(blobTraverser)
@@ -142,21 +141,21 @@ func TestValidateSourceFileDoesNotExist(t *testing.T) {
 
 func TestValidateSourceWithWildCard(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	dirName := "source_dir_does_not_exist"
 	// set up to create blob traverser
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// List
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, dirName)
-	blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
+	rawBlobURLWithSAS := scenarioHelper{}.getBlobClientWithSAS(a, containerName, dirName).URL()
+	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
+	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), false)
 
 	// dir but recursive flag not set - fail
 	cca := CookedCopyCmdArgs{StripTopDir: true, Recursive: false}

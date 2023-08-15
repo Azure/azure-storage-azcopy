@@ -25,6 +25,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"math"
 	"strings"
 	"sync"
@@ -33,7 +35,6 @@ import (
 	gcpUtils "cloud.google.com/go/storage"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
@@ -56,7 +57,7 @@ type CredentialOpOptions struct {
 
 // callerMessage formats caller message prefix.
 func (o CredentialOpOptions) callerMessage() string {
-	return IffString(o.CallerID == "", o.CallerID, o.CallerID+" ")
+	return Iff(o.CallerID == "", o.CallerID, o.CallerID+" ")
 }
 
 // logInfo logs info, if LogInfo is specified in CredentialOpOptions.
@@ -91,32 +92,19 @@ func (o CredentialOpOptions) cancel() {
 	}
 }
 
-// CreateBlobCredential creates Blob credential according to credential info.
-func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) azblob.Credential {
-	credential := azblob.NewAnonymousCredential()
-
+// GetSourceBlobCredential gets the TokenCredential based on the cred info
+func GetSourceBlobCredential(credInfo CredentialInfo, options CredentialOpOptions) (azcore.TokenCredential, error) {
 	if credInfo.CredentialType.IsAzureOAuth() {
 		if credInfo.OAuthTokenInfo.IsEmpty() {
 			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
 		}
-
-		if credInfo.CredentialType == ECredentialType.MDOAuthToken() {
-			credInfo.OAuthTokenInfo.Resource = MDResource // token will instantly refresh with this
-		}
-
-		// Create TokenCredential with refresher.
-		if credInfo.SourceBlobToken != nil {
-			return credInfo.SourceBlobToken
+		if credInfo.S2SSourceTokenCredential != nil {
+			return credInfo.S2SSourceTokenCredential, nil
 		} else {
-			return azblob.NewTokenCredential(
-				credInfo.OAuthTokenInfo.AccessToken,
-				func(credential azblob.TokenCredential) time.Duration {
-					return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential, options)
-				})
+			return credInfo.OAuthTokenInfo.GetTokenCredential()
 		}
 	}
-
-	return credential
+	return nil, nil
 }
 
 // refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,
@@ -143,27 +131,6 @@ func refreshPolicyHalfOfExpiryWithin(token *adal.Token, options CredentialOpOpti
 	options.logInfo(fmt.Sprintf("next token refresh's wait duration: %v", waitDuration))
 
 	return waitDuration
-}
-
-func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azblob.TokenCredential, options CredentialOpOptions) time.Duration {
-	newToken, err := tokenInfo.Refresh(ctx)
-	if err != nil {
-		// Fail to get new token.
-		if _, ok := err.(adal.TokenRefreshError); ok && strings.Contains(err.Error(), "refresh token has expired") {
-			options.logError(fmt.Sprintf("failed to refresh token, OAuth refresh token has expired, please log in with azcopy login command again. (Error details: %v)", err))
-		} else {
-			options.logError(fmt.Sprintf("failed to refresh token, please check error details and try to log in with azcopy login command again. (Error details: %v)", err))
-		}
-		// Try to refresh again according to original token's info.
-		return refreshPolicyHalfOfExpiryWithin(&(tokenInfo.Token), options)
-	}
-
-	// Token has been refreshed successfully.
-	tokenCredential.SetToken(newToken.AccessToken)
-	options.logInfo(fmt.Sprintf("%v token refreshed successfully", time.Now().UTC()))
-
-	// Calculate wait duration, and schedule next refresh.
-	return refreshPolicyHalfOfExpiryWithin(newToken, options)
 }
 
 // CreateBlobFSCredential creates BlobFS credential according to credential info.
@@ -343,37 +310,34 @@ func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo Credential
 	}
 }
 
-// Default Encryption Algorithm Supported
-const EncryptionAlgorithmAES256 string = "AES256"
-
-func GetCpkInfo(cpkInfo bool) CpkInfo {
+func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
 	if !cpkInfo {
-		return CpkInfo{}
+		return nil
 	}
 
 	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
 	glcm := GetLifecycleMgr()
 	encryptionKey := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKey())
 	encryptionKeySHA256 := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
-	encryptionAlgorithmAES256 := EncryptionAlgorithmAES256
+	encryptionAlgorithmAES256 := blob.EncryptionAlgorithmTypeAES256
 
 	if encryptionKey == "" || encryptionKeySHA256 == "" {
 		glcm.Error("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
 			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")
 	}
 
-	return CpkInfo{
+	return &blob.CPKInfo{
 		EncryptionKey:       &encryptionKey,
-		EncryptionKeySha256: &encryptionKeySHA256,
+		EncryptionKeySHA256: &encryptionKeySHA256,
 		EncryptionAlgorithm: &encryptionAlgorithmAES256,
 	}
 }
 
-func GetCpkScopeInfo(cpkScopeInfo string) CpkScopeInfo {
+func GetCpkScopeInfo(cpkScopeInfo string) *blob.CPKScopeInfo {
 	if cpkScopeInfo == "" {
-		return CpkScopeInfo{}
+		return nil
 	} else {
-		return CpkScopeInfo{
+		return &blob.CPKScopeInfo{
 			EncryptionScope: &cpkScopeInfo,
 		}
 	}

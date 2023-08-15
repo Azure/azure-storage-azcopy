@@ -24,6 +24,10 @@ import (
 	"context"
 	"fmt"
 	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"net/url"
 	"strings"
 
@@ -32,8 +36,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -86,6 +88,9 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return err
 	}
 
+	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
+	options := createClientOptions(pipeline2.LogNone, to.Ptr(common.ETrailingDotOption.Disable()), &cookedArgs.resourceLocation)
+
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():
 		p, err := createBlobFSPipeline(ctx, credentialInfo, pipeline2.LogNone)
@@ -108,41 +113,31 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.Blob():
-		p, err := createBlobPipeline(ctx, credentialInfo, pipeline2.LogNone)
-		if err != nil {
-			return err
-		}
-		containerURL := azblob.NewContainerURL(cookedArgs.resourceURL, p)
-		if _, err = containerURL.Create(ctx, nil, azblob.PublicAccessNone); err != nil {
+		// TODO : Ensure it is a container URL here and fail early?
+		containerClient := common.CreateContainerClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		if _, err = containerClient.Create(ctx, nil); err != nil {
 			// print a nicer error message if container already exists
-			if storageErr, ok := err.(azblob.StorageError); ok {
-				if storageErr.ServiceCode() == azblob.ServiceCodeContainerAlreadyExists {
-					return fmt.Errorf("the container already exists")
-				} else if storageErr.ServiceCode() == azblob.ServiceCodeResourceNotFound {
-					return fmt.Errorf("please specify a valid container URL with account SAS")
-				}
+			if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
+				return fmt.Errorf("the container already exists")
+			} else if bloberror.HasCode(err, bloberror.ResourceNotFound) {
+				return fmt.Errorf("please specify a valid container URL with account SAS")
 			}
-
 			// print the ugly error if unexpected
 			return err
 		}
 	case common.ELocation.File():
-		// Note: trailing dot does not apply to share level operations, so we just set it to false always
-		p, err := createFilePipeline(ctx, credentialInfo, pipeline2.LogNone, common.ETrailingDotOption.Enable(), cookedArgs.resourceLocation)
-		if err != nil {
-			return err
+		shareClient := common.CreateShareClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		quota := &cookedArgs.quota
+		if quota != nil && *quota == 0 {
+			quota = nil
 		}
-		shareURL := azfile.NewShareURL(cookedArgs.resourceURL, p)
-		if _, err = shareURL.Create(ctx, nil, cookedArgs.quota); err != nil {
+		if _, err = shareClient.Create(ctx, &share.CreateOptions{Quota: quota}); err != nil {
 			// print a nicer error message if share already exists
-			if storageErr, ok := err.(azfile.StorageError); ok {
-				if storageErr.ServiceCode() == azfile.ServiceCodeShareAlreadyExists {
-					return fmt.Errorf("the file share already exists")
-				} else if storageErr.ServiceCode() == azfile.ServiceCodeResourceNotFound {
-					return fmt.Errorf("please specify a valid share URL with account SAS")
-				}
+			if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
+				return fmt.Errorf("the file share already exists")
+			} else if fileerror.HasCode(err, fileerror.ResourceNotFound) {
+				return fmt.Errorf("please specify a valid share URL with account SAS")
 			}
-
 			// print the ugly error if unexpected
 			return err
 		}

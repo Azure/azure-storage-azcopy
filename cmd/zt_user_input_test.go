@@ -50,8 +50,8 @@ func TestCPKEncryptionInputTest(t *testing.T) {
 		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
 	})
 
-	rawContainerURL := scenarioHelper{}.getContainerURL(a, "testcpkcontainer")
-	raw2 := getDefaultRawCopyInput(dirPath, rawContainerURL.String())
+	rawContainerURL := scenarioHelper{}.getContainerClient(a, "testcpkcontainer")
+	raw2 := getDefaultRawCopyInput(dirPath, rawContainerURL.URL())
 	raw2.recursive = true
 	raw2.cpkInfo = true
 

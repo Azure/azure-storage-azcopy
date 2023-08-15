@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -35,14 +36,14 @@ func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
-			f("filea", with{nameValueMetadata: map[string]string{"foo": "abc", "bar": "def"}}),
-			folder("fold1", with{nameValueMetadata: map[string]string{"other": "xyz"}}),
+			f("filea", with{nameValueMetadata: map[string]*string{"foo": to.Ptr("abc"), "bar": to.Ptr("def")}}),
+			folder("fold1", with{nameValueMetadata: map[string]*string{"other": to.Ptr("xyz")}}),
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
-	expectedMap := map[string]string{"foo": "abc", "bar": "def", "baz": "state=a;b"}
+	expectedMap := map[string]*string{"foo": to.Ptr("abc"), "bar": to.Ptr("def"), "baz": to.Ptr("state=a;b")}
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		metadata:  "foo=abc;bar=def;baz=state=a\\;b",

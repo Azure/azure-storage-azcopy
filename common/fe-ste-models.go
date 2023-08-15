@@ -25,6 +25,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"os"
 	"reflect"
@@ -36,8 +39,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -140,12 +141,12 @@ func (d *DeleteSnapshotsOption) Parse(s string) error {
 	return err
 }
 
-func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapshotsOptionType {
+func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() *blob.DeleteSnapshotsOptionType {
 	if d == EDeleteSnapshotsOption.None() {
-		return azblob.DeleteSnapshotsOptionNone
+		return nil
 	}
 
-	return azblob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+	return to.Ptr(blob.DeleteSnapshotsOptionType(strings.ToLower(d.String())))
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -204,11 +205,11 @@ func (p PermanentDeleteOption) String() string {
 	return enum.StringInt(p, reflect.TypeOf(p))
 }
 
-func (p PermanentDeleteOption) ToPermanentDeleteOptionType() azblob.BlobDeleteType {
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() *blob.DeleteType {
 	if p == EPermanentDeleteOption.None() {
-		return azblob.BlobDeleteNone
+		return nil
 	}
-	return azblob.BlobDeletePermanent
+	return to.Ptr(blob.DeleteTypePermanent)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -681,31 +682,31 @@ func (bt *BlobType) Parse(s string) error {
 	return err
 }
 
-func FromAzBlobType(bt azblob.BlobType) BlobType {
+func FromBlobType(bt blob.BlobType) BlobType {
 	switch bt {
-	case azblob.BlobBlockBlob:
+	case blob.BlobTypeBlockBlob:
 		return EBlobType.BlockBlob()
-	case azblob.BlobPageBlob:
+	case blob.BlobTypePageBlob:
 		return EBlobType.PageBlob()
-	case azblob.BlobAppendBlob:
+	case blob.BlobTypeAppendBlob:
 		return EBlobType.AppendBlob()
 	default:
 		return EBlobType.Detect()
 	}
 }
 
-// ToAzBlobType returns the equivalent azblob.BlobType for given string.
-func (bt *BlobType) ToAzBlobType() azblob.BlobType {
+// ToBlobType returns the equivalent blob.BlobType for given string.
+func (bt *BlobType) ToBlobType() blob.BlobType {
 	blobType := bt.String()
 	switch blobType {
-	case string(azblob.BlobBlockBlob):
-		return azblob.BlobBlockBlob
-	case string(azblob.BlobPageBlob):
-		return azblob.BlobPageBlob
-	case string(azblob.BlobAppendBlob):
-		return azblob.BlobAppendBlob
+	case string(blob.BlobTypeBlockBlob):
+		return blob.BlobTypeBlockBlob
+	case string(blob.BlobTypePageBlob):
+		return blob.BlobTypePageBlob
+	case string(blob.BlobTypeAppendBlob):
+		return blob.BlobTypeAppendBlob
 	default:
-		return azblob.BlobNone
+		return ""
 	}
 }
 
@@ -812,8 +813,8 @@ func (bbt *BlockBlobTier) Parse(s string) error {
 	return err
 }
 
-func (bbt BlockBlobTier) ToAccessTierType() azblob.AccessTierType {
-	return azblob.AccessTierType(bbt.String())
+func (bbt BlockBlobTier) ToAccessTierType() blob.AccessTier {
+	return blob.AccessTier(bbt.String())
 }
 
 func (bbt BlockBlobTier) MarshalJSON() ([]byte, error) {
@@ -857,8 +858,8 @@ func (pbt *PageBlobTier) Parse(s string) error {
 	return err
 }
 
-func (pbt PageBlobTier) ToAccessTierType() azblob.AccessTierType {
-	return azblob.AccessTierType(pbt.String())
+func (pbt PageBlobTier) ToAccessTierType() blob.AccessTier {
+	return blob.AccessTier(pbt.String())
 }
 
 func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
@@ -1054,8 +1055,8 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType      azblob.BlobType
-	BlobTier      azblob.AccessTierType
+	BlobType      blob.BlobType
+	BlobTier      blob.AccessTier
 	BlobVersionID string
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
 	BlobTags BlobTags
@@ -1068,7 +1069,7 @@ type CopyTransfer struct {
 // Metadata used in AzCopy.
 const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and tags
 
-type Metadata map[string]string
+type Metadata map[string]*string
 
 func (m Metadata) Clone() Metadata {
 	out := make(Metadata)
@@ -1078,26 +1079,6 @@ func (m Metadata) Clone() Metadata {
 	}
 
 	return out
-}
-
-// ToAzBlobMetadata converts metadata to azblob's metadata.
-func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
-	return azblob.Metadata(m)
-}
-
-// ToAzFileMetadata converts metadata to azfile's metadata.
-func (m Metadata) ToAzFileMetadata() azfile.Metadata {
-	return azfile.Metadata(m)
-}
-
-// FromAzBlobMetadataToCommonMetadata converts azblob's metadata to common metadata.
-func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
-	return Metadata(m)
-}
-
-// FromAzFileMetadataToCommonMetadata converts azfile's metadata to common metadata.
-func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
-	return Metadata(m)
 }
 
 // Marshal marshals metadata to string.
@@ -1156,7 +1137,8 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 						return Metadata{}, errors.New("metadata names must conform to C# naming rules (https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata#metadata-names)")
 					}
 
-					metadataMap[cKey] = cVal
+					finalValue := cVal
+					metadataMap[cKey] = &finalValue
 					cKey = ""
 					cVal = ""
 					keySet = false
@@ -1172,7 +1154,8 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 		}
 
 		if cKey != "" {
-			metadataMap[cKey] = cVal
+			finalValue := cVal
+			metadataMap[cKey] = &finalValue
 		}
 	}
 	return metadataMap, nil
@@ -1215,8 +1198,8 @@ func isValidMetadataKeyFirstChar(c byte) bool {
 }
 
 func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
-	retainedMetadata = make(map[string]string)
-	excludedMetadata = make(map[string]string)
+	retainedMetadata = make(map[string]*string)
+	excludedMetadata = make(map[string]*string)
 	for k, v := range m {
 		if isValidMetadataKey(k) {
 			retainedMetadata[k] = v
@@ -1231,16 +1214,6 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 
 // BlobTags is a map of key-value pair
 type BlobTags map[string]string
-
-// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
-func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
-	return azblob.BlobTagsMap(bt)
-}
-
-//// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-// func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
-//	return BlobTags(azbt)
-// }
 
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
@@ -1283,7 +1256,7 @@ var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 // Note: To keep first version simple, whenever collision is found during key resolving, error will be returned.
 // This can be further improved once any user feedback get.
 func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
-	resolvedMetadata = make(map[string]string)
+	resolvedMetadata = make(map[string]*string)
 
 	hasCollision := func(name string) bool {
 		_, hasCollisionToOrgNames := m[name]
@@ -1293,18 +1266,22 @@ func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
 	}
 
 	for k, v := range m {
+		value := v
+		valueString := &value
+		key := k
+		keyString := &key
 		if !isValidMetadataKey(k) {
 			validKey := metadataKeyInvalidCharRegex.ReplaceAllString(k, "_")
 			renamedKey := metadataRenamedKeyPrefix + validKey
 			keyForRenamedOriginalKey := metadataKeyForRenamedOriginalKeyPrefix + validKey
 			if hasCollision(renamedKey) || hasCollision(keyForRenamedOriginalKey) {
-				return nil, fmt.Errorf(metadataKeyRenameErrStr, k)
+				return nil, fmt.Errorf(metadataKeyRenameErrStr, *keyString)
 			}
 
-			resolvedMetadata[renamedKey] = v
-			resolvedMetadata[keyForRenamedOriginalKey] = k
+			resolvedMetadata[renamedKey] = *valueString
+			resolvedMetadata[keyForRenamedOriginalKey] = keyString
 		} else {
-			resolvedMetadata[k] = v
+			resolvedMetadata[k] = *valueString
 		}
 	}
 
@@ -1335,27 +1312,27 @@ type ResourceHTTPHeaders struct {
 	CacheControl       string
 }
 
-// ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
-func (h ResourceHTTPHeaders) ToAzBlobHTTPHeaders() azblob.BlobHTTPHeaders {
-	return azblob.BlobHTTPHeaders{
-		ContentType:        h.ContentType,
-		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+// ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's HTTPHeaders.
+func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
+	return blob.HTTPHeaders{
+		BlobContentType:        &h.ContentType,
+		BlobContentMD5:         h.ContentMD5,
+		BlobContentEncoding:    &h.ContentEncoding,
+		BlobContentLanguage:    &h.ContentLanguage,
+		BlobContentDisposition: &h.ContentDisposition,
+		BlobCacheControl:       &h.CacheControl,
 	}
 }
 
-// ToAzFileHTTPHeaders converts ResourceHTTPHeaders to azfile's FileHTTPHeaders.
-func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
-	return azfile.FileHTTPHeaders{
-		ContentType:        h.ContentType,
+// ToFileHTTPHeaders converts ResourceHTTPHeaders to sharefile's HTTPHeaders.
+func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
+	return sharefile.HTTPHeaders{
+		ContentType:        &h.ContentType,
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+		ContentEncoding:    &h.ContentEncoding,
+		ContentLanguage:    &h.ContentLanguage,
+		ContentDisposition: &h.ContentDisposition,
+		CacheControl:       &h.CacheControl,
 	}
 }
 
@@ -1581,63 +1558,6 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	}
 }
 
-////////////////////////////////////////////////////////////////
-
-// CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
-// If not specified, encryption is performed with the default account encryption scope.
-// For more information, see Encryption at Rest for Azure Storage Services.
-type CpkScopeInfo struct {
-	EncryptionScope *string
-}
-
-func (csi CpkScopeInfo) Marshal() (string, error) {
-	result, err := json.Marshal(csi)
-	if err != nil {
-		return "", err
-	}
-	return string(result), nil
-}
-
-type CpkInfo struct {
-	// The algorithm used to produce the encryption key hash.
-	// Currently, the only accepted value is "AES256".
-	// Must be provided if the x-ms-encryption-key header is provided.
-	EncryptionAlgorithm *string
-
-	// Optional. Specifies the encryption key to use to encrypt the data provided in the request.
-	// If not specified, encryption is performed with the root account encryption key.
-	EncryptionKey *string
-
-	// The SHA-256 hash of the provided encryption key.
-	// Must be provided if the x-ms-encryption-key header is provided.
-	EncryptionKeySha256 *string
-}
-
-func (csi CpkInfo) Empty() bool {
-	return csi.EncryptionKey == nil || csi.EncryptionKeySha256 == nil
-}
-
-func (csi CpkInfo) Marshal() (string, error) {
-	result, err := json.Marshal(csi)
-	if err != nil {
-		return "", err
-	}
-	return string(result), nil
-}
-
-func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
-	if cpkInfo.Empty() && cpkScopeInfo.EncryptionScope == nil {
-		return azblob.ClientProvidedKeyOptions{}
-	}
-
-	return azblob.ClientProvidedKeyOptions{
-		EncryptionKey:       cpkInfo.EncryptionKey,
-		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
-		EncryptionKeySha256: cpkInfo.EncryptionKeySha256,
-		EncryptionScope:     cpkScopeInfo.EncryptionScope,
-	}
-}
-
 type CpkOptions struct {
 	// Optional flag to encrypt user data with user provided key.
 	// Key is provide in the REST request itself
@@ -1652,10 +1572,20 @@ type CpkOptions struct {
 	IsSourceEncrypted bool
 }
 
-func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
-	_cpkInfo := GetCpkInfo(options.CpkInfo)
-	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
-	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
+func (options CpkOptions) GetCPKInfo() *blob.CPKInfo {
+	if !options.IsSourceEncrypted {
+		return nil
+	} else {
+		return GetCpkInfo(options.CpkInfo)
+	}
+}
+
+func (options CpkOptions) GetCPKScopeInfo() *blob.CPKScopeInfo {
+	if !options.IsSourceEncrypted {
+		return nil
+	} else {
+		return GetCpkScopeInfo(options.CpkScopeInfo)
+	}
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -1701,14 +1631,14 @@ func (rpt RehydratePriorityType) String() string {
 	return enum.StringInt(rpt, reflect.TypeOf(rpt))
 }
 
-func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePriorityType {
+func (rpt RehydratePriorityType) ToRehydratePriorityType() blob.RehydratePriority {
 	switch rpt {
 	case ERehydratePriorityType.None(), ERehydratePriorityType.Standard():
-		return azblob.RehydratePriorityStandard
+		return blob.RehydratePriorityStandard
 	case ERehydratePriorityType.High():
-		return azblob.RehydratePriorityHigh
+		return blob.RehydratePriorityHigh
 	default:
-		return azblob.RehydratePriorityStandard
+		return blob.RehydratePriorityStandard
 	}
 }
 

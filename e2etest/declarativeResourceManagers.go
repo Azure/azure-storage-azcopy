@@ -21,6 +21,10 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"net/url"
 	"os"
@@ -29,8 +33,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 func assertNoStripTopDir(stripTopDir bool) {
@@ -46,13 +48,13 @@ type downloadContentOptions struct {
 }
 
 type downloadBlobContentOptions struct {
-	containerURL azblob.ContainerURL
-	cpkInfo      common.CpkInfo
-	cpkScopeInfo common.CpkScopeInfo
+	containerClient *container.Client
+	cpkInfo         *blob.CPKInfo
+	cpkScopeInfo *blob.CPKScopeInfo
 }
 
 type downloadFileContentOptions struct {
-	shareURL azfile.ShareURL
+	shareClient *share.Client
 }
 
 // TODO: any better names for this?
@@ -121,8 +123,8 @@ func (r *resourceLocal) createFiles(a asserter, s *scenario, isSource bool) {
 	scenarioHelper{}.generateLocalFilesFromList(a, &generateLocalFilesFromList{
 		dirPath: r.dirPath,
 		generateFromListOptions: generateFromListOptions{
-			fs:          s.fs.allObjects(isSource),
-			defaultSize: s.fs.defaultSize,
+			fs:                      s.fs.allObjects(isSource),
+			defaultSize:             s.fs.defaultSize,
 			preservePosixProperties: s.p.preservePOSIXProperties,
 		},
 	})
@@ -204,15 +206,17 @@ func (r *resourceLocal) createSourceSnapshot(a asserter) {
 // /////
 
 type resourceBlobContainer struct {
-	accountType  AccountType
-	containerURL *azblob.ContainerURL
-	rawSasURL    *url.URL
+	accountType     AccountType
+	containerClient *container.Client
+	rawSasURL       *url.URL
 }
 
 func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 	cu, _, rawSasURL := TestResourceFactory{}.CreateNewContainer(a, s.GetTestFiles().sourcePublic, r.accountType)
-	r.containerURL = &cu
-	r.rawSasURL = &rawSasURL
+	r.containerClient = cu
+	rawURL, err := url.Parse(rawSasURL)
+	a.AssertNoErr(err)
+	r.rawSasURL = rawURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
 		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
 	}
@@ -220,8 +224,8 @@ func (r *resourceBlobContainer) createLocation(a asserter, s *scenario) {
 
 func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bool) {
 	options := &generateBlobFromListOptions{
-		rawSASURL:    *r.rawSasURL,
-		containerURL: *r.containerURL,
+		rawSASURL:       *r.rawSasURL,
+		containerClient: r.containerClient,
 		generateFromListOptions: generateFromListOptions{
 			fs:          s.fs.allObjects(isSource),
 			defaultSize: s.fs.defaultSize,
@@ -239,7 +243,8 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 
 	// set root ACL
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
-		containerURLParts := azblob.NewBlobURLParts(r.containerURL.URL())
+		containerURLParts, err := blob.ParseURL(r.containerClient.URL())
+		a.AssertNoErr(err)
 
 		for _,v := range options.generateFromListOptions.fs {
 			if v.name == "" {
@@ -262,7 +267,7 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 
 func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
 	options := &generateBlobFromListOptions{
-		containerURL: *r.containerURL,
+		containerClient: r.containerClient,
 		generateFromListOptions: generateFromListOptions{
 			fs:          []*testObject{o},
 			defaultSize: s.fs.defaultSize,
@@ -278,32 +283,32 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 }
 
 func (r *resourceBlobContainer) cleanup(a asserter) {
-	if r.containerURL != nil {
-		deleteContainer(a, *r.containerURL)
+	if r.containerClient != nil {
+		deleteContainer(a, r.containerClient)
 	}
 }
 
 func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFile string) string {
-	var uri url.URL
+	var uri string
 	if withSas {
-		uri = *r.rawSasURL
+		uri = r.rawSasURL.String()
 	} else {
-		uri = r.containerURL.URL()
+		uri = r.containerClient.URL()
 	}
 
 	if withFile != "" {
-		bURLParts := azblob.NewBlobURLParts(uri)
+		bURLParts, _ := blob.ParseURL(uri)
 
 		bURLParts.BlobName = withFile
 
-		uri = bURLParts.URL()
+		uri = bURLParts.String()
 	}
 
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
-		uri.Host = strings.ReplaceAll(uri.Host, "blob", "dfs")
+		uri = strings.ReplaceAll(uri, "blob", "dfs")
 	}
 
-	return uri.String()
+	return uri
 }
 
 func (r *resourceBlobContainer) getSAS() string {
@@ -321,11 +326,12 @@ func (r *resourceBlobContainer) appendSourcePath(filePath string, useSas bool) {
 }
 
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
-	objects := scenarioHelper{}.enumerateContainerBlobProperties(a, *r.containerURL)
+	objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient)
 
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
-		urlParts := azblob.NewBlobURLParts(r.containerURL.URL())
-		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("")
+		urlParts, err := blob.ParseURL(r.containerClient.URL())
+		a.AssertNoErr(err)
+		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("/")
 
 		ACL, err := fsURL.GetAccessControl(ctx)
 		if stgErr, ok := err.(azbfs.StorageError); ok {
@@ -345,7 +351,7 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 }
 
 func (r *resourceBlobContainer) downloadContent(a asserter, options downloadContentOptions) []byte {
-	options.containerURL = *r.containerURL
+	options.containerClient = r.containerClient
 	return scenarioHelper{}.downloadBlobContent(a, options)
 }
 
@@ -357,15 +363,17 @@ func (r *resourceBlobContainer) createSourceSnapshot(a asserter) {
 
 type resourceAzureFileShare struct {
 	accountType AccountType
-	shareURL    *azfile.ShareURL // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
+	shareClient *share.Client // // TODO: Either eliminate SDK URLs from ResourceManager or provide means to edit it (File SDK) for which pipeline is required
 	rawSasURL   *url.URL
 	snapshotID  string // optional, use a snapshot as the location instead
 }
 
 func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 	su, _, rawSasURL := TestResourceFactory{}.CreateNewFileShare(a, EAccountType.Standard())
-	r.shareURL = &su
-	r.rawSasURL = &rawSasURL
+	r.shareClient = su
+	rawURL, err := url.Parse(rawSasURL)
+	a.AssertNoErr(err)
+	r.rawSasURL = rawURL
 	if s.GetModifiableParameters().relativeSourcePath != "" {
 		r.appendSourcePath(s.GetModifiableParameters().relativeSourcePath, true)
 	}
@@ -373,7 +381,7 @@ func (r *resourceAzureFileShare) createLocation(a asserter, s *scenario) {
 
 func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource bool) {
 	scenarioHelper{}.generateAzureFilesFromList(a, &generateAzureFilesFromListOptions{
-		shareURL:    *r.shareURL,
+		shareClient: r.shareClient,
 		fileList:    s.fs.allObjects(isSource),
 		defaultSize: s.fs.defaultSize,
 	})
@@ -381,30 +389,30 @@ func (r *resourceAzureFileShare) createFiles(a asserter, s *scenario, isSource b
 
 func (r *resourceAzureFileShare) createFile(a asserter, o *testObject, s *scenario, isSource bool) {
 	scenarioHelper{}.generateAzureFilesFromList(a, &generateAzureFilesFromListOptions{
-		shareURL:    *r.shareURL,
+		shareClient: r.shareClient,
 		fileList:    []*testObject{o},
 		defaultSize: s.fs.defaultSize,
 	})
 }
 
 func (r *resourceAzureFileShare) cleanup(a asserter) {
-	if r.shareURL != nil {
-		deleteShare(a, *r.shareURL)
+	if r.shareClient != nil {
+		deleteShare(a, r.shareClient)
 	}
 }
 
 func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFile string) string {
 	assertNoStripTopDir(stripTopDir)
-	var param url.URL
+	var uri string
 	if withSas {
-		param = *r.rawSasURL
+		uri = r.rawSasURL.String()
 	} else {
-		param = r.shareURL.URL()
+		uri = r.shareClient.URL()
 	}
 
 	// append the snapshot ID if present
 	if r.snapshotID != "" || withFile != "" {
-		parts := azfile.NewFileURLParts(param)
+		parts, _ := file.ParseURL(uri)
 		if r.snapshotID != "" {
 			parts.ShareSnapshot = r.snapshotID
 		}
@@ -412,10 +420,10 @@ func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFi
 		if withFile != "" {
 			parts.DirectoryOrFilePath = withFile
 		}
-		param = parts.URL()
+		uri = parts.String()
 	}
 
-	return param.String()
+	return uri
 }
 
 func (r *resourceAzureFileShare) getSAS() string {
@@ -433,20 +441,20 @@ func (r *resourceAzureFileShare) appendSourcePath(filePath string, useSas bool) 
 }
 
 func (r *resourceAzureFileShare) getAllProperties(a asserter) map[string]*objectProperties {
-	return scenarioHelper{}.enumerateShareFileProperties(a, *r.shareURL)
+	return scenarioHelper{}.enumerateShareFileProperties(a, r.shareClient)
 }
 
 func (r *resourceAzureFileShare) downloadContent(a asserter, options downloadContentOptions) []byte {
 	return scenarioHelper{}.downloadFileContent(a, downloadContentOptions{
 		resourceRelPath: options.resourceRelPath,
 		downloadFileContentOptions: downloadFileContentOptions{
-			shareURL: *r.shareURL,
+			shareClient: r.shareClient,
 		},
 	})
 }
 
 func (r *resourceAzureFileShare) createSourceSnapshot(a asserter) {
-	r.snapshotID = TestResourceFactory{}.CreateNewFileShareSnapshot(a, *r.shareURL)
+	r.snapshotID = TestResourceFactory{}.CreateNewFileShareSnapshot(a, r.shareClient)
 }
 
 // //

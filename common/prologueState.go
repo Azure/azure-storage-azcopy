@@ -32,7 +32,7 @@ type PrologueState struct {
 	LeadingBytes []byte
 }
 
-func (ps PrologueState) GetInferredContentType(jptm cutdownJptm) string {
+func (ps PrologueState) GetInferredContentType(jptm cutdownJptm) *string {
 	headers, _, _, _ := jptm.ResourceDstData(ps.LeadingBytes)
-	return headers.ContentType
+	return &headers.ContentType
 }

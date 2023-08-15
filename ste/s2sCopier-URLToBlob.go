@@ -22,13 +22,13 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var LogBlobConversionOnce = &sync.Once{}
@@ -46,11 +46,13 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 			return nil, err
 		}
 
-		bURLParts := azblob.NewBlobURLParts(*u)
+		bURLParts, err := blob.ParseURL(u.String())
+		if err != nil {
+			return nil, err
+		}
 
 		bURLParts.Host = strings.Replace(bURLParts.Host, ".dfs", ".blob", 1)
-		newDest := bURLParts.URL()
-		destination = newDest.String()
+		destination = bURLParts.String()
 
 		LogBlobConversionOnce.Do(func() {
 			common.GetLifecycleMgr().Info("Switching to blob endpoint to write to destination account. There are some limitations when writing between blob/dfs endpoints. " +
@@ -58,12 +60,12 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 		})
 	}
 
-	var targetBlobType azblob.BlobType
+	var targetBlobType blob.BlobType
 
 	blobTypeOverride := jptm.BlobTypeOverride() // BlobTypeOverride is copy info specified by user
 
 	if blobTypeOverride != common.EBlobType.Detect() { // If a blob type is explicitly specified, determine it.
-		targetBlobType = blobTypeOverride.ToAzBlobType()
+		targetBlobType = blobTypeOverride.ToBlobType()
 
 		if jptm.ShouldLog(pipeline.LogInfo) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
@@ -85,10 +87,10 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 
 			fileName := srcURL.Path
 
-			targetBlobType = inferBlobType(fileName, azblob.BlobBlockBlob)
+			targetBlobType = inferBlobType(fileName, blob.BlobTypeBlockBlob)
 		}
 
-		if targetBlobType != azblob.BlobBlockBlob {
+		if targetBlobType != blob.BlobTypeBlockBlob {
 			jptm.LogTransferInfo(pipeline.LogInfo, srcInfoProvider.RawSource(), destination, fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source, targetBlobType))
 		}
 	}
@@ -102,26 +104,26 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 	}
 
 	if jptm.Info().IsFolderPropertiesTransfer() {
-		return newBlobFolderSender(jptm, destination, p, pacer, srcInfoProvider)
+		return newBlobFolderSender(jptm, destination, srcInfoProvider)
 	} else if jptm.Info().EntityType == common.EEntityType.Symlink() {
-		return newBlobSymlinkSender(jptm, destination, p, pacer, srcInfoProvider)
+		return newBlobSymlinkSender(jptm, destination, srcInfoProvider)
 	}
 
 	switch targetBlobType {
-	case azblob.BlobBlockBlob:
-		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
-	case azblob.BlobAppendBlob:
-		return newURLToAppendBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
-	case azblob.BlobPageBlob:
-		return newURLToPageBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
+	case blob.BlobTypeBlockBlob:
+		return newURLToBlockBlobCopier(jptm, destination, pacer, srcInfoProvider)
+	case blob.BlobTypeAppendBlob:
+		return newURLToAppendBlobCopier(jptm, destination, pacer, srcInfoProvider)
+	case blob.BlobTypePageBlob:
+		return newURLToPageBlobCopier(jptm, destination, pacer, srcInfoProvider)
 	default:
 		if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
 				pipeline.LogDebug,
 				srcInfoProvider.RawSource(),
 				destination,
-				fmt.Sprintf("BlobType %q is used for destination blob by default.", azblob.BlobBlockBlob))
+				fmt.Sprintf("BlobType %q is used for destination blob by default.", blob.BlobTypeBlockBlob))
 		}
-		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
+		return newURLToBlockBlobCopier(jptm, destination, pacer, srcInfoProvider)
 	}
 }

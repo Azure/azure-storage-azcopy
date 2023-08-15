@@ -21,9 +21,13 @@
 package e2etest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
 	"strconv"
@@ -129,7 +133,7 @@ type ManagedDiskConfig struct {
 	SubscriptionID    string
 	ResourceGroupName string
 	DiskName          string
-	oauth             *adal.ServicePrincipalToken
+	oauth             *azcore.AccessToken
 }
 
 func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDiskConfig, error) {
@@ -155,7 +159,7 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		return nil, fmt.Errorf("failed to parse config") // Outputting the error may reveal semi-sensitive info like subscription ID
 	}
 
-	out.oauth, err = gim.GetOAuthCredential("https://management.core.windows.net/")
+	out.oauth, err = gim.GetOAuthCredential("https://management.core.windows.net/.default")
 	if err != nil {
 		return nil, fmt.Errorf("failed to refresh oauth token: %w", err)
 	}
@@ -163,30 +167,22 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 	return &out, nil
 }
 
-func (gim GlobalInputManager) GetOAuthCredential(resource string) (*adal.ServicePrincipalToken, error) {
-	tenant, appID, clientSecret := gim.GetServicePrincipalAuth()
+func (gim GlobalInputManager) GetOAuthCredential(resource string) (*azcore.AccessToken, error) {
+	tenantID, applicationID, secret := gim.GetServicePrincipalAuth()
+	activeDirectoryEndpoint := "https://login.microsoftonline.com"
 
-	var spt *adal.ServicePrincipalToken
-
-	oauthConfig, err := adal.NewOAuthConfig("https://login.microsoftonline.com", tenant)
+	spn, err := azidentity.NewClientSecretCredential(tenantID, applicationID, secret, &azidentity.ClientSecretCredentialOptions{
+		ClientOptions: azcore.ClientOptions{
+			Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: activeDirectoryEndpoint},
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	spt, err = adal.NewServicePrincipalToken( // initialize the token
-		*oauthConfig,
-		appID,
-		clientSecret,
-		resource,
-	)
-	if err != nil {
-		return nil, err
-	}
+	scopes := []string{resource}
 
-	err = spt.Refresh() // grab a token and return it.
-	if err != nil {
-		return nil, err
-	}
+	accessToken, err := spn.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes})
 
-	return spt, nil
+	return &accessToken, nil
 }

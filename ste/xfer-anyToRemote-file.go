@@ -25,7 +25,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"hash"
 	"net/http"
 	"net/url"
@@ -36,6 +36,12 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+// IBlobClient is an interface to allow ValidateTier to accept any type of client
+type IBlobClient interface {
+	URL() string
+	GetAccountInfo(ctx context.Context, o *blob.GetAccountInfoOptions) (blob.GetAccountInfoResponse, error)
+}
 
 // This code for blob tier safety is _not_ safe for multiple jobs at once.
 // That's alright, but it's good to know on the off chance.
@@ -53,9 +59,9 @@ var tierSetPossibleFail bool
 var getDestAccountInfo sync.Once
 var getDestAccountInfoError error
 
-func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
+func prepareDestAccountInfo(client IBlobClient, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
 	getDestAccountInfo.Do(func() {
-		infoResp, err := bURL.GetAccountInfo(ctx)
+		infoResp, err := client.GetAccountInfo(ctx, nil)
 		if err != nil {
 			// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
 			// UNLESS the user is using OAuth. In which case, the account owner can still get the info.
@@ -71,8 +77,10 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 				destAccountKind = "failget"
 			}
 		} else {
-			destAccountSKU = string(infoResp.SkuName())
-			destAccountKind = string(infoResp.AccountKind())
+			sku := infoResp.SKUName
+			kind := infoResp.AccountKind
+			destAccountSKU = string(*sku)
+			destAccountKind = string(*kind)
 		}
 	})
 
@@ -82,7 +90,7 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 }
 
 // // TODO: Infer availability based upon blob size as well, for premium page blobs.
-func BlobTierAllowed(destTier azblob.AccessTierType) bool {
+func BlobTierAllowed(destTier blob.AccessTier) bool {
 	// If we failed to get the account info, just return true.
 	// This is because we can't infer whether it's possible or not, and the setTier operation could possibly succeed (or fail)
 	if tierSetPossibleFail {
@@ -116,22 +124,25 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
-		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || destTier == azblob.AccessTierHot
+		return destTier == blob.AccessTierArchive || destTier == blob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || destTier == blob.AccessTierHot
 	}
 }
 
-func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context, performQuietly bool) (isValid bool) {
+func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, client IBlobClient, ctx context.Context, performQuietly bool) (isValid bool) {
 
-	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
+	if jptm.IsLive() && blobTier != "" {
 
 		// Let's check if we can confirm we'll be able to check the destination blob's account info.
 		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
 		// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
 		// User delegation SAS is the same as OAuth
-		destParts := azblob.NewBlobURLParts(blobURL.URL())
-		mustGet := destParts.SAS.Encode() != "" && destParts.SAS.SignedTid() == ""
+		destParts, err := blob.ParseURL(client.URL())
+		if err != nil {
+			return false
+		}
+		mustGet := destParts.SAS.Encode() != "" && destParts.SAS.SignedTID() == ""
 
-		prepareDestAccountInfo(blobURL, jptm, ctx, mustGet)
+		prepareDestAccountInfo(client, jptm, ctx, mustGet)
 		tierAvailable := BlobTierAllowed(blobTier)
 
 		if tierAvailable {
@@ -558,9 +569,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		if shouldCheckLength {
 			if err != nil {
 				wrapped := fmt.Errorf("Could not read destination length. %w", err)
-				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+				jptm.FailActiveSend(common.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
 			} else if destLength != jptm.Info().SourceSize {
-				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+				jptm.FailActiveSend(common.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
 			}
 		}
 	}

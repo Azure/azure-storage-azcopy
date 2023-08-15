@@ -1,33 +1,33 @@
 package ste
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
 	"strings"
 	"time"
 )
 
 type blobFolderSender struct {
-	destination     azblob.BlockBlobURL // We'll treat all folders as block blobs
-	jptm            IJobPartTransferMgr
-	sip             ISourceInfoProvider
-	metadataToApply azblob.Metadata
-	headersToAppply azblob.BlobHTTPHeaders
-	blobTagsToApply azblob.BlobTagsMap
-	cpkToApply      azblob.ClientProvidedKeyOptions
+	destinationClient *blockblob.Client // We'll treat all folders as block blobs
+	jptm              IJobPartTransferMgr
+	sip               ISourceInfoProvider
+	metadataToApply common.Metadata
+	headersToApply  blob.HTTPHeaders
+	blobTagsToApply common.BlobTags
 }
 
-func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	destURL, err := url.Parse(destination)
-	if err != nil {
-		return nil, err
-	}
+func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
+	destinationClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
-	destBlockBlobURL := azblob.NewBlockBlobURL(*destURL, p)
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -36,13 +36,12 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 
 	var out sender
 	fsend := blobFolderSender{
-		jptm:            jptm,
-		sip:             sip,
-		destination:     destBlockBlobURL,
-		metadataToApply: props.SrcMetadata.Clone().ToAzBlobMetadata(), // We're going to modify it, so we should clone it.
-		headersToAppply: props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		blobTagsToApply: props.SrcBlobTags.ToAzBlobTagsMap(),
-		cpkToApply:      common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo()),
+		jptm:              jptm,
+		sip:               sip,
+		destinationClient: destinationClient,
+		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
+		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		blobTagsToApply:   props.SrcBlobTags,
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
@@ -55,11 +54,18 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, p pipelin
 }
 
 func (b *blobFolderSender) setDatalakeACLs() {
-	bURLParts := azblob.NewBlobURLParts(b.destination.URL())
-	bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
-	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+	blobURLParts, err := blob.ParseURL(b.destinationClient.URL())
+	if err != nil {
+		b.jptm.FailActiveSend("Parsing blob URL", err)
+	}
+	blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
+	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
+	dfsURL, err := url.Parse(blobURLParts.String())
+	if err != nil {
+		b.jptm.FailActiveSend("Parsing datalake URL", err)
+	}
 	// todo: jank, and violates the principle of interfaces
-	fileURL := azbfs.NewFileURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+	fileURL := azbfs.NewFileURL(*dfsURL, b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
 
 	// We know for a fact our source is a "blob".
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
@@ -83,19 +89,24 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 
 	// do not set folder flag as it's invalid to modify a folder with
 	delete(b.metadataToApply, "hdi_isfolder")
+	delete(b.metadataToApply, "Hdi_isfolder")
+	// TODO : Here should we undo delete "Hdi_isfolder" too?
 
 	// SetMetadata can set CPK if it wasn't specified prior. This is not a "full" overwrite, but a best-effort overwrite.
-	_, err = b.destination.SetMetadata(b.jptm.Context(), b.metadataToApply, azblob.BlobAccessConditions{}, b.cpkToApply)
+	_, err = b.destinationClient.SetMetadata(b.jptm.Context(), b.metadataToApply,
+		&blob.SetMetadataOptions{
+			CPKInfo:      b.jptm.CpkInfo(),
+			CPKScopeInfo: b.jptm.CpkScopeInfo(),
+		})
 	if err != nil {
 		return "Set Metadata", fmt.Errorf("A best-effort overwrite was attempted; CPK errors cannot be handled when the blob cannot be deleted.\n%w", err)
 	}
-
-	// blob API not yet supported for HNS account error; re-enable later.
-	//_, err = b.destination.SetTags(b.jptm.Context(), nil, nil, nil, b.blobTagsToApply)
+	//// blob API not yet supported for HNS account error; re-enable later.
+	//_, err = b.destinationClient.SetTags(b.jptm.Context(), b.blobTagsToApply, nil)
 	//if err != nil {
 	//	return "Set Blob Tags", err
 	//}
-	_, err = b.destination.SetHTTPHeaders(b.jptm.Context(), b.headersToAppply, azblob.BlobAccessConditions{})
+	_, err = b.destinationClient.SetHTTPHeaders(b.jptm.Context(), b.headersToApply, nil)
 	if err != nil {
 		return "Set HTTP Headers", err
 	}
@@ -109,11 +120,18 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 }
 
 func (b *blobFolderSender) SetContainerACL() error {
-	bURLParts := azblob.NewBlobURLParts(b.destination.URL())
-	bURLParts.ContainerName += "/" // Container-level ACLs NEED a /
-	bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+	blobURLParts, err := blob.ParseURL(b.destinationClient.URL())
+	if err != nil {
+		b.jptm.FailActiveSend("Parsing blob URL", err)
+	}
+	blobURLParts.ContainerName += "/" // container level perms MUST have a /
+	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
+	dfsURL, err := url.Parse(blobURLParts.String())
+	if err != nil {
+		b.jptm.FailActiveSend("Parsing datalake URL", err)
+	}
 	// todo: jank, and violates the principle of interfaces
-	rootURL := azbfs.NewFileSystemURL(bURLParts.URL(), b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+	rootURL := azbfs.NewFileSystemURL(*dfsURL, b.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
 
 	// We know for a fact our source is a "blob".
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
@@ -134,13 +152,17 @@ func (b *blobFolderSender) SetContainerACL() error {
 func (b *blobFolderSender) EnsureFolderExists() error {
 	t := b.jptm.GetFolderCreationTracker()
 
-	if azblob.NewBlobURLParts(b.destination.URL()).BlobName == "" {
+	parsedURL, err := blob.ParseURL(b.destinationClient.URL())
+	if err != nil {
+		return err
+	}
+	if parsedURL.BlobName == "" {
 		return b.SetContainerACL() // Can't do much with a container, but it is here.
 	}
 
-	_, err := b.destination.GetProperties(b.jptm.Context(), azblob.BlobAccessConditions{}, b.cpkToApply)
+	_, err = b.destinationClient.GetProperties(b.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: b.jptm.CpkInfo()})
 	if err != nil {
-		if stgErr, ok := err.(azblob.StorageError); !(ok && stgErr.ServiceCode() == azblob.ServiceCodeBlobNotFound) {
+		if !bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return fmt.Errorf("when checking if blob exists: %w", err)
 		}
 	} else {
@@ -152,19 +174,15 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 			If so, we should delete the old blob, and create a new one in it's place with all of our fancy new properties.
 		*/
 		if t.ShouldSetProperties(b.DirUrlToString(), b.jptm.GetOverwriteOption(), b.jptm.GetOverwritePrompter()) {
-			_, err := b.destination.Delete(b.jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			_, err := b.destinationClient.Delete(b.jptm.Context(), nil)
 			if err != nil {
-				if stgErr, ok := err.(azblob.StorageError); ok {
-					if stgErr.ServiceCode() == "DirectoryIsNotEmpty" { // this is DFS, and we cannot do a standard replacement on it. Opt to simply overwrite the properties.
+				if bloberror.HasCode(err, "DirectoryIsNotEmpty") { // this is DFS, and we cannot do a standard replacement on it. Opt to simply overwrite the properties.
 						where, err := b.overwriteDFSProperties()
 						if err != nil {
 							return fmt.Errorf("%w. When %s", err, where)
 						}
-
 						return nil
-					}
 				}
-
 				return fmt.Errorf("when deleting existing blob: %w", err)
 			}
 		} else {
@@ -177,22 +195,27 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		}
 	}
 
-	b.metadataToApply["hdi_isfolder"] = "true" // Set folder metadata flag
+	// TODO (gapra): figure out better way to deal with hdi_isfolder metadata key capitalization
+	if b.metadataToApply["Hdi_isfolder"] != nil {
+		b.metadataToApply["Hdi_isfolder"] = to.Ptr("true") // Set folder metadata flag
+	} else {
+		b.metadataToApply["hdi_isfolder"] = to.Ptr("true") // Set folder metadata flag
+	}
 	err = b.getExtraProperties()
 	if err != nil {
 		return fmt.Errorf("when getting additional folder properties: %w", err)
 	}
 
 	err = t.CreateFolder(b.DirUrlToString(), func() error {
-		_, err := b.destination.Upload(b.jptm.Context(),
-			strings.NewReader(""),
-			b.headersToAppply,
-			b.metadataToApply,
-			azblob.BlobAccessConditions{},
-			azblob.DefaultAccessTier, // It doesn't make sense to use a special access tier, the blob will be 0 bytes.
-			b.blobTagsToApply,
-			b.cpkToApply,
-			azblob.ImmutabilityPolicyOptions{})
+		// It doesn't make sense to use a special access tier for a blob folder, the blob will be 0 bytes.
+		_, err := b.destinationClient.Upload(b.jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
+			&blockblob.UploadOptions{
+				HTTPHeaders: &b.headersToApply,
+				Metadata: b.metadataToApply,
+				Tags: b.blobTagsToApply,
+				CPKInfo: b.jptm.CpkInfo(),
+				CPKScopeInfo: b.jptm.CpkScopeInfo(),
+			})
 
 		return err
 	})
@@ -214,10 +237,14 @@ func (b *blobFolderSender) SetFolderProperties() error {
 }
 
 func (b *blobFolderSender) DirUrlToString() string {
-	uri, _ := url.Parse(b.jptm.Info().Destination)
-	uri.RawPath = ""
-	uri.RawQuery = ""
-	return uri.String()
+	rawURL := b.jptm.Info().Destination
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	parsedURL.RawPath = ""
+	parsedURL.RawQuery = ""
+	return parsedURL.String()
 }
 
 // ===== Implement sender so that it can be returned in newBlobUploader. =====
@@ -259,11 +286,11 @@ type dummyFolderUploader struct {
 	blobFolderSender
 }
 
-func (d dummyFolderUploader) GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
+func (d *dummyFolderUploader) GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 	panic("this sender only sends folders.")
 }
 
-func (d dummyFolderUploader) Md5Channel() chan<- []byte {
+func (d *dummyFolderUploader) Md5Channel() chan<- []byte {
 	panic("this sender only sends folders.")
 }
 
@@ -273,7 +300,7 @@ type dummyFolderS2SCopier struct {
 	blobFolderSender
 }
 
-func (d dummyFolderS2SCopier) GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
+func (d *dummyFolderS2SCopier) GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
 	// TODO implement me
 	panic("implement me")
 }

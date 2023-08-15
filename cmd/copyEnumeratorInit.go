@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"log"
 	"net/url"
@@ -18,9 +22,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -394,7 +395,7 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 	}
 
 	if len(cca.excludeBlobType) != 0 {
-		excludeSet := map[azblob.BlobType]bool{}
+		excludeSet := map[blob.BlobType]bool{}
 
 		for _, v := range cca.excludeBlobType {
 			excludeSet[v] = true
@@ -444,6 +445,14 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
 		return err
 	}
+
+	var trailingDot *common.TrailingDotOption
+	var from *common.Location
+	if cca.FromTo.To() == common.ELocation.File() {
+		trailingDot = &cca.trailingDot
+		from = to.Ptr(cca.FromTo.From())
+	}
+	options := createClientOptions(logLevel.ToPipelineLogLevel(), trailingDot, from)
 	// TODO: we can pass cred here as well
 	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel(), cca.trailingDot, cca.FromTo.From())
 	if err != nil {
@@ -463,29 +472,20 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		dstURL, err := url.Parse(accountRoot)
+		bsc := common.CreateBlobServiceClient(accountRoot, dstCredInfo, nil, options)
+		bcc := bsc.NewContainerClient(containerName)
 
-		if err != nil {
-			return err
-		}
-
-		bsu := azblob.NewServiceURL(*dstURL, dstPipeline)
-		bcu := bsu.NewContainerURL(containerName)
-		_, err = bcu.GetProperties(ctx, azblob.LeaseAccessConditions{})
+		_, err = bcc.GetProperties(ctx, nil)
 
 		if err == nil {
 			return err // Container already exists, return gracefully
 		}
 
-		_, err = bcu.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
-
-		if stgErr, ok := err.(azblob.StorageError); ok {
-			if stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists {
-				return err
-			}
-		} else {
-			return err
+		_, err = bcc.Create(ctx, nil)
+		if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
+			return nil
 		}
+		return err
 	case common.ELocation.File():
 		// Grab the account root and parse it as a URL
 		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())
@@ -494,30 +494,21 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		dstURL, err := url.Parse(accountRoot)
+		fsc := common.CreateFileServiceClient(accountRoot, dstCredInfo, nil, options)
+		sc := fsc.NewShareClient(containerName)
 
-		if err != nil {
-			return err
-		}
-
-		fsu := azfile.NewServiceURL(*dstURL, dstPipeline)
-		shareURL := fsu.NewShareURL(containerName)
-		_, err = shareURL.GetProperties(ctx)
+		_, err = sc.GetProperties(ctx, nil)
 		if err == nil {
 			return err
 		}
 
 		// Create a destination share with the default service quota
 		// TODO: Create a flag for the quota
-		_, err = shareURL.Create(ctx, azfile.Metadata{}, 0)
-
-		if stgErr, ok := err.(azfile.StorageError); ok {
-			if stgErr.ServiceCode() != azfile.ServiceCodeShareAlreadyExists {
-				return err
-			}
-		} else {
-			return err
+		_, err = sc.Create(ctx, nil)
+		if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
+			return nil
 		}
+		return err
 	case common.ELocation.BlobFS():
 		// TODO: Implement blobfs container creation
 		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())
@@ -653,8 +644,8 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 	}
 
-	if common.IffString(source, object.ContainerName, object.DstContainerName) != "" {
-		relativePath = `/` + common.IffString(source, object.ContainerName, object.DstContainerName) + relativePath
+	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
+		relativePath = `/` + common.Iff(source, object.ContainerName, object.DstContainerName) + relativePath
 	} else if !source && !cca.StripTopDir && cca.asSubdir { // Avoid doing this where the root is shared or renamed.
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
@@ -691,7 +682,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, filters []ObjectFilter, preserveSmbInfo, preservePermissions, preservePosixProperties, isDstNull, includeDirectoryStubs bool) (common.FolderPropertyOption, string) {
 
 	getSuffix := func(willProcess bool) string {
-		willProcessString := common.IffString(willProcess, "will be processed", "will not be processed")
+		willProcessString := common.Iff(willProcess, "will be processed", "will not be processed")
 
 		template := ". For the same reason, %s defined on folders %s"
 		switch {

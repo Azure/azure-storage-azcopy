@@ -3,6 +3,11 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
 	"net/http"
@@ -16,8 +21,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -28,7 +31,7 @@ var DebugSkipFiles = make(map[string]bool)
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context, sourceBlobToken azblob.Credential)
+	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
@@ -52,59 +55,24 @@ type IJobPartMgr interface {
 	ExclusiveDestinationMap() *common.ExclusiveStringMap
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
+
+	CredentialInfo() common.CredentialInfo
+	ClientOptions() azcore.ClientOptions
+	S2SSourceCredentialInfo() common.CredentialInfo
+	S2SSourceClientOptions() azcore.ClientOptions
+	CredentialOpOptions() *common.CredentialOpOptions
+
 	SourceProviderPipeline() pipeline.Pipeline
-	SecondarySourceProviderPipeline() pipeline.Pipeline
-	SourceCredential() pipeline.Factory
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
 	FolderDeletionManager() common.FolderDeletionManager
-	CpkInfo() common.CpkInfo
-	CpkScopeInfo() common.CpkScopeInfo
+	CpkInfo() *blob.CPKInfo
+	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
-}
-
-type serviceAPIVersionOverride struct{}
-
-// ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
-var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
-
-// DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-var DefaultServiceApiVersion = common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DefaultServiceApiVersion())
-
-// NewVersionPolicy creates a factory that can override the service version
-// set in the request header.
-// If the context has key overwrite-current-version set to false, then x-ms-version in
-// request is not overwritten else it will set x-ms-version to 207-04-17
-func NewVersionPolicyFactory() pipeline.Factory {
-	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			// get the service api version value using the ServiceAPIVersionOverride set in the context.
-			if value := ctx.Value(ServiceAPIVersionOverride); value != nil {
-				request.Header.Set("x-ms-version", value.(string))
-			}
-			resp, err := next.Do(ctx, request)
-			return resp, err
-		}
-	})
-}
-
-func NewTrailingDotPolicyFactory(trailingDot common.TrailingDotOption, from common.Location) pipeline.Factory {
-	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			if trailingDot == common.ETrailingDotOption.Enable() {
-				request.Header.Set("x-ms-allow-trailing-dot", "true")
-				if from == common.ELocation.File() {
-					request.Header.Set("x-ms-source-allow-trailing-dot", "true")
-				}
-				request.Header.Set("x-ms-version", "2022-11-02")
-			}
-			return next.Do(ctx, request)
-		}
-	})
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
@@ -175,39 +143,26 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 	})
 }
 
-// NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
-	if c == nil {
-		panic("c can't be nil")
-	}
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azblob.NewTelemetryPolicyFactory(o.Telemetry),
-		azblob.NewUniqueRequestIDPolicyFactory(),
-		NewBlobXferRetryPolicyFactory(r),    // actually retry the operation
-		newRetryNotificationPolicyFactory(), // record that a retry status was returned
-		c,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		// NewPacerPolicyFactory(p),
-		NewVersionPolicyFactory(),
-		// Bump the service version when using the Cold access tier.
-		pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-			// TODO: Remove me when bumping the service version is no longer relevant.
-			return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-				if request.Header.Get("x-ms-access-tier") == common.EBlockBlobTier.Cold().String() {
-					request.Header.Set("x-ms-version", "2021-12-02")
-				}
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
+	// Pipeline will look like
+	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
+	// TODO (gapra): Does this have to happen this happen here?
+	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
+	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newColdTierPolicy(), NewTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
 
-				return next.Do(ctx, request)
-			}
-		}),
-		NewRequestLogPolicyFactory(RequestLogOptions{
-			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			SyslogDisabled:               common.IsForceLoggingDisabled(),
-		}),
-		newXferStatsPolicyFactory(statsAcc),
+	return azcore.ClientOptions{
+		//APIVersion: ,
+		//Cloud: ,
+		//Logging: ,
+		Retry:     retry,
+		Telemetry: telemetry,
+		//TracingProvider: ,
+		Transport:        transport,
+		PerCallPolicies:  perCallPolicies,
+		PerRetryPolicies: perRetryPolicies,
 	}
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
@@ -220,8 +175,8 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 	f := []pipeline.Factory{
 		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
 		azbfs.NewUniqueRequestIDPolicyFactory(),
-		NewBFSXferRetryPolicyFactory(r),     // actually retry the operation
-		newRetryNotificationPolicyFactory(), // record that a retry status was returned
+		NewBFSXferRetryPolicyFactory(r),       // actually retry the operation
+		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
 	}
 
 	f = append(f, c)
@@ -234,30 +189,6 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 		}),
 		newXferStatsPolicyFactory(statsAcc))
 
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
-}
-
-// NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats, trailingDot common.TrailingDotOption, from common.Location) pipeline.Pipeline {
-	if c == nil {
-		panic("c can't be nil")
-	}
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azfile.NewTelemetryPolicyFactory(o.Telemetry),
-		azfile.NewUniqueRequestIDPolicyFactory(),
-		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
-		newRetryNotificationPolicyFactory(), // record that a retry status was returned
-		NewVersionPolicyFactory(),
-		NewTrailingDotPolicyFactory(trailingDot, from),
-		c,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewRequestLogPolicyFactory(RequestLogOptions{
-			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			SyslogDisabled:               common.IsForceLoggingDisabled(),
-		}),
-		newXferStatsPolicyFactory(statsAcc),
-	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
@@ -285,7 +216,11 @@ type jobPartMgr struct {
 	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
-	credInfo common.CredentialInfo
+	credInfo               common.CredentialInfo
+	clientOptions          azcore.ClientOptions
+	s2sSourceCredInfo      common.CredentialInfo
+	s2sSourceClientOptions azcore.ClientOptions
+	credOption             *common.CredentialOpOptions
 
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
@@ -326,7 +261,6 @@ type jobPartMgr struct {
 	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
 	secondaryPipeline pipeline.Pipeline
 
-	sourceCredential       pipeline.Factory // must satisfy azblob.TokenCredential currently
 	sourceProviderPipeline pipeline.Pipeline
 	// TODO: Ditto
 	secondarySourceProviderPipeline pipeline.Pipeline
@@ -368,7 +302,7 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken azblob.Credential) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
@@ -438,7 +372,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, sourceBlobToken
 
 	jpm.priority = plan.Priority
 
-	jpm.createPipelines(jobCtx, sourceBlobToken) // pipeline is created per job part manager
+	jpm.clientInfo()
+	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -539,12 +474,83 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	jpm.jobMgr.ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azblob.Credential) {
+func (jpm *jobPartMgr) clientInfo() {
+	jobState := jpm.jobMgr.getInMemoryTransitJobState()
+
+	// Destination credential
+	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
+		jpm.credInfo = jobState.CredentialInfo
+	}
+	fromTo := jpm.planMMF.Plan().FromTo
+
+	// S2S source credential
+	// Default credential type assumed to be SAS
+	s2sSourceCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
+	// For Blob and BlobFS, there are other options for the source credential
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
+		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
+			if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
+				s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
+			}
+		} else if fromTo.IsDownload() && (jobState.CredentialInfo.CredentialType.IsAzureOAuth() || jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
+			s2sSourceCredInfo = jobState.CredentialInfo
+		}
+	}
+	jpm.s2sSourceCredInfo = s2sSourceCredInfo
+
+	jpm.credOption = &common.CredentialOpOptions{
+		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		Panic:    jpm.Panic,
+		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+		Cancel:   jpm.jobMgr.Cancel,
+	}
+
+	retryOptions := policy.RetryOptions{
+		MaxRetries:    UploadMaxTries,
+		TryTimeout:    UploadTryTimeout,
+		RetryDelay:    UploadRetryDelay,
+		MaxRetryDelay: UploadMaxRetryDelay,
+	}
+
+	var userAgent string
+	if fromTo.From() == common.ELocation.S3() {
+		userAgent = common.S3ImportUserAgent
+	} else if fromTo.From() == common.ELocation.GCP() {
+		userAgent = common.GCPImportUserAgent
+	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+		userAgent = common.BenchmarkUserAgent
+	} else {
+		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
+	}
+	telemetryOptions := policy.TelemetryOptions{ApplicationID: userAgent}
+
+	httpClient := jpm.jobMgr.HttpClient()
+	networkStats := jpm.jobMgr.PipelineNetworkStats()
+	logOptions := LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()}
+
+	var sourceTrailingDot *common.TrailingDotOption
+	var trailingDot *common.TrailingDotOption
+	var from *common.Location
+	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
+		sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+	}
+	if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
+		fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
+		fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
+		fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
+		fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
+		trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+		if fromTo.IsS2S() {
+			from = to.Ptr(fromTo.From())
+		}
+	}
+	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, sourceTrailingDot, nil)
+	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)}
+
+func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
 		panic("init client and pipelines for same jobPartMgr twice")
-	}
-	if jpm.sourceCredential == nil {
-		jpm.sourceCredential = sourceBlobToken
 	}
 	fromTo := jpm.planMMF.Plan().FromTo
 	credInfo := jpm.credInfo
@@ -582,38 +588,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 	// Create source info provider's pipeline for S2S copy or download (in some cases).
 	// BlobFS and Blob will utilize the Blob source info provider, as they are the "same" resource, but provide different details on both endpoints
 	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
-		sourceCred := azblob.NewAnonymousCredential()
-		jobState := jpm.jobMgr.getInMemoryTransitJobState()
-		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			if jpm.sourceCredential == nil {
-				sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType), credOption)
-				jpm.sourceCredential = sourceCred
-			}
-		} else if fromTo.IsDownload() && jobState.CredentialInfo.CredentialType.IsAzureOAuth() {
-			sourceCred = common.CreateBlobCredential(ctx, jobState.CredentialInfo, credOption)
-		} else if fromTo.IsDownload() && jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey() {
-			lcm := common.GetLifecycleMgr()
-			var err error
-			// Convert the shared key credential to a blob credential & re-use it
-			sourceCred, err = azblob.NewSharedKeyCredential(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName()), lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey()))
-			if err != nil {
-				jpm.Panic(fmt.Errorf("sanity check: failed to initialize shared key credential: %w", err))
-			}
-		}
-
-		jpm.sourceProviderPipeline = NewBlobPipeline(
-			sourceCred,
-			azblob.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azblob.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			xferRetryOption,
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			statsAccForSip)
-
 		// Prepare to pull dfs properties if we're working with BlobFS
 		if fromTo.From() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
 			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
@@ -631,27 +605,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 				statsAccForSip)
 		}
 	}
-	// Set up a source pipeline for files if necessary
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
-		jpm.sourceProviderPipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{
-					Value: userAgent,
-				},
-			}, azfile.RetryOptions{
-			Policy:        azfile.RetryPolicyExponential,
-			MaxTries:      UploadMaxTries,
-			TryTimeout:    UploadTryTimeout,
-			RetryDelay:    UploadRetryDelay,
-			MaxRetryDelay: UploadMaxRetryDelay,
-		}, jpm.pacer,
-		jpm.jobMgr.HttpClient(),
-		statsAccForSip,
-		jpm.planMMF.Plan().DstFileData.TrailingDot,
-		fromTo.From())
-	}
 
 	switch {
 	case fromTo.IsS2S() && (fromTo.To() == common.ELocation.Blob() || fromTo.To() == common.ELocation.BlobFS()), // destination determines pipeline for S2S, blobfs uses blob for S2S
@@ -659,20 +612,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 		 fromTo.IsDownload() && fromTo.From() == common.ELocation.Blob(), // source determines pipeline for download
 		 fromTo.IsSetProperties() && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()), // source determines pipeline for set properties, blobfs uses blob for set properties
 		 fromTo.IsDelete() && fromTo.From() == common.ELocation.Blob(): // ditto for delete
-		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
-		jpm.pipeline = NewBlobPipeline(
-			credential,
-			azblob.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azblob.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			xferRetryOption,
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats())
 
 		// If we need to write specifically to the gen2 endpoint, we should have this available.
 		if fromTo.To() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
@@ -708,58 +648,6 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context, sourceBlobToken azbl
 			jpm.pacer,
 			jpm.jobMgr.HttpClient(),
 			jpm.jobMgr.PipelineNetworkStats())
-
-		// Just in case we need to talk to blob while we're at it
-		var blobCred = azblob.NewAnonymousCredential()
-		if credInfo.CredentialType == common.ECredentialType.SharedKey() {
-			lcm := common.GetLifecycleMgr()
-			var err error
-			// Convert the shared key credential to a blob credential & re-use it
-			blobCred, err = azblob.NewSharedKeyCredential(lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName()), lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey()))
-			if err != nil {
-				jpm.Panic(fmt.Errorf("sanity check: failed to initialize shared key credential: %w", err))
-			}
-		} else if credInfo.CredentialType != common.ECredentialType.Anonymous() {
-			blobCred = common.CreateBlobCredential(ctx, credInfo, credOption)
-		}
-
-		jpm.secondaryPipeline = NewBlobPipeline(
-			blobCred,
-			azblob.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azblob.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			xferRetryOption,
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats())
-	case fromTo.IsS2S() && fromTo.To() == common.ELocation.File(),
-	     fromTo.IsUpload() && fromTo.To() == common.ELocation.File(),
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.File(),
-		 fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File(),
-		 fromTo.IsDelete() && fromTo.From() == common.ELocation.File():
-		jpm.pipeline = NewFilePipeline(
-			azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			azfile.RetryOptions{
-				Policy:        azfile.RetryPolicyExponential,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay,
-			},
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats(),
-			jpm.planMMF.Plan().DstFileData.TrailingDot,
-			fromTo.From())
 	}
 }
 
@@ -862,11 +750,11 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 	return jpm.blockBlobTier, jpm.pageBlobTier
 }
 
-func (jpm *jobPartMgr) CpkInfo() common.CpkInfo {
+func (jpm *jobPartMgr) CpkInfo() *blob.CPKInfo {
 	return common.GetCpkInfo(jpm.cpkOptions.CpkInfo)
 }
 
-func (jpm *jobPartMgr) CpkScopeInfo() common.CpkScopeInfo {
+func (jpm *jobPartMgr) CpkScopeInfo() *blob.CPKScopeInfo {
 	return common.GetCpkScopeInfo(jpm.cpkOptions.CpkScopeInfo)
 }
 
@@ -943,7 +831,6 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
-		
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
 			jpm.planMMF.Plan().JobID, jpm.planMMF.Plan().PartNum, transfersDone,
 			jpm.planMMF.Plan().NumTransfers))
@@ -995,16 +882,28 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jpm.jobMgr.ChunkStatusLogger()
 }
 
+func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
+	return jpm.credInfo
+}
+
+func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {
+	return jpm.s2sSourceCredInfo
+}
+
+func (jpm *jobPartMgr) ClientOptions() azcore.ClientOptions {
+	return jpm.clientOptions
+}
+
+func (jpm *jobPartMgr) S2SSourceClientOptions() azcore.ClientOptions {
+	return jpm.s2sSourceClientOptions
+}
+
+func (jpm *jobPartMgr) CredentialOpOptions() *common.CredentialOpOptions {
+	return jpm.credOption
+}
+
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jpm.sourceProviderPipeline
-}
-
-func (jpm *jobPartMgr) SecondarySourceProviderPipeline() pipeline.Pipeline {
-	return jpm.secondarySourceProviderPipeline
-}
-
-func (jpm *jobPartMgr) SourceCredential() pipeline.Factory {
-	return jpm.sourceCredential
 }
 
 /* Status update messages should not fail */

@@ -165,7 +165,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                                                                                        // Convert the order to a plan file
-	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString, order.CredentialInfo.SourceBlobToken) // Get a this job part's job manager (create it if it doesn't exist)
+	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 
 	if len(order.Transfers.List) == 0 && order.IsFinalPart {
 		/*
@@ -260,7 +260,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 			jpp0.SetJobStatus(desiredJobStatus)
 			msg := fmt.Sprintf("JobID=%v %s", jobID,
-				common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
+				common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
 			if jm.ShouldLog(pipeline.LogInfo) {
 				jm.Log(pipeline.LogInfo, msg)

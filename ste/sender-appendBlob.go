@@ -22,30 +22,30 @@ package ste
 
 import (
 	"context"
-	"net/url"
+	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type appendBlobSenderBase struct {
-	jptm              IJobPartTransferMgr
-	destAppendBlobURL azblob.AppendBlobURL
-	chunkSize         int64
-	numChunks         uint32
-	pacer             pacer
+	jptm                 IJobPartTransferMgr
+	destAppendBlobClient *appendblob.Client
+	chunkSize            int64
+	numChunks            uint32
+	pacer                pacer
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
 	// the properties of the local file
-	headersToApply  azblob.BlobHTTPHeaders
-	metadataToApply azblob.Metadata
-	blobTagsToApply azblob.BlobTagsMap
-	cpkToApply      azblob.ClientProvidedKeyOptions
+	headersToApply  blob.HTTPHeaders
+	metadataToApply common.Metadata
+	blobTagsToApply common.BlobTags
 
 	sip ISourceInfoProvider
 
@@ -54,14 +54,14 @@ type appendBlobSenderBase struct {
 
 type appendBlockFunc = func()
 
-func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
+func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider) (*appendBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
 	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is greater than maximum append blob block size i.e 4 MB,
 	// then set chunkSize as 4 MB.
-	chunkSize = common.Iffint64(
+	chunkSize = common.Iff(
 		chunkSize > common.MaxAppendBlobBlockSize,
 		common.MaxAppendBlobBlockSize,
 		chunkSize)
@@ -69,32 +69,23 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	destURL, err := url.Parse(destination)
-	if err != nil {
-		return nil, err
-	}
-
-	destAppendBlobURL := azblob.NewAppendBlobURL(*destURL, p)
+	destAppendBlobClient := common.CreateAppendBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
 	}
 
-	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
-
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
-		destAppendBlobURL:      destAppendBlobURL,
+		destAppendBlobClient:   destAppendBlobClient,
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
-		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
-		blobTagsToApply:        props.SrcBlobTags.ToAzBlobTagsMap(),
+		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		metadataToApply:        props.SrcMetadata,
+		blobTagsToApply:        props.SrcBlobTags,
 		sip:                    srcInfoProvider,
-		cpkToApply:             cpkToApply,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
@@ -111,7 +102,8 @@ func (s *appendBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *appendBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
+	properties, err := s.destAppendBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+	return remoteObjectExists(blobPropertiesResponseAdapter{properties}, err)
 }
 
 // Returns a chunk-func for sending append blob to remote
@@ -147,22 +139,30 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if s.jptm.ShouldInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
-		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
 
 	blobTags := s.blobTagsToApply
-	separateSetTagsRequired := separateSetTagsRequired(blobTags)
-	if separateSetTagsRequired || len(blobTags) == 0 {
+	setTags := separateSetTagsRequired(blobTags)
+	if setTags || len(blobTags) == 0 {
 		blobTags = nil
 	}
-	if _, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+	_, err := s.destAppendBlobClient.Create(s.jptm.Context(), &appendblob.CreateOptions{
+		HTTPHeaders: &s.headersToApply,
+		Metadata: s.metadataToApply,
+		Tags: blobTags,
+		CPKInfo: s.jptm.CpkInfo(),
+		CPKScopeInfo: s.jptm.CpkScopeInfo(),
+	})
+	if err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 	destinationModified = true
 
-	if separateSetTagsRequired {
-		if _, err := s.destAppendBlobURL.SetTags(s.jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
+	if setTags {
+		_, err = s.destAppendBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil)
+		if err != nil {
 			s.jptm.Log(pipeline.LogWarning, err.Error())
 		}
 	}
@@ -184,9 +184,23 @@ func (s *appendBlobSenderBase) Cleanup() {
 		//   to be consistent with other
 		deletionContext, cancelFunc := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 30*time.Second)
 		defer cancelFunc()
-		_, err := s.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		_, err := s.destAppendBlobClient.Delete(deletionContext, nil)
 		if err != nil {
-			jptm.LogError(s.destAppendBlobURL.String(), "Delete (incomplete) Append Blob ", err)
+			jptm.LogError(s.destAppendBlobClient.URL(), "Delete (incomplete) Append Blob ", err)
 		}
 	}
+}
+
+// GetDestinationLength gets the destination length.
+func (s *appendBlobSenderBase) GetDestinationLength() (int64, error) {
+	prop, err := s.destAppendBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+
+	if err != nil {
+		return -1, err
+	}
+
+	if prop.ContentLength == nil {
+		return -1, fmt.Errorf("destination content length not returned")
+	}
+	return *prop.ContentLength, nil
 }

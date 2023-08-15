@@ -26,6 +26,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
@@ -35,9 +39,6 @@ import (
 	"github.com/minio/minio-go/pkg/s3utils"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -154,41 +155,40 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		resourceURL.RawQuery = standaloneSAS
 	}
 
-	sas := azblob.NewBlobURLParts(*resourceURL).SAS
+	blobResourceURL = resourceURL.String()
+	blobURLParts, err := blob.ParseURL(blobResourceURL)
+	if err != nil {
+		return common.ECredentialType.Unknown(), false, errors.New("provided blob resource string was not able to be parsed")
+	}
+	sas := blobURLParts.SAS
 	isMDAccount := strings.HasPrefix(resourceURL.Host, "md-")
 	canBePublic = canBePublic && !isMDAccount // MD accounts cannot be public.
 
 	// If SAS existed, return anonymous credential type.
+	clientOptions := ste.NewClientOptions(policy.RetryOptions{
+		MaxRetries:    ste.UploadMaxTries,
+		TryTimeout:    ste.UploadTryTimeout,
+		RetryDelay:    ste.UploadRetryDelay,
+		MaxRetryDelay: ste.UploadMaxRetryDelay,
+	}, policy.TelemetryOptions{
+		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+	}, nil, nil, ste.LogOptions{
+		RequestLogOptions: ste.RequestLogOptions{
+			SyslogDisabled: common.IsForceLoggingDisabled(),
+		},
+	}, nil, nil)
+	credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
 	if isSASExisted := sas.Signature() != ""; isSASExisted {
 		if isMDAccount {
 			// Ping the account anyway, and discern if we need OAuth.
-			p := azblob.NewPipeline(
-				azblob.NewAnonymousCredential(),
-				azblob.PipelineOptions{
-					Retry: azblob.RetryOptions{
-						Policy:        azblob.RetryPolicyExponential,
-						MaxTries:      ste.UploadMaxTries,
-						TryTimeout:    ste.UploadTryTimeout,
-						RetryDelay:    ste.UploadRetryDelay,
-						MaxRetryDelay: ste.UploadMaxRetryDelay,
-					},
-					RequestLog: azblob.RequestLogOptions{
-						SyslogDisabled: common.IsForceLoggingDisabled(),
-					},
-				})
-
-			clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-			if cpkOptions.IsSourceEncrypted {
-				clientProvidedKey = common.GetClientProvidedKey(cpkOptions)
-			}
-
-			bURL := azblob.NewBlobURL(*resourceURL, p)
-			_, err := bURL.GetProperties(ctx, azblob.BlobAccessConditions{}, clientProvidedKey)
+			blobClient := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
+			_, err = blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
 
 			if err != nil {
-				if stgErr, ok := err.(azblob.StorageError); ok {
-					if httpResp := stgErr.Response(); httpResp.StatusCode == 401 || httpResp.StatusCode == 403 { // *sometimes* the service can return 403s.
-						challenge := httpResp.Header.Get("WWW-Authenticate")
+				var respErr *azcore.ResponseError
+				if errors.As(err, &respErr) {
+					if respErr.StatusCode == 401 || respErr.StatusCode == 403 { // *sometimes* the service can return 403s.
+						challenge := respErr.RawResponse.Header.Get("WWW-Authenticate")
 						if strings.Contains(challenge, common.MDResource) {
 							if !oAuthTokenExists() {
 								return common.ECredentialType.Unknown(), false,
@@ -211,49 +211,36 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		if !canBePublic { // Cannot possibly be public - like say a destination EP
 			return false
 		}
-		p := azblob.NewPipeline(
-			azblob.NewAnonymousCredential(),
-			azblob.PipelineOptions{
-				Retry: azblob.RetryOptions{
-					Policy:        azblob.RetryPolicyExponential,
-					MaxTries:      ste.UploadMaxTries,
-					TryTimeout:    ste.UploadTryTimeout,
-					RetryDelay:    ste.UploadRetryDelay,
-					MaxRetryDelay: ste.UploadMaxRetryDelay,
-				},
-				RequestLog: azblob.RequestLogOptions{
-					SyslogDisabled: common.IsForceLoggingDisabled(),
-				},
-			})
-
-		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(resourceURL)
+		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(blobResourceURL)
 		isPublicResource = false
 
 		// Scenario 1: When resourceURL points to a container
 		// Scenario 2: When resourceURL points to a virtual directory.
 		// Check if the virtual directory is accessible by doing GetProperties on container.
 		// Virtual directory can be accessed/scanned only when its parent container is public.
-		bURLParts := azblob.NewBlobURLParts(*resourceURL)
+		bURLParts, err := blob.ParseURL(blobResourceURL)
+		if err != nil {
+			return false
+		}
 		bURLParts.BlobName = ""
-		containerURL := azblob.NewContainerURL(bURLParts.URL(), p)
+		bURLParts.Snapshot = ""
+		bURLParts.VersionID = ""
+		containerClient := common.CreateContainerClient(bURLParts.String(), credInfo, nil, clientOptions)
 
 		if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
 			// Service level searches can't possibly be public.
 			return false
 		}
 
-		if _, err := containerURL.GetProperties(ctx, azblob.LeaseAccessConditions{}); err == nil {
+		if _, err := containerClient.GetProperties(ctx, nil); err == nil {
 			return true
 		}
 
 		if !isContainer {
-			clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-			if cpkOptions.IsSourceEncrypted {
-				clientProvidedKey = common.GetClientProvidedKey(cpkOptions)
-			}
 			// Scenario 3: When resourceURL points to a blob
-			blobURL := azblob.NewBlobURL(*resourceURL, p)
-			if _, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}, clientProvidedKey); err == nil {
+			blobClient := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
+
+			if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
 				return true
 			}
 		}
@@ -646,47 +633,22 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createBlobPipelineFromCred(credential azblob.Credential, logLevel pipeline.LogLevel) pipeline.Pipeline {
-	logOption := pipeline.LogOptions{}
+func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
+	logOptions := ste.LogOptions{}
 	if azcopyScanningLogger != nil {
-		logOption = pipeline.LogOptions{
+		logOptions.LogOptions = pipeline.LogOptions{
 			Log:       azcopyScanningLogger.Log,
 			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
 		}
 	}
-
-	return ste.NewBlobPipeline(
-		credential,
-		azblob.PipelineOptions{
-			Telemetry: azblob.TelemetryOptions{
-				Value: glcm.AddUserAgentPrefix(common.UserAgent),
-			},
-			Log: logOption,
-		},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		},
-		nil,
-		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
-		nil, // we don't gather network stats on the credential pipeline
-	)
-}
-
-func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
-	// are we getting dest token?
-	credential := credInfo.SourceBlobToken
-	if credential == nil {
-		credential = common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-			// LogInfo:  glcm.Info, //Comment out for debugging
-			LogError: glcm.Info,
-		})
-	}
-
-	return createBlobPipelineFromCred(credential, logLevel), nil
+	return ste.NewClientOptions(policy.RetryOptions{
+		MaxRetries:    ste.UploadMaxTries,
+		TryTimeout:    ste.UploadTryTimeout,
+		RetryDelay:    ste.UploadRetryDelay,
+		MaxRetryDelay: ste.UploadMaxRetryDelay,
+	}, policy.TelemetryOptions{
+		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, trailingDot, from)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
@@ -724,28 +686,4 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, l
 		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
 		nil, // we don't gather network stats on the credential pipeline
 	), nil
-}
-
-// TODO note: ctx and credInfo are ignored at the moment because we only support SAS for Azure File
-func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel, trailingDot common.TrailingDotOption, from common.Location) (pipeline.Pipeline, error) {
-	logOption := pipeline.LogOptions{}
-	if azcopyScanningLogger != nil {
-		logOption = pipeline.LogOptions{
-			Log:       azcopyScanningLogger.Log,
-			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
-		}
-	}
-
-	return ste.NewFilePipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{
-		Telemetry: azfile.TelemetryOptions{
-			Value: glcm.AddUserAgentPrefix(common.UserAgent),
-		},
-		Log: logOption,
-	}, azfile.RetryOptions{
-		Policy:        azfile.RetryPolicyExponential,
-		MaxTries:      ste.UploadMaxTries,
-		TryTimeout:    ste.UploadTryTimeout,
-		RetryDelay:    ste.UploadRetryDelay,
-		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	}, nil, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, trailingDot, from), nil
 }

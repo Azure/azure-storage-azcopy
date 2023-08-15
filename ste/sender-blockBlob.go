@@ -25,6 +25,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"net/url"
 	"strconv"
 	"strings"
@@ -35,7 +37,6 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -43,22 +44,21 @@ import (
 var lowMemoryLimitAdvice sync.Once
 
 type blockBlobSenderBase struct {
-	jptm             IJobPartTransferMgr
-	sip              ISourceInfoProvider
-	destBlockBlobURL azblob.BlockBlobURL
-	chunkSize        int64
-	numChunks        uint32
-	pacer            pacer
-	blockIDs         []string
-	destBlobTier     azblob.AccessTierType
+	jptm                IJobPartTransferMgr
+	sip                 ISourceInfoProvider
+	destBlockBlobClient *blockblob.Client
+	chunkSize           int64
+	numChunks           uint32
+	pacer               pacer
+	blockIDs            []string
+	destBlobTier        blob.AccessTier
 
 	// Headers and other info that we will apply to the destination object.
 	// 1. For S2S, these come from the source service.
 	// 2. When sending local data, they are computed based on the properties of the local file
-	headersToApply  azblob.BlobHTTPHeaders
-	metadataToApply azblob.Metadata
-	blobTagsToApply azblob.BlobTagsMap
-	cpkToApply      azblob.ClientProvidedKeyOptions
+	headersToApply  blob.HTTPHeaders
+	metadataToApply common.Metadata
+	blobTagsToApply common.BlobTags
 
 	atomicChunksWritten    int32
 	atomicPutListIndicator int32
@@ -125,19 +125,14 @@ func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32
 	return fmt.Sprintf("%s%s%05d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*blockBlobSenderBase, error) {
 	// compute chunk count
 	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit(), jptm.CacheLimiter().StrictLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	destURL, err := url.Parse(destination)
-	if err != nil {
-		return nil, err
-	}
-
-	destBlockBlobURL := azblob.NewBlockBlobURL(*destURL, p)
+	destBlockBlobClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
@@ -152,30 +147,27 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
 	}
 
-	if props.SrcMetadata["hdi_isfolder"] == "true" {
-		destBlobTier = azblob.AccessTierNone
+	if (props.SrcMetadata["hdi_isfolder"] != nil && *props.SrcMetadata["hdi_isfolder"] == "true") ||
+		(props.SrcMetadata["Hdi_isfolder"] != nil && *props.SrcMetadata["Hdi_isfolder"] == "true") {
+		destBlobTier = ""
 	}
-
-	// Once track2 goes live, we'll not need to do this conversion/casting and can directly use CpkInfo & CpkScopeInfo
-	cpkToApply := common.ToClientProvidedKeyOptions(jptm.CpkInfo(), jptm.CpkScopeInfo())
 
 	partNum, transferIndex := jptm.TransferIndex()
 
 	return &blockBlobSenderBase{
-		jptm:             jptm,
-		sip:              srcInfoProvider,
-		destBlockBlobURL: destBlockBlobURL,
-		chunkSize:        chunkSize,
-		numChunks:        numChunks,
-		pacer:            pacer,
-		blockIDs:         make([]string, numChunks),
-		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
-		blobTagsToApply:  props.SrcBlobTags.ToAzBlobTagsMap(),
-		destBlobTier:     destBlobTier,
-		cpkToApply:       cpkToApply,
-		muBlockIDs:       &sync.Mutex{},
-		blockNamePrefix:  getBlockNamePrefix(jptm.Info().JobID, partNum, transferIndex),
+		jptm:                jptm,
+		sip:                 srcInfoProvider,
+		destBlockBlobClient: destBlockBlobClient,
+		chunkSize:           chunkSize,
+		numChunks:           numChunks,
+		pacer:               pacer,
+		blockIDs:            make([]string, numChunks),
+		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		metadataToApply:     props.SrcMetadata,
+		blobTagsToApply:     props.SrcBlobTags,
+		destBlobTier:        destBlobTier,
+		muBlockIDs:          &sync.Mutex{},
+		blockNamePrefix:     getBlockNamePrefix(jptm.Info().JobID, partNum, transferIndex),
 	}, nil
 }
 
@@ -192,7 +184,8 @@ func (s *blockBlobSenderBase) NumChunks() uint32 {
 }
 
 func (s *blockBlobSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}, s.cpkToApply))
+	properties, err := s.destBlockBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+	return remoteObjectExists(blobPropertiesResponseAdapter{properties}, err)
 }
 
 func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModified bool) {
@@ -200,7 +193,7 @@ func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModi
 		s.buildCommittedBlockMap()
 	}
 	if s.jptm.ShouldInferContentType() {
-		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
 	return false
 }
@@ -223,29 +216,38 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
-		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobURL.BlobURL, s.jptm.Context(), false) {
-			s.destBlobTier = azblob.DefaultAccessTier
+		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient, s.jptm.Context(), false) {
+			s.destBlobTier = ""
 		}
 
 		blobTags := s.blobTagsToApply
-		separateSetTagsRequired := separateSetTagsRequired(blobTags)
-		if separateSetTagsRequired || len(blobTags) == 0 {
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
-		destBlobTier := s.destBlobTier
-		if s.cpkToApply.EncryptionScope != nil || (s.cpkToApply.EncryptionKey != nil && s.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = azblob.AccessTierNone
+		destBlobTier := &s.destBlobTier
+		if s.jptm.IsSourceEncrypted() {
+			destBlobTier = nil
 		}
 
-		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, s.cpkToApply, azblob.ImmutabilityPolicyOptions{}); err != nil {
+		_, err := s.destBlockBlobClient.CommitBlockList(jptm.Context(), blockIDs,
+			&blockblob.CommitBlockListOptions{
+				HTTPHeaders: &s.headersToApply,
+				Metadata: s.metadataToApply,
+				Tier: destBlobTier,
+				Tags: blobTags,
+				CPKInfo: s.jptm.CpkInfo(),
+				CPKScopeInfo: s.jptm.CpkScopeInfo(),
+			})
+		if err != nil {
 			jptm.FailActiveSend("Committing block list", err)
 			return
 		}
 
-		if separateSetTagsRequired {
-			if _, err := s.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, s.blobTagsToApply); err != nil {
+		if setTags {
+			if _, err := s.destBlockBlobClient.SetTags(jptm.Context(), s.blobTagsToApply, nil); err != nil {
 				s.jptm.Log(pipeline.LogWarning, err.Error())
 			}
 		}
@@ -253,11 +255,18 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// Upload ADLS Gen 2 ACLs
 	if jptm.FromTo() == common.EFromTo.BlobBlob() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
-		bURLParts := azblob.NewBlobURLParts(s.destBlockBlobURL.URL())
-		bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
-		bURLParts.Host = strings.ReplaceAll(bURLParts.Host, ".blob", ".dfs")
+		blobURLParts, err := blob.ParseURL(s.destBlockBlobClient.URL())
+		if err != nil {
+			jptm.FailActiveSend("Parsing blob URL", err)
+		}
+		blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
+		blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
+		dfsURL, err := url.Parse(blobURLParts.String())
+		if err != nil {
+			jptm.FailActiveSend("Parsing datalake URL", err)
+		}
 		// todo: jank, and violates the principle of interfaces
-		fileURL := azbfs.NewFileURL(bURLParts.URL(), s.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
+		fileURL := azbfs.NewFileURL(*dfsURL, s.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
 
 		// We know for a fact our source is a "blob".
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
@@ -286,17 +295,17 @@ func (s *blockBlobSenderBase) Cleanup() {
 			// This prevents customer paying for their storage for a week until they get garbage collected, and it
 			// also prevents any issues with "too many uncommitted blocks" if user tries to upload the blob again in future.
 			// But if there are committed blocks, leave them there (since they still safely represent the state before our job even started)
-			blockList, err := s.destBlockBlobURL.GetBlockList(deletionContext, azblob.BlockListAll, azblob.LeaseAccessConditions{})
+			blockList, err := s.destBlockBlobClient.GetBlockList(deletionContext, blockblob.BlockListTypeAll, nil)
 			hasUncommittedOnly := err == nil && len(blockList.CommittedBlocks) == 0 && len(blockList.UncommittedBlocks) > 0
 			if hasUncommittedOnly {
 				jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "Deleting uncommitted destination blob due to cancellation")
 				// Delete can delete uncommitted blobs.
-				_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+				_, _ = s.destBlockBlobClient.Delete(deletionContext, nil)
 			}
 		} else {
 			// TODO: review (one last time) should we really do this?  Or should we just give better error messages on "too many uncommitted blocks" errors
 			jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "Deleting destination blob due to failure")
-			_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			_, _ = s.destBlockBlobClient.Delete(deletionContext, nil)
 		}
 	}
 }
@@ -306,7 +315,7 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 	return createChunkFunc(true, s.jptm, id, func() {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = common.Metadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+			s.metadataToApply = s.metadataToApply.Clone()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -315,7 +324,11 @@ func (s *blockBlobSenderBase) GenerateCopyMetadata(id common.ChunkID) chunkFunc 
 
 			common.AddStatToBlobMetadata(statAdapter, s.metadataToApply)
 		}
-		_, err := s.destBlockBlobURL.SetMetadata(s.jptm.Context(), s.metadataToApply, azblob.BlobAccessConditions{}, s.cpkToApply)
+		_, err := s.destBlockBlobClient.SetMetadata(s.jptm.Context(), s.metadataToApply,
+			&blob.SetMetadataOptions{
+				CPKInfo:      s.jptm.CpkInfo(),
+				CPKScopeInfo: s.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			s.jptm.FailActiveSend("Setting Metadata", err)
 			return
@@ -345,7 +358,7 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 		return
 	}
 
-	blockList, err := s.destBlockBlobURL.GetBlockList(s.jptm.Context(), azblob.BlockListUncommitted, azblob.LeaseAccessConditions{})
+	blockList, err := s.destBlockBlobClient.GetBlockList(s.jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
 	if err != nil {
 		s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogError, "Failed to get blocklist. Restarting whole file.")
 		return
@@ -360,12 +373,14 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 	// 1. We find chunks by a different actor
 	// 2. Chunk size differs
 	for _, block := range blockList.UncommittedBlocks {
-		if len(block.Name) != common.AZCOPY_BLOCKNAME_LENGTH {
+		name := common.IffNotNil(block.Name, "")
+		size := common.IffNotNil(block.Size, 0)
+		if len(name) != common.AZCOPY_BLOCKNAME_LENGTH {
 			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
 			return
 		}
 
-		tmp, err := base64.StdEncoding.DecodeString(block.Name)
+		tmp, err := base64.StdEncoding.DecodeString(name)
 		decodedBlockName := string(tmp)
 		if err != nil || !strings.HasPrefix(decodedBlockName, s.blockNamePrefix) {
 			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
@@ -379,7 +394,7 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 		}
 
 		// Last chunk may have different blockSize
-		if block.Size != s.ChunkSize() && index != int(s.numChunks) {
+		if size != s.ChunkSize() && index != int(s.numChunks) {
 			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, changedChunkSize)
 			return
 		}
@@ -397,4 +412,18 @@ func (s *blockBlobSenderBase) ChunkAlreadyTransferred(index int32) bool {
 	}
 	_, ok := s.completedBlockList[int(index)]
 	return ok
+}
+
+// GetDestinationLength gets the destination length.
+func (s *blockBlobSenderBase) GetDestinationLength() (int64, error) {
+	prop, err := s.destBlockBlobClient.GetProperties(s.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: s.jptm.CpkInfo()})
+
+	if err != nil {
+		return -1, err
+	}
+
+	if prop.ContentLength == nil {
+		return -1, fmt.Errorf("destination content length not returned")
+	}
+	return *prop.ContentLength, nil
 }

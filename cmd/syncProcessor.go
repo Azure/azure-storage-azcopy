@@ -25,11 +25,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
 	"os"
 	"path"
@@ -142,7 +146,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 				jsonOutput, err := json.Marshal(newDeleteTransfer(object))
 				common.PanicIfErr(err)
 				return string(jsonOutput)
-			} else { // remove for sync
+			} else {                                       // remove for sync
 				if d.objectTypeToDisplay == "local file" { // removing from local src
 					dryrunValue := fmt.Sprintf("DRYRUN: remove %v", common.ToShortPath(d.objectLocationToDisplay))
 					if runtime.GOOS == "windows" {
@@ -281,14 +285,24 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 	if err != nil {
 		return nil, err
 	}
+	var trailingDot *common.TrailingDotOption
+	var from *common.Location
+	if cca.fromTo.To() == common.ELocation.File() {
+		trailingDot = &cca.trailingDot
+		from = to.Ptr(cca.fromTo.From())
+	}
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
+	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel(), trailingDot, from)
+
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
 	rootURL        *url.URL
 	p              pipeline.Pipeline
+	credInfo       common.CredentialInfo
+	clientOptions  azcore.ClientOptions
 	ctx            context.Context
 	targetLocation common.Location
 	folderManager common.FolderDeletionManager
@@ -296,10 +310,12 @@ type remoteResourceDeleter struct {
 	forceIfReadOnly bool
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location, fpo common.FolderPropertyOption, forceIfReadOnly bool) *remoteResourceDeleter {
+func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, credInfo common.CredentialInfo, clientOptions azcore.ClientOptions, ctx context.Context, targetLocation common.Location, fpo common.FolderPropertyOption, forceIfReadOnly bool) *remoteResourceDeleter {
 	return &remoteResourceDeleter{
 		rootURL:        rawRootURL,
 		p:              p,
+		credInfo:       credInfo,
+		clientOptions:  clientOptions,
 		ctx:            ctx,
 		targetLocation: targetLocation,
 		folderManager:  common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger),
@@ -311,13 +327,27 @@ func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx cont
 func (b *remoteResourceDeleter) getObjectURL(object StoredObject) (url url.URL) {
 	switch b.targetLocation {
 	case common.ELocation.Blob():
-		blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+		blobURLParts, err := blob.ParseURL(b.rootURL.String())
+		if err != nil {
+			panic(err)
+		}
 		blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
-		url = blobURLParts.URL()
+		u, err := url.Parse(blobURLParts.String())
+		if err != nil {
+			panic(err)
+		}
+		url = *u
 	case common.ELocation.File():
-		fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+		fileURLParts, err := sharefile.ParseURL(b.rootURL.String())
+		if err != nil {
+			panic(err)
+		}
 		fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
-		url = fileURLParts.URL()
+		u, err := url.Parse(fileURLParts.String())
+		if err != nil {
+			panic(err)
+		}
+		url = *u
 	case common.ELocation.BlobFS():
 		blobFSURLParts := azbfs.NewBfsURLParts(*b.rootURL)
 		blobFSURLParts.DirectoryOrFilePath = path.Join(blobFSURLParts.DirectoryOrFilePath, object.relativePath)
@@ -341,33 +371,39 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		b.folderManager.RecordChildExists(&objectURL)
 		defer b.folderManager.RecordChildDeleted(&objectURL)
 
-
 		var err error
 		switch b.targetLocation {
 		case common.ELocation.Blob():
-			blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+			blobURLParts, err := blob.ParseURL(b.rootURL.String())
+			if err != nil {
+				return err
+			}
 			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
-			blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
-			_, err = blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+
+			blobClient := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
+			_, err = blobClient.Delete(b.ctx, nil)
+			return err
 		case common.ELocation.File():
-			fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+			fileURLParts, err := sharefile.ParseURL(b.rootURL.String())
+			if err != nil {
+				return err
+			}
 			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
 
-			fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+			fileClient := common.CreateShareFileClient(fileURLParts.String(), b.credInfo, nil, b.clientOptions)
 
-			_, err = fileURL.Delete(b.ctx)
-
-			if stgErr, ok := err.(azfile.StorageError); b.forceIfReadOnly && ok && stgErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+			_, err = fileClient.Delete(b.ctx, nil)
+			if err != nil && b.forceIfReadOnly && fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
 				msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
 				if azcopyScanningLogger != nil {
 					azcopyScanningLogger.Log(pipeline.LogInfo, msg)
 				}
 
 				// if the file is read-only, we need to remove the read-only attribute before we can delete it
-				noAttrib := azfile.FileAttributeNone
-				_, err = fileURL.SetHTTPHeaders(b.ctx, azfile.FileHTTPHeaders{SMBProperties: azfile.SMBProperties{FileAttributes: &noAttrib}})
+				noAttrib := sharefile.NTFSFileAttributes{None: true}
+				_, err = fileClient.SetHTTPHeaders(b.ctx, &sharefile.SetHTTPHeadersOptions{SMBProperties: &sharefile.SMBProperties{Attributes: &noAttrib}})
 				if err == nil {
-					_, err = fileURL.Delete(b.ctx)
+					_, err = fileClient.Delete(b.ctx, nil) //nolint:staticcheck
 				} else {
 					msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
 					glcm.Info(msg + "; check the scanning log file for more details")
@@ -406,24 +442,24 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			var err error
 			switch b.targetLocation {
 			case common.ELocation.Blob():
-				blobURL := azblob.NewBlobURL(objectURL, b.p)
+				blobClient := common.CreateBlobClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
 				// HNS endpoint doesn't like delete snapshots on a directory
-				_, err = blobURL.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+				_, err = blobClient.Delete(b.ctx, nil)
 			case common.ELocation.File():
-				dirURL := azfile.NewDirectoryURL(objectURL, b.p)
-				_, err = dirURL.Delete(ctx)
+				directoryClient := common.CreateShareDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
+				_, err = directoryClient.Delete(ctx, nil)
 
-				if stgErr, ok := err.(azfile.StorageError); b.forceIfReadOnly && ok && stgErr.ServiceCode() == azfile.ServiceCodeReadOnlyAttribute {
+				if err != nil && b.forceIfReadOnly && fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
 					msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
 					if azcopyScanningLogger != nil {
 						azcopyScanningLogger.Log(pipeline.LogInfo, msg)
 					}
 
 					// if the file is read-only, we need to remove the read-only attribute before we can delete it
-					noAttrib := azfile.FileAttributeNone
-					_, err = dirURL.SetProperties(b.ctx, azfile.SMBProperties{FileAttributes: &noAttrib})
+					noAttrib := sharefile.NTFSFileAttributes{None: true}
+					_, err = directoryClient.SetProperties(b.ctx, &sharedirectory.SetPropertiesOptions{FileSMBProperties: &sharefile.SMBProperties{Attributes: &noAttrib}})
 					if err == nil {
-						_, err = dirURL.Delete(b.ctx)
+						_, err = directoryClient.Delete(b.ctx, nil)
 					} else {
 						msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
 						glcm.Info(msg + "; check the scanning log file for more details")

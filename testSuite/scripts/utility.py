@@ -259,10 +259,8 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
         print("failed to clean test filesystem.")
     if not clean_test_container(test_container_url):
         print("failed to clean test blob container.")
-    if not clean_test_container(test_oauth_container_url):
+    if not clean_test_container(test_oauth_container_validate_sas_url):
         print("failed to clean OAuth test blob container.")
-    if not clean_test_container(test_oauth_container_url):
-        print("failed to clean OAuth container.")
     if not clean_test_container(test_premium_account_contaier_url):
         print("failed to clean premium container.")
     if not clean_test_blob_account(test_s2s_src_blob_account_url):
@@ -592,7 +590,7 @@ def verify_operation(command):
             command, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        # print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return False
     else:
         return True

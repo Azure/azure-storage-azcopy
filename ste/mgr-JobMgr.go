@@ -23,7 +23,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/http"
 	"runtime"
 	"strings"
@@ -112,7 +111,7 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool, sourceBlobToken azblob.Credential) IJobMgr {
+	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -188,7 +187,6 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
 		isDaemon:         daemonMode,
-		sourceBlobToken:  sourceBlobToken,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
@@ -338,7 +336,6 @@ type jobMgr struct {
 	jstm                *jobStatusManager
 
 	isDaemon        bool /* is it running as service */
-	sourceBlobToken azblob.Credential
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -467,16 +464,22 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, order.JobID.String(), 0, DataSchemaVersion))
 	jppfn.Create(order) // Convert the order to a plan file
 
+	s2sSourceCredInfo := order.CredentialInfo.WithType(order.S2SSourceCredentialType)
+	if order.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
+		s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
+	}
+
 	jpm := &jobPartMgr{
-		jobMgr:           jm,
-		filename:         jppfn,
-		sourceSAS:        order.SourceRoot.SAS,
-		destinationSAS:   order.DestinationRoot.SAS,
-		pacer:            jm.pacer,
-		slicePool:        jm.slicePool,
-		cacheLimiter:     jm.cacheLimiter,
-		fileCountLimiter: jm.fileCountLimiter,
-		credInfo:         order.CredentialInfo,
+		jobMgr:            jm,
+		filename:          jppfn,
+		sourceSAS:         order.SourceRoot.SAS,
+		destinationSAS:    order.DestinationRoot.SAS,
+		pacer:             jm.pacer,
+		slicePool:         jm.slicePool,
+		cacheLimiter:      jm.cacheLimiter,
+		fileCountLimiter:  jm.fileCountLimiter,
+		credInfo:          order.CredentialInfo,
+		s2sSourceCredInfo: s2sSourceCredInfo,
 	}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
@@ -503,7 +506,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 }
 
 func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
-	newVal := common.Iffint32(isFinalPart, 1, 0)
+	newVal := int32(common.Iff(isFinalPart, 1, 0))
 	oldVal := atomic.SwapInt32(&jm.atomicFinalPartOrderedIndicator, newVal)
 	if newVal == 0 && oldVal == 1 {
 		// we just cleared the flag. Sanity check that.
@@ -971,7 +974,7 @@ func (jm *jobMgr) scheduleJobParts() {
 				go jm.poolSizer()
 				startedPoolSizer = true
 			}
-			jobPart.ScheduleTransfers(jm.Context(), jm.sourceBlobToken)
+			jobPart.ScheduleTransfers(jm.Context())
 		}
 	}
 }
@@ -1066,7 +1069,7 @@ func (jm *jobMgr) SuccessfulBytesInActiveFiles() uint64 {
 }
 
 func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse {
-	verb := common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
+	verb := common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
 	jobID := jm.jobID
 
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
@@ -1110,7 +1113,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
-			common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
+			common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, msg)

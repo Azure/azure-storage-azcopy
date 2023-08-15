@@ -120,8 +120,8 @@ func TestS3BucketNameToAzureResourceResolverMultipleBucketNames(t *testing.T) {
 	resolvedNameCollision2, err := r.ResolveName("a-b---c")
 	a.Nil(err)
 
-	a.EqualValues(1, common.Iffint8(resolvedNameCollision1 == "a-b-3-c", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c", 1, 0))
-	a.EqualValues(1, common.Iffint8(resolvedNameCollision1 == "a-b-3-c-2", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c-2", 1, 0))
+	a.EqualValues(1, common.Iff(resolvedNameCollision1 == "a-b-3-c", 1, 0)^common.Iff(resolvedNameCollision2 == "a-b-3-c", 1, 0))
+	a.EqualValues(1, common.Iff(resolvedNameCollision1 == "a-b-3-c-2", 1, 0)^common.Iff(resolvedNameCollision2 == "a-b-3-c-2", 1, 0))
 }
 
 func TestS3BucketNameToAzureResourceResolverNegative(t *testing.T) {

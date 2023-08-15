@@ -4,12 +4,13 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"golang.org/x/sys/windows"
 )
 
@@ -71,7 +72,7 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 		preserveSMBPermissions: true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -92,7 +93,7 @@ func TestProperties_SMBDates(t *testing.T) {
 		recursive:       true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
@@ -124,7 +125,7 @@ func TestProperties_SMBFlags(t *testing.T) {
 		recursive:       true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -151,13 +152,13 @@ func TestProperties_SMBPermsAndFlagsWithIncludeAfter(t *testing.T) {
 		recursive:       true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 		// includeAfter: SET LATER
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause for a includeAfter time
 			time.Sleep(5 * time.Second)
-			h.GetModifiableParameters().includeAfter = time.Now().Format(azfile.ISO8601)
+			h.GetModifiableParameters().includeAfter = time.Now().Format(cmd.ISO8601)
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
 			// So that when validating, our validation can be sure that the right datetime has ended up in the right
 			// field
@@ -200,7 +201,7 @@ func TestProperties_SMBPermsAndFlagsWithSync(t *testing.T) {
 		recursive:       true,
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
 			// Pause then re-write all the files, so that their LastWriteTime is different from their creation time
@@ -256,7 +257,7 @@ func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
 			preserveSMBPermissions: true,
 
 			// default, but present for clarity
-			//preserveSMBInfo:        BoolPointer(true),
+			//preserveSMBInfo:        to.Ptr(true),
 		},
 		nil,
 		testFiles{
@@ -290,7 +291,7 @@ func TestProperties_SMBTimes(t *testing.T) {
 			recursive:       true,
 
 			// default, but present for clarity
-			//preserveSMBInfo:        BoolPointer(true),
+			//preserveSMBInfo:        to.Ptr(true),
 		},
 		nil,
 		testFiles{
@@ -317,7 +318,7 @@ func TestProperties_EnsureContainerBehavior(t *testing.T) {
 		anonymousAuthOnly,
 		params{
 			recursive: true,
-			preserveSMBInfo: BoolPointer(true),
+			preserveSMBInfo: to.Ptr(true),
 			preserveSMBPermissions: true,
 		},
 		nil,

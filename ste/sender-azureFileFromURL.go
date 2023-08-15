@@ -21,21 +21,19 @@
 package ste
 
 import (
-	"net/url"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type urlToAzureFileCopier struct {
 	azureFileSenderBase
-	srcURL url.URL
+	srcURL string
 }
 
-func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, _ pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
-	senderBase, err := newAzureFileSenderBase(jptm, destination, p, pacer, sip)
+	senderBase, err := newAzureFileSenderBase(jptm, destination, pacer, sip)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +43,7 @@ func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, p pip
 		return nil, err
 	}
 
-	return &urlToAzureFileCopier{azureFileSenderBase: *senderBase, srcURL: *srcURL}, nil
+	return &urlToAzureFileCopier{azureFileSenderBase: *senderBase, srcURL: srcURL}, nil
 }
 
 func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
@@ -64,8 +62,8 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		if err := u.pacer.RequestTrafficAllocation(u.jptm.Context(), adjustedChunkSize); err != nil {
 			u.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
-		_, err := u.fileURL().UploadRangeFromURL(
-			u.ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize)
+		_, err := u.getFileClient().UploadRangeFromURL(
+			u.ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil)
 		if err != nil {
 			u.jptm.FailActiveS2SCopy("Uploading range from URL", err)
 			return

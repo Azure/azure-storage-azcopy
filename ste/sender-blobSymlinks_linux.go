@@ -11,7 +11,7 @@ func (s *blobSymlinkSender) getExtraProperties() error {
 	if s.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = common.Metadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+			s.metadataToApply = s.metadataToApply.Clone()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {

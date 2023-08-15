@@ -21,9 +21,8 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type appendBlobUploader struct {
@@ -37,7 +36,7 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 	if u.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			u.metadataToApply = common.Metadata(u.metadataToApply).Clone().ToAzBlobMetadata()
+			u.metadataToApply = u.metadataToApply.Clone()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -51,8 +50,8 @@ func (u *appendBlobUploader) Prologue(ps common.PrologueState) (destinationModif
 	return u.appendBlobSenderBase.Prologue(ps)
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, sip)
+func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newAppendBlobSenderBase(jptm, destination, pacer, sip)
 	if err != nil {
 		return nil, err
 	}
@@ -68,10 +67,13 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	appendBlockFromLocal := func() {
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
-		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body,
-			azblob.AppendBlobAccessConditions{
-				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
-			}, nil, u.cpkToApply)
+		offset := id.OffsetInFile()
+		_, err := u.destAppendBlobClient.AppendBlock(u.jptm.Context(), body,
+			&appendblob.AppendBlockOptions{
+				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
+				CPKInfo: u.jptm.CpkInfo(),
+				CPKScopeInfo: u.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			u.jptm.FailActiveUpload("Appending block", err)
 			return
@@ -88,21 +90,11 @@ func (u *appendBlobUploader) Epilogue() {
 	if jptm.IsLive() {
 		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
 			epilogueHeaders := u.headersToApply
-			epilogueHeaders.ContentMD5 = md5Hash
-			_, err := u.destAppendBlobURL.SetHTTPHeaders(jptm.Context(), epilogueHeaders, azblob.BlobAccessConditions{})
+			epilogueHeaders.BlobContentMD5 = md5Hash
+			_, err := u.destAppendBlobClient.SetHTTPHeaders(jptm.Context(), epilogueHeaders, nil)
 			return err
 		})
 	}
 
 	u.appendBlobSenderBase.Epilogue()
-}
-
-func (u *appendBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destAppendBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, u.cpkToApply)
-
-	if err != nil {
-		return -1, err
-	}
-
-	return prop.ContentLength(), nil
 }

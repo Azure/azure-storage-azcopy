@@ -23,6 +23,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/stretchr/testify/assert"
 	"net/url"
 	"os"
@@ -32,7 +34,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // Additional S2S migration cases, besides E2E smoke testing cases for S3/blob/file source contained in test_service_to_service_copy.py
@@ -185,10 +186,10 @@ func TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(a)
-		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		a.True(scenarioHelper{}.containerExists(containerURL))
-		defer deleteContainer(a, containerURL)
+		bsc := scenarioHelper{}.getBlobServiceClient(a)
+		cc := bsc.NewContainerClient(resolvedBucketName)
+		a.True(scenarioHelper{}.containerExists(cc))
+		defer deleteContainer(a, cc)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -240,10 +241,10 @@ func TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *test
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(a)
-		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		a.True(scenarioHelper{}.containerExists(containerURL))
-		defer deleteContainer(a, containerURL)
+		bsc := scenarioHelper{}.getBlobServiceClient(a)
+		cc := bsc.NewContainerClient(resolvedBucketName)
+		a.True(scenarioHelper{}.containerExists(cc))
+		defer deleteContainer(a, cc)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -615,10 +616,10 @@ func TestS2SCopyFromGCPToBlobWithBucketNameNeedBeResolved(t *testing.T) {
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(a)
-		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		a.True(scenarioHelper{}.containerExists(containerURL))
-		defer deleteContainer(a, containerURL)
+		bsc := scenarioHelper{}.getBlobServiceClient(a)
+		cc := bsc.NewContainerClient(resolvedBucketName)
+		a.True(scenarioHelper{}.containerExists(cc))
+		defer deleteContainer(a, cc)
 
 		// Check correct entry are scheduled.
 		// Example:
@@ -664,10 +665,10 @@ func TestS2SCopyFromGCPToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(t *tes
 
 		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
-		blobServiceURL := scenarioHelper{}.getBlobServiceURL(a)
-		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
-		a.True(scenarioHelper{}.containerExists(containerURL))
-		defer deleteContainer(a, containerURL)
+		bsc := scenarioHelper{}.getBlobServiceClient(a)
+		cc := bsc.NewContainerClient(resolvedBucketName)
+		a.True(scenarioHelper{}.containerExists(cc))
+		defer deleteContainer(a, cc)
 
 		validateS2STransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING+bucketName, common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
 	})
@@ -818,18 +819,18 @@ func TestS2SCopyFromGCPObjectToBlobContainer(t *testing.T) {
 // Copy from container to container, preserve blob tier.
 func TestS2SCopyFromContainerToContainerPreserveBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 
 	blobName := "blobWithCoolTier"
-	scenarioHelper{}.generateBlockBlobWithAccessTier(a, srcContainerURL, blobName, azblob.AccessTierCool)
+	scenarioHelper{}.generateBlockBlobWithAccessTier(a, srcContainerClient, blobName, to.Ptr(blob.AccessTierCool))
 
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -847,25 +848,25 @@ func TestS2SCopyFromContainerToContainerPreserveBlobTier(t *testing.T) {
 
 		validateS2STransfersAreScheduled(a,
 			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
-		a.Equal(azblob.AccessTierCool, mockedRPC.transfers[0].BlobTier)
+		a.Equal(blob.AccessTierCool, mockedRPC.transfers[0].BlobTier)
 	})
 }
 
 // Copy from container to container, and don't preserve blob tier.
 func TestS2SCopyFromContainerToContainerNoPreserveBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 
 	blobName := "blobWithCoolTier"
-	scenarioHelper{}.generateBlockBlobWithAccessTier(a, srcContainerURL, blobName, azblob.AccessTierCool)
+	scenarioHelper{}.generateBlockBlobWithAccessTier(a, srcContainerClient, blobName, to.Ptr(blob.AccessTierCool))
 
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -885,7 +886,7 @@ func TestS2SCopyFromContainerToContainerNoPreserveBlobTier(t *testing.T) {
 		validateS2STransfersAreScheduled(a,
 			"", "/"+srcContainerName, []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
-		a.Equal(azblob.AccessTierNone, mockedRPC.transfers[0].BlobTier)
+		a.Equal(blob.AccessTier(""), mockedRPC.transfers[0].BlobTier)
 	})
 }
 
@@ -893,19 +894,19 @@ func TestS2SCopyFromContainerToContainerNoPreserveBlobTier(t *testing.T) {
 func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generatePageBlobsFromList(a, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generatePageBlobsFromList(a, srcContainerClient, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -946,19 +947,19 @@ func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 // Attempt to copy from a block blob to a page blob
 func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -999,19 +1000,19 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 // Attempt to copy from a block blob to an append blob
 func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, objectList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, objectList, blockBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1053,19 +1054,19 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateAppendBlobsFromList(a, srcContainerURL, objectList, appendBlobDefaultData)
+	scenarioHelper{}.generateAppendBlobsFromList(a, srcContainerClient, objectList, appendBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1107,19 +1108,19 @@ func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generatePageBlobsFromList(a, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generatePageBlobsFromList(a, srcContainerClient, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1161,19 +1162,19 @@ func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// Generate source container and blobs
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateAppendBlobsFromList(a, srcContainerURL, objectList, pageBlobDefaultData)
+	scenarioHelper{}.generateAppendBlobsFromList(a, srcContainerClient, objectList, pageBlobDefaultData)
 
 	// Create destination container
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// Set up interceptor
 	mockedRPC := interceptor{}
@@ -1213,18 +1214,18 @@ func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 
 func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	a.NotNil(srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	a.NotNil(srcContainerClient)
 
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, objectList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, objectList, blockBlobDefaultData)
 
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -1265,18 +1266,18 @@ func TestS2SCopyFromSingleBlobToBlobContainer(t *testing.T) {
 
 func TestS2SCopyFromSingleAzureFileToBlobContainer(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	a.NotNil(srcShareURL)
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	a.NotNil(srcShareClient)
 
-	scenarioHelper{}.generateFlatFiles(a, srcShareURL, []string{"file"})
+	scenarioHelper{}.generateFlatFiles(a, srcShareClient, []string{"file"})
 
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
-	a.NotNil(dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+	a.NotNil(dstContainerClient)
 
 	// set up interceptor
 	mockedRPC := interceptor{}

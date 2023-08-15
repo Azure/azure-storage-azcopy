@@ -38,8 +38,8 @@ stages:
           displayName: 'Build Azcopy'
 
         - script: |
-            time azcopy copy $(Blob2BlobLargeFilesSrc) $(Blob2BlobLargeFilesDst) --recursive --block-size-mb=128 --log-level=ERROR --cap-mbps=40000
-          displayName: 'Blob2Blob - Large Files'
+            time azcopy copy $(Blob2BlobSmallFilesSrc) $(Blob2BlobSmallFilesDst) --recursive --check-length=false --log-level=ERROR
+          displayName: 'Blob2Blob - Small Files'
           condition: always()
           env:
             AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
@@ -60,8 +60,8 @@ stages:
             AZCOPY_SHOW_PERF_STATES: "1"
 
         - script: |
-            time azcopy copy $(Blob2BlobSmallFilesSrc) $(Blob2BlobSmallFilesDst) --recursive --check-length=false --log-level=ERROR
-          displayName: 'Blob2Blob - Small Files'
+            time azcopy copy $(Blob2BlobLargeFilesSrc) $(Blob2BlobLargeFilesDst) --recursive --block-size-mb=128 --log-level=ERROR --cap-mbps=40000
+          displayName: 'Blob2Blob - Large Files'
           condition: always()
           env:
             AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
@@ -71,9 +71,9 @@ stages:
             AZCOPY_SHOW_PERF_STATES: "1"
 
         - script: |
-            sudo mkdir -m 777 $(localPath)/largeFiles/
-            time azcopy copy $(Blob2BlobLargeFilesSrc) /dev/null --recursive --log-level=ERROR
-          displayName: 'Download - Large files'
+            sudo mkdir -m 777 $(localPath)/smallFiles/
+            time azcopy copy $(Blob2BlobSmallFilesSrc) /dev/null --recursive --check-length=false --log-level=ERROR
+          displayName: 'Download - Small Files'
           condition: always()
           env:
             AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
@@ -82,9 +82,9 @@ stages:
             AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
 
         - script: |
-            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=50 --put-md5=false --delete-test-data=false
+            time azcopy bench $(Blob2BlobSmallFilesDst) --size-per-file=5k --file-count=8000000 --check-length=false --log-level=ERROR --delete-test-data=false
             sudo rm -rf $(localPath)/*
-          displayName: 'Upload - Large files'
+          displayName: 'Upload - Small Files'
           condition: always()
           env:
             AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
@@ -115,9 +115,9 @@ stages:
             AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
 
         - script: |
-            sudo mkdir -m 777 $(localPath)/smallFiles/
-            time azcopy copy $(Blob2BlobSmallFilesSrc) /dev/null --recursive --check-length=false --log-level=ERROR
-          displayName: 'Download - Small Files'
+            sudo mkdir -m 777 $(localPath)/largeFiles/
+            time azcopy copy $(Blob2BlobLargeFilesSrc) /dev/null --recursive --log-level=ERROR
+          displayName: 'Download - Large files'
           condition: always()
           env:
             AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)
@@ -126,9 +126,9 @@ stages:
             AZCOPY_LOG_LOCATION: $(Build.ArtifactStagingDirectory)/logs
 
         - script: |
-            time azcopy bench $(Blob2BlobSmallFilesDst) --size-per-file=5k --file-count=8000000 --check-length=false --log-level=ERROR --delete-test-data=false
+            time azcopy bench $(Blob2BlobLargeFilesDst) --log-level=ERROR --size-per-file=50G --file-count=50 --put-md5=false --delete-test-data=false
             sudo rm -rf $(localPath)/*
-          displayName: 'Upload - Small Files'
+          displayName: 'Upload - Large files'
           condition: always()
           env:
             AZCOPY_AUTO_LOGIN_TYPE: $(AZCOPY_AUTO_LOGIN_TYPE)

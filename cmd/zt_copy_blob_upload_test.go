@@ -33,9 +33,9 @@ import (
 
 func TestIncludeDirSimple(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	files := []string{
 		"filea",
@@ -72,9 +72,9 @@ func TestIncludeDirSimple(t *testing.T) {
 
 func TestIncludeDir(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	files := []string{
 		"filea",
@@ -114,9 +114,9 @@ func TestIncludeDir(t *testing.T) {
 
 func TestExcludeDir(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	files := []string{
 		"filea",
@@ -156,9 +156,9 @@ func TestExcludeDir(t *testing.T) {
 
 func TestIncludeAndExcludeDir(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	files := []string{
 		"xyz/aaa",
@@ -195,9 +195,9 @@ func TestIncludeAndExcludeDir(t *testing.T) {
 // regular local file->blob upload
 func TestUploadSingleFileToBlobVirtualDirectory(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
@@ -256,9 +256,9 @@ func TestUploadSingleFileToBlobVirtualDirectory(t *testing.T) {
 // regular local file->blob upload
 func TestUploadSingleFileToBlob(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
@@ -269,8 +269,8 @@ func TestUploadSingleFileToBlob(t *testing.T) {
 
 		// set up the destination container with a single blob
 		dstBlobName := "whatever"
-		scenarioHelper{}.generateBlobsFromList(a, containerURL, []string{dstBlobName}, blockBlobDefaultData)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromList(a, cc, []string{dstBlobName}, blockBlobDefaultData)
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -314,7 +314,7 @@ func TestUploadSingleFileToBlob(t *testing.T) {
 // regular directory->container upload
 func TestUploadDirectoryToContainer(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
@@ -322,8 +322,9 @@ func TestUploadDirectoryToContainer(t *testing.T) {
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirPath, "")
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -359,7 +360,7 @@ func TestUploadDirectoryToContainer(t *testing.T) {
 // regular directory->virtual dir upload
 func TestUploadDirectoryToVirtualDirectory(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir"
 
 	// set up the source with numerous files
@@ -368,8 +369,8 @@ func TestUploadDirectoryToVirtualDirectory(t *testing.T) {
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(a, srcDirPath, "")
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -406,7 +407,7 @@ func TestUploadDirectoryToVirtualDirectory(t *testing.T) {
 // files(from pattern)->container upload
 func TestUploadDirectoryToContainerWithPattern(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
@@ -418,8 +419,8 @@ func TestUploadDirectoryToContainerWithPattern(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, srcDirPath, filesToInclude)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -456,7 +457,7 @@ func TestUploadDirectoryToContainerWithIncludeBefore_LocalTime(t *testing.T) {
 }
 
 func doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, a *assert.Assertions) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source directory
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
@@ -473,8 +474,8 @@ func doTestUploadDirectoryToContainerWithIncludeBefore(useUtc bool, a *assert.As
 	scenarioHelper{}.generateLocalFilesFromList(a, srcDirPath, extraIgnoredFiles)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -515,7 +516,7 @@ func TestUploadDirectoryToContainerWithIncludeAfter_LocalTime(t *testing.T) {
 }
 
 func doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, a *assert.Assertions) {
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(a)
@@ -531,8 +532,8 @@ func doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, a *assert.Ass
 	scenarioHelper{}.generateLocalFilesFromList(a, srcDirPath, filesToInclude)
 
 	// set up an empty container
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -564,9 +565,9 @@ func doTestUploadDirectoryToContainerWithIncludeAfter(useUtc bool, a *assert.Ass
 
 func TestDisableAutoDecoding(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// Encoded file name since Windows won't create name with invalid chars
 	srcFileName := `%3C %3E %5C %2F %3A %22 %7C %3F %2A invalidcharsfile`

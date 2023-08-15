@@ -2,7 +2,11 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -13,8 +17,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type IJobPartTransferMgr interface {
@@ -59,9 +61,16 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+
+	CredentialInfo() common.CredentialInfo
+	ClientOptions() azcore.ClientOptions
+	S2SSourceCredentialInfo() common.CredentialInfo
+	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
+	S2SSourceClientOptions() azcore.ClientOptions
+	CredentialOpOptions() *common.CredentialOpOptions
+
 	SourceProviderPipeline() pipeline.Pipeline
-	SecondarySourceProviderPipeline() pipeline.Pipeline
-	SourceCredential() pipeline.Factory
+
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -90,10 +99,9 @@ type IJobPartTransferMgr interface {
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
 	ShouldInferContentType() bool
-	CpkInfo() common.CpkInfo
-	CpkScopeInfo() common.CpkScopeInfo
+	CpkInfo() *blob.CPKInfo
+	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
-	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 	SuccessfulBytesTransferred() int64
@@ -122,12 +130,11 @@ type TransferInfo struct {
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// Blob
-	SrcBlobType    azblob.BlobType       // used for both S2S and for downloads to local from blob
-	S2SSrcBlobTier azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
+	SrcBlobType    blob.BlobType   // used for both S2S and for downloads to local from blob
+	S2SSrcBlobTier blob.AccessTier // AccessTierType (string) is used to accommodate service-side support matrix change.
 
-	RehydratePriority azblob.RehydratePriorityType
+	RehydratePriority blob.RehydratePriority
 }
-
 
 func (i TransferInfo) IsFilePropertiesTransfer() bool {
 	return i.EntityType == common.EEntityType.FileProperties()
@@ -214,20 +221,6 @@ type jobPartTransferMgr struct {
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
 		chunkChannel chan<- ChunkMsg*/
-}
-
-func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
-	cred := jptm.SourceCredential()
-
-	if cred == nil {
-		return nil
-	} else {
-		if tc, ok := cred.(azblob.TokenCredential); ok {
-			return tc
-		} else {
-			return nil
-		}
-	}
 }
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
@@ -366,7 +359,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			}
 		}
 	}
-	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	var srcBlobTags common.BlobTags
 	if blobTags != nil {
@@ -541,11 +534,11 @@ func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier,
 	return jptm.jobPartMgr.BlobTiers()
 }
 
-func (jptm *jobPartTransferMgr) CpkInfo() common.CpkInfo {
+func (jptm *jobPartTransferMgr) CpkInfo() *blob.CPKInfo {
 	return jptm.jobPartMgr.CpkInfo()
 }
 
-func (jptm *jobPartTransferMgr) CpkScopeInfo() common.CpkScopeInfo {
+func (jptm *jobPartTransferMgr) CpkScopeInfo() *blob.CPKScopeInfo {
 	return jptm.jobPartMgr.CpkScopeInfo()
 }
 
@@ -850,11 +843,11 @@ func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 }
 
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		return respErr.StatusCode, respErr.RawResponse.Status
+	}
 	switch e := err.(type) {
-	case azblob.StorageError:
-		return e.Response().StatusCode, e.Response().Status
-	case azfile.StorageError:
-		return e.Response().StatusCode, e.Response().Status
 	case azbfs.StorageError:
 		return e.Response().StatusCode, e.Response().Status
 	default:
@@ -967,16 +960,47 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }
 
+func (jptm *jobPartTransferMgr) CredentialInfo() common.CredentialInfo {
+	return jptm.jobPartMgr.CredentialInfo()
+}
+
+func (jptm *jobPartTransferMgr) ClientOptions() azcore.ClientOptions {
+	return jptm.jobPartMgr.ClientOptions()
+}
+
+func (jptm *jobPartTransferMgr) S2SSourceCredentialInfo() common.CredentialInfo {
+	return jptm.jobPartMgr.S2SSourceCredentialInfo()
+}
+
+func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {
+	if jptm.S2SSourceCredentialInfo().CredentialType.IsAzureOAuth() {
+		tokenInfo := jptm.S2SSourceCredentialInfo().OAuthTokenInfo
+		tc, err := tokenInfo.GetTokenCredential()
+		if err != nil {
+			return nil, err
+		}
+		scope := []string{common.StorageScope}
+		if jptm.S2SSourceCredentialInfo().CredentialType == common.ECredentialType.MDOAuthToken() {
+			scope = []string{common.ManagedDiskScope}
+		}
+
+		token, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scope})
+		t := "Bearer " + token.Token
+		return &t, err
+	}
+	return nil, nil
+}
+
+func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
+	return jptm.jobPartMgr.S2SSourceClientOptions()
+}
+
+func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
+	return jptm.jobPartMgr.CredentialOpOptions()
+}
+
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
 	return jptm.jobPartMgr.SourceProviderPipeline()
-}
-
-func (jptm *jobPartTransferMgr) SecondarySourceProviderPipeline() pipeline.Pipeline {
-	return jptm.jobPartMgr.SecondarySourceProviderPipeline()
-}
-
-func (jptm *jobPartTransferMgr) SourceCredential() pipeline.Factory {
-	return jptm.jobPartMgr.SourceCredential()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {

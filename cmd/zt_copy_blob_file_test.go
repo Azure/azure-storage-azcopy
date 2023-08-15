@@ -22,31 +22,30 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // TestBlobAccountCopyToFileShareS2S actually ends up testing the entire account->container scenario as that is not dependent on destination or source.
 func TestBlobAccountCopyToFileShareS2S(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 
 	// Ensure no containers with similar naming schemes exist
-	cleanBlobAccount(a, bsu)
+	cleanBlobAccount(a, bsc)
 
-	containerSources := map[string]azblob.ContainerURL{}
+	containerSources := map[string]*container.Client{}
 	expectedTransfers := make([]string, 0)
 
 	for k := range make([]bool, 5) {
 		name := generateName(fmt.Sprintf("blobacc-file%dcontainer", k), 63)
 
 		// create the container
-		containerSources[name] = bsu.NewContainerURL(name)
-		_, err := containerSources[name].Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+		containerSources[name] = bsc.NewContainerClient(name)
+		_, err := containerSources[name].Create(ctx, nil)
 		a.Nil(err)
 
 		// Generate the remote scenario
@@ -60,7 +59,7 @@ func TestBlobAccountCopyToFileShareS2S(t *testing.T) {
 	}
 
 	// generate destination share
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
+	dstShareURL, dstShareName := createNewShare(a, fsc)
 	defer deleteShare(a, dstShareURL)
 
 	// initialize mocked RPC
@@ -86,19 +85,19 @@ func TestBlobAccountCopyToFileShareS2S(t *testing.T) {
 // TestBlobCopyToFileS2SImplicitDstShare uses a service-level URL on the destination to implicitly create the destination share.
 func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 
 	// create source container
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
 
 	// prepare a destination container URL to be deleted.
-	dstShareURL := fsu.NewShareURL(srcContainerName)
-	defer deleteShare(a, dstShareURL)
+	dstShareClient := fsc.NewShareClient(srcContainerName)
+	defer deleteShare(a, dstShareClient)
 
 	// create a scenario on the source container
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "blobFileImplicitDest")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "blobFileImplicitDest")
 	a.NotZero(len(fileList)) // Ensure that at least one blob is present
 
 	// initialize the mocked RPC
@@ -116,7 +115,7 @@ func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err) // Check there was no error
 
-		_, err = dstShareURL.GetProperties(ctx)
+		_, err = dstShareClient.GetProperties(ctx, nil)
 		a.Nil(err) // Ensure the destination share exists
 
 		// Ensure the transfers were scheduled
@@ -126,18 +125,18 @@ func TestBlobCopyToFileS2SImplicitDstShare(t *testing.T) {
 
 func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsu := getFileServiceClient()
 
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteShare(a, dstShareURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstShareClient, dstShareName := createNewShare(a, fsu)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteShare(a, dstShareClient)
 
 	// copy to explicit destination
 	for _, fileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source container with a single file
-		scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, []string{fileName}, blockBlobDefaultData)
+		scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, []string{fileName}, blockBlobDefaultData)
 
 		// set up the interceptor
 		mockedRPC := interceptor{}
@@ -183,17 +182,17 @@ func TestBlobCopyToFileS2SWithSingleFile(t *testing.T) {
 
 func TestContainerToShareCopyS2S(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 
 	// Create source container and destination share, schedule their deletion
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteShare(a, dstShareURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source container with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(fileList))
 
 	// set up the interceptor
@@ -228,14 +227,14 @@ func TestContainerToShareCopyS2S(t *testing.T) {
 
 func TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 
 	// generate source container and destination fileshare
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteShare(a, dstShareURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteShare(a, dstShareClient)
 
 	// create file list to include against
 	fileList := []string{
@@ -265,7 +264,7 @@ func TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(t *testing.T) {
 	// set up filters and generate blobs
 	includeString := "*.pdf;*.jpeg;exactName"
 	includePathString := "subdir/"
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, fileList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, fileList, blockBlobDefaultData)
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
@@ -294,14 +293,14 @@ func TestBlobFileCopyS2SWithIncludeAndIncludeDirFlag(t *testing.T) {
 
 func TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 
 	// generate source container and destination fileshare
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteShare(a, dstShareURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteShare(a, dstShareClient)
 
 	// create file list to include against
 	fileList := []string{
@@ -328,7 +327,7 @@ func TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(t *testing.T) {
 	// set up filters and generate blobs
 	excludeString := "*.pdf;*.jpeg;exactName"
 	excludePathString := "subdir/"
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, fileList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, fileList, blockBlobDefaultData)
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
@@ -357,14 +356,14 @@ func TestBlobToFileCopyS2SWithExcludeAndExcludeDirFlag(t *testing.T) {
 
 func TestBlobToFileCopyS2SIncludeExcludeMix(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 
 	// generate source container and destination fileshare
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteShare(a, dstShareURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteShare(a, dstShareClient)
 
 	// create file list to include against
 	fileList := []string{
@@ -390,7 +389,7 @@ func TestBlobToFileCopyS2SIncludeExcludeMix(t *testing.T) {
 	// set up filters and generate blobs
 	includeString := "*.pdf;*.jpeg;exactName"
 	excludeString := "ohno*;why*;exactName"
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, fileList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, fileList, blockBlobDefaultData)
 
 	// set up the interceptor
 	mockedRPC := interceptor{}
@@ -413,18 +412,18 @@ func TestBlobToFileCopyS2SIncludeExcludeMix(t *testing.T) {
 
 func TestBlobToFileCopyS2SWithDirectory(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 
 	// create container and share
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteShare(a, dstShareURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteShare(a, dstShareClient)
 
 	// create source scenario
 	dirName := "copyme"
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, dirName+"/")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, dirName+"/")
 	a.NotZero(len(fileList))
 
 	// initialize mocked RPC

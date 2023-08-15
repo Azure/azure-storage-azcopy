@@ -21,6 +21,11 @@
 package ste
 
 import (
+	"errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"time"
 )
@@ -34,14 +39,32 @@ type lastModifiedTimerProvider interface {
 	LastModified() time.Time
 }
 
+type blobPropertiesResponseAdapter struct {
+	blob.GetPropertiesResponse
+}
+
+func (a blobPropertiesResponseAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
+type filePropertiesResponseAdapter struct {
+	sharefile.GetPropertiesResponse
+}
+
+func (a filePropertiesResponseAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
 // remoteObjectExists takes the error returned when trying to access a remote object, sees whether is
 // a "not found" error.  If the object exists (i.e. error is nil) it returns (true, nil).  If the
 // error is a "not found" error, it returns (false, nil). Else it returns false and the original error.
 // The initial, dummy, parameter, is to allow callers to conveniently call it with functions that return a tuple
 // - even though we only need the error.
 func remoteObjectExists(props lastModifiedTimerProvider, errWhenAccessingRemoteObject error) (bool, time.Time, error) {
-
-	if typedErr, ok := errWhenAccessingRemoteObject.(responseError); ok && typedErr.Response().StatusCode == http.StatusNotFound {
+	var respErr *azcore.ResponseError
+	if errors.As(errWhenAccessingRemoteObject, &respErr) && respErr.StatusCode == http.StatusNotFound {
+		return false, time.Time{}, nil // 404 error, so it does NOT exist
+	} else if typedErr, ok := errWhenAccessingRemoteObject.(responseError); ok && typedErr.Response().StatusCode == http.StatusNotFound {
 		return false, time.Time{}, nil // 404 error, so it does NOT exist
 	} else if errWhenAccessingRemoteObject != nil {
 		return false, time.Time{}, errWhenAccessingRemoteObject // some other error happened, so we return it

@@ -21,7 +21,7 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"reflect"
 	"strings"
 	"testing"
@@ -169,7 +169,7 @@ type params struct {
 	isObjectDir               bool
 	debugSkipFiles            []string // a list of localized filepaths to skip over on the first run in the STE.
 	s2sPreserveAccessTier     bool
-	accessTier                azblob.AccessTierType
+	accessTier                *blob.AccessTier
 	checkMd5                  common.HashValidationOption
 	compareHash               common.SyncHashType
 	hashStorageMode           common.HashStorageMode
@@ -533,6 +533,9 @@ type hookHelper interface {
 
 	// GetDestination returns the destination Resource Manager
 	GetDestination() resourceManager
+
+	// GetSource returns the source Resource Manager
+	GetSource() resourceManager
 }
 
 // /////

@@ -21,14 +21,13 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -166,13 +165,13 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	}
 }
 
-var inferExtensions = map[string]azblob.BlobType{
-	".vhd":  azblob.BlobPageBlob,
-	".vhdx": azblob.BlobPageBlob,
+var inferExtensions = map[string]blob.BlobType{
+	".vhd":  blob.BlobTypePageBlob,
+	".vhdx": blob.BlobTypePageBlob,
 }
 
 // infers a blob type from the extension specified.
-func inferBlobType(filename string, defaultBlobType azblob.BlobType) azblob.BlobType {
+func inferBlobType(filename string, defaultBlobType blob.BlobType) blob.BlobType {
 	if b, ok := inferExtensions[strings.ToLower(filepath.Ext(filename))]; ok {
 		return b
 	}

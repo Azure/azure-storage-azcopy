@@ -15,7 +15,7 @@ func TestResume_FolderState(t *testing.T) {
 		},
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, nil, testFiles{
 		defaultSize: "1K",
 
@@ -37,7 +37,7 @@ func TestResume_NoCreateFolder(t *testing.T) {
 		},
 
 		// default, but present for clarity
-		//preserveSMBInfo:        BoolPointer(true),
+		//preserveSMBInfo:        to.Ptr(true),
 	}, &hooks{
 		beforeResumeHook: func(h hookHelper) {
 			// Create the folder in the middle of the transfer
