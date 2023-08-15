@@ -517,11 +517,6 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 		FinalizeAll := false
 		currentDirPath := dir.(string)
 
-		// XDM App create lease blob in root directory. This lease blob need to be excluded from the list of blobs.
-		// Otherwise SyncEngine deletes this blob as it's not present on source side. As an optimization we check lease blob
-		// only in root folder.
-		checkForXDMLeaseBlob := targetTraverser && currentDirPath == ""
-
 		// This code for sync operation and when its target traverser.
 		if targetTraverser {
 			//
@@ -663,11 +658,6 @@ func (t *blobTraverser) parallelList(containerURL azblob.ContainerURL, container
 			for _, blobInfo := range lResp.Segment.BlobItems {
 				// if the blob represents a hdi folder, then skip it
 				if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
-					continue
-				}
-
-				// Check if the blob represents XDM lease blob or not.
-				if checkForXDMLeaseBlob && t.doesBlobRepresentXdmLeaseBlob(filepath.Base(blobInfo.Name)) {
 					continue
 				}
 
@@ -838,11 +828,6 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		object.blobVersionID = *blobInfo.VersionID
 	}
 	return object
-}
-
-// doesBlobRepresentXdmLeaseBlob verifies whether it's XdataMove app created Lease Blob or not.
-func (t *blobTraverser) doesBlobRepresentXdmLeaseBlob(blobName string) bool {
-	return blobName == common.XDM_LEASE_BLOB_NAME
 }
 
 func (t *blobTraverser) doesBlobRepresentAFolder(metadata azblob.Metadata) bool {
