@@ -16,7 +16,7 @@ import (
 
 var explainedSkippedRemoveOnce sync.Once
 
-func DeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func DeleteBlob(jptm IJobPartTransferMgr, _ pipeline.Pipeline, _ pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
@@ -27,11 +27,11 @@ func DeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 	// smaller "transfer initiation pool", where this code runs.
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
-	cf := createChunkFunc(true, jptm, id, func() { doDeleteBlob(jptm, p) })
+	cf := createChunkFunc(true, jptm, id, func() { doDeleteBlob(jptm) })
 	jptm.ScheduleChunks(cf)
 }
 
-func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func doDeleteBlob(jptm IJobPartTransferMgr) {
 
 	info := jptm.Info()
 	// Get the source blob url of blob to delete

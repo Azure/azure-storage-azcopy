@@ -15,7 +15,6 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -847,12 +846,8 @@ func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
 	if errors.As(err, &respErr) {
 		return respErr.StatusCode, respErr.RawResponse.Status
 	}
-	switch e := err.(type) {
-	case azbfs.StorageError:
-		return e.Response().StatusCode, e.Response().Status
-	default:
-		return 0, err.Error()
-	}
+	return 0, err.Error()
+
 }
 
 type transferErrorCode string

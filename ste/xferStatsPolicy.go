@@ -22,8 +22,6 @@ package ste
 
 import (
 	"bytes"
-	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
@@ -160,45 +158,6 @@ func (s *PipelineNetworkStats) AverageE2EMilliseconds() int {
 	}
 }
 
-type xferStatsPolicy struct {
-	next  pipeline.Policy
-	stats *PipelineNetworkStats
-}
-
-// Do accumulates stats for each call
-func (p *xferStatsPolicy) Do(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-	start := time.Now()
-
-	resp, err := p.next.Do(ctx, request)
-
-	if p.stats != nil {
-		if p.stats.IsStarted() {
-			atomic.AddInt64(&p.stats.atomicOperationCount, 1)
-			atomic.AddInt64(&p.stats.atomicE2ETotalMilliseconds, int64(time.Since(start).Seconds()*1000))
-
-			if err != nil && !isContextCancelledError(err) {
-				// no response from server
-				atomic.AddInt64(&p.stats.atomicNetworkErrorCount, 1)
-			}
-		}
-
-		// always look at retries, even if not started, because concurrency tuner needs to know about them
-		if resp != nil {
-			// TODO should we also count status 500?  It is mentioned here as timeout:https://docs.microsoft.com/en-us/azure/storage/common/storage-scalability-targets
-			if rr := resp.Response(); rr != nil && rr.StatusCode == http.StatusServiceUnavailable {
-				p.stats.tunerInterface.recordRetry() // always tell the tuner
-				if p.stats.IsStarted() {             // but only count it here, if we have started
-					// To find out why the server was busy we need to look at the response
-					responseBodyText := transparentlyReadBody(rr)
-					p.stats.recordRetry(responseBodyText)
-				}
-			}
-		}
-	}
-
-	return resp, err
-}
-
 // transparentlyReadBody reads the response body, and then (because body is read-once-only) replaces it with
 // a new body that will return the same content to anyone else who reads it.
 // This looks like a fairly common approach in Go, e.g. https://stackoverflow.com/a/23077519
@@ -212,13 +171,6 @@ func transparentlyReadBody(r *http.Response) string {
 	r.Body = io.NopCloser(bytes.NewReader(buf)) // replace it with something that will read the same data we just read
 
 	return string(buf) // copy to string
-}
-
-func newXferStatsPolicyFactory(accumulator *PipelineNetworkStats) pipeline.Factory {
-	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-		r := xferStatsPolicy{next: next, stats: accumulator}
-		return r.Do
-	})
 }
 
 type statsPolicy struct {

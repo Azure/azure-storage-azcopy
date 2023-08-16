@@ -27,8 +27,8 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"math"
 	"os"
 	"reflect"
@@ -1336,14 +1336,14 @@ func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
 }
 
 // ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
-func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() azbfs.BlobFSHTTPHeaders {
-	return azbfs.BlobFSHTTPHeaders{
-		ContentType: h.ContentType,
-		// ContentMD5 isn't in these headers. ContentMD5 is handled separately for BlobFS
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() datalakefile.HTTPHeaders {
+	return datalakefile.HTTPHeaders{
+		ContentType:        &h.ContentType,
+		ContentMD5:         h.ContentMD5,
+		ContentEncoding:    &h.ContentEncoding,
+		ContentLanguage:    &h.ContentLanguage,
+		ContentDisposition: &h.ContentDisposition,
+		CacheControl:       &h.CacheControl,
 	}
 }
 

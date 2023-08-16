@@ -41,7 +41,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type URLHolder interface {
+type FileClientStub interface {
 	URL() string
 }
 
@@ -54,7 +54,7 @@ type URLHolder interface {
 // if the entity type is folder).
 type azureFileSenderBase struct {
 	jptm            IJobPartTransferMgr
-	fileOrDirClient URLHolder
+	fileOrDirClient FileClientStub
 	shareClient     *share.Client
 	serviceClient *service.Client
 	chunkSize    int64
@@ -120,7 +120,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		}
 	}
 
-	var client URLHolder
+	var client FileClientStub
 	if info.IsFolderPropertiesTransfer() {
 		if directoryOrFilePath == "" {
 			client = shareClient.NewRootDirectoryClient()
@@ -240,7 +240,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 // DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
 // NOTE that all SMB attributes (and other headers?) on the target will be lost, so only use this if you don't need them any more
 // (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)
-func (u *azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir URLHolder, enableForcing bool) error {
+func (u *azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir FileClientStub, enableForcing bool) error {
 	// try the action
 	_, err := action()
 
@@ -480,7 +480,7 @@ func (u *azureFileSenderBase) DirUrlToString() string {
 type AzureFileParentDirCreator struct{}
 
 // getParentDirectoryClient gets parent directory client of a path.
-func (AzureFileParentDirCreator) getParentDirectoryClient(uh URLHolder, serviceClient *service.Client) (*share.Client, *directory.Client, error) {
+func (AzureFileParentDirCreator) getParentDirectoryClient(uh FileClientStub, serviceClient *service.Client) (*share.Client, *directory.Client, error) {
 	rawURL, _ := url.Parse(uh.URL())
 	rawURL.Path = rawURL.Path[:strings.LastIndex(rawURL.Path, "/")]
 	directoryURLParts, err := filesas.ParseURL(rawURL.String())
