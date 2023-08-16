@@ -2,11 +2,10 @@ package common
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 )
 
 // GenericResourceURLParts is intended to be a generic solution to code duplication when using *URLParts
@@ -15,9 +14,9 @@ import (
 // The above suggestion would be preferable to continuing to expand this (due to 4x code dupe for every function)-- it's just a bridge over a LARGE gap for now.
 type GenericResourceURLParts struct {
 	location     Location // underlying location selects which URLParts we're using
-	blobURLParts blob.URLParts
-	fileURLParts sharefile.URLParts
-	bfsURLParts  azbfs.BfsURLParts
+	blobURLParts azblob.URLParts
+	fileURLParts file.URLParts
+	bfsURLParts  azdatalake.URLParts
 	s3URLParts   S3URLParts
 	gcpURLParts  GCPURLParts
 }
@@ -28,23 +27,19 @@ func NewGenericResourceURLParts(resourceURL url.URL, location Location) GenericR
 
 	switch location {
 	case ELocation.Blob():
-		g.blobURLParts, err = blob.ParseURL(resourceURL.String())
-		PanicIfErr(err)
+		g.blobURLParts, err = azblob.ParseURL(resourceURL.String())
 	case ELocation.File():
-		g.fileURLParts, err = sharefile.ParseURL(resourceURL.String())
-		PanicIfErr(err)
+		g.fileURLParts, err = file.ParseURL(resourceURL.String())
 	case ELocation.BlobFS():
-		g.bfsURLParts = azbfs.NewBfsURLParts(resourceURL)
+		g.bfsURLParts, err = azdatalake.ParseURL(resourceURL.String())
 	case ELocation.S3():
 		g.s3URLParts, err = NewS3URLParts(resourceURL)
-		PanicIfErr(err)
 	case ELocation.GCP():
 		g.gcpURLParts, err = NewGCPURLParts(resourceURL)
-		PanicIfErr(err)
 	default:
 		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
 	}
-
+	PanicIfErr(err)
 	return g
 }
 
@@ -55,7 +50,7 @@ func (g *GenericResourceURLParts) GetContainerName() string {
 	case ELocation.File():
 		return g.fileURLParts.ShareName
 	case ELocation.BlobFS():
-		return g.bfsURLParts.FileSystemName
+		return g.bfsURLParts.FilesystemName
 	case ELocation.S3():
 		return g.s3URLParts.BucketName
 	case ELocation.GCP():
@@ -72,7 +67,7 @@ func (g *GenericResourceURLParts) GetObjectName() string {
 	case ELocation.File():
 		return g.fileURLParts.DirectoryOrFilePath
 	case ELocation.BlobFS():
-		return g.bfsURLParts.DirectoryOrFilePath
+		return g.bfsURLParts.PathName
 	case ELocation.S3():
 		return g.s3URLParts.ObjectKey
 	case ELocation.GCP():
@@ -89,7 +84,7 @@ func (g *GenericResourceURLParts) SetObjectName(objectName string) {
 	case ELocation.File():
 		g.fileURLParts.DirectoryOrFilePath = objectName
 	case ELocation.BlobFS():
-		g.bfsURLParts.DirectoryOrFilePath = objectName
+		g.bfsURLParts.PathName = objectName
 	case ELocation.S3():
 		g.s3URLParts.ObjectKey = objectName
 	case ELocation.GCP():
@@ -100,8 +95,6 @@ func (g *GenericResourceURLParts) SetObjectName(objectName string) {
 }
 
 func (g *GenericResourceURLParts) String() string {
-	var URLOut url.URL
-
 	switch g.location {
 	case ELocation.S3():
 		return g.s3URLParts.String()
@@ -112,13 +105,13 @@ func (g *GenericResourceURLParts) String() string {
 	case ELocation.File():
 		return g.fileURLParts.String()
 	case ELocation.BlobFS():
-		URLOut = g.bfsURLParts.URL()
+		return g.bfsURLParts.String()
 
 	default:
 		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
 	}
 
-	return URLOut.String()
+	return ""
 }
 
 func (g *GenericResourceURLParts) URL() url.URL {
@@ -134,7 +127,10 @@ func (g *GenericResourceURLParts) URL() url.URL {
 		PanicIfErr(err)
 		return *parsedURL
 	case ELocation.BlobFS():
-		return g.bfsURLParts.URL()
+		u := g.bfsURLParts.String()
+		parsedURL, err := url.Parse(u)
+		PanicIfErr(err)
+		return *parsedURL
 	case ELocation.S3():
 		return g.s3URLParts.URL()
 	case ELocation.GCP():

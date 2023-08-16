@@ -28,6 +28,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"math"
 	"os"
 	"reflect"
@@ -35,8 +36,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/JeffreyRichter/enum/enum"
