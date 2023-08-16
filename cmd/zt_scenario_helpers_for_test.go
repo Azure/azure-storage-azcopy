@@ -514,10 +514,12 @@ func (scenarioHelper) generateShareFilesFromList(a *assert.Assertions, shareClie
 
 func (scenarioHelper) generateBFSPathsFromList(a *assert.Assertions, fsClient *filesystem.Client, fileList []string) {
 	for _, p := range fileList {
-		fc := fsClient.NewFileClient(p)
+		// TODO : RootDirectoryClient in datalake SDK
+		fc, err := fsClient.NewDirectoryClient("").NewFileClient(p)
+		a.Nil(err)
 
 		// Create the file
-		_, err := fc.Create(ctx, nil)
+		_, err = fc.Create(ctx, nil)
 		a.Nil(err)
 
 		_, err = fc.AppendData(ctx, 0, streaming.NopCloser(strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes)))), nil)
