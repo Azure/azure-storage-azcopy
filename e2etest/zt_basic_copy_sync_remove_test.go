@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
@@ -390,15 +390,12 @@ func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
 				r := s.state.source.(*resourceBlobContainer)
 				urlParts, err := blob.ParseURL(r.containerClient.URL())
 				a.Assert(err, equals(), nil)
-				fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("")
+				fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(urlParts.ContainerName).NewDirectoryClient("/")
 
-				_, err = fsURL.GetAccessControl(ctx)
+				_, err = fsURL.GetAccessControl(ctx, nil)
 				a.Assert(err, notEquals(), nil)
-				stgErr, ok := err.(azbfs.StorageError)
-				a.Assert(ok, equals(), true)
-				if ok {
-					a.Assert(stgErr.ServiceCode(), equals(), azbfs.ServiceCodeType("FilesystemNotFound"))
-				}
+				a.Assert(datalakeerror.HasCode(err, datalakeerror.FileSystemNotFound), equals(), true)
+
 			},
 		},
 		testFiles{

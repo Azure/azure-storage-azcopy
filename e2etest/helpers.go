@@ -37,6 +37,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
+	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
@@ -44,18 +49,15 @@ import (
 	"io"
 	"math/rand"
 	"mime"
-	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go/pkg/credentials"
-	chk "gopkg.in/check.v1"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/credentials"
+	chk "gopkg.in/check.v1"
 )
 
 var ctx = context.Background()
@@ -140,9 +142,9 @@ func getContainerURL(c asserter, bsc *blobservice.Client) (cc *container.Client,
 	return
 }
 
-func getFilesystemURL(c asserter, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
+func getFilesystemURL(c asserter, dsc *datalakeservice.Client) (fsc *filesystem.Client, name string) {
 	name = generateFilesystemName(c)
-	filesystem = bfssu.NewFileSystemURL(name)
+	fsc = dsc.NewFileSystemClient(name)
 
 	return
 }
@@ -154,9 +156,9 @@ func getBlockBlobURL(c asserter, cc *container.Client, prefix string) (bc *block
 	return bc, name
 }
 
-func getBfsFileURL(c asserter, filesystemURL azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
+func getBfsFileURL(c asserter, fsc *filesystem.Client, prefix string) (fc *datalakefile.Client, name string) {
 	name = prefix + generateBfsFileName(c)
-	file = filesystemURL.NewRootDirectoryURL().NewFileURL(name)
+	fc = fsc.NewFileClient(name)
 
 	return
 }
@@ -196,30 +198,26 @@ func createNewContainer(c asserter, bsc *blobservice.Client) (cc *container.Clie
 	return
 }
 
-func createNewFilesystem(c asserter, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
-	filesystem, name = getFilesystemURL(c, bfssu)
+func createNewFilesystem(c asserter, dsc *datalakeservice.Client) (fsc *filesystem.Client, name string) {
+	fsc, name = getFilesystemURL(c, dsc)
 
-	cResp, err := filesystem.Create(ctx)
+	_, err := fsc.Create(ctx, nil)
 	c.AssertNoErr(err)
-	c.Assert(cResp.StatusCode(), equals(), 201)
 	return
 }
 
-func createNewBfsFile(c asserter, filesystem azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
-	file, name = getBfsFileURL(c, filesystem, prefix)
+func createNewBfsFile(c asserter, fsc *filesystem.Client, prefix string) (fc *datalakefile.Client, name string) {
+	fc, name = getBfsFileURL(c, fsc, prefix)
 
 	// Create the file
-	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
+	_, err := fc.Create(ctx, nil)
 	c.AssertNoErr(err)
-	c.Assert(cResp.StatusCode(), equals(), 201)
 
-	aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
+	_, err = fc.AppendData(ctx, 0, streaming.NopCloser(strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes)))), nil)
 	c.AssertNoErr(err)
-	c.Assert(aResp.StatusCode(), equals(), 202)
 
-	fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+	_, err = fc.FlushData(ctx, defaultBlobFSFileSizeInBytes, &datalakefile.FlushDataOptions{Close: to.Ptr(true)})
 	c.AssertNoErr(err)
-	c.Assert(fResp.StatusCode(), equals(), 200)
 	return
 }
 
@@ -302,10 +300,9 @@ func deleteContainer(c asserter, cc *container.Client) {
 	c.AssertNoErr(err)
 }
 
-func deleteFilesystem(c asserter, filesystem azbfs.FileSystemURL) {
-	resp, err := filesystem.Delete(ctx)
+func deleteFilesystem(c asserter, fsc *filesystem.Client) {
+	_, err := fsc.Delete(ctx, nil)
 	c.AssertNoErr(err)
-	c.Assert(resp.StatusCode(), equals(), 202)
 }
 
 type createS3ResOptions struct {
@@ -528,26 +525,18 @@ func getShareURLWithSAS(c asserter, credential *sharefile.SharedKeyCredential, s
 	return sc
 }
 
-func getAdlsServiceURLWithSAS(c asserter, credential azbfs.SharedKeyCredential) azbfs.ServiceURL {
-	sasQueryParams, err := azbfs.AccountSASSignatureValues{
-		Protocol:      azbfs.SASProtocolHTTPS,
-		ExpiryTime:    time.Now().Add(48 * time.Hour),
-		Permissions:   "rwdlacup",
-		Services:      "bqf",
-		ResourceTypes: "sco",
-	}.NewSASQueryParameters(&credential)
+func getAdlsServiceURLWithSAS(c asserter, credential *azdatalake.SharedKeyCredential) *datalakeservice.Client {
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/", credential.AccountName())
+	dsc, err := datalakeservice.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+	c.AssertNoErr(err)
+	sasURL, err := dsc.GetSASURL(datalakesas.AccountResourceTypes{Service: true, Container: true, Object: true},
+		datalakesas.AccountPermissions{Read: true, Write: true, Create: true, Delete: true, List: true, Add: true, Update: true, Process: true},
+		time.Now().UTC().Add(48 * time.Hour), nil)
 	c.AssertNoErr(err)
 
-	// construct the url from scratch
-	qp := sasQueryParams.Encode()
-	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
-		credential.AccountName(), qp)
-
-	// convert the raw url and validate it was parsed successfully
-	fullURL, err := url.Parse(rawURL)
+	dsc, err = datalakeservice.NewClientWithNoCredential(sasURL, nil)
 	c.AssertNoErr(err)
-
-	return azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+	return dsc
 }
 
 // check.v1 style "StringContains" checker
