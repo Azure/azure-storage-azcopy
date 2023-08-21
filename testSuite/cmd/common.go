@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"net/http"
 	"os"
 	"strings"
 
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -65,9 +64,6 @@ func createGCPClientWithGCSSDK() (*gcpUtils.Client, error) {
 
 func ignoreStorageConflictStatus(err error) error {
 	if err != nil {
-		if stgErr, ok := err.(azbfs.StorageError); ok && (stgErr.Response().StatusCode != http.StatusConflict) {
-			return err
-		}
 		// Skip the error, when resource already exists.
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) {
