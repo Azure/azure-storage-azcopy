@@ -27,9 +27,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"math"
-	"strings"
 	"sync"
 	"time"
 
@@ -133,44 +131,6 @@ func refreshPolicyHalfOfExpiryWithin(token *adal.Token, options CredentialOpOpti
 	return waitDuration
 }
 
-// CreateBlobFSCredential creates BlobFS credential according to credential info.
-func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) azbfs.Credential {
-	cred := azbfs.NewAnonymousCredential()
-
-	switch credInfo.CredentialType {
-	case ECredentialType.OAuthToken():
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
-		}
-
-		// Create TokenCredential with refresher.
-		cred = azbfs.NewTokenCredential(
-			credInfo.OAuthTokenInfo.AccessToken,
-			func(credential azbfs.TokenCredential) time.Duration {
-				return refreshBlobFSToken(ctx, credInfo.OAuthTokenInfo, credential, options)
-			})
-
-	case ECredentialType.SharedKey():
-		// Get the Account Name and Key variables from environment
-		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
-		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
-		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-		if name == "" || key == "" {
-			options.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blobfs SharedKey credential"))
-		}
-		// create the shared key credentials
-		cred = azbfs.NewSharedKeyCredential(name, key)
-
-	case ECredentialType.Anonymous():
-		// do nothing
-
-	default:
-		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
-	}
-
-	return cred
-}
-
 // CreateS3Credential creates AWS S3 credential according to credential info.
 func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
 	glcm := GetLifecycleMgr()
@@ -188,27 +148,6 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 	}
 	panic("work around the compiling, logic wouldn't reach here")
-}
-
-func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azbfs.TokenCredential, options CredentialOpOptions) time.Duration {
-	newToken, err := tokenInfo.Refresh(ctx)
-	if err != nil {
-		// Fail to get new token.
-		if _, ok := err.(adal.TokenRefreshError); ok && strings.Contains(err.Error(), "refresh token has expired") {
-			options.logError(fmt.Sprintf("failed to refresh token, OAuth refresh token has expired, please log in with azcopy login command again. (Error details: %v)", err))
-		} else {
-			options.logError(fmt.Sprintf("failed to refresh token, please check error details and try to log in with azcopy login command again. (Error details: %v)", err))
-		}
-		// Try to refresh again according to existing token's info.
-		return refreshPolicyHalfOfExpiryWithin(&(tokenInfo.Token), options)
-	}
-
-	// Token has been refreshed successfully.
-	tokenCredential.SetToken(newToken.AccessToken)
-	options.logInfo(fmt.Sprintf("%v token refreshed successfully", time.Now().UTC()))
-
-	// Calculate wait duration, and schedule next refresh.
-	return refreshPolicyHalfOfExpiryWithin(newToken, options)
 }
 
 // ==============================================================================================
