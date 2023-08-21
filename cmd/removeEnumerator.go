@@ -213,7 +213,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, datalakeURLParts azdatal
 	//deleting a filesystem
 	if datalakeURLParts.PathName == "" {
 		glcm.Dryrun(func(_ common.OutputFormat) string {
-			return fmt.Sprintf("DRYRUN: remove filesystem %s", datalakeURLParts.FilesystemName)
+			return fmt.Sprintf("DRYRUN: remove filesystem %s", datalakeURLParts.FileSystemName)
 		})
 		return nil
 	}
@@ -250,7 +250,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, datalakeURLParts azdatal
 
 		for _, v := range resp.Paths {
 			entityType := "directory"
-			if v.IsDirectory == nil || (*v.IsDirectory == "false") {
+			if v.IsDirectory == nil || (*v.IsDirectory == false) {
 				entityType = "file"
 			}
 

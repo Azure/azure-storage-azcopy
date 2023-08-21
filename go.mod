@@ -28,6 +28,8 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
 
+replace github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake => github.com/gapra-msft/azure-sdk-for-go/sdk/storage/azdatalake v0.0.0-20230821201001-986c0b3e387c
+
 require github.com/stretchr/testify v1.8.1
 
 require (

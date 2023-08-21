@@ -203,7 +203,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		if err != nil {
 			return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
 		}
-		if p.FilesystemName == "" || p.PathName != "" {
+		if p.FileSystemName == "" || p.PathName != "" {
 			return "", errors.New("the blobFS target must be a filesystem")
 		}
 		p.PathName = virtualDir

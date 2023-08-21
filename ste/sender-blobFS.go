@@ -78,13 +78,13 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 	if err != nil {
 		return nil, err
 	}
-	filesystemName := datalakeURLParts.FilesystemName
+	filesystemName := datalakeURLParts.FileSystemName
 	directoryOrFilePath := datalakeURLParts.PathName
 	// Strip any non-service related things away
-	datalakeURLParts.FilesystemName = ""
+	datalakeURLParts.FileSystemName = ""
 	datalakeURLParts.PathName = ""
 	serviceClient := common.CreateDatalakeServiceClient(datalakeURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-	filesystemClient := serviceClient.NewFilesystemClient(filesystemName)
+	filesystemClient := serviceClient.NewFileSystemClient(filesystemName)
 
 	var destClient DatalakeClientStub
 	if info.IsFolderPropertiesTransfer() {
@@ -139,7 +139,7 @@ func getParentDirectoryClient(uh DatalakeClientStub, serviceClient *service.Clie
 		return nil, err
 	}
 	directoryOrFilePath := directoryURLParts.PathName
-	shareClient := serviceClient.NewFilesystemClient(directoryURLParts.FilesystemName)
+	shareClient := serviceClient.NewFileSystemClient(directoryURLParts.FileSystemName)
 	return shareClient.NewDirectoryClient(directoryOrFilePath), nil
 }
 

@@ -50,7 +50,7 @@ func (g *GenericResourceURLParts) GetContainerName() string {
 	case ELocation.File():
 		return g.fileURLParts.ShareName
 	case ELocation.BlobFS():
-		return g.bfsURLParts.FilesystemName
+		return g.bfsURLParts.FileSystemName
 	case ELocation.S3():
 		return g.s3URLParts.BucketName
 	case ELocation.GCP():
