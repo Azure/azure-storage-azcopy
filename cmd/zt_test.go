@@ -215,7 +215,7 @@ func getContainerClient(a *assert.Assertions, bsc *blobservice.Client) (containe
 
 func getFilesystemClient(a *assert.Assertions, dsc *datalakeservice.Client) (filesystem *filesystem.Client, name string) {
 	name = generateFilesystemName()
-	filesystem = dsc.NewFilesystemClient(name)
+	filesystem = dsc.NewFileSystemClient(name)
 
 	return
 }

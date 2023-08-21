@@ -1330,7 +1330,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	_, err = fileClientSource.Create(ctx, nil)
 	a.Nil(err)
 
-	dirClientWithSASSource := serviceClientWithSAS.NewFilesystemClient(fsNameSource).NewDirectoryClient(parentDirNameSource)
+	dirClientWithSASSource := serviceClientWithSAS.NewFileSystemClient(fsNameSource).NewDirectoryClient(parentDirNameSource)
 
 	// Set up destination
 	// set up the file system
@@ -1346,7 +1346,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
-	dirClientWithSAS := serviceClientWithSAS.NewFilesystemClient(fsName).NewDirectoryClient(parentDirName)
+	dirClientWithSAS := serviceClientWithSAS.NewFileSystemClient(fsName).NewDirectoryClient(parentDirName)
 	// =====================================
 
 	// 1. Verify that copy between dfs and dfs works.
