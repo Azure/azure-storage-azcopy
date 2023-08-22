@@ -24,8 +24,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"math"
 	"reflect"
 	"strconv"
@@ -64,6 +64,50 @@ func (h *contentHeaders) DeepCopy() *contentHeaders {
 	}
 
 	return &ret
+}
+
+func (h *contentHeaders) ToBlob() azblob.BlobHTTPHeaders {
+	if h == nil {
+		return azblob.BlobHTTPHeaders{}
+	}
+
+	return azblob.BlobHTTPHeaders{
+		ContentType:        DerefOrZero(h.contentType),
+		ContentDisposition: DerefOrZero(h.contentDisposition),
+		ContentEncoding:    DerefOrZero(h.contentEncoding),
+		ContentLanguage:    DerefOrZero(h.contentLanguage),
+		CacheControl:       DerefOrZero(h.cacheControl),
+		ContentMD5:         h.contentMD5,
+	}
+}
+
+func (h *contentHeaders) ToFile() azfile.FileHTTPHeaders {
+	if h == nil {
+		return azfile.FileHTTPHeaders{}
+	}
+
+	return azfile.FileHTTPHeaders{
+		ContentType:        DerefOrZero(h.contentType),
+		ContentDisposition: DerefOrZero(h.contentDisposition),
+		ContentEncoding:    DerefOrZero(h.contentEncoding),
+		ContentLanguage:    DerefOrZero(h.contentLanguage),
+		CacheControl:       DerefOrZero(h.cacheControl),
+		ContentMD5:         h.contentMD5,
+	}
+}
+
+func (h *contentHeaders) ToBlobFS() azbfs.BlobFSHTTPHeaders {
+	if h == nil {
+		return azbfs.BlobFSHTTPHeaders{}
+	}
+
+	return azbfs.BlobFSHTTPHeaders{
+		ContentType:        DerefOrZero(h.contentType),
+		ContentDisposition: DerefOrZero(h.contentDisposition),
+		ContentEncoding:    DerefOrZero(h.contentEncoding),
+		ContentLanguage:    DerefOrZero(h.contentLanguage),
+		CacheControl:       DerefOrZero(h.cacheControl),
+	}
 }
 
 func (h *contentHeaders) String() string {

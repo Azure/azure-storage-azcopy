@@ -231,15 +231,16 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		verb = "remove"
 	case eOperation.Resume():
 		verb = "jobs resume"
+	case eOperation.List():
+		verb = "list"
 	default:
 		panic("unsupported operation type")
 	}
 
-	args := append(strings.Split(verb, " "), src, dst)
-	if operation == eOperation.Remove() {
-		args = args[:2]
-	} else if operation == eOperation.Resume() {
-		args = args[:3]
+	args := strings.Split(verb, " ")
+	args = append(args, src)
+	if operation.NeedsDst() {
+		args = append(args, dst)
 	}
 	args = append(args, t.computeArgs()...)
 

@@ -328,7 +328,11 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destURL
 		}
 	}
 
-	if u.permissionsToApply.Permission != nil && len(*u.permissionsToApply.Permission) > filesServiceMaxSDDLSize {
+	if u.headersToApply.PermissionString != nil && len(*u.headersToApply.PermissionString) > FilesServiceMaxSDDLSize {
+		fURLParts := azfile.NewFileURLParts(destUrl)
+		fURLParts.DirectoryOrFilePath = ""
+		shareURL := azfile.NewShareURL(fURLParts.URL(), u.pipeline)
+
 		sipm := u.jptm.SecurityInfoPersistenceManager()
 		pkey, err := sipm.PutSDDL(*u.permissionsToApply.Permission, u.shareClient)
 		u.permissionsToApply.PermissionKey = &pkey

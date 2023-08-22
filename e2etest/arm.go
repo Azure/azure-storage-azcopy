@@ -12,13 +12,14 @@ import (
 )
 
 type ARMAsyncResponse struct {
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime"`
-	Status    string `json:"status"`
-
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Status          string  `json:"status"`
+	StartTime       string  `json:"startTime"`
+	EndTime         string  `json:"endTime"`
+	PercentComplete float64 `json:"percentComplete"`
 	// Set Properties to a pointer of your target struct, encoding/json will handle the magic.
 	Properties interface{}   `json:"properties"`
-	Name       string        `json:"name"`
 	Error      ARMAsyncError `json:"error"`
 }
 
@@ -47,6 +48,9 @@ func ResolveAzureAsyncOperation(OAuth *azcore.AccessToken, uri string, propertie
 
 	var resp *http.Response
 	for {
+		// Update the OAuth token if we have to
+		req.Header["Authorization"] = []string{"Bearer " + OAuth.OAuthToken()}
+
 		resp, err = http.DefaultClient.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to send request: %w", err)
@@ -58,15 +62,6 @@ func ResolveAzureAsyncOperation(OAuth *azcore.AccessToken, uri string, propertie
 			return nil, fmt.Errorf("failed to read response body (resp code 200): %w", err)
 		}
 
-		armResp = &ARMAsyncResponse{
-			Properties: properties, // the user may have supplied a ptr to a struct, let encoding/json resolve that
-		}
-
-		err = json.Unmarshal(buf, armResp)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse response body: %w", err)
-		}
-
 		if resp.StatusCode != 200 {
 			rBody, err := io.ReadAll(resp.Body)
 			if err != nil {
@@ -74,6 +69,15 @@ func ResolveAzureAsyncOperation(OAuth *azcore.AccessToken, uri string, propertie
 			}
 
 			return nil, fmt.Errorf("failed to get access (resp code %d): %s", resp.StatusCode, string(rBody))
+		}
+
+		armResp = &ARMAsyncResponse{
+			Properties: properties, // the user may have supplied a ptr to a struct, let encoding/json resolve that
+		}
+
+		err = json.Unmarshal(buf, armResp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse response body: %w", err)
 		}
 
 		if armResp.Status == ARMStatusSucceeded || armResp.Status == ARMStatusCanceled || armResp.Status == ARMStatusFailed {

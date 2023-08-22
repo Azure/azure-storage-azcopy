@@ -285,3 +285,16 @@ func (f FileURL) SetAccessControl(ctx context.Context, permissions BlobFSAccessC
 		nil, nil, nil, nil, &overrideHttpVerb,
 		nil, nil, nil, nil)
 }
+
+func (f FileURL) SetProperties(ctx context.Context, headers BlobFSHTTPHeaders) (*PathUpdateResponse, error) {
+	// TODO: the go http client has a problem with PATCH and content-length header
+	//       we should investigate and report the issue
+	// See similar todo, with larger comments, in AppendData
+	overrideHttpVerb := "PATCH"
+
+	return f.fileClient.Update(ctx, PathUpdateActionSetProperties, f.fileSystemName, f.path,
+		nil, nil, nil, nil, nil, nil,
+		&headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		&overrideHttpVerb, nil, nil, nil, nil)
+}

@@ -207,10 +207,15 @@ func (Operation) Copy() Operation        { return Operation(1) }
 func (Operation) Sync() Operation        { return Operation(1 << 1) }
 func (Operation) CopyAndSync() Operation { return eOperation.Copy() | eOperation.Sync() }
 func (Operation) Remove() Operation      { return Operation(1 << 2) }
+func (Operation) List() Operation        { return Operation(1 << 3) }
 func (Operation) Resume() Operation      { return Operation(1 << 7) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
+}
+
+func (o Operation) NeedsDst() bool {
+	return !(o == eOperation.Remove() || o == eOperation.List() || o == eOperation.Resume())
 }
 
 // getValues chops up composite values into their parts
