@@ -254,7 +254,8 @@ func (s *blockBlobSenderBase) Epilogue() {
 	}
 
 	// Upload ADLS Gen 2 ACLs
-	if jptm.FromTo() == common.EFromTo.BlobBlob() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
+	fromTo := jptm.FromTo()
+	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
 		blobURLParts, err := blob.ParseURL(s.destBlockBlobClient.URL())
 		if err != nil {
 			jptm.FailActiveSend("Parsing blob URL", err)
