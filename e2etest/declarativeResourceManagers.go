@@ -334,7 +334,7 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(urlParts.ContainerName).NewDirectoryClient("/")
 
 		resp, err := fsURL.GetAccessControl(ctx, nil)
-		if datalakeerror.HasCode(err, datalakeerror.FileSystemNotFound) {
+		if datalakeerror.HasCode(err, "FilesystemNotFound") {
 			return objects
 		}
 		a.AssertNoErr(err)

@@ -394,7 +394,7 @@ func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
 
 				_, err = fsURL.GetAccessControl(ctx, nil)
 				a.Assert(err, notEquals(), nil)
-				a.Assert(datalakeerror.HasCode(err, datalakeerror.FileSystemNotFound), equals(), true)
+				a.Assert(datalakeerror.HasCode(err, "FilesystemNotFound"), equals(), true)
 
 			},
 		},
