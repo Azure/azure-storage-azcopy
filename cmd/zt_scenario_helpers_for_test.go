@@ -307,7 +307,7 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(a *assert.Assertions
 
 func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertions, serviceClient *datalakeservice.Client, fsList []string, fileList []string, data string) {
 	for _, filesystemName := range fsList {
-		fsClient := serviceClient.NewFilesystemClient(filesystemName)
+		fsClient := serviceClient.NewFileSystemClient(filesystemName)
 		_, err := fsClient.Create(ctx, nil)
 		a.Nil(err)
 

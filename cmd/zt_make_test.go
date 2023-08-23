@@ -88,7 +88,7 @@ func TestMakeBlobFSFilesystem(t *testing.T) {
 	defer deleteFilesystem(a, fsc)
 
 	bscSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
-	ccSAS := bscSAS.NewFilesystemClient(name)
+	ccSAS := bscSAS.NewFileSystemClient(name)
 
 	args := rawMakeCmdArgs{
 		resourceToCreate: ccSAS.DFSURL(),
@@ -110,7 +110,7 @@ func TestMakeBlobFSFilesystemExists(t *testing.T) {
 	defer deleteFilesystem(a, fsc)
 
 	bscSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
-	ccSAS := bscSAS.NewFilesystemClient(name)
+	ccSAS := bscSAS.NewFileSystemClient(name)
 
 	args := rawMakeCmdArgs{
 		resourceToCreate: ccSAS.DFSURL(),
