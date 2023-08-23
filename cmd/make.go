@@ -95,7 +95,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		filesystemClient := common.CreateFilesystemClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
 		if _, err = filesystemClient.Create(ctx, nil); err != nil {
 			// print a nicer error message if container already exists
-			if datalakeerror.HasCode(err, datalakeerror.FilesystemAlreadyExists) {
+			if datalakeerror.HasCode(err, datalakeerror.FileSystemAlreadyExists) {
 				return fmt.Errorf("the filesystem already exists")
 			} else if datalakeerror.HasCode(err, datalakeerror.ResourceNotFound) {
 				return fmt.Errorf("please specify a valid filesystem URL with corresponding credentials")

@@ -145,12 +145,12 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 			return resource, err
 		}
 
-		if dURLParts.FilesystemName == "" || strings.Contains(dURLParts.FilesystemName, "*") {
+		if dURLParts.FileSystemName == "" || strings.Contains(dURLParts.FileSystemName, "*") {
 			if dURLParts.PathName != "" {
 				return resource, errors.New("cannot combine account-level traversal and specific file/folder names.")
 			}
 
-			dURLParts.FilesystemName = ""
+			dURLParts.FileSystemName = ""
 		}
 
 		return dURLParts.String(), nil
