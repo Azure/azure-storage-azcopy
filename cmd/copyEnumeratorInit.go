@@ -512,14 +512,14 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		}
 
 		dsc := common.CreateDatalakeServiceClient(accountRoot, dstCredInfo, nil, options)
-		fsc := dsc.NewFilesystemClient(containerName)
+		fsc := dsc.NewFileSystemClient(containerName)
 		_, err = fsc.GetProperties(ctx, nil)
 		if err == nil {
 			return err
 		}
 
 		_, err = fsc.Create(ctx, nil)
-		if datalakeerror.HasCode(err, datalakeerror.FilesystemAlreadyExists) {
+		if datalakeerror.HasCode(err, datalakeerror.FileSystemAlreadyExists) {
 			return nil
 		}
 		return err
