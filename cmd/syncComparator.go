@@ -90,6 +90,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
 
 		if f.disableComparison {
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
@@ -170,6 +171,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 
 		// if destination is stale, schedule source for transfer
 		if f.disableComparison {
+			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObject)
 		}
 
@@ -198,8 +200,8 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 			return f.copyTransferScheduler(sourceObject)
 		}
 
-		syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		// skip if dest is more recent
+		syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		return nil
 	}
 
