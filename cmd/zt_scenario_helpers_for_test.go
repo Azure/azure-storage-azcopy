@@ -31,6 +31,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
@@ -45,8 +49,6 @@ import (
 	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/minio/minio-go"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -239,15 +241,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForWASB(a *assert.Assertions, 
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(a *assert.Assertions, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(a *assert.Assertions, filesystemClient *filesystem.Client, prefix string) (pathList []string) {
 	pathList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, pathName1 := createNewBfsFile(a, filesystemURL, prefix+"top")
-		_, pathName2 := createNewBfsFile(a, filesystemURL, prefix+"sub1/")
-		_, pathName3 := createNewBfsFile(a, filesystemURL, prefix+"sub2/")
-		_, pathName4 := createNewBfsFile(a, filesystemURL, prefix+"sub1/sub3/sub5")
-		_, pathName5 := createNewBfsFile(a, filesystemURL, prefix+specialNames[i])
+		_, pathName1 := createNewBfsFile(a, filesystemClient, prefix+"top")
+		_, pathName2 := createNewBfsFile(a, filesystemClient, prefix+"sub1/")
+		_, pathName3 := createNewBfsFile(a, filesystemClient, prefix+"sub2/")
+		_, pathName4 := createNewBfsFile(a, filesystemClient, prefix+"sub1/sub3/sub5")
+		_, pathName5 := createNewBfsFile(a, filesystemClient, prefix+specialNames[i])
 
 		pathList[5*i] = pathName1
 		pathList[5*i+1] = pathName2
@@ -303,13 +305,13 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(a *assert.Assertions
 	}
 }
 
-func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertions, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
+func (s scenarioHelper) generateFilesystemsAndFilesFromLists(a *assert.Assertions, serviceClient *datalakeservice.Client, fsList []string, fileList []string, data string) {
 	for _, filesystemName := range fsList {
-		fsURL := serviceURL.NewFileSystemURL(filesystemName)
-		_, err := fsURL.Create(ctx)
+		fsClient := serviceClient.NewFileSystemClient(filesystemName)
+		_, err := fsClient.Create(ctx, nil)
 		a.Nil(err)
 
-		s.generateBFSPathsFromList(a, fsURL, fileList)
+		s.generateBFSPathsFromList(a, fsClient, fileList)
 	}
 }
 
@@ -510,22 +512,21 @@ func (scenarioHelper) generateShareFilesFromList(a *assert.Assertions, shareClie
 	time.Sleep(time.Second * 3)
 }
 
-func (scenarioHelper) generateBFSPathsFromList(a *assert.Assertions, filesystemURL azbfs.FileSystemURL, fileList []string) {
+func (scenarioHelper) generateBFSPathsFromList(a *assert.Assertions, fsClient *filesystem.Client, fileList []string) {
 	for _, p := range fileList {
-		file := filesystemURL.NewRootDirectoryURL().NewFileURL(p)
+		// TODO : RootDirectoryClient in datalake SDK
+		fc, err := fsClient.NewDirectoryClient("").NewFileClient(p)
+		a.Nil(err)
 
 		// Create the file
-		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
+		_, err = fc.Create(ctx, nil)
 		a.Nil(err)
-		a.Equal(201, cResp.StatusCode())
 
-		aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
+		_, err = fc.AppendData(ctx, 0, streaming.NopCloser(strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes)))), nil)
 		a.Nil(err)
-		a.Equal(202, aResp.StatusCode())
 
-		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+		_, err = fc.FlushData(ctx, defaultBlobFSFileSizeInBytes, &datalakefile.FlushDataOptions{Close: to.Ptr(true)})
 		a.Nil(err)
-		a.Equal(200, fResp.StatusCode())
 	}
 }
 
@@ -680,11 +681,12 @@ func (scenarioHelper) getFileServiceClientWithSAS(a *assert.Assertions) *fileser
 	return getFileServiceClientWithSAS(a, credential)
 }
 
-func (scenarioHelper) getRawAdlsServiceURLWithSAS(a *assert.Assertions) azbfs.ServiceURL {
+func (scenarioHelper) getDatalakeServiceClientWithSAS(a *assert.Assertions) *datalakeservice.Client {
 	accountName, accountKey := getAccountAndKey()
-	credential := azbfs.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := azdatalake.NewSharedKeyCredential(accountName, accountKey)
+	a.Nil(err)
 
-	return getAdlsServiceURLWithSAS(a, *credential)
+	return getDatalakeServiceClientWithSAS(a, credential)
 }
 
 func (scenarioHelper) getBlobServiceClient(a *assert.Assertions) *blobservice.Client {

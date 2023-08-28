@@ -30,6 +30,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
@@ -215,7 +220,6 @@ func CreatePageBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cred
 
 ///////////////////////////////////////////////// FILE FUNCTIONS /////////////////////////////////////////////////
 
-// CreateFileServiceClient creates a blob service client with credentials specified by credInfo
 func CreateFileServiceClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *fileservice.Client {
 	callbacks := newClientCallbacks[fileservice.Client, sharefile.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*fileservice.Client, error) {
@@ -286,6 +290,84 @@ func CreateShareDirectoryClient(u string, credInfo CredentialInfo, credOpOptions
 		},
 		NewSharedKeyCredential: func(accountName string, accountKey string) (*sharefile.SharedKeyCredential, error) {
 			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+		},
+	}
+
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
+}
+
+///////////////////////////////////////////////// DATALAKE FUNCTIONS /////////////////////////////////////////////////
+
+func CreateDatalakeServiceClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *datalakeservice.Client {
+	callbacks := newClientCallbacks[datalakeservice.Client, azdatalake.SharedKeyCredential]{
+		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*datalakeservice.Client, error) {
+			return datalakeservice.NewClient(u, tc, &datalakeservice.ClientOptions{ClientOptions: options})
+		},
+		NoCredential: func(u string, options azcore.ClientOptions) (*datalakeservice.Client, error) {
+			return datalakeservice.NewClientWithNoCredential(u, &datalakeservice.ClientOptions{ClientOptions: options})
+		},
+		SharedKeyCredential: func(u string, sharedKey *azdatalake.SharedKeyCredential, options azcore.ClientOptions) (*datalakeservice.Client, error) {
+			return datalakeservice.NewClientWithSharedKeyCredential(u, sharedKey, &datalakeservice.ClientOptions{ClientOptions: options})
+		},
+		NewSharedKeyCredential: func(accountName string, accountKey string) (*azdatalake.SharedKeyCredential, error) {
+			return azdatalake.NewSharedKeyCredential(accountName, accountKey)
+		},
+	}
+
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
+}
+
+func CreateFilesystemClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *filesystem.Client {
+	callbacks := newClientCallbacks[filesystem.Client, azdatalake.SharedKeyCredential]{
+		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*filesystem.Client, error) {
+			return filesystem.NewClient(u, tc, &filesystem.ClientOptions{ClientOptions: options})
+		},
+		NoCredential: func(u string, options azcore.ClientOptions) (*filesystem.Client, error) {
+			return filesystem.NewClientWithNoCredential(u, &filesystem.ClientOptions{ClientOptions: options})
+		},
+		SharedKeyCredential: func(u string, sharedKey *azdatalake.SharedKeyCredential, options azcore.ClientOptions) (*filesystem.Client, error) {
+			return filesystem.NewClientWithSharedKeyCredential(u, sharedKey, &filesystem.ClientOptions{ClientOptions: options})
+		},
+		NewSharedKeyCredential: func(accountName string, accountKey string) (*azdatalake.SharedKeyCredential, error) {
+			return azdatalake.NewSharedKeyCredential(accountName, accountKey)
+		},
+	}
+
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
+}
+
+func CreateDatalakeFileClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *datalakefile.Client {
+	callbacks := newClientCallbacks[datalakefile.Client, azdatalake.SharedKeyCredential]{
+		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*datalakefile.Client, error) {
+			return datalakefile.NewClient(u, tc, &datalakefile.ClientOptions{ClientOptions: options})
+		},
+		NoCredential: func(u string, options azcore.ClientOptions) (*datalakefile.Client, error) {
+			return datalakefile.NewClientWithNoCredential(u, &datalakefile.ClientOptions{ClientOptions: options})
+		},
+		SharedKeyCredential: func(u string, sharedKey *azdatalake.SharedKeyCredential, options azcore.ClientOptions) (*datalakefile.Client, error) {
+			return datalakefile.NewClientWithSharedKeyCredential(u, sharedKey, &datalakefile.ClientOptions{ClientOptions: options})
+		},
+		NewSharedKeyCredential: func(accountName string, accountKey string) (*azdatalake.SharedKeyCredential, error) {
+			return azdatalake.NewSharedKeyCredential(accountName, accountKey)
+		},
+	}
+
+	return createClient(callbacks, u, credInfo, credOpOptions, options)
+}
+
+func CreateDatalakeDirectoryClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *datalakedirectory.Client {
+	callbacks := newClientCallbacks[datalakedirectory.Client, azdatalake.SharedKeyCredential]{
+		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*datalakedirectory.Client, error) {
+			return datalakedirectory.NewClient(u, tc, &datalakedirectory.ClientOptions{ClientOptions: options})
+		},
+		NoCredential: func(u string, options azcore.ClientOptions) (*datalakedirectory.Client, error) {
+			return datalakedirectory.NewClientWithNoCredential(u, &datalakedirectory.ClientOptions{ClientOptions: options})
+		},
+		SharedKeyCredential: func(u string, sharedKey *azdatalake.SharedKeyCredential, options azcore.ClientOptions) (*datalakedirectory.Client, error) {
+			return datalakedirectory.NewClientWithSharedKeyCredential(u, sharedKey, &datalakedirectory.ClientOptions{ClientOptions: options})
+		},
+		NewSharedKeyCredential: func(accountName string, accountKey string) (*azdatalake.SharedKeyCredential, error) {
+			return azdatalake.NewSharedKeyCredential(accountName, accountKey)
 		},
 	}
 

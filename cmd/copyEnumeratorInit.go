@@ -8,8 +8,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"log"
 	"net/url"
 	"os"
@@ -74,7 +74,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, &dest)
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, &dest)
 
 	if err != nil {
 		return nil, err
@@ -345,7 +345,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, nil)
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
 
 	if err != nil {
 		return false
@@ -453,11 +453,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		from = to.Ptr(cca.FromTo.From())
 	}
 	options := createClientOptions(logLevel.ToPipelineLogLevel(), trailingDot, from)
-	// TODO: we can pass cred here as well
-	dstPipeline, err := InitPipeline(ctx, cca.FromTo.To(), dstCredInfo, logLevel.ToPipelineLogLevel(), cca.trailingDot, cca.FromTo.From())
-	if err != nil {
-		return
-	}
 
 	// Because the only use-cases for createDstContainer will be on service-level S2S and service-level download
 	// We only need to create "containers" on local and blob.
@@ -516,26 +511,18 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		dstURL, err := url.Parse(accountRoot)
-		if err != nil {
-			return err
-		}
-
-		serviceURL := azbfs.NewServiceURL(*dstURL, dstPipeline)
-		fsURL := serviceURL.NewFileSystemURL(containerName)
-		_, err = fsURL.GetProperties(ctx)
+		dsc := common.CreateDatalakeServiceClient(accountRoot, dstCredInfo, nil, options)
+		fsc := dsc.NewFileSystemClient(containerName)
+		_, err = fsc.GetProperties(ctx, nil)
 		if err == nil {
 			return err
 		}
 
-		_, err = fsURL.Create(ctx)
-		if stgErr, ok := err.(azbfs.StorageError); ok {
-			if stgErr.ServiceCode() != azbfs.ServiceCodeFileSystemAlreadyExists {
-				return err
-			}
-		} else {
-			return err
+		_, err = fsc.Create(ctx, nil)
+		if datalakeerror.HasCode(err, datalakeerror.FileSystemAlreadyExists) {
+			return nil
 		}
+		return err
 	default:
 		panic(fmt.Sprintf("cannot create a destination container at location %s.", cca.FromTo.To()))
 	}

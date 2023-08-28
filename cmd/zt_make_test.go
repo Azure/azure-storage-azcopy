@@ -83,43 +83,43 @@ func TestMakeBlobContainerExists(t *testing.T) {
 
 func TestMakeBlobFSFilesystem(t *testing.T) {
 	a := assert.New(t)
-	bsc := GetBFSSU()
-	fsc, name := getFilesystemURL(a, bsc)
+	dsc := getDatalakeServiceClient()
+	fsc, name := getFilesystemClient(a, dsc)
 	defer deleteFilesystem(a, fsc)
 
-	bscSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
-	ccSAS := bscSAS.NewFileSystemURL(name)
+	bscSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
+	ccSAS := bscSAS.NewFileSystemClient(name)
 
 	args := rawMakeCmdArgs{
-		resourceToCreate: ccSAS.String(),
+		resourceToCreate: ccSAS.DFSURL(),
 	}
 
 	runMakeAndVerify(args, func(err error) {
 		a.Nil(err)
-		_, err = fsc.GetProperties(ctx)
+		_, err = fsc.GetProperties(ctx, nil)
 		a.Nil(err)
 	})
 }
 
 func TestMakeBlobFSFilesystemExists(t *testing.T) {
 	a := assert.New(t)
-	bsc := GetBFSSU()
-	fsc, name := getFilesystemURL(a, bsc)
-	_, err := fsc.Create(ctx)
+	bsc := getDatalakeServiceClient()
+	fsc, name := getFilesystemClient(a, bsc)
+	_, err := fsc.Create(ctx, nil)
 	a.Nil(err)
 	defer deleteFilesystem(a, fsc)
 
-	bscSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
-	ccSAS := bscSAS.NewFileSystemURL(name)
+	bscSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
+	ccSAS := bscSAS.NewFileSystemClient(name)
 
 	args := rawMakeCmdArgs{
-		resourceToCreate: ccSAS.String(),
+		resourceToCreate: ccSAS.DFSURL(),
 	}
 
 	runMakeAndVerify(args, func(err error) {
 		a.NotNil(err)
-		a.Equal("the file system already exists", err.Error())
-		_, err = fsc.GetProperties(ctx)
+		a.Equal("the filesystem already exists", err.Error())
+		_, err = fsc.GetProperties(ctx, nil)
 		a.Nil(err)
 	})
 }
