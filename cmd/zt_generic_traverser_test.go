@@ -528,7 +528,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 	sc, shareName := createNewShare(a, fsc)
 	defer deleteShare(a, sc)
 
-	bfsu := GetBFSSU()
+	bfsu := getDatalakeServiceClient()
 	filesystemURL, _ := createNewFilesystem(a, bfsu)
 	defer deleteFilesystem(a, filesystemURL)
 
@@ -658,7 +658,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 	sc, shareName := createNewShare(a, fsc)
 	defer deleteShare(a, sc)
 
-	bfsu := GetBFSSU()
+	bfsu := getDatalakeServiceClient()
 	filesystemURL, _ := createNewFilesystem(a, bfsu)
 	defer deleteFilesystem(a, filesystemURL)
 
@@ -804,7 +804,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 	sc, shareName := createNewShare(a, fsc)
 	defer deleteShare(a, sc)
 
-	bfsu := GetBFSSU()
+	bfsu := getDatalakeServiceClient()
 	filesystemURL, _ := createNewFilesystem(a, bfsu)
 	defer deleteFilesystem(a, filesystemURL)
 
