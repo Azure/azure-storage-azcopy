@@ -40,7 +40,7 @@ func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
-func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr) {
 	bd.jptm = jptm
 	bd.txInfo = jptm.Info() // Inform the downloader
 }
@@ -70,13 +70,18 @@ func (bd *blobFSDownloader) Epilogue() {
 
 // Returns a chunk-func for ADLS gen2 downloads
 
-func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline any, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
 		info := jptm.Info()
 		u, _ := url.Parse(info.Source)
-		srcFileURL := azbfs.NewDirectoryURL(*u, srcPipeline).NewFileUrl()
+
+		p, ok := srcPipeline.(pipeline.Pipeline)
+		if !ok {
+			panic("Expecting a pipeline object here")
+		}
+		srcFileURL := azbfs.NewDirectoryURL(*u, p).NewFileUrl()
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.

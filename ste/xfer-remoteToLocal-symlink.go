@@ -1,12 +1,11 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 )
 
-func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
 	info := jptm.Info()
 
 	// Perform initial checks

@@ -32,8 +32,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -216,7 +214,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// Next, grab the page ranges on the destination.
 		s.destPageRangeOptimizer.fetchPages()
 
-		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
+		s.jptm.Log(common.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
 		return
 	}
 
@@ -261,7 +259,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 
 	if setTags {
 		if _, err := s.destPageBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil); err != nil {
-			s.jptm.Log(pipeline.LogWarning, err.Error())
+			s.jptm.Log(common.LogWarning, err.Error())
 		}
 	}
 

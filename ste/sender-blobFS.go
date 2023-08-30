@@ -22,14 +22,16 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"net/url"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -54,8 +56,11 @@ type blobFSSenderBase struct {
 	flushThreshold      int64
 }
 
-func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
-
+func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p any, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
+	pipeline, ok := p.(pipeline.Pipeline)
+	if !ok {
+		return nil, errors.New("Expecting pipeline.Pipeline on argument p")
+	}
 	info := jptm.Info()
 
 	// compute chunk size and number of chunks
@@ -76,9 +81,9 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 
 	var h URLHolderV1
 	if info.IsFolderPropertiesTransfer() {
-		h = azbfs.NewDirectoryURL(*destURL, p)
+		h = azbfs.NewDirectoryURL(*destURL, pipeline)
 	} else {
-		h = azbfs.NewFileURL(*destURL, p)
+		h = azbfs.NewFileURL(*destURL, pipeline)
 	}
 	return &blobFSSenderBase{
 		jptm:                jptm,
@@ -86,7 +91,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 		fileOrDirURL:        h,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
-		pipeline:            p,
+		pipeline:            pipeline,
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
@@ -187,7 +192,7 @@ func (u *blobFSSenderBase) Cleanup() {
 		defer cancelFn()
 		_, err := u.fileURL().Delete(deletionContext)
 		if err != nil {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL().String(), err.Error()))
+			jptm.Log(common.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL().String(), err.Error()))
 		}
 	}
 }

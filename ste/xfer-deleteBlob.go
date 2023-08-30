@@ -10,13 +10,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var explainedSkippedRemoveOnce sync.Once
 
-func DeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func DeleteBlob(jptm IJobPartTransferMgr, pacer pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
@@ -31,7 +30,7 @@ func DeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	jptm.ScheduleChunks(cf)
 }
 
-func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func doDeleteBlob(jptm IJobPartTransferMgr) {
 
 	info := jptm.Info()
 	// Get the source blob url of blob to delete
@@ -49,9 +48,9 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 			})
 
 			// log at error level so that it's clear why the transfer was skipped even when the log level is set to error
-			jptm.Log(pipeline.LogError, fmt.Sprintf("DELETE SKIPPED(blob has snapshots): %s", strings.Split(info.Destination, "?")[0]))
+			jptm.Log(common.LogError, fmt.Sprintf("DELETE SKIPPED(blob has snapshots): %s", strings.Split(info.Destination, "?")[0]))
 		} else {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+			jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
 
 		jptm.SetStatus(status)
@@ -81,7 +80,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 			// User can resume the job if completely ordered with a new sas.
 			if respErr.StatusCode == http.StatusForbidden {
 				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
-				jptm.Log(pipeline.LogError, errMsg)
+				jptm.Log(common.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)
 			}
 		}

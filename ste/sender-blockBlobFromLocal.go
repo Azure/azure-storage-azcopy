@@ -27,8 +27,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"sync/atomic"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -91,7 +89,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		encodedBlockID := u.generateEncodedBlockID(blockIndex)
 
 		if u.ChunkAlreadyTransferred(blockIndex) {
-			u.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug,
+			u.jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
 				fmt.Sprintf("Skipping chunk %d as it was already transferred.", blockIndex))
 			atomic.AddInt32(&u.atomicChunksWritten, 1)
 			return
@@ -186,7 +184,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 		if setTags {
 			if _, err := u.destBlockBlobClient.SetTags(jptm.Context(), u.blobTagsToApply, nil); err != nil {
-				u.jptm.Log(pipeline.LogWarning, err.Error())
+				u.jptm.Log(common.LogWarning, err.Error())
 			}
 		}
 	})

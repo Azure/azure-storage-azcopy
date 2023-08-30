@@ -3,7 +3,6 @@ package ste
 import (
 	gcpUtils "cloud.google.com/go/storage"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/oauth2/google"
 	"os"
@@ -45,8 +44,8 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 			GCPCredentialInfo: common.GCPCredentialInfo{},
 		},
 		common.CredentialOpOptions{
-			LogInfo:  func(str string) { p.jptm.Log(pipeline.LogInfo, str) },
-			LogError: func(str string) { p.jptm.Log(pipeline.LogError, str) },
+			LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
+			LogError: func(str string) { p.jptm.Log(common.LogError, str) },
 			Panic:    func(err error) { panic(err) },
 		})
 	if err != nil {
@@ -120,8 +119,8 @@ func (p *gcpSourceInfoProvider) handleInvalidMetadataKeys(m common.Metadata) (co
 	switch p.transferInfo.S2SInvalidMetadataHandleOption {
 	case common.EInvalidMetadataHandleOption.ExcludeIfInvalid():
 		retainedMetadata, excludedMetadata, invalidKeyExists := m.ExcludeInvalidKey()
-		if invalidKeyExists && p.jptm.ShouldLog(pipeline.LogWarning) {
-			p.jptm.Log(pipeline.LogWarning,
+		if invalidKeyExists && p.jptm.ShouldLog(common.LogWarning) {
+			p.jptm.Log(common.LogWarning,
 				fmt.Sprintf("METADATAWARNING: For source %q, invalid metadata with keys %s are excluded", p.transferInfo.Source, excludedMetadata.ConcatenatedKeys()))
 		}
 		return retainedMetadata, nil

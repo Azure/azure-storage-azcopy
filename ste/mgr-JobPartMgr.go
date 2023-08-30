@@ -417,7 +417,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}
-		jpm.Log(pipeline.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
+		jpm.Log(common.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 
 		// ===== TEST KNOB
 		relSrc, relDst := plan.TransferSrcDstRelatives(t)
@@ -437,16 +437,16 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		_, srcOk := DebugSkipFiles[relSrc]
 		_, dstOk := DebugSkipFiles[relDst]
 		if srcOk || dstOk {
-			if jpm.ShouldLog(pipeline.LogInfo) {
-				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
+			if jpm.ShouldLog(common.LogInfo) {
+				jpm.Log(common.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
 			}
 
 			// cancel the transfer
 			jptm.Cancel()
 			jptm.SetStatus(common.ETransferStatus.Cancelled())
 		} else {
-			if len(DebugSkipFiles) != 0 && jpm.ShouldLog(pipeline.LogInfo) {
-				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Did not exclude: src: %s dst: %s", relSrc, relDst))
+			if len(DebugSkipFiles) != 0 && jpm.ShouldLog(common.LogInfo) {
+				jpm.Log(common.LogInfo, fmt.Sprintf("Did not exclude: src: %s dst: %s", relSrc, relDst))
 			}
 		}
 		// ===== TEST KNOB
@@ -462,7 +462,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	}
 
 	if plan.IsFinalPart {
-		jpm.Log(pipeline.LogInfo, "Final job part has been scheduled")
+		jpm.Log(common.LogInfo, "Final job part has been scheduled")
 	}
 }
 
@@ -499,8 +499,8 @@ func (jpm *jobPartMgr) clientInfo() {
 	jpm.s2sSourceCredInfo = s2sSourceCredInfo
 
 	jpm.credOption = &common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(common.LogError, str) },
 		Panic:    jpm.Panic,
 		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
 		Cancel:   jpm.jobMgr.Cancel,
@@ -569,8 +569,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	}
 
 	credOption := common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(common.LogError, str) },
 		Panic:    jpm.Panic,
 		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
 		Cancel:   jpm.jobMgr.Cancel,
@@ -612,7 +612,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		 fromTo.IsDownload() && fromTo.From() == common.ELocation.Blob(), // source determines pipeline for download
 		 fromTo.IsSetProperties() && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()), // source determines pipeline for set properties, blobfs uses blob for set properties
 		 fromTo.IsDelete() && fromTo.From() == common.ELocation.Blob(): // ditto for delete
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+		jpm.Log(common.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
 		// If we need to write specifically to the gen2 endpoint, we should have this available.
 		if fromTo.To() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
@@ -634,7 +634,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS(),
 		 fromTo.IsDelete() && fromTo.From() == common.ELocation.BlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+		jpm.Log(common.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
 		jpm.pipeline = NewBlobFSPipeline(
 			credential,
@@ -812,7 +812,7 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
 	case common.ETransferStatus.Cancelled():
 	default:
-		jpm.Log(pipeline.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
+		jpm.Log(common.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
 	}
 }
 
@@ -831,7 +831,7 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
+		jpm.Log(common.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
 			jpm.planMMF.Plan().JobID, jpm.planMMF.Plan().PartNum, transfersDone,
 			jpm.planMMF.Plan().NumTransfers))
 	}
@@ -875,8 +875,8 @@ func (jpm *jobPartMgr) ReleaseAConnection() {
 	jpm.jobMgr.ReleaseAConnection()
 }
 
-func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
-func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
+func (jpm *jobPartMgr) ShouldLog(level common.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
+func (jpm *jobPartMgr) Log(level common.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
 func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
 func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jpm.jobMgr.ChunkStatusLogger()

@@ -21,7 +21,7 @@ func DeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pace
 	}
 
 	logBlobFSDeleteWarnOnce.Do(func() {
-		jptm.Log(pipeline.LogWarning, blobFSDeleteWarning)
+		jptm.Log(common.LogWarning, blobFSDeleteWarning)
 		common.GetLifecycleMgr().Info(blobFSDeleteWarning)
 	})
 
@@ -54,7 +54,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "DELETE ERROR ", err)
 		} else {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Source, "?")[0]))
+			jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Source, "?")[0]))
 		}
 
 		jptm.SetStatus(status)

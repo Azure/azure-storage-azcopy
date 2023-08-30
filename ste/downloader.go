@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 )
@@ -29,12 +28,12 @@ import (
 // Abstraction of the methods needed to download files/blobs from a remote location
 type downloader interface {
 	// Prologue does any necessary first-time setup
-	Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline)
+	Prologue(jptm IJobPartTransferMgr)
 
 	// GenerateDownloadFunc returns a func() that will download the specified portion of the remote file into dstFile
 	// Instead of taking destination file as a parameter, it takes a helper that will write to the file. That keeps details of
 	// file IO out out the download func, and lets that func concentrate only on the details of the remote endpoint
-	GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, writer common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc
+	GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline any, writer common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc
 
 	// Epilogue does cleanup. MAY be the only method that gets called (in error cases). So must not fail simply because
 	// Prologue has not yet been called

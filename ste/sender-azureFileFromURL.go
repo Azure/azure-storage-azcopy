@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -30,7 +29,7 @@ type urlToAzureFileCopier struct {
 	srcURL string
 }
 
-func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, _ pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newURLToAzureFileCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
 	senderBase, err := newAzureFileSenderBase(jptm, destination, pacer, sip)
