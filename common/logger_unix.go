@@ -43,7 +43,7 @@ type sysLogger struct {
 func NewSysLogger(jobID JobID, minimumLevelToLog LogLevel, logSuffix string) ILoggerResetable {
 	return &sysLogger{
 		jobID:             jobID,
-		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
+		minimumLevelToLog: minimumLevelToLog,
 		logSuffix:         logSuffix,
 		sanitizer:         NewAzCopyLogSanitizer(),
 	}

@@ -399,7 +399,7 @@ func (ll LogLevel) String() string {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // LogSanitizer can be implemented to clean secrets from lines logged by ForceLog
-// By default no implemetation is provided here, because pipeline may be used in many different
+// By default no implementation is provided here, because pipeline may be used in many different
 // contexts, so the correct implementation is context-dependent
 type LogSanitizer interface {
 	SanitizeLogMessage(raw string) string
