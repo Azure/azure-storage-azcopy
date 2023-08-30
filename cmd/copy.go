@@ -39,8 +39,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -1283,7 +1281,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := createClientOptions(pipeline.LogNone, nil, nil)
+	options := createClientOptions(common.LogNone, nil, nil)
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1330,7 +1328,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := createClientOptions(pipeline.LogNone, nil, nil)
+	options := createClientOptions(common.LogNone, nil, nil)
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()

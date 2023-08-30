@@ -25,9 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"os"
 	"reflect"
@@ -35,6 +32,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
@@ -397,11 +398,6 @@ func (ll LogLevel) String() string {
 	default:
 		return enum.StringInt(ll, reflect.TypeOf(ll))
 	}
-}
-
-func (ll LogLevel) ToPipelineLogLevel() LogLevel {
-	// This assumes that pipeline's LogLevel values can fit in a byte (which they can)
-	return LogLevel(ll)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

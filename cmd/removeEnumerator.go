@@ -30,8 +30,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -49,7 +47,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, nil)
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, nil)
 
 	// report failure to create traverser
 	if err != nil {
@@ -83,7 +81,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		glcm.Info(message)
 	}
 	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
@@ -134,12 +132,6 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
-	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
-	if err != nil {
-		return err
-	}
-
 	// attempt to parse the source url
 	sourceURL, err := cca.Source.FullURL()
 	if err != nil {
@@ -151,7 +143,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 
 	if cca.ListOfFilesChannel == nil {
 		if cca.dryrunMode {
-			return dryrunRemoveSingleDFSResource(ctx, urlParts, p, cca.Recursive)
+			return dryrunRemoveSingleDFSResource(ctx, cca.credentialInfo, urlParts, cca.Recursive)
 		} else {
 			err := transferProcessor.scheduleCopyTransfer(newStoredObject(
 				nil,
@@ -180,7 +172,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 			//remove the child path
 			urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
 			if cca.dryrunMode {
-				return dryrunRemoveSingleDFSResource(ctx, urlParts, p, cca.Recursive)
+				return dryrunRemoveSingleDFSResource(ctx, cca.credentialInfo, urlParts, cca.Recursive)
 			} else {
 				err := transferProcessor.scheduleCopyTransfer(newStoredObject(
 					nil,
@@ -206,7 +198,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	return err
 }
 
-func dryrunRemoveSingleDFSResource(ctx context.Context, urlParts azbfs.BfsURLParts, p pipeline.Pipeline, recursive bool) error {
+func dryrunRemoveSingleDFSResource(ctx context.Context, credInfo common.CredentialInfo, urlParts azbfs.BfsURLParts, recursive bool) error {
 	//deleting a filesystem
 	if urlParts.DirectoryOrFilePath == "" {
 
@@ -216,6 +208,10 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, urlParts azbfs.BfsURLPar
 		return nil
 	}
 
+	p, err := createBlobFSPipeline(ctx, credInfo, azcopyLogVerbosity)
+	if err != nil {
+		return err
+	}
 	// we do not know if the source is a file or a directory
 	// we assume it is a directory and get its properties
 	directoryURL := azbfs.NewDirectoryURL(urlParts.URL(), p)

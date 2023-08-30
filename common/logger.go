@@ -68,7 +68,7 @@ type jobLogger struct {
 func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, logFileFolder string, logFileNameSuffix string) ILoggerResetable {
 	return &jobLogger{
 		jobID:             jobID,
-		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
+		minimumLevelToLog: minimumLevelToLog,
 		logFileFolder:     logFileFolder,
 		sanitizer:         NewAzCopyLogSanitizer(),
 		logFileNameSuffix: logFileNameSuffix,

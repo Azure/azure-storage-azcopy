@@ -131,7 +131,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
-	enableChunkLogOutput := level.ToPipelineLogLevel() == common.LogDebug
+	enableChunkLogOutput := level == common.LogDebug
 
 	/* Create book-keeping channels */
 	jobPartProgressCh := make(chan jobPartProgressInfo)

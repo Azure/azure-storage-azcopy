@@ -32,8 +32,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
@@ -149,7 +147,7 @@ var rootCmd = &cobra.Command{
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
 			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
 		if !azcopySkipVersionCheck {
 			// spawn a routine to fetch and compare the local application's version against the latest version available
@@ -253,7 +251,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: initialize pipeline
-		options := createClientOptions(pipeline.LogNone, nil, nil)
+		options := createClientOptions(common.LogNone, nil, nil)
 
 		// step 2: start download
 		blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
