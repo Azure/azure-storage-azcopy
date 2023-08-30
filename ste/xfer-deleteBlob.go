@@ -26,7 +26,7 @@ func DeleteBlob(jptm IJobPartTransferMgr, pacer pacer) {
 	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 	// smaller "transfer initiation pool", where this code runs.
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
-	cf := createChunkFunc(true, jptm, id, func() { doDeleteBlob(jptm, p) })
+	cf := createChunkFunc(true, jptm, id, func() { doDeleteBlob(jptm) })
 	jptm.ScheduleChunks(cf)
 }
 

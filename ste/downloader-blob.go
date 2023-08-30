@@ -64,7 +64,7 @@ func newBlobDownloader() downloader {
 	}
 }
 
-func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr)
+func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr) {
 	bd.txInfo = jptm.Info()
 	bd.jptm = jptm
 

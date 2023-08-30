@@ -635,10 +635,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 func createClientOptions(logLevel common.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
+	logOptions.ShouldLog = func(level common.LogLevel) bool {return level <= logLevel}
+
 	if azcopyScanningLogger != nil {
-		logOptions.Log: azcopyScanningLogger.Log,
-		logOptions.ShouldLog: func(level common.LogLevel) bool {return level <= logLevel},
-		}
+		logOptions.Log = azcopyScanningLogger.Log
 	}
 	return ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
@@ -661,8 +661,8 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, l
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOption = pipeline.LogOptions{
-			Log:       azcopyScanningLogger.Log,
-			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
+			Log:       func(l pipeline.LogLevel, msg string) { azcopyScanningLogger.Log(common.LogLevel(l), msg) },
+			ShouldLog: func(level pipeline.LogLevel) bool { return common.LogLevel(level) <= logLevel },
 		}
 	}
 

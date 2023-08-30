@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -64,7 +63,7 @@ type IJobMgr interface {
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
 	Reset(context.Context, string) IJobMgr
-	PipelineLogInfo() pipeline.LogOptions
+	PipelineLogInfo() LogOptions
 	ReportJobPartDone(jobPartProgressInfo)
 	Context() context.Context
 	Cancel()
@@ -709,8 +708,8 @@ func (jm *jobMgr) Cancel() {
 }
 func (jm *jobMgr) ShouldLog(level common.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level common.LogLevel, msg string) { jm.logger.Log(level, msg) }
-func (jm *jobMgr) PipelineLogInfo() pipeline.LogOptions {
-	return pipeline.LogOptions{
+func (jm *jobMgr) PipelineLogInfo() LogOptions {
+	return LogOptions{
 		Log:       jm.Log,
 		ShouldLog: func(level common.LogLevel) bool { return level <= jm.logger.MinimumLogLevel() },
 	}

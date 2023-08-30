@@ -313,6 +313,17 @@ type LogOptions struct {
 	ShouldLog func(level common.LogLevel) bool
 }
 
+func (o LogOptions) ToPipelineLogOptions() pipeline.LogOptions {
+	log := func(ll pipeline.LogLevel, msg string) {
+		o.Log(common.LogLevel(ll), msg)
+	}
+	shouldLog := func(ll pipeline.LogLevel) bool {
+		return o.ShouldLog(common.LogLevel(ll))
+	}
+
+	return pipeline.LogOptions{log, shouldLog}
+}
+
 type logPolicy struct {
 	LogOptions         LogOptions
 	disallowedHeaders     map[string]struct{}
@@ -424,7 +435,7 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 		msg := b.String()
 
 		if forceLog {
-			pipeline.ForceLog(logLevel, msg)
+			pipeline.ForceLog(pipeline.LogLevel(logLevel), msg)
 		}
 		if shouldLog {
 			p.LogOptions.Log(logLevel, msg)

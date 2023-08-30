@@ -1775,7 +1775,7 @@ Final Job Status: %v%s%s
 				// log to job log
 				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
-					jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
+					jobMan.Log(common.LogInfo, logStats+"\n"+output)
 				}
 				return output
 			}

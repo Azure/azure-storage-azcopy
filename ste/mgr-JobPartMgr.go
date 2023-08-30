@@ -62,6 +62,7 @@ type IJobPartMgr interface {
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
+	Pipeline() pipeline.Pipeline
 	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -527,7 +528,7 @@ func (jpm *jobPartMgr) clientInfo() {
 
 	httpClient := jpm.jobMgr.HttpClient()
 	networkStats := jpm.jobMgr.PipelineNetworkStats()
-	logOptions := LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()}
+	logOptions := jpm.jobMgr.PipelineLogInfo()
 
 	var sourceTrailingDot *common.TrailingDotOption
 	var trailingDot *common.TrailingDotOption
@@ -546,7 +547,8 @@ func (jpm *jobPartMgr) clientInfo() {
 		}
 	}
 	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, sourceTrailingDot, nil)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)}
+	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)
+}
 
 func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
@@ -594,7 +596,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
 				credential,
 				azbfs.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
+					Log: jpm.jobMgr.PipelineLogInfo().ToPipelineLogOptions(),
 					Telemetry: azbfs.TelemetryOptions{
 						Value: userAgent,
 					},
@@ -620,7 +622,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.secondaryPipeline = NewBlobFSPipeline(
 				credential,
 				azbfs.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
+					Log: jpm.jobMgr.PipelineLogInfo().ToPipelineLogOptions(),
 					Telemetry: azbfs.TelemetryOptions{
 						Value: userAgent,
 					},
@@ -639,7 +641,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		jpm.pipeline = NewBlobFSPipeline(
 			credential,
 			azbfs.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
+				Log: jpm.jobMgr.PipelineLogInfo().ToPipelineLogOptions(),
 				Telemetry: azbfs.TelemetryOptions{
 					Value: userAgent,
 				},
@@ -668,7 +670,7 @@ func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
-	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
+	jpm.newJobXfer(jptm, jpm.pacer)
 }
 
 func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
@@ -900,6 +902,10 @@ func (jpm *jobPartMgr) S2SSourceClientOptions() azcore.ClientOptions {
 
 func (jpm *jobPartMgr) CredentialOpOptions() *common.CredentialOpOptions {
 	return jpm.credOption
+}
+
+func (jpm *jobPartMgr) Pipeline() pipeline.Pipeline {
+	return jpm.pipeline
 }
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {

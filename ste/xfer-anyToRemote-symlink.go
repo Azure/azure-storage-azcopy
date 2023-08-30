@@ -40,7 +40,7 @@ func anyToRemote_symlink(jptm IJobPartTransferMgr, info TransferInfo, pacer pace
 		return
 	}
 
-	baseSender, err := senderFactory(jptm, info.Destination, acer, srcInfoProvider)
+	baseSender, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())

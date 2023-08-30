@@ -13,7 +13,7 @@ import (
 var logBlobFSDeleteWarnOnce = &sync.Once{}
 const blobFSDeleteWarning = "Displayed file count will be either 1 or based upon list-of-files entries, and thus inaccurate, as deletes are performed recursively service-side."
 
-func DeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func DeleteHNSResource(jptm IJobPartTransferMgr, pacer pacer) {
 	// If the transfer was cancelled, then report the transfer as done.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
@@ -28,7 +28,7 @@ func DeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pace
 	// schedule the transfer as a chunk, so it will run on the main goroutine pool
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
 	cf := createChunkFunc(true, jptm, id, func() {
-		doDeleteHNSResource(jptm, p)
+		doDeleteHNSResource(jptm, jptm.Pipeline())
 	})
 	jptm.ScheduleChunks(cf)
 }

@@ -69,6 +69,7 @@ type IJobPartTransferMgr interface {
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
+	Pipeline() pipeline.Pipeline
 	SourceProviderPipeline() pipeline.Pipeline
 
 	FailActiveUpload(where string, err error)
@@ -833,7 +834,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	// TODO: ... if all expected chunks report as done
 }
 
-func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
+func (jptm *jobPartTransferMgr) PipelineLogInfo() LogOptions {
 	return jptm.jobPartMgr.(*jobPartMgr).jobMgr.(*jobMgr).PipelineLogInfo()
 }
 
@@ -997,6 +998,10 @@ func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
 
 func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
 	return jptm.jobPartMgr.CredentialOpOptions()
+}
+
+func (jptm *jobPartTransferMgr) Pipeline() pipeline.Pipeline {
+	return jptm.jobPartMgr.Pipeline()
 }
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {

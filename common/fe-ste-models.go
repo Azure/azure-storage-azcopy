@@ -345,19 +345,16 @@ const (
 	// LogPanic tells a logger to log all LogPanic and LogFatal entries passed to it.
 	LogPanic
 
-	// LogFailure will log all of above plus hard failures/errors. Retries are not logged.
-	LogFailure
-
-	// LogError tells a logger to log all of above plus temporary errors, retries.
+	// LogError tells a logger to log all LogError, LogPanic and LogFatal entries passed to it.
 	LogError
 
-	// LogWarning tells a logger to log all LogWarning, LogError, LogFailure, LogPanic and LogFatal entries passed to it.
+	// LogWarning tells a logger to log all LogWarning, LogError, LogPanic and LogFatal entries passed to it.
 	LogWarning
 
-	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LOgFailure, LogPanic and LogFatal entries passed to it.
+	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
 	LogInfo
 
-	// LogDebug tells a logger to log all LogDebug, LogInfo, LogWarning, LogError, LOgFailure, LogPanic and LogFatal entries passed to it.
+	// LogDebug tells a logger to log all LogDebug, LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
 	LogDebug
 )
 

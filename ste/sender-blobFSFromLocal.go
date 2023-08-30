@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"math"
 )
@@ -31,8 +30,8 @@ type blobFSUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newBlobFSSenderBase(jptm, destination, p, pacer, sip)
+func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newBlobFSSenderBase(jptm, destination, jptm.Pipeline(), pacer, sip)
 	if err != nil {
 		return nil, err
 	}
