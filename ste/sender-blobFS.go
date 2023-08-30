@@ -22,7 +22,6 @@ package ste
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -32,8 +31,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -50,17 +47,12 @@ type blobFSSenderBase struct {
 	fileOrDirURL URLHolderV1
 	chunkSize    int64
 	numChunks           uint32
-	pipeline            pipeline.Pipeline
 	pacer               pacer
 	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
 	flushThreshold      int64
 }
 
-func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p any, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
-	pipeline, ok := p.(pipeline.Pipeline)
-	if !ok {
-		return nil, errors.New("Expecting pipeline.Pipeline on argument p")
-	}
+func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
 	info := jptm.Info()
 
 	// compute chunk size and number of chunks
@@ -81,9 +73,9 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p any, pa
 
 	var h URLHolderV1
 	if info.IsFolderPropertiesTransfer() {
-		h = azbfs.NewDirectoryURL(*destURL, pipeline)
+		h = azbfs.NewDirectoryURL(*destURL, jptm.Pipeline())
 	} else {
-		h = azbfs.NewFileURL(*destURL, pipeline)
+		h = azbfs.NewFileURL(*destURL, jptm.Pipeline())
 	}
 	return &blobFSSenderBase{
 		jptm:                jptm,
@@ -91,7 +83,6 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p any, pa
 		fileOrDirURL:        h,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
-		pipeline:            pipeline,
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),

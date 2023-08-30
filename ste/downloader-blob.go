@@ -106,7 +106,7 @@ func (bd *blobDownloader) Epilogue() {
 }
 
 // Returns a chunk-func for blob downloads
-func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, _ any, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// If the range does not contain any data, write out empty data to disk without performing download

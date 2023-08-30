@@ -317,7 +317,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), id, adjustedChunkSize)
 
 		// create download func that is a appropriate to the remote data source
-		downloadFunc := dl.GenerateDownloadFunc(jptm, jptm.Pipeline(), dstWriter, id, adjustedChunkSize, pacer)
+		downloadFunc := dl.GenerateDownloadFunc(jptm, dstWriter, id, adjustedChunkSize, pacer)
 
 		// schedule the download chunk job
 		jptm.ScheduleChunks(downloadFunc)

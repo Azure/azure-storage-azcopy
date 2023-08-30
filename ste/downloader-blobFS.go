@@ -26,7 +26,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -70,18 +69,14 @@ func (bd *blobFSDownloader) Epilogue() {
 
 // Returns a chunk-func for ADLS gen2 downloads
 
-func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline any, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
 		info := jptm.Info()
 		u, _ := url.Parse(info.Source)
 
-		p, ok := srcPipeline.(pipeline.Pipeline)
-		if !ok {
-			panic("Expecting a pipeline object here")
-		}
-		srcFileURL := azbfs.NewDirectoryURL(*u, p).NewFileUrl()
+		srcFileURL := azbfs.NewDirectoryURL(*u, jptm.Pipeline()).NewFileUrl()
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.

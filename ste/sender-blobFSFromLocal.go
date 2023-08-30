@@ -31,7 +31,7 @@ type blobFSUploader struct {
 }
 
 func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newBlobFSSenderBase(jptm, destination, jptm.Pipeline(), pacer, sip)
+	senderBase, err := newBlobFSSenderBase(jptm, destination, pacer, sip)
 	if err != nil {
 		return nil, err
 	}
