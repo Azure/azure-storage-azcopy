@@ -250,7 +250,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, datalakeURLParts azdatal
 
 		for _, v := range resp.Paths {
 			entityType := "directory"
-			if v.IsDirectory == nil || (*v.IsDirectory == false) {
+			if v.IsDirectory == nil || !*v.IsDirectory {
 				entityType = "file"
 			}
 
