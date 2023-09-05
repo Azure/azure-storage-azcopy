@@ -22,7 +22,6 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"net/http"
 )
@@ -45,39 +44,6 @@ type contextKey struct {
 }
 
 var retryNotifyContextKey = contextKey{"retryNotify"}
-
-type v1RetryNotificationPolicy struct {
-	next pipeline.Policy
-}
-
-// Do invokes the registered notification callback if there's a retry (503) status.
-// This is to notify any interested party that a retry status has been returned in an HTTP response.
-// (We can't just let the top-level caller look at the status of the HTTP response, because by that
-// time our RetryPolicy will have actually DONE the retry, so the status will be successful. That's why, if the
-// top level caller wants to be informed, they have to get informed by this callback mechanism.)
-func (r *v1RetryNotificationPolicy) Do(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-
-	resp, err := r.next.Do(ctx, request)
-
-	if resp != nil {
-		if rr := resp.Response(); rr != nil && rr.StatusCode == http.StatusServiceUnavailable {
-			// Grab the notification callback out of the context and, if its there, call it
-			notifier, ok := ctx.Value(retryNotifyContextKey).(retryNotificationReceiver)
-			if ok {
-				notifier.RetryCallback()
-			}
-		}
-	}
-
-	return resp, err
-}
-
-func newV1RetryNotificationPolicyFactory() pipeline.Factory {
-	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-		r := v1RetryNotificationPolicy{next: next}
-		return r.Do
-	})
-}
 
 type retryNotificationPolicy struct {
 }

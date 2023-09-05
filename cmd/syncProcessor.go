@@ -473,6 +473,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				}
 			case common.ELocation.BlobFS():
 				directoryClient := common.CreateDatalakeDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
+				// TODO : Recursive delete
 				_, err = directoryClient.Delete(ctx, nil)
 			default:
 				panic("not implemented, check your code")

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sync/semaphore"
 )
@@ -163,33 +162,6 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 		PerCallPolicies:  perCallPolicies,
 		PerRetryPolicies: perRetryPolicies,
 	}
-}
-
-// NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
-// The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
-	if c == nil {
-		panic("c can't be nil")
-	}
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
-		azbfs.NewUniqueRequestIDPolicyFactory(),
-		NewBFSXferRetryPolicyFactory(r),       // actually retry the operation
-		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
-	}
-
-	f = append(f, c)
-
-	f = append(f,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewRequestLogPolicyFactory(RequestLogOptions{
-			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			SyslogDisabled:               common.IsForceLoggingDisabled(),
-		}),
-		newXferStatsPolicyFactory(statsAcc))
-
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -373,7 +345,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.priority = plan.Priority
 
 	jpm.clientInfo()
-	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -547,109 +518,6 @@ func (jpm *jobPartMgr) clientInfo() {
 	}
 	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, sourceTrailingDot, nil)
 	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)}
-
-func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
-	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
-		panic("init client and pipelines for same jobPartMgr twice")
-	}
-	fromTo := jpm.planMMF.Plan().FromTo
-	credInfo := jpm.credInfo
-	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
-		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
-	}
-	var userAgent string
-	if fromTo.From() == common.ELocation.S3() {
-		userAgent = common.S3ImportUserAgent
-	} else if fromTo.From() == common.ELocation.GCP() {
-		userAgent = common.GCPImportUserAgent
-	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
-		userAgent = common.BenchmarkUserAgent
-	} else {
-		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
-	}
-
-	credOption := common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-		Panic:    jpm.Panic,
-		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-		Cancel:   jpm.jobMgr.Cancel,
-	}
-	// TODO: Consider to remove XferRetryPolicy and Options?
-	xferRetryOption := XferRetryOptions{
-		Policy:        0,
-		MaxTries:      UploadMaxTries, // TODO: Consider to unify options.
-		TryTimeout:    UploadTryTimeout,
-		RetryDelay:    UploadRetryDelay,
-		MaxRetryDelay: UploadMaxRetryDelay}
-
-	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
-
-	// Create source info provider's pipeline for S2S copy or download (in some cases).
-	// BlobFS and Blob will utilize the Blob source info provider, as they are the "same" resource, but provide different details on both endpoints
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
-		// Prepare to pull dfs properties if we're working with BlobFS
-		if fromTo.From() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
-			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
-			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
-				credential,
-				azbfs.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azbfs.TelemetryOptions{
-						Value: userAgent,
-					},
-				},
-				xferRetryOption,
-				jpm.pacer,
-				jpm.jobMgr.HttpClient(),
-				statsAccForSip)
-		}
-	}
-
-	switch {
-	case fromTo.IsS2S() && (fromTo.To() == common.ELocation.Blob() || fromTo.To() == common.ELocation.BlobFS()), // destination determines pipeline for S2S, blobfs uses blob for S2S
-		 fromTo.IsUpload() && fromTo.To() == common.ELocation.Blob(), // destination determines pipeline for upload
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.Blob(), // source determines pipeline for download
-		 fromTo.IsSetProperties() && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()), // source determines pipeline for set properties, blobfs uses blob for set properties
-		 fromTo.IsDelete() && fromTo.From() == common.ELocation.Blob(): // ditto for delete
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
-
-		// If we need to write specifically to the gen2 endpoint, we should have this available.
-		if fromTo.To() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
-			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
-			jpm.secondaryPipeline = NewBlobFSPipeline(
-				credential,
-				azbfs.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azbfs.TelemetryOptions{
-						Value: userAgent,
-					},
-				},
-				xferRetryOption,
-				jpm.pacer,
-				jpm.jobMgr.HttpClient(),
-				statsAccForSip)
-		}
-	case fromTo.IsUpload() && fromTo.To() == common.ELocation.BlobFS(), // Blobfs up/down/delete use the dfs endpoint
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS(),
-		 fromTo.IsDelete() && fromTo.From() == common.ELocation.BlobFS():
-		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
-
-		jpm.pipeline = NewBlobFSPipeline(
-			credential,
-			azbfs.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azbfs.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			xferRetryOption,
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats())
-	}
-}
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
 	return jpm.slicePool

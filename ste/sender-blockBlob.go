@@ -27,7 +27,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,7 +36,6 @@ import (
 	"unsafe"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -261,20 +260,14 @@ func (s *blockBlobSenderBase) Epilogue() {
 		}
 		blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
 		blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
-		dfsURL, err := url.Parse(blobURLParts.String())
-		if err != nil {
-			jptm.FailActiveSend("Parsing datalake URL", err)
-		}
-		// todo: jank, and violates the principle of interfaces
-		fileURL := azbfs.NewFileURL(*dfsURL, s.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondaryPipeline)
 
+		fileClient := common.CreateDatalakeFileClient(blobURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 		// We know for a fact our source is a "blob".
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
 		if err != nil {
 			jptm.FailActiveSend("Grabbing source ACLs", err)
 		}
-		acl.Permissions = "" // Since we're sending the full ACL, Permissions is irrelevant.
-		_, err = fileURL.SetAccessControl(jptm.Context(), acl)
+		_, err = fileClient.SetAccessControl(jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 		if err != nil {
 			jptm.FailActiveSend("Putting ACLs", err)
 		}
