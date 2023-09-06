@@ -4,7 +4,7 @@ require (
 	cloud.google.com/go/storage v1.29.0
 	github.com/Azure/azure-pipeline-go v0.2.4-0.20220425205405-09e6f201e1e4
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.1.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.0.0-20230810010657-8fd00224af9b
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.0.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.18
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
@@ -28,7 +28,7 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
 
-replace github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake => github.com/gapra-msft/azure-sdk-for-go/sdk/storage/azdatalake v0.0.0-20230821201001-986c0b3e387c
+replace github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake => github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1.0.20230823184147-c9d65f00ca17
 
 require github.com/stretchr/testify v1.8.1
 
