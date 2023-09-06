@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
@@ -472,9 +473,11 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 					}
 				}
 			case common.ELocation.BlobFS():
-				directoryClient := common.CreateDatalakeDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
-				// TODO : Recursive delete
-				_, err = directoryClient.Delete(ctx, nil)
+				clientOptions := b.clientOptions
+				clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, clientOptions.PerCallPolicies...)
+				directoryClient := common.CreateDatalakeDirectoryClient(objectURL.String(), b.credInfo, nil, clientOptions)
+				recursiveContext := common.WithRecursive(ctx, false)
+				_, err = directoryClient.Delete(recursiveContext, nil)
 			default:
 				panic("not implemented, check your code")
 			}
