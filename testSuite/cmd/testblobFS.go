@@ -88,7 +88,8 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	if datalakeURLParts.SAS.Encode() != "" {
 		fc, err = file.NewClientWithNoCredential(datalakeURLParts.String(), nil)
 	} else {
-		cred, err := azdatalake.NewSharedKeyCredential(name, key)
+		var cred *azdatalake.SharedKeyCredential
+		cred, err = azdatalake.NewSharedKeyCredential(name, key)
 		if err != nil {
 			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
 			os.Exit(1)

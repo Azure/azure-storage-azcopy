@@ -376,7 +376,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		var err error
 		switch b.targetLocation {
 		case common.ELocation.Blob():
-			blobURLParts, err := blob.ParseURL(b.rootURL.String())
+			var blobURLParts blob.URLParts
+			blobURLParts, err = blob.ParseURL(b.rootURL.String())
 			if err != nil {
 				return err
 			}
@@ -385,7 +386,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			blobClient := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
 			_, err = blobClient.Delete(b.ctx, nil)
 		case common.ELocation.File():
-			fileURLParts, err := sharefile.ParseURL(b.rootURL.String())
+			var fileURLParts sharefile.URLParts
+			fileURLParts, err = sharefile.ParseURL(b.rootURL.String())
 			if err != nil {
 				return err
 			}
@@ -414,7 +416,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				}
 			}
 		case common.ELocation.BlobFS():
-			datalakeURLParts, err := azdatalake.ParseURL(b.rootURL.String())
+			var datalakeURLParts azdatalake.URLParts
+			datalakeURLParts, err = azdatalake.ParseURL(b.rootURL.String())
 			if err != nil {
 				return err
 			}
