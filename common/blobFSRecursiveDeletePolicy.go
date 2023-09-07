@@ -46,7 +46,9 @@ func NewRecursivePolicy() policy.Policy {
 func (p *recursivePolicy) Do(req *policy.Request) (*http.Response, error) {
 	if recursive := req.Raw().Context().Value(CtxRecursiveKey{}); recursive != nil {
 		if req.Raw().URL.Query().Has("recursive") {
-			req.Raw().URL.Query().Set("recursive", strconv.FormatBool(recursive.(bool)))
+			query := req.Raw().URL.Query()
+			query.Set("recursive", strconv.FormatBool(recursive.(bool)))
+			req.Raw().URL.RawQuery = query.Encode()
 		}
 	}
 	return req.Next()
