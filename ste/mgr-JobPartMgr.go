@@ -129,19 +129,6 @@ func (d *dialRateLimiter) DialContext(ctx context.Context, network, address stri
 	return d.dialer.DialContext(ctx, network, address)
 }
 
-// newAzcopyHTTPClientFactory creates a HTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.
-func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factory {
-	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			r, err := pipelineHTTPClient.Do(request.WithContext(ctx))
-			if err != nil {
-				err = pipeline.NewError(err, "HTTP request failed")
-			}
-			return pipeline.NewHTTPResponse(r), err
-		}
-	})
-}
-
 func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
@@ -230,15 +217,8 @@ type jobPartMgr struct {
 	exclusiveDestinationMap *common.ExclusiveStringMap
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
-	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
-	secondaryPipeline pipeline.Pipeline
 
 	sourceProviderPipeline pipeline.Pipeline
-	// TODO: Ditto
-	secondarySourceProviderPipeline pipeline.Pipeline
-
-	// used defensively to protect double init
-	atomicPipelinesInitedIndicator uint32
 
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed

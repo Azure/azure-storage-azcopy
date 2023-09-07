@@ -90,6 +90,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 		_, err := fileClient.Delete(ctx, nil)
 		transferDone(err)
 	} else {
+		// Remove the directory
 		recursiveContext := common.WithRecursive(ctx, recursive)
 		_, err := directoryClient.Delete(recursiveContext, nil)
 		transferDone(err)
