@@ -321,7 +321,7 @@ func (o LogOptions) ToPipelineLogOptions() pipeline.LogOptions {
 		return o.ShouldLog(common.LogLevel(ll))
 	}
 
-	return pipeline.LogOptions{log, shouldLog}
+	return pipeline.LogOptions{Log: log, ShouldLog: shouldLog}
 }
 
 type logPolicy struct {
