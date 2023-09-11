@@ -161,7 +161,7 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, client IBl
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
-func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	info := jptm.Info()
 	fromTo := jptm.FromTo()
 
@@ -192,22 +192,22 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 	switch info.EntityType {
 	case common.EEntityType.Folder():
-		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_folder(jptm, info, pacer, senderFactory, sipf)
 	case common.EEntityType.FileProperties():
-		anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
 	case common.EEntityType.File():
 		if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
-			anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
+			anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
 		} else {
-			anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
+			anyToRemote_file(jptm, info, pacer, senderFactory, sipf)
 		}
 	case common.EEntityType.Symlink():
-		anyToRemote_symlink(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_symlink(jptm, info, pacer, senderFactory, sipf)
 	}
 }
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
-func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())
@@ -235,7 +235,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 		panic("configuration error. Source Info Provider does not have File entity type")
 	}
 
-	s, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	s, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -245,7 +245,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 
 	// step 2b. Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
 	numChunks := s.NumChunks()
-	if jptm.ShouldLog(pipeline.LogInfo) {
+	if jptm.ShouldLog(common.LogInfo) {
 		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", s.ChunkSize()))
 	}
 	if s.NumChunks() == 0 {
@@ -282,7 +282,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 
 			if !shouldOverwrite {
 				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "File already exists, so will be skipped")
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return
@@ -537,7 +537,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
 				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
-				jptm.Log(pipeline.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
+				jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}
@@ -560,8 +560,8 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				var glcm = common.GetLifecycleMgr()
 				msg := "Could not read destination length. If the destination is write-only, use --check-length=false on the command line."
 				glcm.Info(msg)
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, msg)
+				if jptm.ShouldLog(common.LogError) {
+					jptm.Log(common.LogError, msg)
 				}
 			})
 		}
@@ -606,22 +606,22 @@ func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInf
 		jptm.SetStatus(common.ETransferStatus.Success())
 
 		// Final logging
-		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
+		if jptm.ShouldLog(common.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
 			if _, ok := s.(s2sCopier); ok {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
+				jptm.Log(common.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
 			} else if _, ok := s.(uploader); ok {
 				// Output relative path of file, includes file name.
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
+				jptm.Log(common.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
 			} else {
 				panic("invalid state: epilogueWithCleanupSendToRemote should be used by COPY and UPLOAD")
 			}
 		}
-		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
+		if jptm.ShouldLog(common.LogDebug) {
+			jptm.Log(common.LogDebug, "Finalizing Transfer")
 		}
 	} else {
-		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation/Failure")
+		if jptm.ShouldLog(common.LogDebug) {
+			jptm.Log(common.LogDebug, "Finalizing Transfer Cancellation/Failure")
 		}
 	}
 	// successful or unsuccessful, it's definitely over

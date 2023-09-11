@@ -1,12 +1,11 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 )
 
-func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
 	info := jptm.Info()
 
 	// Perform initial checks
@@ -38,7 +37,7 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer 
 
 			if !shouldOverwrite {
 				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "File already exists, so will be skipped")
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return

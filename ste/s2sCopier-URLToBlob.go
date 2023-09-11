@@ -27,14 +27,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var LogBlobConversionOnce = &sync.Once{}
 
 // Creates the right kind of URL to blob copier, based on the blob type of the source
-func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
 	// If our destination is a dfs endpoint, make an attempt to cast it to the blob endpoint
@@ -67,9 +66,9 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 	if blobTypeOverride != common.EBlobType.Detect() { // If a blob type is explicitly specified, determine it.
 		targetBlobType = blobTypeOverride.ToBlobType()
 
-		if jptm.ShouldLog(pipeline.LogInfo) { // To save fmt.Sprintf
+		if jptm.ShouldLog(common.LogInfo) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
-				pipeline.LogInfo,
+				common.LogInfo,
 				srcInfoProvider.RawSource(),
 				destination,
 				fmt.Sprintf("BlobType has been explicitly set to %q for destination blob.", blobTypeOverride))
@@ -91,13 +90,13 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 		}
 
 		if targetBlobType != blob.BlobTypeBlockBlob {
-			jptm.LogTransferInfo(pipeline.LogInfo, srcInfoProvider.RawSource(), destination, fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source, targetBlobType))
+			jptm.LogTransferInfo(common.LogInfo, srcInfoProvider.RawSource(), destination, fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source, targetBlobType))
 		}
 	}
 
-	if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf, debug level verbose log
+	if jptm.ShouldLog(common.LogDebug) { // To save fmt.Sprintf, debug level verbose log
 		jptm.LogTransferInfo(
-			pipeline.LogDebug,
+			common.LogDebug,
 			srcInfoProvider.RawSource(),
 			destination,
 			fmt.Sprintf("BlobType %q is set for destination blob.", targetBlobType))
@@ -117,9 +116,9 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 	case blob.BlobTypePageBlob:
 		return newURLToPageBlobCopier(jptm, destination, pacer, srcInfoProvider)
 	default:
-		if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf
+		if jptm.ShouldLog(common.LogDebug) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
-				pipeline.LogDebug,
+				common.LogDebug,
 				srcInfoProvider.RawSource(),
 				destination,
 				fmt.Sprintf("BlobType %q is used for destination blob by default.", blob.BlobTypeBlockBlob))

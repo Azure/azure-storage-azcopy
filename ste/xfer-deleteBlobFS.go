@@ -2,9 +2,9 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"strings"
@@ -14,7 +14,7 @@ import (
 var logBlobFSDeleteWarnOnce = &sync.Once{}
 const blobFSDeleteWarning = "Displayed file count will be either 1 or based upon list-of-files entries, and thus inaccurate, as deletes are performed recursively service-side."
 
-func DeleteHNSResource(jptm IJobPartTransferMgr, _ pipeline.Pipeline, _ pacer) {
+func DeleteHNSResource(jptm IJobPartTransferMgr, pacer pacer) {
 	// If the transfer was cancelled, then report the transfer as done.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
@@ -22,7 +22,7 @@ func DeleteHNSResource(jptm IJobPartTransferMgr, _ pipeline.Pipeline, _ pacer) {
 	}
 
 	logBlobFSDeleteWarnOnce.Do(func() {
-		jptm.Log(pipeline.LogWarning, blobFSDeleteWarning)
+		jptm.Log(common.LogWarning, blobFSDeleteWarning)
 		common.GetLifecycleMgr().Info(blobFSDeleteWarning)
 	})
 
@@ -56,7 +56,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "DELETE ERROR ", err)
 		} else {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Source, "?")[0]))
+			jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Source, "?")[0]))
 		}
 
 		jptm.SetStatus(status)

@@ -25,8 +25,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"os"
 	"time"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -39,7 +37,7 @@ func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
-func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr, _ pipeline.Pipeline) {
+func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr) {
 	bd.jptm = jptm
 	bd.txInfo = jptm.Info() // Inform the downloader
 }
@@ -69,7 +67,7 @@ func (bd *blobFSDownloader) Epilogue() {
 
 // Returns a chunk-func for ADLS gen2 downloads
 
-func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, _ pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)

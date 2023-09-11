@@ -23,8 +23,6 @@ package ste
 import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -33,7 +31,7 @@ type azureFileUploader struct {
 	md5Channel chan []byte
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, _ pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
 	senderBase, err := newAzureFileSenderBase(jptm, destination, pacer, sip)
 	if err != nil {
 		return nil, err
@@ -60,7 +58,7 @@ func (u *azureFileUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 
 		if reader.HasPrefetchedEntirelyZeros() {
 			// for this destination type, there is no need to upload ranges than consist entirely of zeros
-			jptm.Log(pipeline.LogDebug,
+			jptm.Log(common.LogDebug,
 				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
 					id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
 			return

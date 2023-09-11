@@ -3,7 +3,6 @@ package ste
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -74,7 +73,7 @@ func (b *blobFolderSender) setDatalakeACLs() {
 }
 
 func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
-	b.jptm.Log(pipeline.LogWarning, "It is impossible to completely overwrite a folder with existing content under it on a hierarchical namespace storage account. A best-effort attempt will be made, but if CPK does not match the transfer will fail.")
+	b.jptm.Log(common.LogWarning, "It is impossible to completely overwrite a folder with existing content under it on a hierarchical namespace storage account. A best-effort attempt will be made, but if CPK does not match the transfer will fail.")
 
 	err := b.getExtraProperties()
 	if err != nil {

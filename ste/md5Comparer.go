@@ -23,12 +23,11 @@ package ste
 import (
 	"bytes"
 	"errors"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type transferSpecificLogger interface {
-	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
+	LogAtLevelForCurrentTransfer(level common.LogLevel, msg string)
 }
 
 type md5Comparer struct {
@@ -97,9 +96,9 @@ func (c *md5Comparer) Check() error {
 }
 
 func (c *md5Comparer) logAsMissing() {
-	c.logger.LogAtLevelForCurrentTransfer(pipeline.LogWarning, noMD5Stored)
+	c.logger.LogAtLevelForCurrentTransfer(common.LogWarning, noMD5Stored)
 }
 
 func (c *md5Comparer) logAsDifferent() {
-	c.logger.LogAtLevelForCurrentTransfer(pipeline.LogWarning, errMd5Mismatch.Error())
+	c.logger.LogAtLevelForCurrentTransfer(common.LogWarning, errMd5Mismatch.Error())
 }
