@@ -35,7 +35,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -213,7 +212,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 	// commit block list if necessary
 	if jptm.IsLive() && shouldPutBlockList == putListNeeded {
-		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
+		jptm.Log(common.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
 		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient, s.jptm.Context(), false) {
@@ -248,7 +247,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 		if setTags {
 			if _, err := s.destBlockBlobClient.SetTags(jptm.Context(), s.blobTagsToApply, nil); err != nil {
-				s.jptm.Log(pipeline.LogWarning, err.Error())
+				s.jptm.Log(common.LogWarning, err.Error())
 			}
 		}
 	}
@@ -298,13 +297,13 @@ func (s *blockBlobSenderBase) Cleanup() {
 			blockList, err := s.destBlockBlobClient.GetBlockList(deletionContext, blockblob.BlockListTypeAll, nil)
 			hasUncommittedOnly := err == nil && len(blockList.CommittedBlocks) == 0 && len(blockList.UncommittedBlocks) > 0
 			if hasUncommittedOnly {
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "Deleting uncommitted destination blob due to cancellation")
+				jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "Deleting uncommitted destination blob due to cancellation")
 				// Delete can delete uncommitted blobs.
 				_, _ = s.destBlockBlobClient.Delete(deletionContext, nil)
 			}
 		} else {
 			// TODO: review (one last time) should we really do this?  Or should we just give better error messages on "too many uncommitted blocks" errors
-			jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "Deleting destination blob due to failure")
+			jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "Deleting destination blob due to failure")
 			_, _ = s.destBlockBlobClient.Delete(deletionContext, nil)
 		}
 	}
@@ -360,12 +359,12 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 
 	blockList, err := s.destBlockBlobClient.GetBlockList(s.jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
 	if err != nil {
-		s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogError, "Failed to get blocklist. Restarting whole file.")
+		s.jptm.LogAtLevelForCurrentTransfer(common.LogError, "Failed to get blocklist. Restarting whole file.")
 		return
 	}
 
 	if len(blockList.UncommittedBlocks) == 0 {
-		s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "No uncommitted chunks found.")
+		s.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "No uncommitted chunks found.")
 		return
 	}
 
@@ -376,26 +375,26 @@ func (s *blockBlobSenderBase) buildCommittedBlockMap() {
 		name := common.IffNotNil(block.Name, "")
 		size := common.IffNotNil(block.Size, 0)
 		if len(name) != common.AZCOPY_BLOCKNAME_LENGTH {
-			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			s.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, invalidAzCopyBlockNameMsg)
 			return
 		}
 
 		tmp, err := base64.StdEncoding.DecodeString(name)
 		decodedBlockName := string(tmp)
 		if err != nil || !strings.HasPrefix(decodedBlockName, s.blockNamePrefix) {
-			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			s.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, invalidAzCopyBlockNameMsg)
 			return
 		}
 
 		index, err := strconv.Atoi(decodedBlockName[len(s.blockNamePrefix):])
 		if err != nil || index < 0 || index > int(s.numChunks) {
-			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, invalidAzCopyBlockNameMsg)
+			s.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, invalidAzCopyBlockNameMsg)
 			return
 		}
 
 		// Last chunk may have different blockSize
 		if size != s.ChunkSize() && index != int(s.numChunks) {
-			s.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, changedChunkSize)
+			s.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, changedChunkSize)
 			return
 		}
 

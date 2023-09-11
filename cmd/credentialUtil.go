@@ -511,7 +511,7 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
 		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+			jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 		}
 		glcm.Info(message)
 	}
@@ -633,13 +633,12 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
+func createClientOptions(logLevel common.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
+	logOptions.ShouldLog = func(level common.LogLevel) bool {return level <= logLevel}
+
 	if azcopyScanningLogger != nil {
-		logOptions.LogOptions = pipeline.LogOptions{
-			Log:       azcopyScanningLogger.Log,
-			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
-		}
+		logOptions.Log = azcopyScanningLogger.Log
 	}
 	return ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
@@ -653,7 +652,7 @@ func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.Trailin
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
 
-func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel pipeline.LogLevel) (pipeline.Pipeline, error) {
+func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel common.LogLevel) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
 		// LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
@@ -662,8 +661,8 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, l
 	logOption := pipeline.LogOptions{}
 	if azcopyScanningLogger != nil {
 		logOption = pipeline.LogOptions{
-			Log:       azcopyScanningLogger.Log,
-			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
+			Log:       func(l pipeline.LogLevel, msg string) { azcopyScanningLogger.Log(common.LogLevel(l), msg) },
+			ShouldLog: func(level pipeline.LogLevel) bool { return common.LogLevel(level) <= logLevel },
 		}
 	}
 

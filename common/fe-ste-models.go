@@ -25,9 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"os"
 	"reflect"
@@ -36,9 +33,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -333,17 +333,40 @@ func (ExitCode) Error() ExitCode   { return ExitCode(1) }
 // NoExit is used as a marker, to suppress the normal exit behaviour
 func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
+const (
+	// LogNone tells a logger not to log any entries passed to it.
+	LogNone LogLevel = iota
 
-var ELogLevel = LogLevel(pipeline.LogNone)
+	// LogFatal tells a logger to log all LogFatal entries passed to it.
+	LogFatal
 
-func (LogLevel) None() LogLevel    { return LogLevel(pipeline.LogNone) }
-func (LogLevel) Fatal() LogLevel   { return LogLevel(pipeline.LogFatal) }
-func (LogLevel) Panic() LogLevel   { return LogLevel(pipeline.LogPanic) }
-func (LogLevel) Error() LogLevel   { return LogLevel(pipeline.LogError) }
-func (LogLevel) Warning() LogLevel { return LogLevel(pipeline.LogWarning) }
-func (LogLevel) Info() LogLevel    { return LogLevel(pipeline.LogInfo) }
-func (LogLevel) Debug() LogLevel   { return LogLevel(pipeline.LogDebug) }
+	// LogPanic tells a logger to log all LogPanic and LogFatal entries passed to it.
+	LogPanic
+
+	// LogError tells a logger to log all LogError, LogPanic and LogFatal entries passed to it.
+	LogError
+
+	// LogWarning tells a logger to log all LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogWarning
+
+	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogInfo
+
+	// LogDebug tells a logger to log all LogDebug, LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogDebug
+)
+
+var ELogLevel = LogLevel(LogNone)
+
+func (LogLevel) None() LogLevel    { return LogLevel(LogNone) }
+func (LogLevel) Fatal() LogLevel   { return LogLevel(LogFatal) }
+func (LogLevel) Panic() LogLevel   { return LogLevel(LogPanic) }
+func (LogLevel) Error() LogLevel   { return LogLevel(LogError) }
+func (LogLevel) Warning() LogLevel { return LogLevel(LogWarning) }
+func (LogLevel) Info() LogLevel    { return LogLevel(LogInfo) }
+func (LogLevel) Debug() LogLevel   { return LogLevel(LogDebug) }
 
 func (ll *LogLevel) Parse(s string) error {
 	val, err := enum.ParseInt(reflect.TypeOf(ll), s, true, true)
@@ -374,13 +397,14 @@ func (ll LogLevel) String() string {
 	}
 }
 
-func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
-	// This assumes that pipeline's LogLevel values can fit in a byte (which they can)
-	return pipeline.LogLevel(ll)
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+// LogSanitizer can be implemented to clean secrets from lines logged by ForceLog
+// By default no implementation is provided here, because pipeline may be used in many different
+// contexts, so the correct implementation is context-dependent
+type LogSanitizer interface {
+	SanitizeLogMessage(raw string) string
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EJobPriority = JobPriority(0)
 
 // JobPriority defines the transfer priorities supported by the Storage Transfer Engine's channels

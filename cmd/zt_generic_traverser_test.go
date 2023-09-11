@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/stretchr/testify/assert"
@@ -98,12 +97,11 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		false,
 		common.ESyncHashType.None(),
 		common.EPreservePermissionsOption.None(),
-		pipeline.LogInfo,
+		common.LogInfo,
 		common.CpkOptions{},
 		nil,
 		true,
 		common.ETrailingDotOption.Enable(),
-		nil,
 		nil,
 	)
 	a.Nil(err)

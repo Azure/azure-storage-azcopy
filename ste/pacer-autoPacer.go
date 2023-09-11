@@ -27,7 +27,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -121,7 +120,7 @@ func (a *autoTokenBucketPacer) Close() error {
 
 // RetryCallback records the fact that a retry has happened
 func (a *autoTokenBucketPacer) RetryCallback() {
-	a.logger.Log(pipeline.LogInfo, fmt.Sprintf("%s: ServerBusy (503) recorded", a.logPrefix))
+	a.logger.Log(common.LogInfo, fmt.Sprintf("%s: ServerBusy (503) recorded", a.logPrefix))
 	atomic.AddInt32(&a.atomicRetriesInInterval, 1)
 }
 
@@ -182,5 +181,5 @@ func (a *autoTokenBucketPacer) increaseRate() {
 }
 
 func (a *autoTokenBucketPacer) logRate() {
-	a.logger.Log(pipeline.LogInfo, fmt.Sprintf("%s: Target Mbps %d", a.logPrefix, (a.targetBytesPerSecond()*8)/(1000*1000)))
+	a.logger.Log(common.LogInfo, fmt.Sprintf("%s: Target Mbps %d", a.logPrefix, (a.targetBytesPerSecond()*8)/(1000*1000)))
 }

@@ -2,7 +2,6 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/url"
@@ -13,7 +12,7 @@ import (
 var logBlobFSDeleteWarnOnce = &sync.Once{}
 const blobFSDeleteWarning = "Displayed file count will be either 1 or based upon list-of-files entries, and thus inaccurate, as deletes are performed recursively service-side."
 
-func DeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func DeleteHNSResource(jptm IJobPartTransferMgr, pacer pacer) {
 	// If the transfer was cancelled, then report the transfer as done.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
@@ -21,19 +20,19 @@ func DeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pace
 	}
 
 	logBlobFSDeleteWarnOnce.Do(func() {
-		jptm.Log(pipeline.LogWarning, blobFSDeleteWarning)
+		jptm.Log(common.LogWarning, blobFSDeleteWarning)
 		common.GetLifecycleMgr().Info(blobFSDeleteWarning)
 	})
 
 	// schedule the transfer as a chunk, so it will run on the main goroutine pool
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
 	cf := createChunkFunc(true, jptm, id, func() {
-		doDeleteHNSResource(jptm, p)
+		doDeleteHNSResource(jptm)
 	})
 	jptm.ScheduleChunks(cf)
 }
 
-func doDeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 	ctx := jptm.Context()
 	info := jptm.Info()
 
@@ -54,7 +53,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "DELETE ERROR ", err)
 		} else {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Source, "?")[0]))
+			jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Source, "?")[0]))
 		}
 
 		jptm.SetStatus(status)
@@ -66,7 +65,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 
 	// Deleting a filesystem
 	if urlParts.DirectoryOrFilePath == "" {
-		fsURL := azbfs.NewFileSystemURL(*u, p)
+		fsURL := azbfs.NewFileSystemURL(*u, jptm.Pipeline())
 
 		_, err := fsURL.Delete(ctx)
 		transferDone(err)
@@ -74,7 +73,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 	}
 
 	// Check if the source is a file or directory
-	directoryURL := azbfs.NewDirectoryURL(*u, p)
+	directoryURL := azbfs.NewDirectoryURL(*u, jptm.Pipeline())
 	props, err := directoryURL.GetProperties(ctx)
 	if err != nil {
 		transferDone(err)

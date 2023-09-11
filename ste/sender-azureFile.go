@@ -36,8 +36,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -81,8 +79,8 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	chunkSize := info.BlockSize
 	if chunkSize > common.DefaultAzureFileChunkSize {
 		chunkSize = common.DefaultAzureFileChunkSize
-		if jptm.ShouldLog(pipeline.LogWarning) {
-			jptm.Log(pipeline.LogWarning,
+		if jptm.ShouldLog(common.LogWarning) {
+			jptm.Log(common.LogWarning,
 				fmt.Sprintf("Block size %d larger than maximum file chunk size, 4 MB chunk size used", info.BlockSize))
 		}
 	}
@@ -209,7 +207,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	if fileerror.HasCode(err, fileerror.ParentNotFound) {
 		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		jptm.Log(pipeline.LogError, fmt.Sprintf("%s: %s \n AzCopy going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
+		jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
 		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.serviceClient, u.jptm.GetFolderCreationTracker())
 		if err != nil {
 			u.jptm.FailActiveUpload("Creating parent directory", err)
@@ -414,7 +412,7 @@ func (u *azureFileSenderBase) Cleanup() {
 		defer cancelFn()
 		_, err := u.getFileClient().Delete(deletionContext, nil)
 		if err != nil {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileOrDirClient.URL(), err.Error()))
+			jptm.Log(common.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileOrDirClient.URL(), err.Error()))
 		}
 	}
 }

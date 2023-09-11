@@ -28,7 +28,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -37,8 +36,6 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
-	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure SyslogDisabled logs get secrets redacted
-
 	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
 
 	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files

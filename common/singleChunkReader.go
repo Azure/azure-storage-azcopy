@@ -26,8 +26,6 @@ import (
 	"hash"
 	"io"
 	"sync"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // Reader of ONE chunk of a file. Maybe used to re-read multiple times (e.g. if
@@ -405,7 +403,7 @@ func (cr *singleChunkReader) Close() error {
 	// This check originates from issue 191. Even tho we think we've now resolved that issue,
 	// we'll keep this code just to make sure.
 	if cr.positionInChunk < cr.length && cr.ctx.Err() == nil {
-		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader with context still active")
+		cr.generalLogger.Log(LogInfo, "Early close of chunk in singleChunkReader with context still active")
 		// cannot panic here, since this code path is NORMAL in the case of sparse files to Azure Files and Page Blobs
 	}
 

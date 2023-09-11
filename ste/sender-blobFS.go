@@ -23,15 +23,14 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -48,14 +47,12 @@ type blobFSSenderBase struct {
 	fileOrDirURL URLHolderV1
 	chunkSize    int64
 	numChunks           uint32
-	pipeline            pipeline.Pipeline
 	pacer               pacer
 	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
 	flushThreshold      int64
 }
 
-func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
-
+func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
 	info := jptm.Info()
 
 	// compute chunk size and number of chunks
@@ -76,9 +73,9 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 
 	var h URLHolderV1
 	if info.IsFolderPropertiesTransfer() {
-		h = azbfs.NewDirectoryURL(*destURL, p)
+		h = azbfs.NewDirectoryURL(*destURL, jptm.Pipeline())
 	} else {
-		h = azbfs.NewFileURL(*destURL, p)
+		h = azbfs.NewFileURL(*destURL, jptm.Pipeline())
 	}
 	return &blobFSSenderBase{
 		jptm:                jptm,
@@ -86,7 +83,6 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 		fileOrDirURL:        h,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
-		pipeline:            p,
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
@@ -187,7 +183,7 @@ func (u *blobFSSenderBase) Cleanup() {
 		defer cancelFn()
 		_, err := u.fileURL().Delete(deletionContext)
 		if err != nil {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL().String(), err.Error()))
+			jptm.Log(common.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL().String(), err.Error()))
 		}
 	}
 }

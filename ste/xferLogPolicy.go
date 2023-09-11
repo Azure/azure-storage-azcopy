@@ -304,7 +304,24 @@ type logPolicyOpValues struct {
 type LogOptions struct {
 	// TODO : Unravel LogOptions and RequestLogOptions
 	RequestLogOptions  RequestLogOptions
-	LogOptions         pipeline.LogOptions
+	Log                func(level common.LogLevel, message string)
+	// ShouldLog is called periodically allowing you to return whether the specified LogLevel should be logged or not.
+	// An application can return different values over the its lifetime; this allows the application to dynamically
+	// alter what is logged. NOTE: This method can be called by multiple goroutines simultaneously so make sure
+	// you implement it in a goroutine-safe way. If nil, nothing is logged (the equivalent of returning LogNone).
+	// Usually, the function will be implemented simply like this: return level <= LogWarning
+	ShouldLog func(level common.LogLevel) bool
+}
+
+func (o LogOptions) ToPipelineLogOptions() pipeline.LogOptions {
+	log := func(ll pipeline.LogLevel, msg string) {
+		o.Log(common.LogLevel(ll), msg)
+	}
+	shouldLog := func(ll pipeline.LogLevel) bool {
+		return o.ShouldLog(common.LogLevel(ll))
+	}
+
+	return pipeline.LogOptions{Log: log, ShouldLog: shouldLog}
 }
 
 type logPolicy struct {
@@ -323,11 +340,11 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 	opValues.try++ // The first try is #1 (not #0)
 	req.SetOperationValue(opValues)
 
-	if p.LogOptions.LogOptions.ShouldLog(pipeline.LogDebug) {
+	if p.LogOptions.ShouldLog(common.LogDebug) {
 		b := &bytes.Buffer{}
 		fmt.Fprintf(b, "==> OUTGOING REQUEST (Try=%d)\n", opValues.try)
 		p.writeRequestWithResponse(b, req, nil, nil)
-		p.LogOptions.LogOptions.Log(pipeline.LogInfo, b.String())
+		p.LogOptions.Log(common.LogInfo, b.String())
 	}
 
 	// Set the time for this particular retry operation and then Do the operation.
@@ -353,18 +370,18 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 	tryDuration := tryEnd.Sub(tryBeginAwaitResponse)
 	opDuration := tryEnd.Sub(opValues.start)
 
-	logLevel, forceLog, httpError := pipeline.LogInfo, false, false // Default logging information
+	logLevel, forceLog, httpError := common.LogInfo, false, false // Default logging information
 
 	// If the response took too long, we'll upgrade to warning.
 	if p.LogOptions.RequestLogOptions.LogWarningIfTryOverThreshold > 0 && tryDuration > p.LogOptions.RequestLogOptions.LogWarningIfTryOverThreshold {
 		// Log a warning if the try duration exceeded the specified threshold
-		logLevel, forceLog = pipeline.LogWarning, !p.LogOptions.RequestLogOptions.SyslogDisabled
+		logLevel, forceLog = common.LogWarning, !p.LogOptions.RequestLogOptions.SyslogDisabled
 	}
 
 	if err == nil { // We got a response from the service
 		sc := response.StatusCode
 		if ((sc >= 400 && sc <= 499) && sc != http.StatusNotFound && sc != http.StatusConflict && sc != http.StatusPreconditionFailed && sc != http.StatusRequestedRangeNotSatisfiable) || (sc >= 500 && sc <= 599) {
-			logLevel, forceLog, httpError = pipeline.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled, true // Promote to Error any 4xx (except those listed is an error) or any 5xx
+			logLevel, forceLog, httpError = common.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled, true // Promote to Error any 4xx (except those listed is an error) or any 5xx
 		} else if sc == http.StatusNotFound || sc == http.StatusConflict || sc == http.StatusPreconditionFailed || sc == http.StatusRequestedRangeNotSatisfiable {
 			httpError = true
 		}
@@ -373,14 +390,14 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 		// Otherwise, when lots of go-routines are running, and one fails with a real error, the rest obscure the log with their
 		// context canceled logging. If there's no real error, just user-requested cancellation,
 		// that's is visible by cancelled status shown in end-of-log summary.
-		logLevel, forceLog = pipeline.LogDebug, false
+		logLevel, forceLog = common.LogDebug, false
 	} else {
 		// This error did not get an HTTP response from the service; upgrade the severity to Error
-		logLevel, forceLog = pipeline.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled
+		logLevel, forceLog = common.LogError, !p.LogOptions.RequestLogOptions.SyslogDisabled
 	}
 
 	logBody := false
-	if shouldLog := p.LogOptions.LogOptions.ShouldLog(logLevel); forceLog || shouldLog {
+	if shouldLog := p.LogOptions.ShouldLog(logLevel); forceLog || shouldLog {
 		// We're going to log this; build the string to log
 		b := &bytes.Buffer{}
 		slow := ""
@@ -391,14 +408,14 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 		if err != nil { // This HTTP request did not get a response from the service
 			fmt.Fprint(b, "REQUEST ERROR\n")
 		} else {
-			if logLevel == pipeline.LogError {
+			if logLevel == common.LogError {
 				fmt.Fprint(b, "RESPONSE STATUS CODE ERROR\n")
 				logBody = true
 			} else {
 				fmt.Fprint(b, "RESPONSE SUCCESSFULLY RECEIVED\n")
 			}
 		}
-		if forceLog || err != nil || p.LogOptions.LogOptions.ShouldLog(pipeline.LogDebug) {
+		if forceLog || err != nil || p.LogOptions.ShouldLog(common.LogDebug) {
 			p.writeRequestWithResponse(b, req, response, err)
 		} else {
 			p.writeRequestAsOneLine(b, req)
@@ -412,16 +429,16 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 
 		//Dropping HTTP errors as grabbing the stack is an expensive operation & fills the log too much
 		//for a set of harmless errors. HTTP requests ultimately will be retried.
-		if logLevel <= pipeline.LogError && !httpError {
+		if logLevel <= common.LogError && !httpError {
 			b.Write(stack())
 		}
 		msg := b.String()
 
 		if forceLog {
-			pipeline.ForceLog(logLevel, msg)
+			pipeline.ForceLog(pipeline.LogLevel(logLevel), msg)
 		}
 		if shouldLog {
-			p.LogOptions.LogOptions.Log(logLevel, msg)
+			p.LogOptions.Log(logLevel, msg)
 		}
 
 	}
@@ -431,11 +448,11 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 
 func newLogPolicy(options LogOptions) policy.Policy {
 	options.RequestLogOptions = options.RequestLogOptions.defaults()
-	if options.LogOptions.ShouldLog == nil {
-		options.LogOptions.ShouldLog = func(pipeline.LogLevel) bool { return false } // No-op logger
+	if options.ShouldLog == nil {
+		options.ShouldLog = func(common.LogLevel) bool { return false } // No-op logger
 	}
-	if options.LogOptions.Log == nil {
-		options.LogOptions.Log = func(pipeline.LogLevel, string) {} // No-op logger
+	if options.Log == nil {
+		options.Log = func(common.LogLevel, string) {} // No-op logger
 	}
 	disallowedHeaders := map[string]struct{}{
 		"authorization": {},

@@ -21,7 +21,6 @@
 package common
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"regexp"
 	"strings"
 )
@@ -38,7 +37,7 @@ import (
 type azCopyLogSanitizer struct {
 }
 
-func NewAzCopyLogSanitizer() pipeline.LogSanitizer {
+func NewAzCopyLogSanitizer() LogSanitizer {
 	return &azCopyLogSanitizer{}
 }
 

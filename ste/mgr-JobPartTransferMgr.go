@@ -69,6 +69,7 @@ type IJobPartTransferMgr interface {
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
+	Pipeline() pipeline.Pipeline
 	SourceProviderPipeline() pipeline.Pipeline
 
 	FailActiveUpload(where string, err error)
@@ -85,11 +86,11 @@ type IJobPartTransferMgr interface {
 	LogS2SCopyError(source, destination, errorMsg string, status int)
 	LogSendError(source, destination, errorMsg string, status int)
 	LogError(resource, context string, err error)
-	LogTransferInfo(level pipeline.LogLevel, source, destination, msg string)
+	LogTransferInfo(level common.LogLevel, source, destination, msg string)
 	LogTransferStart(source, destination, description string)
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	ChunkStatusLogger() common.ChunkStatusLogger
-	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
+	LogAtLevelForCurrentTransfer(level common.LogLevel, msg string)
 	GetOverwritePrompter() *overwritePrompter
 	GetFolderCreationTracker() FolderCreationTracker
 	common.ILogger
@@ -664,7 +665,7 @@ func (jptm *jobPartTransferMgr) SetDestinationIsModified() {
 	//   because the default is currently (2019) "Started".  So the NotStarted state is never used.
 	//   Starting to use it would require analysis and testing that we don't have time for right now.
 	if old == 0 {
-		jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "destination modified flag is set to true")
+		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "destination modified flag is set to true")
 	}
 }
 
@@ -699,7 +700,7 @@ func (jptm *jobPartTransferMgr) IsLive() bool {
 	return !jptm.isDead()
 }
 
-func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
+func (jptm *jobPartTransferMgr) ShouldLog(level common.LogLevel) bool {
 	return jptm.jobPartMgr.ShouldLog(level)
 }
 
@@ -833,11 +834,11 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	// TODO: ... if all expected chunks report as done
 }
 
-func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
+func (jptm *jobPartTransferMgr) PipelineLogInfo() LogOptions {
 	return jptm.jobPartMgr.(*jobPartMgr).jobMgr.(*jobMgr).PipelineLogInfo()
 }
 
-func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
+func (jptm *jobPartTransferMgr) Log(level common.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
 	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: [P#%d-T#%d] ", common.LogLevel(level), plan.PartNum, jptm.transferIndex)+msg)
 }
@@ -863,7 +864,7 @@ const (
 	transferErrorCodeCopyFailed     transferErrorCode = "COPYFAILED"
 )
 
-func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string) {
+func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level common.LogLevel, msg string) {
 	// order of log elements here is mirrored, with some more added, in logTransferError
 	info := jptm.Info()
 	fullMsg := common.URLStringExtension(info.Source).RedactSecretQueryParamForLogging() + " " + info.entityTypeLogIndicator() +
@@ -878,7 +879,7 @@ func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, so
 	info := jptm.Info() // TODO we are getting a lot of Info calls and its (presumably) not well-optimized.  Profile that?
 	msg := fmt.Sprintf("%v: %v", errorCode, info.entityTypeLogIndicator()) + common.URLStringExtension(source).RedactSecretQueryParamForLogging() +
 		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSecretQueryParamForLogging()
-	jptm.Log(pipeline.LogError, msg)
+	jptm.Log(common.LogError, msg)
 }
 
 func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int) {
@@ -909,19 +910,19 @@ func (jptm *jobPartTransferMgr) LogSendError(source, destination, errorMsg strin
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
 	_, status, msg := ErrorEx{err}.ErrorCodeAndString()
 	MSRequestID := ErrorEx{err}.MSRequestID()
-	jptm.Log(pipeline.LogError,
+	jptm.Log(common.LogError,
 		fmt.Sprintf("%s: %d: %s-%s. X-Ms-Request-Id:%s\n", common.URLStringExtension(resource).RedactSecretQueryParamForLogging(), status, context, msg, MSRequestID))
 }
 
 func (jptm *jobPartTransferMgr) LogTransferStart(source, destination, description string) {
-	jptm.Log(pipeline.LogInfo,
+	jptm.Log(common.LogInfo,
 		fmt.Sprintf("Starting transfer: Source %q Destination %q. %s",
 			common.URLStringExtension(source).RedactSecretQueryParamForLogging(),
 			common.URLStringExtension(destination).RedactSecretQueryParamForLogging(),
 			description))
 }
 
-func (jptm *jobPartTransferMgr) LogTransferInfo(level pipeline.LogLevel, source, destination, msg string) {
+func (jptm *jobPartTransferMgr) LogTransferInfo(level common.LogLevel, source, destination, msg string) {
 	jptm.Log(level,
 		fmt.Sprintf("Transfer: Source %q Destination %q. %s",
 			common.URLStringExtension(source).RedactSecretQueryParamForLogging(),
@@ -997,6 +998,10 @@ func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
 
 func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
 	return jptm.jobPartMgr.CredentialOpOptions()
+}
+
+func (jptm *jobPartTransferMgr) Pipeline() pipeline.Pipeline {
+	return jptm.jobPartMgr.Pipeline()
 }
 
 func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
