@@ -171,6 +171,10 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Println("error parsing the datalake sas ", tbfsc.Subject)
 		os.Exit(1)
 	}
+	// break the remote Url into parts
+	// and save the directory path
+	currentDirectoryPath := datalakeURLParts.PathName
+	datalakeURLParts.PathName = ""
 
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
@@ -208,9 +212,6 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Printf("the source provided %s is not a directory path\n", tbfsc.Object)
 		os.Exit(1)
 	}
-	// break the remote Url into parts
-	// and save the directory path
-	currentDirectoryPath := datalakeURLParts.PathName
 
 	// List the directory
 	pager := fsc.NewListPathsPager(true, &filesystem.ListPathsOptions{Prefix: &currentDirectoryPath})
