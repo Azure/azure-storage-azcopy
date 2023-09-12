@@ -21,9 +21,7 @@
 package ste
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"sync/atomic"
@@ -64,10 +62,6 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, pacer
 
 // Returns a chunk-func for blob copies
 func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
-	if blockIndex == 0 && adjustedChunkSize == 0 {
-		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
-		return c.generateCreateEmptyBlob(id)
-	}
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
 	if c.NumChunks() == 1 && adjustedChunkSize <= int64(blockblob.MaxUploadBlobBytes) {
 		/*
@@ -80,54 +74,6 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	}
 	setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
 	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
-}
-
-// generateCreateEmptyBlob generates a func to create empty blob in destination.
-// This could be replaced by sync version of copy blob from URL.
-func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkFunc {
-	return createSendToRemoteChunkFunc(c.jptm, id, func() {
-		jptm := c.jptm
-
-		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		// Create blob and finish.
-		if !ValidateTier(jptm, c.destBlobTier, c.destBlockBlobClient, c.jptm.Context(), false) {
-			c.destBlobTier = ""
-		}
-
-		blobTags := c.blobTagsToApply
-		setTags := separateSetTagsRequired(blobTags)
-		if setTags || len(blobTags) == 0 {
-			blobTags = nil
-		}
-
-		// TODO: Remove this snippet once service starts supporting CPK with blob tier
-		destBlobTier := &c.destBlobTier
-		if c.jptm.IsSourceEncrypted() {
-			destBlobTier = nil
-		}
-
-		_, err := c.destBlockBlobClient.Upload(c.jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
-			&blockblob.UploadOptions{
-				HTTPHeaders: &c.headersToApply,
-				Metadata: c.metadataToApply,
-				Tier: destBlobTier,
-				Tags: blobTags,
-				CPKInfo: c.jptm.CpkInfo(),
-				CPKScopeInfo: c.jptm.CpkScopeInfo(),
-			})
-		if err != nil {
-			jptm.FailActiveSend("Creating empty blob", err)
-			return
-		}
-
-		atomic.AddInt32(&c.atomicChunksWritten, 1)
-
-		if setTags {
-			if _, err := c.destBlockBlobClient.SetTags(jptm.Context(), c.blobTagsToApply, nil); err != nil {
-				c.jptm.Log(common.LogWarning, err.Error())
-			}
-		}
-	})
 }
 
 // generatePutBlockFromURL generates a func to copy the block of src data from given startIndex till the given chunkSize.
