@@ -243,3 +243,19 @@ func (e S3HTTPTraceLogger) Write(msg []byte) (n int, err error) {
 	e.logger.Log(e.logLevel, toPrint)
 	return len(toPrint), nil
 }
+
+type causer interface {
+	Cause() error
+}
+
+// Cause walks all the preceding errors and return the originating error.
+func Cause(err error) error {
+	for err != nil {
+		cause, ok := err.(causer)
+		if !ok {
+			break
+		}
+		err = cause.Cause()
+	}
+	return err
+}

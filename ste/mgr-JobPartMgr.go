@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sync/semaphore"
 )
@@ -61,8 +60,6 @@ type IJobPartMgr interface {
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
-	Pipeline() pipeline.Pipeline
-	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
@@ -216,10 +213,6 @@ type jobPartMgr struct {
 	cacheLimiter            common.CacheLimiter
 	fileCountLimiter        common.CacheLimiter
 	exclusiveDestinationMap *common.ExclusiveStringMap
-
-	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
-
-	sourceProviderPipeline pipeline.Pipeline
 
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
@@ -696,17 +689,6 @@ func (jpm *jobPartMgr) Close() {
 	jpm.metadata = common.Metadata{}
 	jpm.preserveLastModifiedTime = false
 
-	/*
-	 * Set pipeline to nil, so that jpm/JobMgr can be GC'ed.
-	 *
-	 * TODO: We should not need to explicitly set this to nil but today we have a yet-unknown ref on pipeline which
-	 *       is leaking JobMgr memory, so we cause that to be freed by force dropping this ref.
-	 *
-	 * Note: Force setting this to nil can technically result in crashes since the containing object is still around,
-	 *       but we should be protected against that since we do this Close in a deferred manner, at least few minutes after the job completes.
-	 */
-	jpm.pipeline = nil
-
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
 		jpm.Panic(fmt.Errorf("error removing Job Part Plan file %s. Error=%v", jpm.planFile.Name(), err))
@@ -750,14 +732,6 @@ func (jpm *jobPartMgr) S2SSourceClientOptions() azcore.ClientOptions {
 
 func (jpm *jobPartMgr) CredentialOpOptions() *common.CredentialOpOptions {
 	return jpm.credOption
-}
-
-func (jpm *jobPartMgr) Pipeline() pipeline.Pipeline {
-	return jpm.pipeline
-}
-
-func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
-	return jpm.sourceProviderPipeline
 }
 
 /* Status update messages should not fail */
