@@ -27,7 +27,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -163,7 +162,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if setTags {
 		_, err = s.destAppendBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil)
 		if err != nil {
-			s.jptm.Log(pipeline.LogWarning, err.Error())
+			s.jptm.Log(common.LogWarning, err.Error())
 		}
 	}
 	return

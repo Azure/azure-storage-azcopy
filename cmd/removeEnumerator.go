@@ -34,9 +34,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
@@ -53,7 +50,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
 
 	// report failure to create traverser
 	if err != nil {
@@ -87,7 +84,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		glcm.Info(message)
 	}
 	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
@@ -138,8 +135,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
-	options := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel(), nil, nil)
-
+	options := createClientOptions(azcopyLogVerbosity, nil, nil)
 	// attempt to parse the source url
 	sourceURL, err := cca.Source.String()
 	if err != nil {
@@ -217,7 +213,6 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, datalakeURLParts azdatal
 		})
 		return nil
 	}
-
 	// we do not know if the source is a file or a directory
 	// we assume it is a directory and get its properties
 	directoryClient := common.CreateDatalakeDirectoryClient(datalakeURLParts.String(), credInfo, nil, options)

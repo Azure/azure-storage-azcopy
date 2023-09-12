@@ -27,7 +27,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -65,7 +64,7 @@ func newBlobDownloader() downloader {
 	}
 }
 
-func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr) {
 	bd.txInfo = jptm.Info()
 	bd.jptm = jptm
 
@@ -107,7 +106,7 @@ func (bd *blobDownloader) Epilogue() {
 }
 
 // Returns a chunk-func for blob downloads
-func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// If the range does not contain any data, write out empty data to disk without performing download

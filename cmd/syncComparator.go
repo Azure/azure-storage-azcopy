@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"reflect"
 	"strings"
@@ -42,7 +41,7 @@ func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
 	out := fmt.Sprintf("File %s was %s because %s", fileName, status, skipReason)
 
 	if azcopyScanningLogger != nil {
-		azcopyScanningLogger.Log(pipeline.LogInfo, out)
+		azcopyScanningLogger.Log(common.LogInfo, out)
 	}
 
 	if stdout {

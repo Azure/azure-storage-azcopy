@@ -36,11 +36,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/minio/minio-go/pkg/s3utils"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/minio/minio-go/pkg/s3utils"
 )
 
 var once sync.Once
@@ -510,7 +508,7 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
 		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+			jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 		}
 		glcm.Info(message)
 	}
@@ -632,13 +630,12 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
+func createClientOptions(logLevel common.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
+	logOptions.ShouldLog = func(level common.LogLevel) bool {return level <= logLevel}
+
 	if azcopyScanningLogger != nil {
-		logOptions.LogOptions = pipeline.LogOptions{
-			Log:       azcopyScanningLogger.Log,
-			ShouldLog: func(level pipeline.LogLevel) bool { return level <= logLevel },
-		}
+		logOptions.Log = azcopyScanningLogger.Log
 	}
 	return ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,

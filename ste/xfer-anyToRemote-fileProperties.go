@@ -21,12 +21,11 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // anyToRemote_folder handles all kinds of sender operations for FOLDERS - both uploads from local files, and S2S copies
-func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 	// smaller "transfer initiation pool", where this code runs.
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
@@ -54,7 +53,7 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info TransferInfo, p p
 		panic("configuration error. Source Info Provider does not have FileProperties entity type")
 	}
 
-	baseSender, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	baseSender, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())

@@ -25,7 +25,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"sync"
@@ -114,7 +113,7 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 	s3Client, err := minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
 
 	if logger != nil {
-		s3Client.TraceOn(NewS3HTTPTraceLogger(logger, pipeline.LogDebug))
+		s3Client.TraceOn(NewS3HTTPTraceLogger(logger, LogDebug))
 	}
 	return s3Client, err
 }

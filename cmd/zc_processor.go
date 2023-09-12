@@ -28,8 +28,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -202,7 +200,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	}
 
 	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, common.LogInfo)
 	}
 
 	if s.reportFinalPartDispatched != nil {

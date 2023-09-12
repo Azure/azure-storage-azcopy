@@ -35,7 +35,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -335,7 +334,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 // If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
 // To avoid slowdowns, use a buffered channel of enough capacity.
-func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, destination *common.Location) (ResourceTraverser, error) {
+func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel common.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, destination *common.Location) (ResourceTraverser, error) {
 	var output ResourceTraverser
 
 	var includeDeleted bool
@@ -732,7 +731,7 @@ func WarnStdoutAndScanningLog(toLog string) {
 	glcm.Info(toLog)
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
-		azcopyScanningLogger.Log(pipeline.LogWarning, toLog)
+		azcopyScanningLogger.Log(common.LogWarning, toLog)
 	}
 }
 

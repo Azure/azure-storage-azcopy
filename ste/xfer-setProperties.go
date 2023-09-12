@@ -3,7 +3,6 @@ package ste
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
@@ -12,7 +11,7 @@ import (
 	"strings"
 )
 
-func SetProperties(jptm IJobPartTransferMgr, _ pipeline.Pipeline, _ pacer) {
+func SetProperties(jptm IJobPartTransferMgr, _ pacer) {
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytes transferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
@@ -47,7 +46,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "SET-PROPERTIES FAILED with error: ", err)
 		} else {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+			jptm.Log(common.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
 
 		jptm.SetStatus(status)
@@ -110,7 +109,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "SET-PROPERTIES ERROR ", err)
 		} else {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+			jptm.Log(common.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
 
 		jptm.SetStatus(status)
@@ -168,7 +167,7 @@ func setPropertiesFile(jptm IJobPartTransferMgr) {
 		if status == common.ETransferStatus.Failed() {
 			jptm.LogError(info.Source, "SET-PROPERTIES ERROR ", err)
 		} else {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+			jptm.Log(common.LogInfo, fmt.Sprintf("SET-PROPERTIES SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
 
 		jptm.SetStatus(status)
@@ -201,7 +200,7 @@ func errorHandlerForXferSetProperties(err error, jptm IJobPartTransferMgr, trans
 		// If the status code was 403, it means there was an authentication error, and we exit.
 		// User can resume the job if completely ordered with a new sas.
 		errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
-		jptm.Log(pipeline.LogError, errMsg)
+		jptm.Log(common.LogError, errMsg)
 		common.GetLifecycleMgr().Error(errMsg)
 		// TODO : Migrate on azfile
 	}

@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	pipeline2 "github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
@@ -88,7 +87,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	}
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
-	options := createClientOptions(pipeline2.LogNone, to.Ptr(common.ETrailingDotOption.Disable()), &cookedArgs.resourceLocation)
+	options := createClientOptions(common.LogNone, to.Ptr(common.ETrailingDotOption.Disable()), &cookedArgs.resourceLocation)
 
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():

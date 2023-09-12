@@ -37,8 +37,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -54,14 +52,12 @@ type blobFSSenderBase struct {
 	serviceClient *service.Client
 	chunkSize       int64
 	numChunks           uint32
-	pipeline            pipeline.Pipeline
 	pacer               pacer
 	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
 }
 
-func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
-
+func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
 	info := jptm.Info()
 
 	// compute chunk size and number of chunks
@@ -99,7 +95,6 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 		serviceClient: serviceClient,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
-		pipeline:            p,
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
@@ -190,7 +185,7 @@ func (u *blobFSSenderBase) Cleanup() {
 		defer cancelFn()
 		_, err := u.getFileClient().Delete(deletionContext, nil)
 		if err != nil {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.getFileClient().DFSURL(), err.Error()))
+			jptm.Log(common.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.getFileClient().DFSURL(), err.Error()))
 		}
 	}
 }

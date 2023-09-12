@@ -26,7 +26,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -95,7 +94,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			// If neither the source nor destination contain data, it's safe to skip.
 			if !destContainsData {
 				// for this destination type, there is no need to upload ranges than consist entirely of zeros
-				jptm.Log(pipeline.LogDebug,
+				jptm.Log(common.LogDebug,
 					fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
 						id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
 				return

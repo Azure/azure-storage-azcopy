@@ -28,8 +28,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"sync/atomic"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -126,7 +124,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 		if setTags {
 			if _, err := c.destBlockBlobClient.SetTags(jptm.Context(), c.blobTagsToApply, nil); err != nil {
-				c.jptm.Log(pipeline.LogWarning, err.Error())
+				c.jptm.Log(common.LogWarning, err.Error())
 			}
 		}
 	})
@@ -142,7 +140,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		c.setBlockID(blockIndex, encodedBlockID)
 
 		if c.ChunkAlreadyTransferred(blockIndex) {
-			c.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, fmt.Sprintf("Skipping chunk %d as it was already transferred.", blockIndex))
+			c.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, fmt.Sprintf("Skipping chunk %d as it was already transferred.", blockIndex))
 			atomic.AddInt32(&c.atomicChunksWritten, 1)
 			return
 		}
@@ -225,7 +223,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		if setTags {
 			if _, err := c.destBlockBlobClient.SetTags(c.jptm.Context(), c.blobTagsToApply, nil); err != nil {
-				c.jptm.Log(pipeline.LogWarning, err.Error())
+				c.jptm.Log(common.LogWarning, err.Error())
 			}
 		}
 	})

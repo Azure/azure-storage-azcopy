@@ -25,8 +25,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -74,7 +72,7 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
 			err = spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
 			if err == errorNoSddlFound {
-				bd.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "No SMB permissions were downloaded because none were found at the source")
+				bd.jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "No SMB permissions were downloaded because none were found at the source")
 			} else if err != nil {
 				return "Setting destination file SDDLs", err
 			}
@@ -96,7 +94,7 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	return "", nil
 }
 
-func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline) {
+func (bd *azureFilesDownloader) Prologue(jptm IJobPartTransferMgr) {
 	bd.init(jptm)
 }
 
@@ -113,7 +111,7 @@ func (bd *azureFilesDownloader) Epilogue() {
 }
 
 // GenerateDownloadFunc returns a chunk-func for file downloads
-func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
+func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)

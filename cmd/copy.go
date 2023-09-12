@@ -39,8 +39,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -1283,7 +1281,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := createClientOptions(pipeline.LogNone, nil, nil)
+	options := createClientOptions(common.LogNone, nil, nil)
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1330,7 +1328,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := createClientOptions(pipeline.LogNone, nil, nil)
+	options := createClientOptions(common.LogNone, nil, nil)
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1777,7 +1775,7 @@ Final Job Status: %v%s%s
 				// log to job log
 				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
-					jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
+					jobMan.Log(common.LogInfo, logStats+"\n"+output)
 				}
 				return output
 			}
@@ -1973,7 +1971,8 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
 		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
 	// options change how the transfers are performed
-	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
+	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25)."+
+	" When uploading or downloading, maximum allowed block size is 0.75 * AZCOPY_BUFFER_GB. Please refer https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#optimize-memory-use.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
 		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier. (default 'None'). Valid options are Hot, Cold, Cool, Archive")
@@ -2011,7 +2010,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service transfer from one blob storage to another")
 	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers.")
 	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. Can be set to true to disable automatic decoding.")
-	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be copied by this command. This flag does not copy the actual files.")
+	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be copied by this command. This flag does not copy the actual files. The --overwrite flag has no effect. If you set the --overwrite flag to false, files in the source directory are listed even if those files exist in the destination directory")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
