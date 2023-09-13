@@ -2,6 +2,7 @@ package ste
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 
@@ -44,8 +45,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 		panic("sanity check: HNS source URI did not parse.")
 	}
 
-	// TODO : Recursive delete
-	//recursive := info.BlobFSRecursiveDelete
+	recursive := info.BlobFSRecursiveDelete
 
 	transferDone := func(err error) {
 		status := common.ETransferStatus.Success()
@@ -72,7 +72,9 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 	}
 
 	// Check if the source is a file or directory
-	directoryClient := common.CreateDatalakeDirectoryClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	clientOptions := jptm.ClientOptions()
+	clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, clientOptions.PerCallPolicies...)
+	directoryClient := common.CreateDatalakeDirectoryClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), clientOptions)
 	var respFromCtx *http.Response
 	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
 	_, err = directoryClient.GetProperties(ctxWithResp, nil)
@@ -88,8 +90,9 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 		_, err := fileClient.Delete(ctx, nil)
 		transferDone(err)
 	} else {
-		// TODO : Recursive delete
-		_, err := directoryClient.Delete(ctx, nil)
+		// Remove the directory
+		recursiveContext := common.WithRecursive(ctx, recursive)
+		_, err := directoryClient.Delete(recursiveContext, nil)
 		transferDone(err)
 	}
 }

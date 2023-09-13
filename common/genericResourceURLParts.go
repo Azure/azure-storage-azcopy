@@ -110,8 +110,6 @@ func (g *GenericResourceURLParts) String() string {
 	default:
 		panic(fmt.Sprintf("%s is an invalid location for GenericResourceURLParts", g.location))
 	}
-
-	return ""
 }
 
 func (g *GenericResourceURLParts) URL() url.URL {

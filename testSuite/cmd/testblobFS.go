@@ -88,7 +88,8 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	if datalakeURLParts.SAS.Encode() != "" {
 		fc, err = file.NewClientWithNoCredential(datalakeURLParts.String(), nil)
 	} else {
-		cred, err := azdatalake.NewSharedKeyCredential(name, key)
+		var cred *azdatalake.SharedKeyCredential
+		cred, err = azdatalake.NewSharedKeyCredential(name, key)
 		if err != nil {
 			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
 			os.Exit(1)
@@ -170,6 +171,10 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Println("error parsing the datalake sas ", tbfsc.Subject)
 		os.Exit(1)
 	}
+	// break the remote Url into parts
+	// and save the directory path
+	currentDirectoryPath := datalakeURLParts.PathName
+	datalakeURLParts.PathName = ""
 
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
@@ -183,7 +188,8 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	if datalakeURLParts.SAS.Encode() != "" {
 		fsc, err = filesystem.NewClientWithNoCredential(datalakeURLParts.String(), nil)
 	} else {
-		cred, err := azdatalake.NewSharedKeyCredential(name, key)
+		var cred *azdatalake.SharedKeyCredential
+		cred, err = azdatalake.NewSharedKeyCredential(name, key)
 		if err != nil {
 			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
 			os.Exit(1)
@@ -206,9 +212,6 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Printf("the source provided %s is not a directory path\n", tbfsc.Object)
 		os.Exit(1)
 	}
-	// break the remote Url into parts
-	// and save the directory path
-	currentDirectoryPath := datalakeURLParts.PathName
 
 	// List the directory
 	pager := fsc.NewListPathsPager(true, &filesystem.ListPathsOptions{Prefix: &currentDirectoryPath})

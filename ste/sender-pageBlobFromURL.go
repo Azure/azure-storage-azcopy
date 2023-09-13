@@ -22,6 +22,8 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
@@ -150,6 +152,12 @@ type pageRangeOptimizer struct {
 
 func newPageRangeOptimizer(srcPageBlobClient *pageblob.Client, ctx context.Context) *pageRangeOptimizer {
 	return &pageRangeOptimizer{srcPageBlobClient: srcPageBlobClient, ctx: ctx}
+}
+
+// withNoRetryForBlob returns a context that contains a marker to say we don't want any retries to happen
+// Is only implemented for blob pipelines at present
+func withNoRetryForBlob(ctx context.Context) context.Context {
+	return runtime.WithRetryOptions(ctx, policy.RetryOptions{MaxRetries: 1})
 }
 
 func (p *pageRangeOptimizer) fetchPages() {

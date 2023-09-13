@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
@@ -374,7 +375,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		var err error
 		switch b.targetLocation {
 		case common.ELocation.Blob():
-			blobURLParts, err := blob.ParseURL(b.rootURL.String())
+			var blobURLParts blob.URLParts
+			blobURLParts, err = blob.ParseURL(b.rootURL.String())
 			if err != nil {
 				return err
 			}
@@ -383,7 +385,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			blobClient := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
 			_, err = blobClient.Delete(b.ctx, nil)
 		case common.ELocation.File():
-			fileURLParts, err := sharefile.ParseURL(b.rootURL.String())
+			var fileURLParts sharefile.URLParts
+			fileURLParts, err = sharefile.ParseURL(b.rootURL.String())
 			if err != nil {
 				return err
 			}
@@ -412,7 +415,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				}
 			}
 		case common.ELocation.BlobFS():
-			datalakeURLParts, err := azdatalake.ParseURL(b.rootURL.String())
+			var datalakeURLParts azdatalake.URLParts
+			datalakeURLParts, err = azdatalake.ParseURL(b.rootURL.String())
 			if err != nil {
 				return err
 			}
@@ -471,9 +475,11 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 					}
 				}
 			case common.ELocation.BlobFS():
-				directoryClient := common.CreateDatalakeDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
-				// TODO : Recursive delete
-				_, err = directoryClient.Delete(ctx, nil)
+				clientOptions := b.clientOptions
+				clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, clientOptions.PerCallPolicies...)
+				directoryClient := common.CreateDatalakeDirectoryClient(objectURL.String(), b.credInfo, nil, clientOptions)
+				recursiveContext := common.WithRecursive(ctx, false)
+				_, err = directoryClient.Delete(recursiveContext, nil)
 			default:
 				panic("not implemented, check your code")
 			}
