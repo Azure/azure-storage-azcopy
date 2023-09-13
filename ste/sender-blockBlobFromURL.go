@@ -62,6 +62,15 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, pacer
 
 // Returns a chunk-func for blob copies
 func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
+	/*
+	 * There was a optimization here to use PutBlob for zero-byte blobs instead of PutBlobFromURL.
+	 * It was removed because of these reasons:
+	 * 1. Both apis are different in some aspects. For put blob service verifies the content md5.
+	 * This is not required if check-md5 is false. Using same calls helps us be consistent.
+	 * 2. If the source only has list (and no read) permissions, we will still put the blob here
+	 * While it is arguable that content can be inferred from size, it is better to fail transfer
+	 * for blobs of all sizes.
+	 */
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
 	if c.NumChunks() == 1 && adjustedChunkSize <= int64(blockblob.MaxUploadBlobBytes) {
 		/*
