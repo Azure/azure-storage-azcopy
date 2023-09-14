@@ -360,11 +360,13 @@ func (TestFromTo) AllSync() TestFromTo {
 			common.ELocation.Blob(),
 			common.ELocation.File(),
 			common.ELocation.Local(),
+			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Blob(),
 			common.ELocation.File(),
 			common.ELocation.Local(),
+			common.ELocation.BlobFS(),
 		},
 	}
 }
