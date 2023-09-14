@@ -50,7 +50,7 @@ type downloadContentOptions struct {
 type downloadBlobContentOptions struct {
 	containerClient *container.Client
 	cpkInfo         *blob.CPKInfo
-	cpkScopeInfo *blob.CPKScopeInfo
+	cpkScopeInfo    *blob.CPKScopeInfo
 }
 
 type downloadFileContentOptions struct {
@@ -246,7 +246,7 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		containerURLParts, err := blob.ParseURL(r.containerClient.URL())
 		a.AssertNoErr(err)
 
-		for _,v := range options.generateFromListOptions.fs {
+		for _, v := range options.generateFromListOptions.fs {
 			if v.name == "" {
 				if v.creationProperties.adlsPermissionsACL == nil {
 					break
@@ -274,7 +274,7 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 		},
 	}
 
-	if s.fromTo.IsDownload()|| s.fromTo.IsDelete() {
+	if s.fromTo.IsDownload() || s.fromTo.IsDelete() {
 		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
@@ -342,7 +342,7 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 		a.AssertNoErr(err)
 
 		objects[""] = &objectProperties{
-			entityType: common.EEntityType.Folder(),
+			entityType:         common.EEntityType.Folder(),
 			adlsPermissionsACL: &ACL.ACL,
 		}
 	}

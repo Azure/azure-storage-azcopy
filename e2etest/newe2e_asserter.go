@@ -8,6 +8,7 @@ import (
 // ====== Asserter ======
 
 type Asserter interface {
+	NoError(comment string, err error)
 	// Assert fails the test, but does not exit.
 	Assert(comment string, assertion Assertion, items ...any)
 	// AssertNow wraps Assert, and exits if failed.
@@ -50,24 +51,28 @@ type TestingAsserter struct {
 	Step         string
 }
 
-func (ta TestingAsserter) PrintFinalizingMessage(reasonFormat string, a ...any) {
+func (ta *TestingAsserter) PrintFinalizingMessage(reasonFormat string, a ...any) {
 	ta.Log("========== %s/%s: at step %s ===========", ta.TestName, ta.ScenarioName, ta.Step)
 	ta.Log(reasonFormat, a...)
 	ta.Log("========== %s/%s: at step %s ===========", ta.TestName, ta.ScenarioName, ta.Step)
 }
 
-func (ta TestingAsserter) Log(format string, a ...any) {
+func (ta *TestingAsserter) Log(format string, a ...any) {
 	ta.t.Log(fmt.Sprintf(format, a...))
 }
 
-func (ta TestingAsserter) AssertNow(comment string, assertion Assertion, items ...any) {
+func (ta *TestingAsserter) NoError(comment string, err error) {
+	ta.AssertNow(comment, IsNil{}, err)
+}
+
+func (ta *TestingAsserter) AssertNow(comment string, assertion Assertion, items ...any) {
 	ta.Assert(comment, assertion, items...)
 	if ta.Failed() {
 		ta.t.FailNow()
 	}
 }
 
-func (ta TestingAsserter) Assert(comment string, assertion Assertion, items ...any) {
+func (ta *TestingAsserter) Assert(comment string, assertion Assertion, items ...any) {
 	if (assertion.MinArgs() > 0 && len(items) < assertion.MinArgs()) || (assertion.MaxArgs() > 0 && len(items) > assertion.MaxArgs()) {
 		ta.PrintFinalizingMessage("Failed to assert: Assertion %s supports argument counts between %d and %d, but received %d args.", assertion.Name(), assertion.MinArgs(), assertion.MaxArgs(), len(items))
 		ta.t.FailNow()
@@ -84,16 +89,16 @@ func (ta TestingAsserter) Assert(comment string, assertion Assertion, items ...a
 	}
 }
 
-func (ta TestingAsserter) Error(reason string) {
+func (ta *TestingAsserter) Error(reason string) {
 	ta.PrintFinalizingMessage("Test failed: %s", reason)
 	ta.t.FailNow()
 }
 
-func (ta TestingAsserter) Skip(reason string) {
+func (ta *TestingAsserter) Skip(reason string) {
 	ta.PrintFinalizingMessage("Test skipped: %s", reason)
 	ta.t.SkipNow()
 }
 
-func (ta TestingAsserter) Failed() bool {
+func (ta *TestingAsserter) Failed() bool {
 	return ta.t.Failed()
 }

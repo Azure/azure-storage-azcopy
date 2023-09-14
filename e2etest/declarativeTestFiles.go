@@ -24,8 +24,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	bfsfile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"reflect"
 	"strconv"
@@ -66,47 +68,48 @@ func (h *contentHeaders) DeepCopy() *contentHeaders {
 	return &ret
 }
 
-func (h *contentHeaders) ToBlob() azblob.BlobHTTPHeaders {
+func (h *contentHeaders) ToBlob() *blob.HTTPHeaders {
 	if h == nil {
-		return azblob.BlobHTTPHeaders{}
+		return nil
 	}
 
-	return azblob.BlobHTTPHeaders{
-		ContentType:        DerefOrZero(h.contentType),
-		ContentDisposition: DerefOrZero(h.contentDisposition),
-		ContentEncoding:    DerefOrZero(h.contentEncoding),
-		ContentLanguage:    DerefOrZero(h.contentLanguage),
-		CacheControl:       DerefOrZero(h.cacheControl),
+	return &blob.HTTPHeaders{
+		BlobContentType:        h.contentType,
+		BlobContentDisposition: h.contentDisposition,
+		BlobContentEncoding:    h.contentEncoding,
+		BlobContentLanguage:    h.contentLanguage,
+		BlobCacheControl:       h.cacheControl,
+		BlobContentMD5:         h.contentMD5,
+	}
+}
+
+func (h *contentHeaders) ToFile() *file.HTTPHeaders {
+	if h == nil {
+		return nil
+	}
+
+	return &file.HTTPHeaders{
+		ContentType:        h.contentType,
+		ContentDisposition: h.contentDisposition,
+		ContentEncoding:    h.contentEncoding,
+		ContentLanguage:    h.contentLanguage,
+		CacheControl:       h.cacheControl,
 		ContentMD5:         h.contentMD5,
 	}
 }
 
-func (h *contentHeaders) ToFile() azfile.FileHTTPHeaders {
+func (h *contentHeaders) ToBlobFS() *bfsfile.HTTPHeaders {
 	if h == nil {
-		return azfile.FileHTTPHeaders{}
+		return nil
 	}
 
-	return azfile.FileHTTPHeaders{
-		ContentType:        DerefOrZero(h.contentType),
-		ContentDisposition: DerefOrZero(h.contentDisposition),
-		ContentEncoding:    DerefOrZero(h.contentEncoding),
-		ContentLanguage:    DerefOrZero(h.contentLanguage),
-		CacheControl:       DerefOrZero(h.cacheControl),
+	return &bfsfile.HTTPHeaders{
 		ContentMD5:         h.contentMD5,
-	}
-}
-
-func (h *contentHeaders) ToBlobFS() azbfs.BlobFSHTTPHeaders {
-	if h == nil {
-		return azbfs.BlobFSHTTPHeaders{}
-	}
-
-	return azbfs.BlobFSHTTPHeaders{
-		ContentType:        DerefOrZero(h.contentType),
-		ContentDisposition: DerefOrZero(h.contentDisposition),
-		ContentEncoding:    DerefOrZero(h.contentEncoding),
-		ContentLanguage:    DerefOrZero(h.contentLanguage),
-		CacheControl:       DerefOrZero(h.cacheControl),
+		ContentType:        h.contentType,
+		ContentDisposition: h.contentDisposition,
+		ContentEncoding:    h.contentEncoding,
+		ContentLanguage:    h.contentLanguage,
+		CacheControl:       h.cacheControl,
 	}
 }
 
@@ -154,7 +157,7 @@ type objectUnixStatContainer struct {
 	// mode can contain THE FOLLOWING file type specifier bits (common.S_IFSOCK, common.S_IFIFO)
 	// common.S_IFDIR and common.S_IFLNK are achievable using folder() and symlink().
 	// TODO/Spike: common.S_IFBLK and common.S_IFCHR may be difficult to replicate consistently in a test environment
-	mode       *uint32
+	mode *uint32
 
 	accessTime *time.Time
 	modTime    *time.Time
@@ -240,9 +243,9 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string) {
 		delete(metadata, common.POSIXFIFOMeta)
 		delete(metadata, common.POSIXSocketMeta)
 		switch {
-		case *o.mode & common.S_IFIFO == common.S_IFIFO:
+		case *o.mode&common.S_IFIFO == common.S_IFIFO:
 			metadata[common.POSIXFIFOMeta] = to.Ptr("true")
-		case *o.mode & common.S_IFSOCK == common.S_IFSOCK:
+		case *o.mode&common.S_IFSOCK == common.S_IFSOCK:
 			metadata[common.POSIXSocketMeta] = to.Ptr("true")
 		}
 	}
@@ -506,9 +509,9 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 // Our expectations, e.g. success or failure, are represented by whether we put each file into
 // "shouldTransfer", "shouldFail" etc.
 type testFiles struct {
-	defaultSize  string                  // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
-	objectTarget string                  // should we target only a single file/folder?
-	destTarget   string                  // do we want to copy under a folder or rename?
+	defaultSize  string                      // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
+	objectTarget string                      // should we target only a single file/folder?
+	destTarget   string                      // do we want to copy under a folder or rename?
 	sourcePublic *container.PublicAccessType // should the source blob container be public? (ONLY APPLIES TO BLOB.)
 
 	// The files/folders that we expect to be transferred. Elements of the list must be strings or testObject's.

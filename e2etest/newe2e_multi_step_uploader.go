@@ -3,12 +3,16 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"runtime"
+	"sync"
 )
 
 type MultiStepUploader struct { // GetTypeOrZero[T] will prove useful.
 	Init        func(size int64) error
-	UploadRange func(block io.ReadSeeker, state MultiStepUploaderState) error
+	UploadRange func(block io.ReadSeekCloser, state MultiStepUploaderState) error
 	Finalize    func() error
 	BlockSize   int64
 	Parallel    bool
@@ -41,7 +45,7 @@ func (m *MultiStepUploader) UploadContents(content ObjectContentContainer) error
 	}
 
 	if content == nil {
-		content = NewZeroContentContainerBuffer(0)
+		content = NewZeroObjectContentContainer(0)
 	}
 
 	size := content.Size()
@@ -51,8 +55,20 @@ func (m *MultiStepUploader) UploadContents(content ObjectContentContainer) error
 	offset := int64(0)
 	blockIndex := int64(0)
 
-	buf := make([]byte, m.BlockSize)
+	wg := &sync.WaitGroup{}
+	pool := &sync.Pool{}
+	threads := common.Iff(m.Parallel, runtime.NumCPU(), 1) // 1 thread if not parallel
+	for i := 0; i < threads; i++ {
+		pool.Put(&struct{ threadID int }{
+			threadID: i,
+		})
+	}
+
+	chunkErrors := make(map[int64]error)
+	errMutex := &sync.Mutex{}
+
 	for {
+		buf := make([]byte, m.BlockSize)
 		n, err := reader.Read(buf)
 		if err != nil && err != io.EOF {
 			return fmt.Errorf("failed to read content (offset %d (block %d/%d), total %d): %w", offset, blockIndex, blockCount, size, err)
@@ -60,15 +76,24 @@ func (m *MultiStepUploader) UploadContents(content ObjectContentContainer) error
 			buf = buf[:n] // reduce buffer size for final block
 		}
 
-		if m.UploadRange != nil {
-			err = m.UploadRange(
-				bytes.NewReader(buf),
-				MultiStepUploaderState{BlockSize: int64(n), Offset: offset, BlockIndex: blockIndex, BlockCount: blockCount})
+		wg.Add(1)
+		thread := pool.Get().(*struct{ threadID int })
+		go func() {
+			defer wg.Done()
+			defer pool.Put(thread)
 
-			if err != nil {
-				return fmt.Errorf("failed to upload content (offset %d (block %d/%d), total %d): %w", offset, blockIndex, blockCount, size, err)
+			if m.UploadRange != nil {
+				err = m.UploadRange(
+					streaming.NopCloser(bytes.NewReader(buf)),
+					MultiStepUploaderState{BlockSize: int64(n), Offset: offset, BlockIndex: blockIndex, BlockCount: blockCount})
+
+				if err != nil {
+					errMutex.Lock()
+					defer errMutex.Unlock()
+					chunkErrors[blockIndex] = fmt.Errorf("failed to upload content (thread %d, offset %d (block %d/%d), total %d): %w", thread.threadID, offset, blockIndex, blockCount, size, err)
+				}
 			}
-		}
+		}()
 
 		offset += int64(n)
 		blockIndex++

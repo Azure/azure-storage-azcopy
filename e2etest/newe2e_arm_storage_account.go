@@ -1,7 +1,8 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"net/http"
 	"net/url"
 )
@@ -34,7 +35,7 @@ func (sa *ARMStorageAccount) PerformRequest(baseURI url.URL, reqSettings ARMRequ
 
 // ARMStorageAccountCreateParams is the request body for https://learn.microsoft.com/en-us/rest/api/storagerp/storage-accounts/create?tabs=HTTP#storageaccount
 type ARMStorageAccountCreateParams struct {
-	Kind             azblob.AccountKindType             `json:"kind"`
+	Kind             service.AccountKind                `json:"kind"`
 	Location         string                             `json:"location"`
 	Sku              ARMStorageAccountSKU               `json:"sku"`
 	ExtendedLocation *ARMExtendedLocation               `json:"extendedLocation,omitempty"`
@@ -45,7 +46,7 @@ type ARMStorageAccountCreateParams struct {
 // ARMStorageAccountCreateProperties implements a portion of ARMStorageAccountCreateParams.
 // https://learn.microsoft.com/en-us/rest/api/storagerp/storage-accounts/create?tabs=HTTP#storageaccount
 type ARMStorageAccountCreateProperties struct { // ARMUnimplementedStruct(s) are used as filler, if needed for one-offs
-	AccessTier                            *azblob.AccessTierType `json:"accessTier,omitempty"`
+	AccessTier                            *blob.AccessTier       `json:"accessTier,omitempty"`
 	AllowBlobPublicAccess                 *bool                  `json:"allowBlobPublicAccess,omitempty"`
 	AllowCrossTenantReplication           *bool                  `json:"allowCrossTenantReplication,omitempty"`
 	AllowSharedKeyAccess                  *bool                  `json:"allowSharedKeyAccess,omitempty"`
@@ -112,11 +113,11 @@ type ARMStorageAccountProperties struct {
 	ExtendedLocation ARMExtendedLocation       `json:"extendedLocation"`
 	ID               string                    `json:"id"`
 	Identity         ARMStorageAccountIdentity `json:"identity"`
-	Kind             azblob.AccountKindType    `json:"kind"`
+	Kind             service.AccountKind       `json:"kind"`
 	Location         string                    `json:"location"`
 	Name             string                    `json:"name"`
 	Properties       struct {
-		AccessTier                            azblob.AccessTierType    `json:"accessTier"`
+		AccessTier                            blob.AccessTier          `json:"accessTier"`
 		AccountMigrationInProcess             bool                     `json:"accountMigrationInProcess"`
 		AllowBlobPublicAccess                 bool                     `json:"allowBlobPublicAccess"`
 		AllowCrossTenantReplication           bool                     `json:"allowCrossTenantReplication"`

@@ -1,19 +1,22 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"time"
 )
 
 type ResourceManager interface {
 	Location() common.Location
 	Level() cmd.LocationLevel
+	URI() string
 }
 
 type RemoteResourceManager interface {
 	ValidAuthTypes() ExplicitCredentialTypes
-	ResourceClient() any // Should be wrangled by caller
+	ResourceClient() any // Should be wrangled by caller, check internalClient field of resource manager
 }
 
 // ExplicitCredentialTypes defines a more explicit enum for credential types as AzCopy's internal definition is very loose (e.g. Anonymous can be public or SAS); accepts the URI as-is.
@@ -34,105 +37,106 @@ func (e ExplicitCredentialTypes) Includes(x ExplicitCredentialTypes) bool {
 	return e&x == x
 }
 
-type AzureAccountResourceManager interface {
-	GetServiceResourceManager(Location common.Location) ServiceResourceManager
+func (e ExplicitCredentialTypes) With(x ...ExplicitCredentialTypes) ExplicitCredentialTypes {
+	out := e
+	for _, v := range x {
+		out |= v
+	}
+	return out
+}
+
+type PropertiesAvailability uint8
+
+const (
+	PropertiesAvailabilityNone PropertiesAvailability = iota
+	PropertiesAvailabilityReadOnly
+	PropertiesAvailabilityReadWrite
+)
+
+/*
+Resource managers implement the most generic common expectation of features across services.
+If you get more complex, you may want to use GetTypeOrAssert[T] or GetTypeOrZero[T] to wrangle the underlying resource manager,
+or wrangle to RemoteResourceManager and call ResourceClient() to pull the actual client.
+
+Check newe2e_resource_managers_*.go for the implementation(s) of resource managers.
+*/
+
+type AccountResourceManager interface {
+	ResourceManager
+	RemoteResourceManager
+
+	AccountName() string
 	AccountType() AccountType
+	AvailableServices() []common.Location
+	GetService(Asserter, common.Location) ServiceResourceManager
 }
 
 type ServiceResourceManager interface {
-	RemoteResourceManager
 	ResourceManager
-	CreateContainer(name string, options *CreateContainerOptions) (ContainerResourceManager, error)
-	DeleteContainer(name string, options *DeleteContainerOptions) error
-	GetContainer(name string) ContainerResourceManager
-	/*
-		todo: do we need to handle container properties for any tests?
-		For Files, we can just treat "/" as root and pull the SMB properties that way.
-		But that's working around the issue. Should we choose to handle it properly? Do we think we'll need it in the future?
-	*/
-}
+	RemoteResourceManager
 
-type CreateContainerOptions struct {
-	// ResourceSpecificOptions provides a space for a struct intended to be read uniquely by a specific intended ContainerResourceManager.
-	// The ServiceResourceManager should document clearly what struct is required in the documentation of each function.
-	ResourceSpecificOptions any
-}
-
-type DeleteContainerOptions struct {
-	// ResourceSpecificOptions provides a space for a struct intended to be read uniquely by a specific intended ContainerResourceManager.
-	// The ServiceResourceManager should document clearly what struct is required in the documentation of each function.
-	ResourceSpecificOptions any
+	ListContainers(a Asserter) []string
+	GetContainer(string) ContainerResourceManager
+	IsHierarchical() bool
 }
 
 type ContainerResourceManager interface {
-	// Local directories will be treated as ContainerResourceManager(s), and as such ContainerResourceManager(s) aren't inherently RemoteResourceManager(s).
 	ResourceManager
-	Create(path string, entityType common.EntityType, options *CreateObjectOptions) error
-	Read(path string, options *ReadObjectOptions) ([]byte, error)
-	GetProperties(path string, options *GetObjectPropertiesOptions) (GenericObjectProperties, error)
-	SetProperties(path string, props GenericObjectProperties, options *SetObjectPropertiesOptions) error
-	Delete(path string, options *DeleteObjectProperties) error
+
+	ContainerName() string
+	Create(a Asserter)
+	Delete(a Asserter)
+	// ListObjects treats prefixOrDirectory as a prefix when in a non-hierarchical service, and as a directory in a hierarchical service.
+	// The map will be the real path, relative to container root, not to prefix/directory.
+	ListObjects(a Asserter, prefixOrDirectory string, recursive bool) map[string]ObjectProperties
+	GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager
 }
 
-type CreateObjectOptions struct {
-	// Overwrite determines if we're replacing the content entirely
-	Overwrite bool
-	// Defaults to NewRandomObjectContainer(1024)
-	Content ObjectContentContainer
+type ObjectResourceManager interface {
+	ResourceManager
 
-	// Optionals
-	Metadata map[string]string
-	Headers  *contentHeaders
+	EntityType() common.EntityType
+	Create(a Asserter, body ObjectContentContainer, properties ObjectProperties)
 
-	// ResourceSpecificOptions provides a space for a struct intended to be read uniquely by a specific intended ContainerResourceManager.
-	// The ContainerResourceManager should document clearly what struct is required in the documentation of each function.
-	ResourceSpecificOptions any
+	// ListChildren will fail if EntityType is not a folder and the service is hierarchical.
+	// The map will be relative to the object.
+	ListChildren(a Asserter, recursive bool) map[string]ObjectProperties
+
+	GetProperties(a Asserter) ObjectProperties
+
+	SetHTTPHeaders(a Asserter, h contentHeaders)
+	SetMetadata(a Asserter, metadata common.Metadata)
+	SetObjectProperties(a Asserter, props ObjectProperties)
 }
 
-// For now, Read will just be plainly implemented.
-type ReadObjectOptions struct {
-	offset, count int64 // default 0, eof
+type ObjectProperties struct {
+	EntityType  common.EntityType
+	HTTPHeaders contentHeaders
+	Metadata    common.Metadata
 
-	// ResourceSpecificOptions provides a space for a struct intended to be read uniquely by a specific intended ContainerResourceManager.
-	// The ContainerResourceManager should document clearly what struct is required in the documentation of each function.
-	ResourceSpecificOptions any
+	BlobProperties   BlobProperties
+	BlobFSProperties BlobFSProperties
+	FileProperties   FileProperties
 }
 
-type GenericObjectProperties struct {
-	headers  common.ResourceHTTPHeaders
-	metadata common.Metadata
-
-	ResourceSpecificProperties any // Filled with e.g. BlobObjectProperties
-	OriginalResponse           any // Original response struct for extended handling; not required for setproperties
+type BlobProperties struct {
+	Type                *blob.BlobType
+	Tags                map[string]string // "Tags"
+	BlockBlobAccessTier *blob.AccessTier
+	PageBlobAccessTier  *pageblob.PremiumPageBlobAccessTier
 }
 
-// BlobObjectProperties is a struct to fill GenericObjectProperties' ResourceSpecificProperties.
-type BlobObjectProperties struct {
-	BlobType   common.BlobType
-	AccessTier azblob.AccessTierType
-
-	// Read-only
-	LeaseStatus   azblob.LeaseStatusType
-	LeaseDuration azblob.LeaseDurationType
-	LeaseState    azblob.LeaseStateType
-	ArchiveStatus azblob.ArchiveStatusType
+type BlobFSProperties struct {
+	Permissions *string
+	Owner       *string
+	Group       *string
+	ACL         *string
 }
 
-// For now, Read will just be plainly implemented.
-type GetObjectPropertiesOptions struct {
-	// ResourceSpecificOptions provides a space for a struct intended to be read uniquely by a specific intended ContainerResourceManager.
-	// The ContainerResourceManager should document clearly what struct is required in the documentation of each function.
-	ResourceSpecificOptions any
-}
-
-type SetObjectPropertiesOptions struct {
-	// ResourceSpecificOptions provides a space for a struct intended to be read uniquely by a specific intended ContainerResourceManager.
-	// The ContainerResourceManager should document clearly what struct is required in the documentation of each function.
-	ResourceSpecificOptions any
-}
-
-type DeleteObjectProperties struct {
-	// ResourceSpecificOptions provides a space for a struct intended to be read uniquely by a specific intended ContainerResourceManager.
-	// The ContainerResourceManager should document clearly what struct is required in the documentation of each function.
-	ResourceSpecificOptions any
+type FileProperties struct {
+	FileAttributes    *string
+	FileChangeTime    *time.Time
+	FileCreationTime  *time.Time
+	FileLastWriteTime *time.Time
+	FilePermissions   *string
 }

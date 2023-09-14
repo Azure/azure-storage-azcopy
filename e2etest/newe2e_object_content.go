@@ -19,8 +19,12 @@ func NewRandomObjectContentContainer(size int64) (ObjectContentContainer, error)
 	return &ObjectContentContainerBuffer{buf}, err
 }
 
-func NewZeroContentContainerBuffer(size int64) ObjectContentContainer {
+func NewZeroObjectContentContainer(size int64) ObjectContentContainer {
 	return &ObjectContentContainerBuffer{Data: make([]byte, size)}
+}
+
+func NewStringObjectContentContainer(data string) ObjectContentContainer {
+	return &ObjectContentContainerBuffer{Data: []byte(data)}
 }
 
 type ObjectContentContainerBuffer struct {
