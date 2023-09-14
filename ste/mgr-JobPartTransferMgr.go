@@ -12,10 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"net/url"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"net/url"
 )
 
 type IJobPartTransferMgr interface {
@@ -67,9 +65,6 @@ type IJobPartTransferMgr interface {
 	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
-
-	Pipeline() pipeline.Pipeline
-	SourceProviderPipeline() pipeline.Pipeline
 
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
@@ -993,14 +988,6 @@ func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
 
 func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
 	return jptm.jobPartMgr.CredentialOpOptions()
-}
-
-func (jptm *jobPartTransferMgr) Pipeline() pipeline.Pipeline {
-	return jptm.jobPartMgr.Pipeline()
-}
-
-func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
-	return jptm.jobPartMgr.SourceProviderPipeline()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {

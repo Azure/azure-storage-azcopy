@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -55,7 +54,7 @@ func isContextCancelledError(err error) bool {
 		return true
 	}
 
-	cause := pipeline.Cause(err)
+	cause := common.Cause(err)
 	if cause == context.Canceled {
 		return true
 	}
@@ -122,17 +121,6 @@ type LogOptions struct {
 	// you implement it in a goroutine-safe way. If nil, nothing is logged (the equivalent of returning LogNone).
 	// Usually, the function will be implemented simply like this: return level <= LogWarning
 	ShouldLog func(level common.LogLevel) bool
-}
-
-func (o LogOptions) ToPipelineLogOptions() pipeline.LogOptions {
-	log := func(ll pipeline.LogLevel, msg string) {
-		o.Log(common.LogLevel(ll), msg)
-	}
-	shouldLog := func(ll pipeline.LogLevel) bool {
-		return o.ShouldLog(common.LogLevel(ll))
-	}
-
-	return pipeline.LogOptions{Log: log, ShouldLog: shouldLog}
 }
 
 type logPolicy struct {
@@ -246,7 +234,7 @@ func (p logPolicy) Do(req *policy.Request) (*http.Response, error) {
 		msg := b.String()
 
 		if forceLog {
-			pipeline.ForceLog(pipeline.LogLevel(logLevel), msg)
+			common.ForceLog(logLevel, msg)
 		}
 		if shouldLog {
 			p.LogOptions.Log(logLevel, msg)
