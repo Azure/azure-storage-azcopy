@@ -97,6 +97,7 @@ type loginCmdArgs struct {
 
 	identity         bool // Whether to use MSI.
 	servicePrincipal bool
+	azCliCred        bool
 
 	// Info of VM's user assigned identity, client or object ids of the service identity are required if
 	// your VM has multiple user-assigned managed identities.
@@ -191,6 +192,11 @@ func (lca loginCmdArgs) process() error {
 		}
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
+	case lca.azCliCred:
+		if err := uotm.AzCliLogin(lca.tenantID); err != nil {
+			return err
+		}
+		glcm.Info("Login with AzCliCreds succeeded")
 	default:
 		if err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
 			return err

@@ -114,6 +114,11 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 
 		case "DEVICE":
 			lca.identity = false
+		
+		case "AZCLI":
+			lca.identity = false
+			lca.servicePrincipal = false
+			lca.azCliCred = true
 		}
 
 		lca.persistToken = false

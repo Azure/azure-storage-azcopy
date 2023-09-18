@@ -160,6 +160,16 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	return nil
 }
 
+func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
+	oAuthTokenInfo := &OAuthTokenInfo{
+		AzCLICred: true,
+		Tenant: tenantID,
+	}
+
+	// CLI creds will not be persisted. AzCLI would have already persistd that
+	return uotm.validateAndPersistLogin(oAuthTokenInfo, false)
+}
+
 // MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
 func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist bool) error {
 	if err := identityInfo.Validate(); err != nil {
@@ -404,6 +414,7 @@ type OAuthTokenInfo struct {
 	IdentityInfo            IdentityInfo
 	ServicePrincipalName    bool `json:"_spn"`
 	SPNInfo                 SPNInfo
+	AzCLICred				bool
 	// Note: ClientID should be only used for internal integrations through env var with refresh token.
 	// It indicates the Application ID assigned to your app when you registered it with Azure AD.
 	// In this case AzCopy refresh token on behalf of caller.
@@ -675,6 +686,10 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 		} else {
 			return credInfo.GetClientSecretCredential()
 		}
+	}
+
+	if credInfo.AzCLICred {
+		return azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{TenantID: credInfo.Tenant})
 	}
 
 	return credInfo.GetDeviceCodeCredential()
