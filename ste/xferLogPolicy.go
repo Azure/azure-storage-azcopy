@@ -204,11 +204,18 @@ func prepareRequestForLogging(request pipeline.Request) *http.Request {
 	req := request
 	rawQuery := req.URL.RawQuery
 	sigRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, common.SigAzure)
-
 	if sigRedacted {
 		// Make copy so we don't destroy the query parameters we actually need to send in the request
 		req = request.Copy()
 		req.Request.URL.RawQuery = rawQuery
+	}
+
+	if req.Method == "PUT" {
+		if renameSource, ok := req.Header["X-Ms-Rename-Source"]; ok {
+			//request.Header["TEST"] = renameSource
+			_, redactedHeader := common.RedactSecretQueryParam(renameSource[0], common.SigAzure)
+			req.Header["X-Ms-Rename-Source"] = []string{redactedHeader}
+		}
 	}
 
 	return prepareRequestForServiceLogging(req)
@@ -242,10 +249,10 @@ func stack() []byte {
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////
 // Redact phase useful for blob and file service only. For other services,
 // this method can directly return request.Request.
-///////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////
 func prepareRequestForServiceLogging(request pipeline.Request) *http.Request {
 	req := request
 
