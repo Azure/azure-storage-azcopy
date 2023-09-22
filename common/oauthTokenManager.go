@@ -91,7 +91,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial,                   /*Context*/
+			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -804,7 +804,12 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	req, resp, errArcVM := credInfo.queryIMDS(ctx, MSIEndpointArcVM, targetResource, IMDSAPIVersionArcVM)
 	if errArcVM != nil {
 		// Try Azure VM since there was an error in trying Arc VM
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM) //nolint:staticcheck
+		msiEndpoint := MSIEndpointAzureVM
+		if credInfo.ActiveDirectoryEndpoint != "" {
+			msiEndpoint = credInfo.ActiveDirectoryEndpoint
+		}
+
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, msiEndpoint, targetResource, IMDSAPIVersionAzureVM) //nolint:staticcheck
 		if errAzureVM != nil {
 			var serr syscall.Errno
 			if errors.As(errArcVM, &serr) {
@@ -835,7 +840,12 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 		req, resp = reqAzureVM, respAzureVM //nolint:staticcheck
 	} else if !isValidArcResponse(resp) {
 		// Not valid response from ARC IMDS endpoint. Perhaps some other process listening on it. Try Azure IMDS endpoint as fallback option.
-		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, MSIEndpointAzureVM, targetResource, IMDSAPIVersionAzureVM) //nolint:staticcheck
+		msiEndpoint := MSIEndpointAzureVM
+		if credInfo.ActiveDirectoryEndpoint != "" {
+			msiEndpoint = credInfo.ActiveDirectoryEndpoint
+		}
+
+		reqAzureVM, respAzureVM, errAzureVM := credInfo.queryIMDS(ctx, msiEndpoint, targetResource, IMDSAPIVersionAzureVM) //nolint:staticcheck
 		if errAzureVM != nil {
 			// Neither Arc nor Azure VM IMDS endpoint available. Can't use MSI.
 			return nil, fmt.Errorf("invalid response received from Arc IMDS endpoint (%s), probably some unknown process listening. If this an Azure VM, please check whether MSI is enabled, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm: %v", MSIEndpointArcVM, errAzureVM)
