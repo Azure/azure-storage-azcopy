@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -627,8 +628,15 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerCl
 			if fileSystemURL != nil {
 				fURL := fileSystemURL.NewDirectoryURL(*relativePath).NewFileUrl()
 				accessControl, err := fURL.GetAccessControl(ctx)
-				a.AssertNoErr(err, "getting ACLs")
-				acl = &accessControl.ACL
+
+				var stgErr azbfs.StorageError
+				if errors.As(err, &stgErr) && strings.EqualFold(string(stgErr.ServiceCode()), "FilesystemNotFound") {
+					err = nil
+					acl = nil
+				} else {
+					a.AssertNoErr(err, "getting ACLs")
+					acl = &accessControl.ACL
+				}
 			}
 
 			props := objectProperties{
