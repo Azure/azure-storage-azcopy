@@ -677,19 +677,17 @@ func (s *scenario) validateMetadata(expected, actual map[string]*string) {
 }
 
 func (s *scenario) validateADLSACLs(name string, expected, actual *string) {
-	if expected == nil && actual == nil {
+	if expected == nil { // Don't test when we don't want to
 		return
 	}
-	if eitherNil := expected == nil || actual == nil; eitherNil {
-		e, a := "nil", "nil"
-		if expected != nil {
-			e = *expected
-		}
+
+	if actual == nil {
+		e, a := *expected, "nil"
 		if actual != nil {
 			a = *actual
 		}
 
-		s.a.Assert(eitherNil, equals(), false, fmt.Sprintf("for object %s: If either expected or actual ACLs are nonzero, both must be nonzero (expected: %s actual: %s)", name, e, a))
+		s.a.Assert(true, equals(), false, fmt.Sprintf("for object %s: If expected ACLs are nonzero, actual must be nonzero and equal (expected: %s actual: %s)", name, e, a))
 		return
 	}
 
