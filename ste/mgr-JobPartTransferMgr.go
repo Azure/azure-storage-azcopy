@@ -218,6 +218,8 @@ type jobPartTransferMgr struct {
 
 	actionAfterLastChunk func()
 
+	commandLineMbpsCap float64
+
 	/*
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
@@ -339,24 +341,33 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 
 	sourceSize := plan.Transfer(jptm.transferIndex).SourceSize
 	var blockSize = dstBlobData.BlockSize
-	// If the blockSize is 0, then User didn't provide any blockSize
+	// if blockSize and commandLineMbpsCap are 0, then the user didn't provide either
 	// We need to set the blockSize in such way that number of blocks per blob
 	// does not exceeds 50000 (max number of block per blob)
 	if blockSize == 0 {
-		blockSize = common.DefaultBlockBlobBlockSize
-		for ; sourceSize >= common.MaxNumberOfBlocksPerBlob*blockSize; blockSize = 2 * blockSize {
-			if blockSize > common.BlockSizeThreshold {
+		var tempBlockSize int64
+		tempBlockSize = common.DefaultBlockBlobBlockSize
+		for ; sourceSize >= common.MaxNumberOfBlocksPerBlob*tempBlockSize; tempBlockSize = 2 * tempBlockSize {
+			if tempBlockSize > common.BlockSizeThreshold {
 				/*
 				 * For a RAM usage of 0.5G/core, we would have 4G memory on typical 8 core device, meaning at a blockSize of 256M,
 				 * we can have 4 blocks in core, waiting for a disk or n/w operation. Any higher block size would *sort of*
 				 * serialize n/w and disk operations, and is better avoided.
 				 */
 				if sourceSize%common.MaxNumberOfBlocksPerBlob == 0 {
-					blockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
+					tempBlockSize = sourceSize / common.MaxNumberOfBlocksPerBlob
 				} else {
-					blockSize = sourceSize/common.MaxNumberOfBlocksPerBlob + 1
+					tempBlockSize = sourceSize/common.MaxNumberOfBlocksPerBlob + 1
 				}
 				break
+			}
+		}
+		if jptm.commandLineMbpsCap == 0 {
+			blockSize = tempBlockSize
+		} else {
+			targetRateInBytesPerSec := int64(jptm.commandLineMbpsCap * 1000 * 1000 / 8)
+			if targetRateInBytesPerSec < tempBlockSize {
+				blockSize = targetRateInBytesPerSec
 			}
 		}
 	}

@@ -31,7 +31,7 @@ var DebugSkipFiles = make(map[string]bool)
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context)
+	ScheduleTransfers(jobCtx context.Context, commandLineMbpsCap float64)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone(status common.TransferStatus) uint32
 	GetOverwriteOption() common.OverwriteOption
@@ -303,7 +303,7 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, commandLineMbpsCap float64) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
@@ -415,6 +415,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			transferIndex:       t,
 			ctx:                 transferCtx,
 			cancel:              transferCancel,
+			commandLineMbpsCap: commandLineMbpsCap,
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}

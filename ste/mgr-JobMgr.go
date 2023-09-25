@@ -110,7 +110,7 @@ type IJobMgr interface {
 func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx context.Context, cpuMon common.CPUMonitor, level common.LogLevel,
 	commandString string, logFileFolder string, tuner ConcurrencyTuner,
 	pacer PacerAdmin, slicePool common.ByteSlicePooler, cacheLimiter common.CacheLimiter, fileCountLimiter common.CacheLimiter,
-	jobLogger common.ILoggerResetable, daemonMode bool) IJobMgr {
+	jobLogger common.ILoggerResetable, daemonMode bool, commandLineMbpsCap float64) IJobMgr {
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -186,6 +186,7 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 		cpuMon:           cpuMon,
 		jstm:             &jstm,
 		isDaemon:         daemonMode,
+		commandLineMbpsCap: commandLineMbpsCap,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.Reset(appCtx, commandString)
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
@@ -335,6 +336,8 @@ type jobMgr struct {
 	jstm                *jobStatusManager
 
 	isDaemon        bool /* is it running as service */
+
+	commandLineMbpsCap float64
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -973,7 +976,7 @@ func (jm *jobMgr) scheduleJobParts() {
 				go jm.poolSizer()
 				startedPoolSizer = true
 			}
-			jobPart.ScheduleTransfers(jm.Context())
+			jobPart.ScheduleTransfers(jm.Context(), jm.commandLineMbpsCap)
 		}
 	}
 }
