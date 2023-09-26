@@ -168,17 +168,24 @@ func TestDownloadAccount(t *testing.T) {
 	rawBSC := scenarioHelper{}.getBlobServiceClientWithSAS(a)
 
 	// Just in case there are no existing containers...
-	cc, name := createNewContainer(a, bsc)
+	cc, _ := createNewContainer(a, bsc)
 	defer deleteContainer(a, cc)
 	scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
 
 	// Traverse the account ahead of time and determine the relative paths for testing.
 	relPaths := make([]string, 0) // Use a map for easy lookup
-	blobTraverser := newBlobAccountTraverser(rawBSC, name, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
+	blobTraverser := newBlobAccountTraverser(rawBSC, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
 	processor := func(object StoredObject) error {
+		// Skip non-file types
+		_, ok := object.Metadata[common.POSIXSymlinkMeta]
+		if ok {
+			return nil
+		}
+
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
 		relPaths = append(relPaths, relPath)
+
 		return nil
 	}
 	err := blobTraverser.Traverse(noPreProccessor, processor, []ObjectFilter{})
@@ -403,7 +410,8 @@ func TestDownloadBlobVirtualDirectory(t *testing.T) {
 
 // blobs(from pattern)->directory download
 // TODO the current pattern matching behavior is inconsistent with the posix filesystem
-//   update test after re-writing copy enumerators
+//
+//	update test after re-writing copy enumerators
 func TestDownloadBlobContainerWithPattern(t *testing.T) {
 	a := assert.New(t)
 	bsc := getBlobServiceClient()
