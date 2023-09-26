@@ -178,7 +178,16 @@ func (d DirectoryURL) Rename(ctx context.Context, options RenameDirectoryOptions
 	urlParts.FileSystemName = *fileSystemName
 	urlParts.DirectoryOrFilePath = options.DestinationPath
 	// ensure we use our source's SAS token in the x-ms-rename-source header
-	renameSource := "/" + d.filesystem + "/" + d.pathParameter + "?" + urlParts.SAS.Encode()
+	renameSource := "/" + d.filesystem + "/" + d.pathParameter
+
+	sasParams := urlParts.SAS.Encode()
+	if sasParams != "" {
+		renameSource += "?" + sasParams
+
+		if urlParts.UnparsedParams != "" {
+			renameSource += "&" + urlParts.UnparsedParams
+		}
+	}
 
 	// if we're changing our source SAS to a new SAS in the rename
 	// in the case the user wants to have limited permissions per directory: sas1 for directory1 and sas2 for directory2
