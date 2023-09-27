@@ -14,7 +14,7 @@ func SetupArmClient() TieredError {
 		return nil // no setup
 	}
 
-	spt, err := GlobalInputManager{}.GetOAuthCredential(AzureManagementResource)
+	spt, err := PrimaryOAuthCache.GetAccessToken(AzureManagementResource)
 	if err != nil {
 		return TieredErrorWrapper{
 			error:     fmt.Errorf("getting OAuth token: %w", err),

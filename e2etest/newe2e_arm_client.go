@@ -6,19 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/go-autorest/autorest/adal"
 	"io"
 	"net/http"
 	"net/url"
 	"reflect"
 )
 
-const (
-	AzureManagementResource = "https://management.core.windows.net/"
-)
-
 type ARMSubject interface {
-	Token() *adal.ServicePrincipalToken
+	Token() AccessToken
 	ManagementURI() url.URL // todo: URL?
 }
 
@@ -62,7 +57,7 @@ func (s ARMUnimplementedStruct) Get(Key []string, out interface{}) error {
 }
 
 type ARMClient struct {
-	OAuth      *adal.ServicePrincipalToken
+	OAuth      AccessToken
 	HttpClient *http.Client
 }
 
@@ -74,7 +69,7 @@ func (c *ARMClient) getHTTPClient() *http.Client {
 	return http.DefaultClient
 }
 
-func (c *ARMClient) Token() *adal.ServicePrincipalToken {
+func (c *ARMClient) Token() AccessToken {
 	return c.OAuth
 }
 
@@ -86,10 +81,11 @@ func (c *ARMClient) ManagementURI() url.URL {
 }
 
 type ARMRequestSettings struct { // All values will be added to the request
-	Method  string
-	Query   url.Values
-	Headers http.Header
-	Body    interface{}
+	Method        string
+	PathExtension string
+	Query         url.Values
+	Headers       http.Header
+	Body          interface{}
 }
 
 func (s *ARMRequestSettings) CreateRequest(baseURI url.URL) (*http.Request, error) {
@@ -130,7 +126,8 @@ func (c *ARMClient) PerformRequest(baseURI url.URL, reqSettings ARMRequestSettin
 		return nil, fmt.Errorf("failed to prepare request: %w", err)
 	}
 
-	r.Header["Authorization"] = []string{"Bearer " + c.OAuth.OAuthToken()}
+	oAuthToken, err := c.OAuth.FreshToken()
+	r.Header["Authorization"] = []string{"Bearer " + oAuthToken}
 	r.Header["Content-Type"] = []string{"application/json; charset=utf-8"}
 	r.Header["Accept"] = []string{"application/json; charset=utf-8"}
 

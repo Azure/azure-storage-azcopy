@@ -38,7 +38,7 @@ import (
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
-// A scenario is treated as a sub-test by our declarative test runner
+// A scenario is treated as a subtest by our declarative test runner
 type scenario struct {
 	// scenario config properties
 	srcAccountType      AccountType
@@ -248,7 +248,7 @@ func (s *scenario) assignSourceAndDest() {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{common.Iff(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
+			return &resourceLocal{common.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: accType}
 		case common.ELocation.Blob():

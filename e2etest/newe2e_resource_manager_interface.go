@@ -11,7 +11,6 @@ import (
 type ResourceManager interface {
 	Location() common.Location
 	Level() cmd.LocationLevel
-	URI() string
 }
 
 type RemoteResourceManager interface {
@@ -61,10 +60,8 @@ or wrangle to RemoteResourceManager and call ResourceClient() to pull the actual
 Check newe2e_resource_managers_*.go for the implementation(s) of resource managers.
 */
 
+// AccountResourceManager manages an account.
 type AccountResourceManager interface {
-	ResourceManager
-	RemoteResourceManager
-
 	AccountName() string
 	AccountType() AccountType
 	AvailableServices() []common.Location

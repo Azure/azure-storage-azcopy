@@ -127,13 +127,13 @@ func (o AccountType) IsBlobOnly() bool {
 }
 
 /*
-	{"SubscriptionID":"","ResourceGroupName":"","DiskName":""}
+{"SubscriptionID":"","ResourceGroupName":"","DiskName":""}
 */
 type ManagedDiskConfig struct {
 	SubscriptionID    string
 	ResourceGroupName string
 	DiskName          string
-	oauth             *azcore.AccessToken
+	oauth             AccessToken
 }
 
 func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDiskConfig, error) {
@@ -159,9 +159,9 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		return nil, fmt.Errorf("failed to parse config") // Outputting the error may reveal semi-sensitive info like subscription ID
 	}
 
-	out.oauth, err = gim.GetOAuthCredential("https://management.core.windows.net/.default")
+	out.oauth, err = PrimaryOAuthCache.GetAccessToken(AzureManagementResource)
 	if err != nil {
-		return nil, fmt.Errorf("failed to refresh oauth token: %w", err)
+		return nil, fmt.Errorf("failed to get access token: %w", err)
 	}
 
 	return &out, nil
