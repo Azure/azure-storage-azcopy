@@ -231,6 +231,12 @@ func TestDownloadAccountWildcard(t *testing.T) {
 	relPaths := make([]string, 0) // Use a map for easy lookup
 	blobTraverser := newBlobAccountTraverser(rawBSC, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
 	processor := func(object StoredObject) error {
+		// Skip non-file types
+		_, ok := object.Metadata[common.POSIXSymlinkMeta]
+		if ok {
+			return nil
+		}
+
 		// Append the container name to the relative path
 		relPath := "/" + object.ContainerName + "/" + object.relativePath
 		relPaths = append(relPaths, relPath)
@@ -248,7 +254,7 @@ func TestDownloadAccountWildcard(t *testing.T) {
 	Rpc = mockedRPC.intercept
 	mockedRPC.init()
 
-	raw := getDefaultCopyRawInput(rawBSC.URL(), dstDirName)
+	raw := getDefaultCopyRawInput(rawBSC.NewContainerClient(container).URL(), dstDirName)
 	raw.recursive = true
 
 	runCopyAndVerify(a, raw, func(err error) {
