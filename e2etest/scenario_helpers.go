@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -148,7 +149,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c asserter, options *generate
 				mode = *file.creationProperties.posixProperties.mode
 			}
 			switch {
-			case mode & common.S_IFIFO == common.S_IFIFO || mode & common.S_IFSOCK == common.S_IFSOCK:
+			case mode&common.S_IFIFO == common.S_IFIFO || mode&common.S_IFSOCK == common.S_IFSOCK:
 				osScenarioHelper{}.Mknod(c, destFile, mode, 0)
 			default:
 				sourceData, err := s.generateLocalFile(
@@ -367,7 +368,7 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceC
 		c.AssertNoErr(err)
 
 		s.generateAzureFilesFromList(c, &generateAzureFilesFromListOptions{
-			shareClient:    sURL,
+			shareClient: sURL,
 			fileList:    fileList,
 			defaultSize: defaultStringFileSize,
 		})
@@ -394,18 +395,18 @@ func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c asserter, s3Clien
 }
 
 type generateFromListOptions struct {
-	fs          []*testObject
-	defaultSize string
+	fs                      []*testObject
+	defaultSize             string
 	preservePosixProperties bool
-	accountType AccountType
+	accountType             AccountType
 }
 
 type generateBlobFromListOptions struct {
 	rawSASURL       url.URL
 	containerClient *container.Client
 	cpkInfo         *blob.CPKInfo
-	cpkScopeInfo *blob.CPKScopeInfo
-	accessTier   *blob.AccessTier
+	cpkScopeInfo    *blob.CPKScopeInfo
+	accessTier      *blob.AccessTier
 	generateFromListOptions
 }
 
@@ -448,7 +449,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				mode := *b.creationProperties.posixProperties.mode
 
 				// todo: support for device rep files may be difficult in a testing environment.
-				if mode & common.S_IFSOCK == common.S_IFSOCK || mode & common.S_IFIFO == common.S_IFIFO {
+				if mode&common.S_IFSOCK == common.S_IFSOCK || mode&common.S_IFIFO == common.S_IFIFO {
 					b.body = make([]byte, 0)
 				}
 			}
@@ -496,7 +497,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				blockID := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
 				_, err = bb.StageBlock(ctx, blockID, reader,
 					&blockblob.StageBlockOptions{
-						CPKInfo: options.cpkInfo,
+						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
 
@@ -505,11 +506,11 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				_, err = bb.CommitBlockList(ctx,
 					[]string{blockID},
 					&blockblob.CommitBlockListOptions{
-						HTTPHeaders: headers,
-						Metadata: metadata,
-						Tier: options.accessTier,
-						Tags: tags,
-						CPKInfo: options.cpkInfo,
+						HTTPHeaders:  headers,
+						Metadata:     metadata,
+						Tier:         options.accessTier,
+						Tags:         tags,
+						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
 
@@ -518,11 +519,11 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				// handle empty blobs
 				_, err := bb.Upload(ctx, reader,
 					&blockblob.UploadOptions{
-						HTTPHeaders: headers,
-						Metadata: metadata,
-						Tier: options.accessTier,
-						Tags: tags,
-						CPKInfo: options.cpkInfo,
+						HTTPHeaders:  headers,
+						Metadata:     metadata,
+						Tier:         options.accessTier,
+						Tags:         tags,
+						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
 
@@ -533,17 +534,17 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			_, err := pb.Create(ctx, int64(size),
 				&pageblob.CreateOptions{
 					SequenceNumber: to.Ptr(int64(0)),
-					HTTPHeaders: headers,
-					Metadata: metadata,
-					Tags: tags,
-					CPKInfo: options.cpkInfo,
-					CPKScopeInfo: options.cpkScopeInfo,
+					HTTPHeaders:    headers,
+					Metadata:       metadata,
+					Tags:           tags,
+					CPKInfo:        options.cpkInfo,
+					CPKScopeInfo:   options.cpkScopeInfo,
 				})
 			c.AssertNoErr(err)
 
 			_, err = pb.UploadPages(ctx, reader, blob.HTTPRange{Offset: 0, Count: int64(size)},
 				&pageblob.UploadPagesOptions{
-					CPKInfo: options.cpkInfo,
+					CPKInfo:      options.cpkInfo,
 					CPKScopeInfo: options.cpkScopeInfo,
 				})
 			c.AssertNoErr(err)
@@ -551,17 +552,17 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			ab := options.containerClient.NewAppendBlobClient(b.name)
 			_, err := ab.Create(ctx,
 				&appendblob.CreateOptions{
-					HTTPHeaders: headers,
-					Metadata: metadata,
-					Tags: tags,
-					CPKInfo: options.cpkInfo,
+					HTTPHeaders:  headers,
+					Metadata:     metadata,
+					Tags:         tags,
+					CPKInfo:      options.cpkInfo,
 					CPKScopeInfo: options.cpkScopeInfo,
 				})
 			c.AssertNoErr(err)
 
 			_, err = ab.AppendBlock(ctx, reader,
 				&appendblob.AppendBlockOptions{
-					CPKInfo: options.cpkInfo,
+					CPKInfo:      options.cpkInfo,
 					CPKScopeInfo: options.cpkScopeInfo,
 				})
 			c.AssertNoErr(err)
@@ -600,7 +601,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerClient *container.Client) map[string]*objectProperties {
+func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerClient *container.Client, fileSystemURL *azbfs.FileSystemURL) map[string]*objectProperties {
 	result := make(map[string]*objectProperties)
 
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Include: container.ListBlobsInclude{Metadata: true, Tags: true}})
@@ -623,17 +624,32 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerCl
 			}
 			md := blobInfo.Metadata
 
+			var acl *string
+			if fileSystemURL != nil {
+				fURL := fileSystemURL.NewDirectoryURL(*relativePath).NewFileUrl()
+				accessControl, err := fURL.GetAccessControl(ctx)
+
+				var stgErr azbfs.StorageError
+				if errors.As(err, &stgErr) && strings.EqualFold(string(stgErr.ServiceCode()), "FilesystemNotFound") {
+					err = nil
+					acl = nil
+				} else {
+					a.AssertNoErr(err, "getting ACLs")
+					acl = &accessControl.ACL
+				}
+			}
+
 			props := objectProperties{
-				entityType:         common.EEntityType.File(), // todo: posix properties includes folders
-				size:               bp.ContentLength,
-				contentHeaders:     &h,
-				nameValueMetadata:  md,
-				creationTime:       bp.CreationTime,
-				lastWriteTime:      bp.LastModified,
-				cpkInfo:            &blob.CPKInfo{EncryptionKeySHA256: bp.CustomerProvidedKeySHA256},
-				cpkScopeInfo:       &blob.CPKScopeInfo{EncryptionScope: bp.EncryptionScope},
+				entityType:        common.EEntityType.File(), // todo: posix properties includes folders
+				size:              bp.ContentLength,
+				contentHeaders:    &h,
+				nameValueMetadata: md,
+				creationTime:      bp.CreationTime,
+				lastWriteTime:     bp.LastModified,
+				cpkInfo:           &blob.CPKInfo{EncryptionKeySHA256: bp.CustomerProvidedKeySHA256},
+				cpkScopeInfo:      &blob.CPKScopeInfo{EncryptionScope: bp.EncryptionScope},
 				// TODO : Return ACL in list
-				//adlsPermissionsACL: bp.ACL,
+				adlsPermissionsACL: acl,
 				// smbAttributes and smbPermissions don't exist in blob
 			}
 
@@ -682,7 +698,7 @@ func (scenarioHelper) generatePageBlobsFromList(c asserter, containerClient *con
 			int64(len(data)),
 			&pageblob.CreateOptions{
 				SequenceNumber: to.Ptr(int64(0)),
-				HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
+				HTTPHeaders:    &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
 			})
 		c.AssertNoErr(err)
 
@@ -811,7 +827,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil || f.creationProperties.lastWriteTime != nil {
 				_, err := dir.SetProperties(ctx, &directory.SetPropertiesOptions{
 					FileSMBProperties: ad.toSMBProperties(c),
-					FilePermissions: ad.toPermissions(c, options.shareClient),
+					FilePermissions:   ad.toPermissions(c, options.shareClient),
 				})
 				c.AssertNoErr(err)
 
@@ -867,9 +883,9 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 			_, err := fileClient.Create(ctx, fileSize, &sharefile.CreateOptions{
 				SMBProperties: ad.toSMBProperties(c),
-				Permissions: ad.toPermissions(c, options.shareClient),
-				HTTPHeaders: ad.toHeaders(),
-				Metadata: ad.obj.creationProperties.nameValueMetadata,
+				Permissions:   ad.toPermissions(c, options.shareClient),
+				HTTPHeaders:   ad.toHeaders(),
+				Metadata:      ad.obj.creationProperties.nameValueMetadata,
 			})
 			c.AssertNoErr(err)
 
@@ -892,9 +908,9 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 				*/
 
 				_, err := fileClient.SetHTTPHeaders(ctx, &sharefile.SetHTTPHeadersOptions{
-					HTTPHeaders: ad.toHeaders(),
+					HTTPHeaders:   ad.toHeaders(),
 					SMBProperties: ad.toSMBProperties(c),
-					Permissions: ad.toPermissions(c, options.shareClient),
+					Permissions:   ad.toPermissions(c, options.shareClient),
 				})
 				c.AssertNoErr(err)
 
@@ -941,7 +957,7 @@ func (s scenarioHelper) enumerateShareFileProperties(a asserter, sc *share.Clien
 	result[""] = &objectProperties{
 		entityType:         common.EEntityType.Folder(),
 		smbPermissionsSddl: rootPerm,
-		smbAttributes: to.Ptr(ste.FileAttributesToUint32(*rootAttr)),
+		smbAttributes:      to.Ptr(ste.FileAttributesToUint32(*rootAttr)),
 	}
 
 	dirQ = append(dirQ, root)
