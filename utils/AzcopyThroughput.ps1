@@ -99,13 +99,14 @@ foreach ($azvalue in $azvalues){
         $item | Add-Member -MemberType NoteProperty -Name "Percentage" -Value $value
     }
     foreach ($param in $params[6]){
-        $value = $param -split ':', 2
-        $item | Add-Member -MemberType NoteProperty -Name "Throughput (Mb/s)" -Value $value[1]
+        $value = $param -split ' ', 6
+        $item | Add-Member -MemberType NoteProperty -Name "Throughput (Mb/s)" -Value $value[4]
+        $item | Add-Member -MemberType NoteProperty -Name "Warnings" -Value $value[5]
     }
     $azcopyvalues += $item
 }
 
-$azcopyvalues | Export-Csv -NoClobber -NoTypeInformation -Encoding Unicode -Path C:\temp\ReporAzCopy_$logname.csv -Delimiter ";"
+$azcopyvalues | Export-Csv -NoClobber -NoTypeInformation -Encoding Unicode -Path C:\temp\ReportAzCopy_$logname.csv -Delimiter ";"
 Remove-Item C:\temp\auxiliaryfile_$logname.log
 
 $timer.Stop()
