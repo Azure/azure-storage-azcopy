@@ -1,6 +1,28 @@
 
 # Change Log
 
+## Version 10.21.0
+
+### New Features
+
+1. Migrated to the latest [azblob SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob).
+2. Migrated to the latest [azfile SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azfile).
+3. Migrated from deprecated ADAL to MSAL through the latest [azidentity SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity).
+4. Added support for sync with Azure Data Lake Storage Gen2. ([#2376](https://github.com/Azure/azure-storage-azcopy/pull/2376))
+
+### Bug Fixes
+
+1. Fixed an issue where ACL data would not copy when specifying `*.dfs.core.windows.net` endpoints ([#2347](https://github.com/Azure/azure-storage-azcopy/pull/2347)).
+2. Fixed an issue where Sync would incorrectly log that _all_ files, even those that didn't get overwritten, would be overwritten. ([#2372](https://github.com/Azure/azure-storage-azcopy/pull/2372))
+
+### Documentation
+
+1. Updated `--dry-run` documentation to indicate the effects of `--overwrite` are ignored. ([#2325](https://github.com/Azure/azure-storage-azcopy/pull/2325))
+
+### Special notes
+
+1. Due to the migration from ADAL to MSAL, tenant ID must now be set when authorizing with single tenant applications created after 10/15/2018.
+
 ## Version 10.21.0-Preview
 
 ### New Features
