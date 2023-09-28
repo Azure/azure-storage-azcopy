@@ -1,10 +1,12 @@
 package e2etest
 
 import (
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // ARMStorageAccount implements an API to interface with a singular Azure Storage account via the Storage Resource Provider's REST APIs.
@@ -19,6 +21,52 @@ func (sa *ARMStorageAccount) ManagementURI() url.URL {
 	newURI := baseURI.JoinPath("providers/Microsoft.Storage/storageAccounts", sa.AccountName)
 
 	return *newURI
+}
+
+// GetResourceManager should not be called repeatedly; it makes calls to REST APIs and does not cache.
+func (sa *ARMStorageAccount) GetResourceManager() (*AzureAccountResourceManager, error) {
+	keyList, err := sa.GetKeys()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get account keys: %w", err)
+	}
+
+	var acctKey string
+	for _, v := range keyList.Keys { // todo: fallback to RO key
+		if v.Permissions == ARMStorageAccountKeyPermissionFull || v.Permissions == "" {
+			acctKey = v.Value
+			break
+		}
+	}
+
+	if acctKey == "" {
+		return nil, fmt.Errorf("failed to find suitable account key; did you intentionally make it RO")
+	}
+
+	props, err := sa.GetProperties(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to poll account properties: %w", err)
+	}
+
+	var acctType AccountType
+	switch {
+	case props.Properties.IsHNSEnabled:
+		acctType = EAccountType.HierarchicalNamespaceEnabled()
+	case strings.EqualFold(props.Sku.Tier, "Standard"):
+		acctType = EAccountType.Standard()
+	case strings.EqualFold(props.Sku.Tier, "Premium"):
+		acctType = EAccountType.Premium()
+		// Classic comes from Microsoft.ClassicStorage/storageAccounts, so, not possible here.
+		// Managed Disks also won't appear here.
+	default:
+		return nil, fmt.Errorf("failed to assign an appropriate account type")
+	}
+
+	return &AzureAccountResourceManager{
+		accountName: sa.AccountName,
+		accountKey:  acctKey,
+		accountType: acctType,
+		armClient:   sa,
+	}, nil
 }
 
 func (sa *ARMStorageAccount) PerformRequest(baseURI url.URL, reqSettings ARMRequestSettings, target interface{}) (armResp *ARMAsyncResponse, err error) {
@@ -105,6 +153,16 @@ func (sa *ARMStorageAccount) GetProperties(expand []string) (*ARMStorageAccountP
 		Method: http.MethodGet,
 	}, &out)
 	return &out, err
+}
+
+func (sa *ARMStorageAccount) GetKeys() (*ARMStorageAccountListKeysResult, error) { // Kerberos keys can be listed, but AzCopy doesn't currently support this.
+	var resp ARMStorageAccountListKeysResult
+
+	_, err := sa.PerformRequest(sa.ManagementURI(), ARMRequestSettings{
+		Method:        http.MethodPost,
+		PathExtension: "listKeys",
+	}, &resp)
+	return &resp, err
 }
 
 // =========== Shared Types ===========
@@ -196,3 +254,19 @@ type ARMStorageAccountUserAssignedIdentity struct {
 	ClientID    string `json:"clientId"`
 	PrincipalID string `json:"principalId"`
 }
+
+type ARMStorageAccountListKeysResult struct {
+	Keys []ARMStorageAccountKey `json:"keys"`
+}
+
+type ARMStorageAccountKey struct {
+	CreationTime string `json:"creationTime"`
+	KeyName      string `json:"keyName"`
+	Permissions  string `json:"permissions"`
+	Value        string `json:"value"`
+}
+
+const (
+	ARMStorageAccountKeyPermissionReadOnly = "Read"
+	ARMStorageAccountKeyPermissionFull     = "Full"
+)

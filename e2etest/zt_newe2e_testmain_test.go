@@ -72,22 +72,4 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-
-	//for hookName, hook := range InitHooks {
-	//	err := hook()
-	//}
-	//
-	//m.Run()
-	//
-	//for hookName, hook := range CleanupHooks {
-	//	err := hook()
-	//	if err != nil {
-	//		switch err.Tier() {
-	//		case ErrorTierInconsequential:
-	//			log.Println("WARNING: failed to run initialization hook " + hookName + ": " + err.Error())
-	//		case ErrorTierFatal:
-	//			log.Fatalln("failed to run initialization hook " + hookName + ": " + err.Error())
-	//		}
-	//	}
-	//}
 }
