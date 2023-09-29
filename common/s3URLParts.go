@@ -23,6 +23,7 @@ package common
 import (
 	"errors"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -58,9 +59,26 @@ type S3URLParts struct {
 const s3HostPattern = "^(?P<bucketName>.+\\.)?s3[.-](?P<dualStackOrRegionOrAWSDomain>[a-z0-9-]+)\\.(?P<regionOrAWSDomainOrCom>[a-z0-9-]+)"
 const invalidS3URLErrorMessage = "Invalid S3 URL. AzCopy supports standard virtual-hosted-style or path-style URLs defined by AWS, E.g: https://bucket.s3.amazonaws.com or https://s3.amazonaws.com/bucket"
 const versionQueryParamKey = "versionId"
-const s3KeywordAmazonAWS = "amazonaws"
 const s3KeywordDualStack = "dualstack"
-const s3EssentialHostPart = "amazonaws.com"
+
+// returns the S3 essential host part, 'amazonaws.com' by default
+//
+//	can be overriden by the AWS_ESSENTIAL_HOST_PART env variable
+func GetS3EssentialHostPart() string {
+	if os.Getenv("AWS_ESSENTIAL_HOST_PART") != "" {
+		return os.Getenv("AWS_ESSENTIAL_HOST_PART")
+	} else {
+		return "amazonaws.com"
+	}
+}
+
+// returns the S3 keyword for hostname matching, 'amazonaws' by default
+//
+//	derived by stripping the top-level domain from the essential host part
+func getS3KeywordAmazonAWS() string {
+	awsHost := GetS3EssentialHostPart()
+	return awsHost[0:strings.LastIndex(awsHost, ".")]
+}
 
 var s3HostRegex = regexp.MustCompile(s3HostPattern)
 
@@ -74,7 +92,7 @@ func IsS3URL(u url.URL) bool {
 
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 	matchSlices := s3HostRegex.FindStringSubmatch(host) // If match the first element would be entire host, and then follows the sub match strings.
-	if matchSlices == nil || !strings.Contains(host, s3EssentialHostPart) {
+	if matchSlices == nil || !strings.Contains(host, GetS3EssentialHostPart()) {
 		return nil, false
 	}
 	return matchSlices, true
@@ -122,6 +140,7 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 		up.Endpoint = host
 	}
 	// Check if dualstack is contained in host name
+	s3KeywordAmazonAWS := getS3KeywordAmazonAWS()
 	if matchSlices[2] == s3KeywordDualStack {
 		up.isDualStack = true
 		if matchSlices[3] != s3KeywordAmazonAWS {
