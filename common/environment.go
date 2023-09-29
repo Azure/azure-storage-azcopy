@@ -47,6 +47,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.AWSAccessKeyID(),
 	EEnvironmentVariable.AWSSecretAccessKey(),
 	EEnvironmentVariable.AWSEssentialHostPart(),
+	EEnvironmentVariable.AWSObjectMD5MetadataName(),
 	EEnvironmentVariable.GoogleAppCredentials(),
 	EEnvironmentVariable.ShowPerfStates(),
 	EEnvironmentVariable.PacePageBlobs(),
@@ -292,6 +293,13 @@ func (EnvironmentVariable) AWSEssentialHostPart() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AWS_ESSENTIAL_HOST_PART",
 		Description: "The essential host part used to construct S3 URLs, defaults to 'amazonaws.com'.",
+	}
+}
+
+func (EnvironmentVariable) AWSObjectMD5MetadataName() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AWS_OBJECT_MD5_METADATA_NAME",
+		Description: "The name of the metadata value that contains the object MD5 sum for objects composed from a list of blocks",
 	}
 }
 

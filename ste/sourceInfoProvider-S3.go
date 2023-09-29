@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -41,6 +42,8 @@ type s3SourceInfoProvider struct {
 	s3Client  *minio.Client
 	s3URLPart common.S3URLParts
 	credType  common.CredentialType
+
+	md5SumMetaDataName string
 }
 
 // By default presign expires after 7 days, which is considered enough for large amounts of files transfer.
@@ -83,6 +86,8 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		return nil, err
 	}
 
+	p.md5SumMetaDataName = os.Getenv("AWS_OBJECT_MD5_METADATA_NAME")
+
 	return &p, nil
 }
 
@@ -115,9 +120,17 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 				ContentDisposition: oie.ContentDisposition(),
 				ContentLanguage:    oie.ContentLanguage(),
 				CacheControl:       oie.CacheControl(),
-				ContentMD5:         oie.ContentMD5(),
+				ContentMD5:         oie.ContentMD5Ext(p.md5SumMetaDataName),
 			},
 			SrcMetadata: oie.NewCommonMetadata(),
+		}
+		if p.md5SumMetaDataName != "" && srcProperties.SrcHTTPHeaders.ContentMD5 != nil {
+			for k := range srcProperties.SrcMetadata {
+				if strings.EqualFold(k, p.md5SumMetaDataName) {
+					delete(srcProperties.SrcMetadata, k)
+					break
+				}
+			}
 		}
 	}
 

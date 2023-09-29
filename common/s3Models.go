@@ -22,6 +22,8 @@ package common
 
 import (
 	"encoding/base64"
+	"encoding/hex"
+	"regexp"
 	"strings"
 
 	minio "github.com/minio/minio-go"
@@ -55,17 +57,35 @@ func (oie *ObjectInfoExtension) ContentLanguage() string {
 	return oie.ObjectInfo.Metadata.Get("Content-Language")
 }
 
-// ContentMD5 returns the value for header Content-MD5.
+// ContentMD5 returns the value for header Content-MD5 or ETag
 func (oie *ObjectInfoExtension) ContentMD5() []byte {
+	return oie.ContentMD5Ext("")
+}
+func (oie *ObjectInfoExtension) ContentMD5Ext(md5SumMetaDataName string) []byte {
 	s := oie.ObjectInfo.Metadata.Get("Content-MD5")
-	if s == "" {
-		return nil
+	if s != "" {
+		b, err := base64.StdEncoding.DecodeString(s)
+		if err == nil {
+			return b
+		}
 	}
-	b, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		b = nil
+	s = oie.ObjectInfo.ETag
+	if s != "" && regexp.MustCompile(`^[a-fA-F0-9]+$`).MatchString(s) {
+		b, err := hex.DecodeString(s)
+		if err == nil {
+			return b
+		}
 	}
-	return b
+	if md5SumMetaDataName != "" {
+		s = oie.ObjectInfo.Metadata.Get(s3MetadataPrefix + md5SumMetaDataName)
+		if s != "" {
+			b, err := base64.StdEncoding.DecodeString(s)
+			if err == nil {
+				return b
+			}
+		}
+	}
+	return nil
 }
 
 const s3MetadataPrefix = "x-amz-meta-"
