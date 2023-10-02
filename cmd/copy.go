@@ -1281,7 +1281,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := createClientOptions(common.LogNone, nil, nil)
+	options := createClientOptions(common.LogNone)
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1328,7 +1328,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := createClientOptions(common.LogNone, nil, nil)
+	options := createClientOptions(common.LogNone)
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()

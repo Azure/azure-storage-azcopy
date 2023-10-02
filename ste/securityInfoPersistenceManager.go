@@ -71,7 +71,7 @@ func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareClie
 	return permKey, nil
 }
 
-func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL string, credInfo common.CredentialInfo, credOpOptions *common.CredentialOpOptions, clientOptions azcore.ClientOptions) (string, error) {
+func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL string, credInfo common.CredentialInfo, credOpOptions *common.CredentialOpOptions, clientOptions azcore.ClientOptions, trailingDot *common.TrailingDotOption, from *common.Location) (string, error) {
 	fileURLParts, err := filesas.ParseURL(shareURL)
 	if err != nil {
 		return "", err
@@ -89,7 +89,7 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL st
 		return perm.(string), nil
 	}
 
-	actionableShareURL := common.CreateShareClient(shareURL, credInfo, credOpOptions, clientOptions)
+	actionableShareURL := common.CreateShareClient(shareURL, credInfo, credOpOptions, clientOptions, trailingDot, from)
 	// to clarify, the GetPermission call only works against the share root, and not against a share snapshot
 	// if we detect that the source is a snapshot, we simply get rid of the snapshot value
 	if len(fileURLParts.ShareSnapshot) != 0 {
@@ -98,7 +98,7 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL st
 			return "", err
 		}
 		fileURLParts.ShareSnapshot = "" // clear the snapshot value
-		actionableShareURL = common.CreateShareClient(fileURLParts.String(), credInfo, credOpOptions, clientOptions)
+		actionableShareURL = common.CreateShareClient(fileURLParts.String(), credInfo, credOpOptions, clientOptions, trailingDot, from)
 	}
 
 	si, err := actionableShareURL.GetPermission(sipm.ctx, id, nil)

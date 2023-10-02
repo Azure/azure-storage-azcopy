@@ -63,24 +63,3 @@ func (r *coldTierPolicy) Do(req *policy.Request) (*http.Response, error) {
 	}
 	return req.Next()
 }
-
-// TODO: Delete me when bumping the service version is no longer relevant.
-type trailingDotPolicy struct {
-	trailingDot *common.TrailingDotOption
-	from *common.Location
-}
-
-func NewTrailingDotPolicy(trailingDot *common.TrailingDotOption, from *common.Location) policy.Policy {
-	return &trailingDotPolicy{trailingDot: trailingDot, from: from}
-}
-
-func (r *trailingDotPolicy) Do(req *policy.Request) (*http.Response, error) {
-	if r.trailingDot != nil && *r.trailingDot == common.ETrailingDotOption.Enable() {
-		req.Raw().Header.Set("x-ms-allow-trailing-dot", "true")
-		if r.from != nil && *r.from == common.ELocation.File() {
-			req.Raw().Header.Set("x-ms-source-allow-trailing-dot", "true")
-		}
-		req.Raw().Header["x-ms-version"] = []string{"2022-11-02"}
-	}
-	return req.Next()
-}
