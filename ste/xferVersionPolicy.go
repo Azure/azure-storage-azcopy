@@ -72,7 +72,7 @@ func newTrailingDotPolicy() policy.Policy {
 }
 
 func (r *trailingDotPolicy) Do(req *policy.Request) (*http.Response, error) {
-	if req.Raw().Header.Get("x-ms-allow-trailing-dot") != "" || req.Raw().Header.Get("x-ms-source-allow-trailing-dot") != "" {
+	if len(req.Raw().Header["x-ms-allow-trailing-dot"]) > 0 || len(req.Raw().Header["x-ms-source-allow-trailing-dot"]) > 0 {
 		req.Raw().Header["x-ms-version"] = []string{"2022-11-02"}
 	}
 	return req.Next()
