@@ -151,7 +151,7 @@ var ETrailingDotOption = TrailingDotOption(0)
 
 type TrailingDotOption uint8
 
-func (TrailingDotOption) Enable() TrailingDotOption    { return TrailingDotOption(0) }
+func (TrailingDotOption) Enable() TrailingDotOption  { return TrailingDotOption(0) }
 func (TrailingDotOption) Disable() TrailingDotOption { return TrailingDotOption(1) }
 
 func (d TrailingDotOption) String() string {
@@ -273,11 +273,11 @@ var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
 
-func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(0) }
-func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
-func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
-func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
-func (OverwriteOption) PosixProperties() OverwriteOption {return OverwriteOption(4)}
+func (OverwriteOption) True() OverwriteOption            { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption           { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption          { return OverwriteOption(2) }
+func (OverwriteOption) IfSourceNewer() OverwriteOption   { return OverwriteOption(3) }
+func (OverwriteOption) PosixProperties() OverwriteOption { return OverwriteOption(4) }
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)
@@ -561,6 +561,10 @@ func (l Location) IsFolderAware() bool {
 }
 
 func (l Location) CanForwardOAuthTokens() bool {
+	return l == ELocation.Blob() || l == ELocation.BlobFS()
+}
+
+func (l Location) SupportsHnsACLs() bool {
 	return l == ELocation.Blob() || l == ELocation.BlobFS()
 }
 
@@ -1508,9 +1512,9 @@ var EEntityType = EntityType(0)
 
 type EntityType uint8
 
-func (EntityType) File()           EntityType { return EntityType(0) }
-func (EntityType) Folder()         EntityType { return EntityType(1) }
-func (EntityType) Symlink()        EntityType { return EntityType(2) }
+func (EntityType) File() EntityType           { return EntityType(0) }
+func (EntityType) Folder() EntityType         { return EntityType(1) }
+func (EntityType) Symlink() EntityType        { return EntityType(2) }
 func (EntityType) FileProperties() EntityType { return EntityType(3) }
 
 func (e EntityType) String() string {
@@ -1663,7 +1667,7 @@ func (rpt RehydratePriorityType) ToRehydratePriorityType() blob.RehydratePriorit
 	}
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 type SyncHashType uint8
 
 var ESyncHashType SyncHashType = 0
@@ -1688,7 +1692,7 @@ func (ht SyncHashType) String() string {
 	return enum.StringInt(ht, reflect.TypeOf(ht))
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 type SymlinkHandlingType uint8 // SymlinkHandlingType is only utilized internally to avoid having to carry around two contradictory flags. Thus, it doesn't have a parse method.
 
 // for reviewers: This is different than we usually implement enums, but it's something I've found to be more pleasant in personal projects, especially for bitflags. Should we change the pattern to match this in the future?

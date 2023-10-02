@@ -51,7 +51,7 @@ type downloadContentOptions struct {
 type downloadBlobContentOptions struct {
 	containerClient *container.Client
 	cpkInfo         *blob.CPKInfo
-	cpkScopeInfo *blob.CPKScopeInfo
+	cpkScopeInfo    *blob.CPKScopeInfo
 }
 
 type downloadFileContentOptions struct {
@@ -247,7 +247,7 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 		containerURLParts, err := blob.ParseURL(r.containerClient.URL())
 		a.AssertNoErr(err)
 
-		for _,v := range options.generateFromListOptions.fs {
+		for _, v := range options.generateFromListOptions.fs {
 			if v.name == "" {
 				if v.creationProperties.adlsPermissionsACL == nil {
 					break
@@ -274,7 +274,7 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 		},
 	}
 
-	if s.fromTo.IsDownload()|| s.fromTo.IsDelete() {
+	if s.fromTo.IsDownload() || s.fromTo.IsDelete() {
 		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
@@ -326,14 +326,14 @@ func (r *resourceBlobContainer) appendSourcePath(filePath string, useSas bool) {
 }
 
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
-	objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient)
-
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
 		urlParts, err := blob.ParseURL(r.containerClient.URL())
 		a.AssertNoErr(err)
-		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(urlParts.ContainerName).NewDirectoryClient("/")
+		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(urlParts.ContainerName)
+		objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient, fsURL)
 
-		resp, err := fsURL.GetAccessControl(ctx, nil)
+
+		resp, err := fsURL.NewDirectoryClient("/").GetAccessControl(ctx, nil)
 		if datalakeerror.HasCode(err, "FilesystemNotFound") {
 			return objects
 		}
@@ -343,9 +343,10 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 			entityType: common.EEntityType.Folder(),
 			adlsPermissionsACL: resp.ACL,
 		}
-	}
 
-	return objects
+		return objects
+	}
+	return scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient, nil)
 }
 
 func (r *resourceBlobContainer) downloadContent(a asserter, options downloadContentOptions) []byte {

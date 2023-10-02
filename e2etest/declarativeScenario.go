@@ -523,7 +523,7 @@ func (s *scenario) validateProperties() {
 		s.validateLastWriteTime(expected.lastWriteTime, actual.lastWriteTime)
 		s.validateCPKByScope(expected.cpkScopeInfo, actual.cpkScopeInfo)
 		s.validateCPKByValue(expected.cpkInfo, actual.cpkInfo)
-		s.validateADLSACLs(expected.adlsPermissionsACL, actual.adlsPermissionsACL)
+		s.validateADLSACLs(f.name, expected.adlsPermissionsACL, actual.adlsPermissionsACL)
 		if expected.smbPermissionsSddl != nil {
 			if actual.smbPermissionsSddl == nil {
 				s.a.Error("Expected a SDDL on file " + destName + ", but none was found")
@@ -676,16 +676,22 @@ func (s *scenario) validateMetadata(expected, actual map[string]*string) {
 	}
 }
 
-func (s *scenario) validateADLSACLs(expected, actual *string) {
-	if expected == nil && actual == nil {
-		return
-	}
-	if expected == nil || actual == nil {
-		s.a.Failed()
+func (s *scenario) validateADLSACLs(name string, expected, actual *string) {
+	if expected == nil { // Don't test when we don't want to
 		return
 	}
 
-	s.a.Assert(expected, equals(), actual, fmt.Sprintf("Expected Gen 2 ACL: %s but found: %s", *expected, *actual))
+	if actual == nil {
+		e, a := *expected, "nil"
+		if actual != nil {
+			a = *actual
+		}
+
+		s.a.Assert(true, equals(), false, fmt.Sprintf("for object %s: If expected ACLs are nonzero, actual must be nonzero and equal (expected: %s actual: %s)", name, e, a))
+		return
+	}
+
+	s.a.Assert(expected, equals(), actual, fmt.Sprintf("for object %s: Expected Gen 2 ACL: %s but found: %s", name, *expected, *actual))
 }
 
 func (s *scenario) validateCPKByScope(expected, actual *blob.CPKScopeInfo) {

@@ -28,13 +28,13 @@ import (
 )
 
 const (
-	syncSkipReasonTime = "the source has an older LMT than the destination"
-	syncSkipReasonMissingHash = "the source lacks an associated hash; please upload with --put-md5"
-	syncSkipReasonSameHash = "the source has the same hash"
+	syncSkipReasonTime           = "the source has an older LMT than the destination"
+	syncSkipReasonMissingHash    = "the source lacks an associated hash; please upload with --put-md5"
+	syncSkipReasonSameHash       = "the source has the same hash"
 	syncOverwriteReasonNewerHash = "the source has a differing hash"
-	syncOverwriteResaonNewerLMT = "the source is more recent than the destination"
-	syncStatusSkipped = "skipped"
-	syncStatusOverwritten = "overwritten"
+	syncOverwriteReasonNewerLMT  = "the source is more recent than the destination"
+	syncStatusSkipped            = "skipped"
+	syncStatusOverwritten        = "overwritten"
 )
 
 func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
@@ -64,7 +64,7 @@ type syncDestinationComparator struct {
 
 	comparisonHashType common.SyncHashType
 
-  	preferSMBTime     bool
+	preferSMBTime     bool
 	disableComparison bool
 }
 
@@ -89,6 +89,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
 
 		if f.disableComparison {
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
@@ -113,10 +114,12 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteResaonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
-		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteResaonNewerLMT, false)
+		// skip if dest is more recent
+		syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 	} else {
 		// purposefully ignore the error from destinationCleaner
 		// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
@@ -138,7 +141,7 @@ type syncSourceComparator struct {
 
 	comparisonHashType common.SyncHashType
 
-  preferSMBTime     bool
+	preferSMBTime     bool
 	disableComparison bool
 }
 
@@ -164,8 +167,9 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 	if present {
 		defer delete(f.destinationIndex.indexMap, relPath)
 
-    // if destination is stale, schedule source for transfer
+		// if destination is stale, schedule source for transfer
 		if f.disableComparison {
+			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
 			return f.copyTransferScheduler(sourceObject)
 		}
 
@@ -190,12 +194,12 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 			return nil
 		} else if sourceObject.isMoreRecentThan(destinationObjectInMap, f.preferSMBTime) {
 			// if destination is stale, schedule source
-			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteResaonNewerLMT, false)
+			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObject)
 		}
 
-		syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		// skip if dest is more recent
+		syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
 		return nil
 	}
 

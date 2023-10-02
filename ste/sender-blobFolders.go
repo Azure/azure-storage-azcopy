@@ -19,14 +19,13 @@ type blobFolderSender struct {
 	destinationClient *blockblob.Client // We'll treat all folders as block blobs
 	jptm              IJobPartTransferMgr
 	sip               ISourceInfoProvider
-	metadataToApply common.Metadata
-	headersToApply  blob.HTTPHeaders
-	blobTagsToApply common.BlobTags
+	metadataToApply   common.Metadata
+	headersToApply    blob.HTTPHeaders
+	blobTagsToApply   common.BlobTags
 }
 
 func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
 	destinationClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -105,7 +104,8 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 	}
 
 	// Upload ADLS Gen 2 ACLs
-	if b.jptm.FromTo() == common.EFromTo.BlobBlob() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
+	fromTo := b.jptm.FromTo()
+	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
 		b.setDatalakeACLs()
 	}
 
@@ -164,11 +164,11 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 			_, err := b.destinationClient.Delete(b.jptm.Context(), nil)
 			if err != nil {
 				if bloberror.HasCode(err, "DirectoryIsNotEmpty") { // this is DFS, and we cannot do a standard replacement on it. Opt to simply overwrite the properties.
-						where, err := b.overwriteDFSProperties()
-						if err != nil {
-							return fmt.Errorf("%w. When %s", err, where)
-						}
-						return nil
+					where, err := b.overwriteDFSProperties()
+					if err != nil {
+						return fmt.Errorf("%w. When %s", err, where)
+					}
+					return nil
 				}
 				return fmt.Errorf("when deleting existing blob: %w", err)
 			}
@@ -197,10 +197,10 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 		// It doesn't make sense to use a special access tier for a blob folder, the blob will be 0 bytes.
 		_, err := b.destinationClient.Upload(b.jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
 			&blockblob.UploadOptions{
-				HTTPHeaders: &b.headersToApply,
-				Metadata: b.metadataToApply,
-				Tags: b.blobTagsToApply,
-				CPKInfo: b.jptm.CpkInfo(),
+				HTTPHeaders:  &b.headersToApply,
+				Metadata:     b.metadataToApply,
+				Tags:         b.blobTagsToApply,
+				CPKInfo:      b.jptm.CpkInfo(),
 				CPKScopeInfo: b.jptm.CpkScopeInfo(),
 			})
 
@@ -212,7 +212,8 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 	}
 
 	// Upload ADLS Gen 2 ACLs
-	if b.jptm.FromTo() == common.EFromTo.BlobBlob() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
+	fromTo := b.jptm.FromTo()
+	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
 		b.setDatalakeACLs()
 	}
 
