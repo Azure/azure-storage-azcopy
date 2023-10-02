@@ -17,8 +17,8 @@ github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.3.1/go.mod h1:uE9zaUfEQT/nbQ
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0 h1:sXr+ck84g/ZlZUOZiNELInmMgOsuGwdjjVkEIde0OtY=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0/go.mod h1:okt5dMMTOFjX/aovMlrjvvXoPMBVSPzk9185BT0+eZM=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage v1.2.0 h1:Ma67P/GGprNwsslzEH6+Kb8nybI8jpDTm4Wmzu2ReK8=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.1.0 h1:nVocQV40OQne5613EeLayJiRAJuKlBGy+m22qWG+WRg=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.1.0/go.mod h1:7QJP7dr2wznCMeqIrhMgWGf7XpAQnVrJqDm9nvV3Cu4=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0-beta.1 h1:QRcv7intN7/ZsCq9UpB7ybXMc2lor+DgqqUEOwervcA=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0-beta.1/go.mod h1:+6KLcKIVgxoBDMqMO/Nvy7bZ9a0nbU3I1DtFQK3YvB4=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1.0.20230823184147-c9d65f00ca17 h1:qbkTKL4uPkbcjHRez9TcQJDPVdPK+dRmmdOMBYYfOvQ=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1.0.20230823184147-c9d65f00ca17/go.mod h1:LOiiRCZKY9OlgPDmDrdM8uiL63lwSe01M0hklP3/4xc=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.0.0 h1:iqXx16jKhIkx1FLPA4tsaXLc6zIrj/kMesoutWDv6MI=

@@ -2,7 +2,7 @@ module github.com/Azure/azure-storage-azcopy/v10
 
 require (
 	cloud.google.com/go/storage v1.29.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.1.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0-beta.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.0.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.18
