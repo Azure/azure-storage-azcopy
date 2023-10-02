@@ -2,9 +2,12 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"net/url"
+	"net/http"
 	"strings"
 	"sync"
 )
@@ -37,7 +40,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
 
 	// parsing should not fail, we've made it this far
-	u, err := url.Parse(info.Source)
+	datalakeURLParts, err := azdatalake.ParseURL(info.Source)
 	if err != nil {
 		panic("sanity check: HNS source URI did not parse.")
 	}
@@ -60,50 +63,36 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-
-	urlParts := azbfs.NewBfsURLParts(*u)
-
 	// Deleting a filesystem
-	if urlParts.DirectoryOrFilePath == "" {
-		fsURL := azbfs.NewFileSystemURL(*u, jptm.Pipeline())
-
-		_, err := fsURL.Delete(ctx)
+	if datalakeURLParts.PathName == "" {
+		fsClient := common.CreateFilesystemClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		_, err := fsClient.Delete(ctx, nil)
 		transferDone(err)
 		return
 	}
 
 	// Check if the source is a file or directory
-	directoryURL := azbfs.NewDirectoryURL(*u, jptm.Pipeline())
-	props, err := directoryURL.GetProperties(ctx)
+	clientOptions := jptm.ClientOptions()
+	clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, clientOptions.PerCallPolicies...)
+	directoryClient := common.CreateDatalakeDirectoryClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), clientOptions)
+	var respFromCtx *http.Response
+	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
+	_, err = directoryClient.GetProperties(ctxWithResp, nil)
 	if err != nil {
 		transferDone(err)
 		return
 	}
 
-	if strings.EqualFold(props.XMsResourceType(), "file") {
-		fileURL := directoryURL.NewFileUrl()
+	resourceType := respFromCtx.Header.Get("x-ms-resource-type")
+	if strings.EqualFold(resourceType, "file") {
+		fileClient := common.CreateDatalakeFileClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
-		_, err := fileURL.Delete(ctx)
+		_, err := fileClient.Delete(ctx, nil)
 		transferDone(err)
 	} else {
 		// Remove the directory
-		marker := ""
-		for {
-			removeResp, err := directoryURL.Delete(ctx, &marker, recursive)
-			if err != nil {
-				transferDone(err)
-				return
-			}
-
-			// Update continuation for next call
-			marker = removeResp.XMsContinuation()
-
-			// Break if finished
-			if marker == "" {
-				break
-			}
-		}
-
+		recursiveContext := common.WithRecursive(ctx, recursive)
+		_, err := directoryClient.Delete(recursiveContext, nil)
 		transferDone(err)
 	}
 }

@@ -1,3 +1,5 @@
+// +build !windows,!nacl,!plan9
+
 // Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,43 +20,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package common
 
 import (
-	"github.com/stretchr/testify/assert"
-	"testing"
+	"log"
+	"log/syslog"
 )
 
-func TestCPKEncryptionInputTest(t *testing.T) {
-	a := assert.New(t)
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	dirPath := "this/is/a/dummy/path"
-	rawDFSEndpointWithSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
-	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.DFSURL())
-	raw.recursive = true
-	raw.cpkInfo = true
-
-	runCopyAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
-		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
-	})
-
-	mockedRPC.reset()
-	raw.cpkInfo = false
-	raw.cpkScopeInfo = "dummyscope"
-	runCopyAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
-		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
-	})
-
-	rawContainerURL := scenarioHelper{}.getContainerClient(a, "testcpkcontainer")
-	raw2 := getDefaultRawCopyInput(dirPath, rawContainerURL.URL())
-	raw2.recursive = true
-	raw2.cpkInfo = true
-
-	_, err := raw2.cook()
-	a.Nil(err)
+// forceLog should rarely be used. It forceable logs an entry to the
+// Windows Event Log (on Windows) or to the SysLog (on Linux)
+func forceLog(level LogLevel, msg string) {
+	if defaultLogger == nil {
+		return // Return fast if we failed to create the logger.
+	}
+	// We are logging it, ensure trailing newline
+	if len(msg) == 0 || msg[len(msg)-1] != '\n' {
+		msg += "\n" // Ensure trailing newline
+	}
+	switch level {
+	case LogFatal:
+		defaultLogger.Fatal(msg)
+	case LogPanic:
+		defaultLogger.Panic(msg)
+	case LogError, LogWarning, LogInfo:
+		defaultLogger.Print(msg)
+	}
 }
+
+var defaultLogger = func() *log.Logger {
+	l, _ := syslog.NewLogger(syslog.LOG_USER|syslog.LOG_WARNING, log.LstdFlags)
+	return l
+}()

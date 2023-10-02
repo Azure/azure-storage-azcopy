@@ -4,8 +4,6 @@ import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"net/http"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 )
 
 type ErrorEx struct {
@@ -18,12 +16,8 @@ func (errex ErrorEx) ErrorCodeAndString() (string, int, string) {
 	if errors.As(errex.error, &respErr) {
 		return respErr.ErrorCode, respErr.StatusCode, respErr.RawResponse.Status
 	}
-	switch e := interface{}(errex.error).(type) {
-	case azbfs.StorageError:
-		return string(e.ServiceCode()), e.Response().StatusCode, e.Response().Status
-	default:
-		return "", 0, errex.Error()
-	}
+	return "", 0, errex.Error()
+
 }
 
 type hasResponse interface {

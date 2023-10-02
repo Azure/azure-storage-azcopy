@@ -27,7 +27,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -37,6 +36,12 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
@@ -53,7 +58,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/minio/minio-go"
 
@@ -302,15 +306,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c asserter, containerC
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, fsc *filesystem.Client, prefix string) (pathList []string) {
 	pathList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, pathName1 := createNewBfsFile(c, filesystemURL, prefix+"top")
-		_, pathName2 := createNewBfsFile(c, filesystemURL, prefix+"sub1/")
-		_, pathName3 := createNewBfsFile(c, filesystemURL, prefix+"sub2/")
-		_, pathName4 := createNewBfsFile(c, filesystemURL, prefix+"sub1/sub3/sub5")
-		_, pathName5 := createNewBfsFile(c, filesystemURL, prefix+specialNames[i])
+		_, pathName1 := createNewBfsFile(c, fsc, prefix+"top")
+		_, pathName2 := createNewBfsFile(c, fsc, prefix+"sub1/")
+		_, pathName3 := createNewBfsFile(c, fsc, prefix+"sub2/")
+		_, pathName4 := createNewBfsFile(c, fsc, prefix+"sub1/sub3/sub5")
+		_, pathName5 := createNewBfsFile(c, fsc, prefix+specialNames[i])
 
 		pathList[5*i] = pathName1
 		pathList[5*i+1] = pathName2
@@ -375,13 +379,13 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceC
 	}
 }
 
-func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
+func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, dsc *datalakeservice.Client, fsList []string, fileList []string, data string) {
 	for _, filesystemName := range fsList {
-		fsURL := serviceURL.NewFileSystemURL(filesystemName)
-		_, err := fsURL.Create(ctx)
+		fsc := dsc.NewFileSystemClient(filesystemName)
+		_, err := fsc.Create(ctx, nil)
 		c.AssertNoErr(err)
 
-		s.generateBFSPathsFromList(c, fsURL, fileList)
+		s.generateBFSPathsFromList(c, fsc, fileList)
 	}
 }
 
@@ -569,30 +573,29 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 		}
 
 		if b.creationProperties.adlsPermissionsACL != nil {
-			bfsURLParts := azbfs.NewBfsURLParts(options.rawSASURL)
+			bfsURLParts, err := azdatalake.ParseURL(options.rawSASURL.String())
+			c.AssertNoErr(err)
 			bfsURLParts.Host = strings.Replace(bfsURLParts.Host, ".blob", ".dfs", 1)
 
-			bfsContainer := azbfs.NewFileSystemURL(bfsURLParts.URL(), azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+			fsc, err := filesystem.NewClientWithNoCredential(bfsURLParts.String(), nil)
+			c.AssertNoErr(err)
 
-			var updateResp *azbfs.PathUpdateResponse
 			if b.isFolder() {
-				dirURL := bfsContainer.NewDirectoryURL(b.name)
+				dc := fsc.NewDirectoryClient(b.name)
 
-				updateResp, err = dirURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
-					ACL: *b.creationProperties.adlsPermissionsACL,
-				})
+				_, err = dc.SetAccessControl(ctx,
+					&datalakedirectory.SetAccessControlOptions{ACL: b.creationProperties.adlsPermissionsACL})
 			} else {
 				d, f := path.Split(b.name)
-				dirURL := bfsContainer.NewDirectoryURL(d)
-				fileURL := dirURL.NewFileURL(f)
+				dc := fsc.NewDirectoryClient(d)
+				fc, err := dc.NewFileClient(f)
+				c.AssertNoErr(err)
 
-				updateResp, err = fileURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
-					ACL: *b.creationProperties.adlsPermissionsACL,
-				})
+				_, err = fc.SetAccessControl(ctx,
+					&datalakefile.SetAccessControlOptions{ACL: b.creationProperties.adlsPermissionsACL})
 			}
 
 			c.AssertNoErr(err)
-			c.Assert(updateResp.StatusCode(), equals(), 200)
 		}
 	}
 
@@ -601,7 +604,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerClient *container.Client, fileSystemURL *azbfs.FileSystemURL) map[string]*objectProperties {
+func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerClient *container.Client, fileSystemURL *filesystem.Client) map[string]*objectProperties {
 	result := make(map[string]*objectProperties)
 
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Include: container.ListBlobsInclude{Metadata: true, Tags: true}})
@@ -626,16 +629,15 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerCl
 
 			var acl *string
 			if fileSystemURL != nil {
-				fURL := fileSystemURL.NewDirectoryURL(*relativePath).NewFileUrl()
-				accessControl, err := fURL.GetAccessControl(ctx)
+				fURL := fileSystemURL.NewFileClient(*relativePath)
+				accessControl, err := fURL.GetAccessControl(ctx, nil)
 
-				var stgErr azbfs.StorageError
-				if errors.As(err, &stgErr) && strings.EqualFold(string(stgErr.ServiceCode()), "FilesystemNotFound") {
+				if datalakeerror.HasCode(err, "FilesystemNotFound") {
 					err = nil
 					acl = nil
 				} else {
 					a.AssertNoErr(err, "getting ACLs")
-					acl = &accessControl.ACL
+					acl = accessControl.ACL
 				}
 			}
 
@@ -1066,22 +1068,19 @@ func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentO
 	return destData
 }
 
-func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {
+func (scenarioHelper) generateBFSPathsFromList(c asserter, fsc *filesystem.Client, fileList []string) {
 	for _, bfsPath := range fileList {
-		file := filesystemURL.NewRootDirectoryURL().NewFileURL(bfsPath)
+		fc := fsc.NewFileClient(bfsPath)
 
 		// Create the file
-		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
+		_, err := fc.Create(ctx, nil)
 		c.AssertNoErr(err)
-		c.Assert(cResp.StatusCode(), equals(), 201)
 
-		aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
+		_, err = fc.AppendData(ctx, 0, streaming.NopCloser(strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes)))), nil)
 		c.AssertNoErr(err)
-		c.Assert(aResp.StatusCode(), equals(), 202)
 
-		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+		_, err = fc.FlushData(ctx, defaultBlobFSFileSizeInBytes, &datalakefile.FlushDataOptions{Close: to.Ptr(true)})
 		c.AssertNoErr(err)
-		c.Assert(fResp.StatusCode(), equals(), 200)
 
 	}
 }
@@ -1146,11 +1145,12 @@ func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) string {
 	return getFileServiceURLWithSAS(c, credential).URL()
 }
 
-func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
+func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) *datalakeservice.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
-	credential := azbfs.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := azdatalake.NewSharedKeyCredential(accountName, accountKey)
+	c.AssertNoErr(err)
 
-	return getAdlsServiceURLWithSAS(c, *credential)
+	return getAdlsServiceURLWithSAS(c, credential)
 }
 
 func (scenarioHelper) getBlobServiceURL(c asserter) *blobservice.Client {

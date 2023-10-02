@@ -8,8 +8,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"log"
 	"net/url"
 	"os"
@@ -509,30 +509,18 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		dstURL, err := url.Parse(accountRoot)
-		if err != nil {
-			return err
-		}
-
-		dstPipeline, err := createBlobFSPipeline(ctx, cca.credentialInfo, azcopyLogVerbosity)
-		if err != nil {
-			return err
-		}
-		serviceURL := azbfs.NewServiceURL(*dstURL, dstPipeline)
-		fsURL := serviceURL.NewFileSystemURL(containerName)
-		_, err = fsURL.GetProperties(ctx)
+		dsc := common.CreateDatalakeServiceClient(accountRoot, dstCredInfo, nil, options)
+		fsc := dsc.NewFileSystemClient(containerName)
+		_, err = fsc.GetProperties(ctx, nil)
 		if err == nil {
 			return err
 		}
 
-		_, err = fsURL.Create(ctx)
-		if stgErr, ok := err.(azbfs.StorageError); ok {
-			if stgErr.ServiceCode() != azbfs.ServiceCodeFileSystemAlreadyExists {
-				return err
-			}
-		} else {
-			return err
+		_, err = fsc.Create(ctx, nil)
+		if datalakeerror.HasCode(err, datalakeerror.FileSystemAlreadyExists) {
+			return nil
 		}
+		return err
 	default:
 		panic(fmt.Sprintf("cannot create a destination container at location %s.", cca.FromTo.To()))
 	}
