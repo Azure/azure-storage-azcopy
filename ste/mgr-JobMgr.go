@@ -296,7 +296,7 @@ type jobMgr struct {
 	cancel               context.CancelFunc
 	pipelineNetworkStats *PipelineNetworkStats
 
-	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
+	// Share the same HTTP Client across all job parts, so that we maximize reuse of
 	// its internal connection pool
 	httpClient *http.Client
 

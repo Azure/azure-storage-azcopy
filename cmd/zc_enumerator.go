@@ -606,7 +606,7 @@ type objectProcessor func(storedObject StoredObject) error
 //
 //	Might be easier to debug
 //
-// modifies a StoredObject, but does NOT process it.  Used for modifications, such as pre-pending a parent path
+// modifies a StoredObject, but does NOT process it.  Used for modifications, such as prepending a parent path
 type objectMorpher func(storedObject *StoredObject)
 
 // FollowedBy returns a new objectMorpher, which performs the action of existing followed by the action of additional.
