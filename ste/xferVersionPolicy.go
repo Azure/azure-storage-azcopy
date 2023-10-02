@@ -63,3 +63,17 @@ func (r *coldTierPolicy) Do(req *policy.Request) (*http.Response, error) {
 	}
 	return req.Next()
 }
+
+type trailingDotPolicy struct {
+}
+
+func newTrailingDotPolicy() policy.Policy {
+	return &trailingDotPolicy{}
+}
+
+func (r *trailingDotPolicy) Do(req *policy.Request) (*http.Response, error) {
+	if req.Raw().Header.Get("x-ms-allow-trailing-dot") != "" || req.Raw().Header.Get("x-ms-source-allow-trailing-dot") != "" {
+		req.Raw().Header["x-ms-version"] = []string{"2022-11-02"}
+	}
+	return req.Next()
+}
