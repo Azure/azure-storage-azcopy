@@ -63,7 +63,7 @@ const s3KeywordDualStack = "dualstack"
 
 // returns the S3 essential host part, 'amazonaws.com' by default
 //
-//	can be overriden by the AWS_ESSENTIAL_HOST_PART env variable
+//	can be overridden by the AWS_ESSENTIAL_HOST_PART env variable
 func GetS3EssentialHostPart() string {
 	if os.Getenv("AWS_ESSENTIAL_HOST_PART") != "" {
 		return os.Getenv("AWS_ESSENTIAL_HOST_PART")
