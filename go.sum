@@ -21,8 +21,6 @@ github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.1.0 h1:nVocQV40OQne5613E
 github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.1.0/go.mod h1:7QJP7dr2wznCMeqIrhMgWGf7XpAQnVrJqDm9nvV3Cu4=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1.0.20230823184147-c9d65f00ca17 h1:qbkTKL4uPkbcjHRez9TcQJDPVdPK+dRmmdOMBYYfOvQ=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1.0.20230823184147-c9d65f00ca17/go.mod h1:LOiiRCZKY9OlgPDmDrdM8uiL63lwSe01M0hklP3/4xc=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.1.0-beta.1 h1:zzhx3sjArVbmpPE0K1kMl0ZC8xhiZuWZ9R1m1efqrYI=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.1.0-beta.1/go.mod h1:qTVVvsSlVe5NZKdjBOJYxB0Ge5D+laQga/zckme+hw0=
 github.com/Azure/go-autorest v14.2.0+incompatible h1:V5VMDjClD3GiElqLWO7mz2MxNAK/vTfRHdAubSIPRgs=
 github.com/Azure/go-autorest v14.2.0+incompatible/go.mod h1:r+4oMnoxhatjLLJ6zxSWATqVooLgysK6ZNox3g/xq24=
 github.com/Azure/go-autorest/autorest/adal v0.9.18 h1:kLnPsRjzZZUF3K5REu/Kc+qMQrvuza2bwSnNdhmzLfQ=
@@ -58,6 +56,8 @@ github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymF
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
+github.com/gapra-msft/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20231003163444-0b9aca3543b5 h1:jK1L4Eya4gFEFo11BxYgsFzKwWWS/eGLmMXAYEWsqCI=
+github.com/gapra-msft/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20231003163444-0b9aca3543b5/go.mod h1:qTVVvsSlVe5NZKdjBOJYxB0Ge5D+laQga/zckme+hw0=
 github.com/go-ini/ini v1.66.4 h1:dKjMqkcbkzfddhIhyglTPgMoJnkvmG+bSLrU9cTHc5M=
 github.com/go-ini/ini v1.66.4/go.mod h1:ByCAeIL28uOIIG0E3PJtZPDL8WnHpFKFOtgjp+3Ies8=
 github.com/golang-jwt/jwt/v4 v4.0.0/go.mod h1:/xlHOz8bRuivTWchD4jCa+NbatV+wEUSzwAxVc6locg=
