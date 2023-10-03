@@ -106,7 +106,7 @@ foreach ($azvalue in $azvalues){
     $azcopyvalues += $item
 }
 
-$azcopyvalues | Export-Csv -NoClobber -NoTypeInformation -Encoding Unicode -Path C:\temp\ReportAzCopy_$logname.csv -Delimiter ";"
+$azcopyvalues | ConvertTo-Csv -NoTypeInformation -Delimiter ";" | % {$_ -replace '"',''} | Out-File C:\temp\ReporAzCopy_$logname.csv
 Remove-Item C:\temp\auxiliaryfile_$logname.log
 
 $timer.Stop()
