@@ -60,6 +60,10 @@ type IJobPartMgr interface {
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
+	SourceTrailingDot() *common.TrailingDotOption
+	TrailingDot() *common.TrailingDotOption
+	From() *common.Location
+
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
@@ -127,14 +131,14 @@ func (d *dialRateLimiter) DialContext(ctx context.Context, network, address stri
 	return d.dialer.DialContext(ctx, network, address)
 }
 
-func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	// TODO (gapra): Does this have to happen this happen here?
 	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), NewTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newLogPolicy(log), newStatsPolicy(statsAcc)}
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
@@ -178,6 +182,10 @@ type jobPartMgr struct {
 	s2sSourceCredInfo      common.CredentialInfo
 	s2sSourceClientOptions azcore.ClientOptions
 	credOption             *common.CredentialOpOptions
+
+	sourceTrailingDot *common.TrailingDotOption
+	trailingDot *common.TrailingDotOption
+	from *common.Location
 
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
@@ -474,24 +482,21 @@ func (jpm *jobPartMgr) clientInfo() {
 	networkStats := jpm.jobMgr.PipelineNetworkStats()
 	logOptions := jpm.jobMgr.PipelineLogInfo()
 
-	var sourceTrailingDot *common.TrailingDotOption
-	var trailingDot *common.TrailingDotOption
-	var from *common.Location
 	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
-		sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+		jpm.sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
 	}
 	if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
 		fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
 		fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
 		fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
 		fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
-		trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+		jpm.trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
 		if fromTo.IsS2S() {
-			from = to.Ptr(fromTo.From())
+			jpm.from = to.Ptr(fromTo.From())
 		}
 	}
-	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, sourceTrailingDot, nil)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)
+	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions)
+	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions)
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
@@ -732,6 +737,18 @@ func (jpm *jobPartMgr) S2SSourceClientOptions() azcore.ClientOptions {
 
 func (jpm *jobPartMgr) CredentialOpOptions() *common.CredentialOpOptions {
 	return jpm.credOption
+}
+
+func (jpm *jobPartMgr) SourceTrailingDot() *common.TrailingDotOption {
+	return jpm.sourceTrailingDot
+}
+
+func (jpm *jobPartMgr) TrailingDot() *common.TrailingDotOption {
+	return jpm.trailingDot
+}
+
+func (jpm *jobPartMgr) From() *common.Location {
+	return jpm.from
 }
 
 /* Status update messages should not fail */
