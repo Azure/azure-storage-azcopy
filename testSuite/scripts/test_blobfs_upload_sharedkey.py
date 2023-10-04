@@ -11,8 +11,6 @@ class BlobFs_Upload_ShareKey_User_Scenarios(unittest.TestCase):
 
     def setUp(self):
         # ensure oauth is not being used
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
         self.cachedAzCopyClientSecret = os.environ['AZCOPY_SPA_CLIENT_SECRET']
         os.environ['AZCOPY_SPA_CLIENT_SECRET'] = ''
 

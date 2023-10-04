@@ -5,8 +5,6 @@ import utility as util
 class BlobFs_Upload_SAS_User_Scenarios(unittest.TestCase):
     def setUp(self):
         # ensure OAuth is not being used
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
         self.cachedAzCopyClientSecret = os.environ['AZCOPY_SPA_CLIENT_SECRET']
         os.environ['AZCOPY_SPA_CLIENT_SECRET'] = ''
         # ensure account key is not being used
