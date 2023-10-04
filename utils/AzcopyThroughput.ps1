@@ -1,11 +1,11 @@
-﻿<#
+<#
     .SCRIPT SYNOPSIS 
         Analyzes the azcopy log, and collects transfer metrics to generate a repot
 	  
 	.Description
 	  	This script will collect transfer metrics from azcopy log and generate a csv
 
-	.Parameter AzCopy log
+	.Parameter JsonFile
 		Mandatory: This item is the Resource Group Name that will be used
 		Alias: F
 
@@ -65,14 +65,12 @@ Write-Host "`n Loading Azcopy log ($path)......" -ForegroundColor Yellow
 $timer=[system.diagnostics.stopwatch]::StartNew()
 $logname = (Get-ChildItem $path).BaseName
 
-# Read log, and save into auxiliary file, with all the information about azcopy metrics
-
-
+# Read log, and save into auxiliar file, with all the information about azcoy metrics
 $reader = [IO.File]::OpenText($path)
 while ($reader.Peek() -ge 0) {
     $line = $reader.ReadLine()
     if ($line -match 'Mb/s'){
-        $line | Out-File -FilePath C:\temp\auxiliaryfile_$logname.log -Append
+        $line | Out-File -FilePath C:\temp\auxiliarfile_$logname.log -Append
     }elseif($line -match 'Total Number of Transfers'){
         $totalfiles = $line
         break
@@ -82,21 +80,24 @@ $reader.Dispose()
 # Get the total files to transfer
 $tf=$totalfiles -split ':', 2
 
-# Convert the auxiliary file in a CSV to be imported in HTML report
+# Convert the auxiliar file in a CSV to be imported in HTML report
 $azcopyvalues = @()
-$azvalues = Get-Content -Path "C:\temp\auxiliaryfile_$logname.log"
+$azvalues = Get-Content -Path "C:\temp\auxiliarfile_$logname.log"
 foreach ($azvalue in $azvalues){
     $item = New-Object -TypeName PSObject
     $params=$azvalue -split ',', 7
     foreach ($param in $params[0]){
         $value=$param -split ' ', 3
         $item | Add-Member -MemberType NoteProperty -Name "timestamp" -Value $value[1]
+        if ($tf){}else{ $item | Add-Member -MemberType NoteProperty -Name "Percentage" -Value $value[2] }    
     }
     # calculate the Percentage base on done files
     foreach ($param in $params[1]){
         $value = $param -split ' ', 3
-        $value = [math]::Round(([int]$value[1]*100)/[int]$tf[1], 2)
-        $item | Add-Member -MemberType NoteProperty -Name "Percentage" -Value $value
+        if ($tf){
+            $value = [math]::Round(([int]$value[1]*100)/[int]$tf[1], 2)
+            $item | Add-Member -MemberType NoteProperty -Name "Percentage" -Value $value
+        }  
     }
     foreach ($param in $params[6]){
         $value = $param -split ' ', 6
@@ -107,7 +108,10 @@ foreach ($azvalue in $azvalues){
 }
 
 $azcopyvalues | ConvertTo-Csv -NoTypeInformation -Delimiter ";" | % {$_ -replace '"',''} | Out-File C:\temp\ReporAzCopy_$logname.csv
-Remove-Item C:\temp\auxiliaryfile_$logname.log
+
+if(Test-Path -Path "C:\temp\auxiliarfile_$logname.log"){
+    Remove-Item C:\temp\auxiliarfile_$logname.log
+}
 
 $timer.Stop()
 Write-Host 'Duration:' $timer.Elapsed -ForegroundColor Green
