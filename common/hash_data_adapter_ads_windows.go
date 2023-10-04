@@ -21,7 +21,7 @@ func (HashStorageMode) AlternateDataStreams() HashStorageMode { return 11 } // I
 func (e *HashStorageMode) osDefault() HashStorageMode { return e.AlternateDataStreams() }
 
 func init() { // Override the default hash data adapter behaviour
-	osAgnosticBehavior := NewHashDataAdapter // Copy the function for re-use
+	osAgnosticBehavior := NewHashDataAdapter // Copy the function for reuse
 
 	NewHashDataAdapter = func(hashPath, dataPath string, mode HashStorageMode) (adapter HashDataAdapter, err error) {
 		switch mode {

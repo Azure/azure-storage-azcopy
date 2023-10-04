@@ -165,7 +165,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
 // There's no measure of physical RAM in the STD library, so we guesstimate conservatively, based on  CPU count (logical, not physical CPUs)
 // Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
-// currently-unused, re-usable slices, that is not tracked by cacheLimiter.
+// currently-unused, reusable slices, that is not tracked by cacheLimiter.
 // Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
 // count 100 MB towards this limit, but actually consume 128 MB)
 func getMaxRamForChunks() int64 {

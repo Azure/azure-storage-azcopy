@@ -73,7 +73,7 @@ type IJobPartMgr interface {
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
-// We must minimize use of this, and instead maximize re-use of the returned client object.
+// We must minimize use of this, and instead maximize reuse of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).

@@ -557,7 +557,7 @@ func (r *resourceDummy) isContainerLike() bool {
 }
 
 func (r *resourceDummy) getAllProperties(a asserter) map[string]*objectProperties {
-	panic("not impelmented")
+	panic("not implemented")
 }
 
 func (r *resourceDummy) downloadContent(a asserter, options downloadContentOptions) []byte {
