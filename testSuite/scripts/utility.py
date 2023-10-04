@@ -530,7 +530,7 @@ def execute_azcopy_command(command):
 
     try:
         # executing the command with timeout to set 3 minutes / 360 sec.
-        subprocess.check_output(
+        out = subprocess.check_output(
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
@@ -538,6 +538,7 @@ def execute_azcopy_command(command):
         print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
+        print("command ", cmnd, " output ", out)
         return True
 
 # execute_azcopy_command_interactive executes the given azcopy command in "inproc" mode.

@@ -14,7 +14,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 1024)
         # upload the file using Azcopy
         cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("log-level", "Info")
+            add_flags("log-level", "DEBUG")
         util.process_oauth_command(
             cmd,
             "LocalBlobFS" if explictFromTo else "")
@@ -34,7 +34,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
 
         # download the file using Azcopy
         cmd = util.Command("copy").add_arguments(fileUrl).add_arguments(util.test_directory_path). \
-            add_flags("log-level", "Info")
+            add_flags("log-level", "DEBUG")
         util.process_oauth_command(
             cmd,
             "BlobFSLocal" if explictFromTo else "")
@@ -53,7 +53,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 64*1024*1024)
         # Upload the file using Azcopy
         cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("log-level", "Info")
+            add_flags("log-level", "DEBUG")
         util.process_oauth_command(
             cmd,
             "LocalBlobFS" if explictFromTo else "")
@@ -73,7 +73,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
 
         # download the file using azcopy
         cmd = util.Command("copy").add_arguments(fileUrl).add_arguments(util.test_directory_path). \
-            add_flags("log-level", "Info")
+            add_flags("log-level", "DEBUG")
         util.process_oauth_command(
             cmd,
             "BlobFSLocal" if explictFromTo else "")
@@ -93,7 +93,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
 
         # Upload the directory with 100 files inside it
         cmd = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("log-level", "Info").add_flags("recursive","true")
+            add_flags("log-level", "DEBUG").add_flags("recursive","true")
         util.process_oauth_command(
             cmd,
             "LocalBlobFS" if explictFromTo else "")
@@ -114,7 +114,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
 
         # download the directory
         cmd = util.Command("copy").add_arguments(dirUrl).add_arguments(util.test_directory_path).\
-            add_flags("log-level", "Info").add_flags("recursive", "true")
+            add_flags("log-level", "DEBUG").add_flags("recursive", "true")
         util.process_oauth_command(
             cmd,
             "BlobFSLocal" if explictFromTo else "")
@@ -133,7 +133,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
 
         # Upload the directory with 2000 files inside it
         result = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("log-level", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
+            add_flags("log-level", "DEBUG").add_flags("recursive","true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Validate the uploaded directory

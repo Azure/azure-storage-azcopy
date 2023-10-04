@@ -17,7 +17,7 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 1024)
         # upload the file using Azcopy
         cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("log-level", "Info")
+            add_flags("log-level", "DEBUG")
         util.process_oauth_command(
             cmd,
             "LocalBlobFS" if explictFromTo else "")
@@ -37,7 +37,7 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 64*1024*1024)
         # Upload the file using Azcopy
         cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("log-level", "Info")
+            add_flags("log-level", "DEBUG")
         util.process_oauth_command(
             cmd,
             "LocalBlobFS" if explictFromTo else "")
@@ -57,7 +57,7 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 64*1024*1024)
         # Upload the file using AzCopy @ 1MB blocks, 15 block flushes (5 flushes, 4 15 blocks, 1 4 blocks)
         cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("block-size-mb", "1").add_flags("flush-threshold", "15").add_flags("log-level", "Info")
+            add_flags("block-size-mb", "1").add_flags("flush-threshold", "15").add_flags("log-level", "DEBUG")
         util.process_oauth_command(
             cmd,
             "LocalBlobFS" if explicitFromTo else "")
@@ -77,7 +77,7 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 64 * 1024 * 1024)
         # Upload the file using AzCopy @ 1MB blocks, 16 block flushes (4 16 block flushes)
         cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("block-size-mb", "1").add_flags("flush-threshold", "16").add_flags("log-level", "Info")
+            add_flags("block-size-mb", "1").add_flags("flush-threshold", "16").add_flags("log-level", "DEBUG")
         util.process_oauth_command(
             cmd,
             "LocalBlobFS" if explicitFromTo else "")
@@ -98,7 +98,7 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
 
         # Upload the directory with 100 files inside it
         cmd = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("log-level", "Info").add_flags("recursive","true")
+            add_flags("log-level", "DEBUG").add_flags("recursive","true")
         util.process_oauth_command(
             cmd,
             "LocalBlobFS" if explictFromTo else "")
