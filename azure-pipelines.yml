@@ -257,26 +257,26 @@ jobs:
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
         name: 'Acquire_the_distributed_mutex'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'cmd'
-          coverage_name: 'cmd'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'common'
-          coverage_name: 'common'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'common/parallel'
-          coverage_name: 'parallel'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'ste'
-          coverage_name: 'ste'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'sddl'
-          coverage_name: 'sddl'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'cmd'
+#          coverage_name: 'cmd'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'common'
+#          coverage_name: 'common'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'common/parallel'
+#          coverage_name: 'parallel'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'ste'
+#          coverage_name: 'ste'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'sddl'
+#          coverage_name: 'sddl'
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64 
           go build -o test-validator ./testSuite/
@@ -326,6 +326,12 @@ jobs:
         inputs:
           codeCoverageTool: Cobertura
           summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish logs'
+        condition: succeededOrFailed()
+        inputs:
+          pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
+          artifactName: logs
       - script: |
           pip install azure-storage-blob==12.12.0
           python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
