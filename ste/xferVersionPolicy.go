@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
+	"strings"
 )
 
 type serviceAPIVersionOverride struct{}
@@ -44,22 +45,19 @@ func newVersionPolicy() policy.Policy {
 func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// get the service api version value using the ServiceAPIVersionOverride set in the context.
 	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
+		version := value.(string)
+		if version == "default" {
+			if strings.Contains(req.Raw().URL.Host, ".blob") {
+				version = "2023-08-03"
+			} else if strings.Contains(req.Raw().URL.Host, ".file") {
+				version = "2022-11-02"
+			} else if strings.Contains(req.Raw().URL.Host, ".dfs") {
+				version = "2020-10-02"
+			} else {
+				version = "2020-10-02"
+			}
+		}
 		req.Raw().Header["x-ms-version"] = []string{value.(string)}
-	}
-	return req.Next()
-}
-
-// TODO: Delete me when bumping the service version is no longer relevant.
-type coldTierPolicy struct {
-}
-
-func newColdTierPolicy() policy.Policy {
-	return &coldTierPolicy{}
-}
-
-func (r *coldTierPolicy) Do(req *policy.Request) (*http.Response, error) {
-	if req.Raw().Header.Get("x-ms-access-tier") == common.EBlockBlobTier.Cold().String() {
-		req.Raw().Header["x-ms-version"] = []string{"2021-12-02"}
 	}
 	return req.Next()
 }
