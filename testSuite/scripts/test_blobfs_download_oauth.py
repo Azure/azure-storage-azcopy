@@ -5,7 +5,15 @@ import unittest
 import utility as util
 
 class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
+    def setUp(self):
+        # ensure account key is not being used
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = 'SPN'
 
+    def tearDown(self):
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = ''
     def util_test_blobfs_download_1Kb_file(
         self,
         explictFromTo=False):
