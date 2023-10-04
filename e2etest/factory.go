@@ -23,8 +23,6 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -36,8 +34,6 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
 	"os"
 	"path"
@@ -73,11 +69,7 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) *fileservi
 	if err != nil {
 		panic(err)
 	}
-	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(to.Ptr(common.ETrailingDotOption.Enable()), nil)}
-	clientOptions := azcore.ClientOptions{
-		PerRetryPolicies: perRetryPolicies,
-	}
-	fsc, err := fileservice.NewClientWithSharedKeyCredential(resourceURL, credential, &fileservice.ClientOptions{ClientOptions: clientOptions})
+	fsc, err := fileservice.NewClientWithSharedKeyCredential(resourceURL, credential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
 	if err != nil {
 		panic(err)
 	}
@@ -153,11 +145,7 @@ func (TestResourceFactory) GetFileShareURLWithSAS(c asserter, accountType Accoun
 		time.Now().Add(48 * time.Hour),
 		nil)
 	c.AssertNoErr(err)
-	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(to.Ptr(common.ETrailingDotOption.Enable()), nil)}
-	clientOptions := azcore.ClientOptions{
-		PerRetryPolicies: perRetryPolicies,
-	}
-	client, err = share.NewClientWithNoCredential(sasURL, &share.ClientOptions{ClientOptions: clientOptions})
+	client, err = share.NewClientWithNoCredential(sasURL, &share.ClientOptions{AllowTrailingDot: to.Ptr(true)})
 	c.AssertNoErr(err)
 
 	return client
