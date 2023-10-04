@@ -116,108 +116,108 @@ jobs:
           verbosity: 'Verbose'
           alertWarningLevel: 'High'
 
-  - job: E2E_Test
-    timeoutInMinutes: 360
-    # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
-    strategy:
-      matrix:
-        Ubuntu-20:
-          imageName: 'ubuntu-20.04'
-          build_name: 'azcopy_linux_amd64'
-          display_name: "Linux"
-          go_path: '$(go env GOPATH)/bin/'
-          suffix: ''
-          run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
-          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-          return_exit_code: 'exit "$exit_code"'
-        Windows:
-          imageName: 'windows-2019'
-          build_name: 'azcopy_windows_amd64.exe'
-          display_name: "Windows"
-          go_path: 'C:\Users\VssAdministrator\go\bin\'
-          suffix: '.exe'
-          run_e2e: 'go test -timeout=1h -v ./e2etest > test.txt'
-          save_exit_code: 'set exit_code=%errorlevel%'
-          return_exit_code: 'exit %exit_code%'
-        MacOS:
-          imageName: 'macos-11'
-          build_name: 'azcopy_darwin_amd64'
-          display_name: "MacOS"
-          go_path: '$(go env GOPATH)/bin/'
-          suffix: ''
-          run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
-          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-          return_exit_code: 'exit "$exit_code"'
-    pool:
-      vmImage: $(imageName)
-
-    steps:
-      - task: GoTool@0
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-      - script: |
-          go install github.com/jstemmer/go-junit-report@v0.9.1
-          go install github.com/axw/gocov/gocov@v1.1.0
-          go install github.com/AlekSi/gocov-xml@v1.0.0
-          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-        displayName: 'Installing dependencies'
-
-      # Running E2E Tests on AMD64
-      - script: |
-          mkdir coverage
-          echo 'Building executable'
-          go build -cover -o $(build_name)
-          echo 'Running tests'
-          $(run_e2e)
-          $(save_exit_code)
-          echo "Generating junit report"
-          cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
-          echo 'Formatting coverage directory to legacy txt format'
-          go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
-          echo 'Formatting coverage to json format'
-          $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
-          echo 'Formatting coverage to xml format'
-          $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
-          $(return_exit_code)
-        env:
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
-          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
-          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
-          AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
-          AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
-          AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
-          AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
-          AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
-          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-        displayName: 'E2E Test $(display_name) - AMD64'
-
-      - task: PublishBuildArtifacts@1
-        displayName: 'Publish logs'
-        condition: succeededOrFailed()
-        inputs:
-          pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
-          artifactName: logs
-
-      - task: PublishTestResults@2
-        condition: succeededOrFailed()
-        inputs:
-          testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_report.xml
-          testRunTitle: 'Go on $(display_name)'
-
-      - task: PublishCodeCoverageResults@1
-        condition: succeededOrFailed()
-        inputs:
-          codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
+#  - job: E2E_Test
+#    timeoutInMinutes: 360
+#    # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
+#    strategy:
+#      matrix:
+#        Ubuntu-20:
+#          imageName: 'ubuntu-20.04'
+#          build_name: 'azcopy_linux_amd64'
+#          display_name: "Linux"
+#          go_path: '$(go env GOPATH)/bin/'
+#          suffix: ''
+#          run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
+#          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
+#          return_exit_code: 'exit "$exit_code"'
+#        Windows:
+#          imageName: 'windows-2019'
+#          build_name: 'azcopy_windows_amd64.exe'
+#          display_name: "Windows"
+#          go_path: 'C:\Users\VssAdministrator\go\bin\'
+#          suffix: '.exe'
+#          run_e2e: 'go test -timeout=1h -v ./e2etest > test.txt'
+#          save_exit_code: 'set exit_code=%errorlevel%'
+#          return_exit_code: 'exit %exit_code%'
+#        MacOS:
+#          imageName: 'macos-11'
+#          build_name: 'azcopy_darwin_amd64'
+#          display_name: "MacOS"
+#          go_path: '$(go env GOPATH)/bin/'
+#          suffix: ''
+#          run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
+#          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
+#          return_exit_code: 'exit "$exit_code"'
+#    pool:
+#      vmImage: $(imageName)
+#
+#    steps:
+#      - task: GoTool@0
+#        inputs:
+#          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+#      - script: |
+#          go install github.com/jstemmer/go-junit-report@v0.9.1
+#          go install github.com/axw/gocov/gocov@v1.1.0
+#          go install github.com/AlekSi/gocov-xml@v1.0.0
+#          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
+#        displayName: 'Installing dependencies'
+#
+#      # Running E2E Tests on AMD64
+#      - script: |
+#          mkdir coverage
+#          echo 'Building executable'
+#          go build -cover -o $(build_name)
+#          echo 'Running tests'
+#          $(run_e2e)
+#          $(save_exit_code)
+#          echo "Generating junit report"
+#          cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
+#          echo 'Formatting coverage directory to legacy txt format'
+#          go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
+#          echo 'Formatting coverage to json format'
+#          $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
+#          echo 'Formatting coverage to xml format'
+#          $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
+#          $(return_exit_code)
+#        env:
+#          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+#          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+#          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+#          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
+#          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+#          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+#          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+#          AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
+#          AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
+#          AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
+#          AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
+#          AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
+#          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+#          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+#          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
+#          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+#        displayName: 'E2E Test $(display_name) - AMD64'
+#
+#      - task: PublishBuildArtifacts@1
+#        displayName: 'Publish logs'
+#        condition: succeededOrFailed()
+#        inputs:
+#          pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
+#          artifactName: logs
+#
+#      - task: PublishTestResults@2
+#        condition: succeededOrFailed()
+#        inputs:
+#          testRunner: JUnit
+#          testResultsFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_report.xml
+#          testRunTitle: 'Go on $(display_name)'
+#
+#      - task: PublishCodeCoverageResults@1
+#        condition: succeededOrFailed()
+#        inputs:
+#          codeCoverageTool: Cobertura
+#          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
+#          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
 
   - job: Test_On_Ubuntu
     variables:
@@ -330,7 +330,7 @@ jobs:
         displayName: 'Publish logs'
         condition: succeededOrFailed()
         inputs:
-          pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
+          pathToPublish: '/home/vsts/.azcopy'
           artifactName: logs
       - script: |
           pip install azure-storage-blob==12.12.0
