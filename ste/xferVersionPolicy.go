@@ -46,15 +46,11 @@ func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// get the service api version value using the ServiceAPIVersionOverride set in the context.
 	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
 		version := value.(string)
-		if version == "default" {
-			if strings.Contains(req.Raw().URL.Host, ".blob") {
+		if version == "2020-10-02" {
+			if strings.Contains(req.Raw().URL.String(), ".blob.") {
 				version = "2023-08-03"
-			} else if strings.Contains(req.Raw().URL.Host, ".file") {
+			} else if strings.Contains(req.Raw().URL.String(), ".file.") {
 				version = "2022-11-02"
-			} else if strings.Contains(req.Raw().URL.Host, ".dfs") {
-				version = "2020-10-02"
-			} else {
-				version = "2020-10-02"
 			}
 		}
 		req.Raw().Header["x-ms-version"] = []string{value.(string)}
