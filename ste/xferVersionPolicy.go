@@ -37,7 +37,7 @@ var DefaultServiceApiVersion = common.GetLifecycleMgr().GetEnvironmentVariable(c
 type versionPolicy struct {
 }
 
-func newVersionPolicy() policy.Policy {
+func NewVersionPolicy() policy.Policy {
 	return &versionPolicy{}
 }
 

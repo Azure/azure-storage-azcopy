@@ -132,7 +132,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	// TODO (gapra): Does this have to happen this happen here?
 	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
-	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), newVersionPolicy()}
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
 	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newColdTierPolicy(), NewTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
 
