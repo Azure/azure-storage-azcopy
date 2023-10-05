@@ -132,9 +132,9 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	// TODO (gapra): Does this have to happen this happen here?
 	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
-	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), newVersionPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newColdTierPolicy(), NewTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newColdTierPolicy(), NewTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
@@ -709,7 +709,7 @@ func (jpm *jobPartMgr) ReleaseAConnection() {
 
 func (jpm *jobPartMgr) ShouldLog(level common.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
 func (jpm *jobPartMgr) Log(level common.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
-func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
+func (jpm *jobPartMgr) Panic(err error)                       { jpm.jobMgr.Panic(err) }
 func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jpm.jobMgr.ChunkStatusLogger()
 }
