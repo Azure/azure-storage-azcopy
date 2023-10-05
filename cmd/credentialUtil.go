@@ -173,7 +173,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		RequestLogOptions: ste.RequestLogOptions{
 			SyslogDisabled: common.IsForceLoggingDisabled(),
 		},
-	}, nil, nil)
+	})
 	credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
 	if isSASExisted := sas.Signature() != ""; isSASExisted {
 		if isMDAccount {
@@ -630,9 +630,9 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logLevel common.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
+func createClientOptions(logLevel common.LogLevel) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
-	logOptions.ShouldLog = func(level common.LogLevel) bool {return level <= logLevel}
+	logOptions.ShouldLog = func(level common.LogLevel) bool { return level <= logLevel }
 
 	if azcopyScanningLogger != nil {
 		logOptions.Log = azcopyScanningLogger.Log
@@ -644,7 +644,7 @@ func createClientOptions(logLevel common.LogLevel, trailingDot *common.TrailingD
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, trailingDot, from)
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
