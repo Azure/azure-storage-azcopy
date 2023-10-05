@@ -257,24 +257,24 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
 
     if not clean_test_filesystem(test_bfs_account_url.rstrip("/").rstrip("\\")):  # rstrip because clean fails if trailing /
         print("failed to clean test filesystem.")
-    # if not clean_test_container(test_container_url):
-    #     print("failed to clean test blob container.")
-    # if not clean_test_container(test_oauth_container_validate_sas_url):
-    #     print("failed to clean OAuth test blob container.")
-    # if not clean_test_container(test_premium_account_contaier_url):
-    #     print("failed to clean premium container.")
-    # if not clean_test_blob_account(test_s2s_src_blob_account_url):
-    #     print("failed to clean s2s blob source account.")
-    # if not clean_test_file_account(test_s2s_src_file_account_url):
-    #     print("failed to clean s2s file source account.")
-    # if not clean_test_blob_account(test_s2s_dst_blob_account_url):
-    #     print("failed to clean s2s blob destination account.")
-    # if not clean_test_s3_account(test_s2s_src_s3_service_url):
-    #     print("failed to clean s3 account.")
-    # if not clean_test_gcp_account(test_s2s_src_gcp_service_url):
-    #     print("failed to clean GCS account")
-    # if not clean_test_share(test_share_url):
-    #     print("failed to clean test share.")
+    if not clean_test_container(test_container_url):
+        print("failed to clean test blob container.")
+    if not clean_test_container(test_oauth_container_validate_sas_url):
+        print("failed to clean OAuth test blob container.")
+    if not clean_test_container(test_premium_account_contaier_url):
+        print("failed to clean premium container.")
+    if not clean_test_blob_account(test_s2s_src_blob_account_url):
+        print("failed to clean s2s blob source account.")
+    if not clean_test_file_account(test_s2s_src_file_account_url):
+        print("failed to clean s2s file source account.")
+    if not clean_test_blob_account(test_s2s_dst_blob_account_url):
+        print("failed to clean s2s blob destination account.")
+    if not clean_test_s3_account(test_s2s_src_s3_service_url):
+        print("failed to clean s3 account.")
+    if not clean_test_gcp_account(test_s2s_src_gcp_service_url):
+        print("failed to clean GCS account")
+    if not clean_test_share(test_share_url):
+        print("failed to clean test share.")
 
     return True
 
