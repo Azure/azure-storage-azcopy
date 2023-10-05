@@ -530,9 +530,9 @@ def execute_azcopy_command(command):
 
     try:
         # executing the command with timeout to set 3 minutes / 360 sec.
-        subprocess.check_output(
+        print(subprocess.check_output(
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
-            universal_newlines=True)
+            universal_newlines=True))
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
         print("command failed with error code " , exec.returncode , " and message " + exec.output)
