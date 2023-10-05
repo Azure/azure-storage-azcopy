@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"io"
 	"os"
 	"path/filepath"
@@ -94,7 +96,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
-		fc, err = file.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, nil)
+		fc, err = file.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, &file.ClientOptions{ClientOptions: azcore.ClientOptions{APIVersion: ste.DefaultServiceApiVersion}})
 	}
 	if err != nil {
 		fmt.Printf("error creating client. failed with error %s\n", err.Error())
@@ -194,7 +196,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
-		fsc, err = filesystem.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, nil)
+		fsc, err = filesystem.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, &filesystem.ClientOptions{ClientOptions: azcore.ClientOptions{APIVersion: ste.DefaultServiceApiVersion}})
 	}
 	if err != nil {
 		fmt.Printf("error creating client. failed with error %s\n", err.Error())
