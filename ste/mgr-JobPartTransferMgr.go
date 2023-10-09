@@ -18,7 +18,7 @@ import (
 
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
-	Info() TransferInfo
+	Info() *TransferInfo
 	ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
@@ -255,9 +255,9 @@ func (jptm *jobPartTransferMgr) GetSourceCompressionType() (common.CompressionTy
 	return common.GetCompressionType(encoding)
 }
 
-func (jptm *jobPartTransferMgr) Info() TransferInfo {
+func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	if jptm.transferInfo != nil {
-		return *jptm.transferInfo
+		return jptm.transferInfo
 	}
 
 	plan := jptm.jobPartMgr.Plan()
@@ -366,7 +366,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		}
 	}
 
-	jptm.transferInfo = &TransferInfo{
+	return &TransferInfo{
 		JobID:                          plan.JobID,
 		BlockSize:                      blockSize,
 		Source:                         src,
@@ -390,8 +390,6 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		S2SSrcBlobTier:    srcBlobTier,
 		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 	}
-
-	return *jptm.transferInfo
 }
 
 func (jptm *jobPartTransferMgr) Context() context.Context {

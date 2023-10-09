@@ -41,7 +41,7 @@ type blobDownloader struct {
 	pageRangeOptimizer *pageRangeOptimizer
 
 	jptm   IJobPartTransferMgr
-	txInfo TransferInfo
+	txInfo *TransferInfo
 }
 
 func (bd *blobDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {

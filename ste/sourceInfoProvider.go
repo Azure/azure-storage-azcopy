@@ -115,7 +115,7 @@ type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvid
 // return FRESH (up to date) data.
 type defaultRemoteSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 }
 
 func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (*defaultRemoteSourceInfoProvider, error) {

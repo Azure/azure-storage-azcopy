@@ -70,9 +70,9 @@ type symlinkDownloader interface {
 // smbPropertyAwareDownloader is a windows-triggered interface.
 // Code outside of windows-specific files shouldn't implement this ever.
 type smbPropertyAwareDownloader interface {
-	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
+	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 
-	PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
+	PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }
 
 type downloaderFactory func() downloader

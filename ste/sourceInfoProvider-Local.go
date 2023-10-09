@@ -30,7 +30,7 @@ import (
 // Source info provider for local files
 type localFileSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 }
 
 func (f localFileSourceInfoProvider) ReadLink() (string, error) {

@@ -64,7 +64,7 @@ type blockBlobSenderBase struct {
 	completedBlockList     map[int]string
 }
 
-func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
+func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
 	chunkSize = transferInfo.BlockSize
 	srcSize := transferInfo.SourceSize
 	numChunks = getNumChunks(srcSize, chunkSize)

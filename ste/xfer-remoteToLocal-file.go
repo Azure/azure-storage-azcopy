@@ -456,7 +456,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 	commonDownloaderCompletion(jptm, info, common.EEntityType.File())
 }
 
-func commonDownloaderCompletion(jptm IJobPartTransferMgr, info TransferInfo, entityType common.EntityType) {
+func commonDownloaderCompletion(jptm IJobPartTransferMgr, info *TransferInfo, entityType common.EntityType) {
 redoCompletion:
 	// note that we do not really know whether the context was canceled because of an error, or because the user asked for it
 	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
@@ -549,7 +549,7 @@ func deleteFile(destinationPath string) error {
 }
 
 // tries to delete file, but if that fails just logs and returns
-func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
+func tryDeleteFile(info *TransferInfo, jptm IJobPartTransferMgr) {
 	// skip deleting if we are targeting dev null and throwing away the data
 	if strings.EqualFold(common.Dev_Null, info.Destination) {
 		return
