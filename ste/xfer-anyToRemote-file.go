@@ -208,7 +208,7 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 }
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
-func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())
@@ -585,7 +585,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 }
 
 // commonSenderCompletion is used for both files and folders
-func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInfo) {
+func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info *TransferInfo) {
 
 	jptm.EnsureDestinationUnlocked()
 

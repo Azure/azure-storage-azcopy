@@ -30,7 +30,7 @@ import (
 
 type azureFilesDownloader struct {
 	jptm   IJobPartTransferMgr
-	txInfo TransferInfo
+	txInfo *TransferInfo
 	sip    ISourceInfoProvider
 }
 

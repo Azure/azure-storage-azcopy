@@ -289,7 +289,7 @@ func (u *azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action
 	return err
 }
 
-func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destURL string) (stage string, err error) {
+func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destURL string) (stage string, err error) {
 	if !info.PreserveSMBPermissions.IsTruthy() {
 		return "", nil
 	}
@@ -340,7 +340,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info TransferInfo, destURL
 	return "", nil
 }
 
-func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info TransferInfo) (stage string, err error) {
+func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info *TransferInfo) (stage string, err error) {
 	if !info.PreserveSMBInfo {
 		return "", nil
 	}

@@ -177,6 +177,11 @@ type jobPartMgr struct {
 	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
+	// These fields hold the container/fileshare client of this jobPart,
+	// whatever is appropriate for this scenario
+	sourceClient any
+	destinationClient any 
+
 	credInfo               common.CredentialInfo
 	clientOptions          azcore.ClientOptions
 	s2sSourceCredInfo      common.CredentialInfo
@@ -370,6 +375,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}
+
+		//build transferInfo after we've set transferIndex
+		jptm.transferInfo = jptm.Info()
 		jpm.Log(common.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 
 		// ===== TEST KNOB

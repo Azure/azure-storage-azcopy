@@ -13,7 +13,7 @@ import (
 
 type gcpSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 
 	rawSourceURL *url.URL
 

@@ -55,6 +55,8 @@ type IJobMgr interface {
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 		destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
+	AddJobPart2(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceClient any,
+		destinationClient any, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
@@ -411,6 +413,61 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 	jm.Log(common.LogInfo, msg)
 }
 
+// initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
+func (jm *jobMgr) AddJobPart2(partNum PartNumber,
+							  planFile JobPartPlanFileName,
+							  existingPlanMMF *JobPartPlanMMF,
+							  sourceClient any,
+							  destiationClient any,
+							  scheduleTransfers bool,
+							  completionChan chan struct{}) IJobPartMgr {
+	jpm := &jobPartMgr{
+		jobMgr:            jm,
+		filename:          planFile,
+		sourceClient:      sourceClient,
+		destinationClient: destiationClient,
+		pacer:             jm.pacer,
+		slicePool:         jm.slicePool,
+		cacheLimiter:      jm.cacheLimiter,
+		fileCountLimiter:  jm.fileCountLimiter,
+		closeOnCompletion: completionChan,
+	}
+	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
+	if existingPlanMMF == nil {
+		jpm.planMMF = jpm.filename.Map()
+	} else {
+		jpm.planMMF = existingPlanMMF
+	}
+
+	jm.jobPartMgrs.Set(partNum, jpm)
+	jm.setFinalPartOrdered(partNum, jpm.planMMF.Plan().IsFinalPart)
+	jm.setDirection(jpm.Plan().FromTo)
+
+	jm.initMu.Lock()
+	defer jm.initMu.Unlock()
+	if jm.initState == nil {
+		var logger common.ILogger = jm
+		jm.initState = &jobMgrInitState{
+			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+			exclusiveDestinationMapHolder:  &atomic.Value{},
+		}
+		jm.initState.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(jpm.Plan().FromTo, runtime.GOOS))
+	}
+	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
+	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(partNum, jpm.Plan().FromTo)
+
+	if scheduleTransfers {
+		// If the schedule transfer is set to true
+		// Instead of the scheduling the Transfer for given JobPart
+		// JobPart is put into the partChannel
+		// from where it is picked up and scheduled
+		// jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
+		jm.QueueJobParts(jpm)
+	}
+	return jpm
+}
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 	destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr {

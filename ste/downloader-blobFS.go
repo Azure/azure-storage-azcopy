@@ -30,7 +30,7 @@ import (
 
 type blobFSDownloader struct {
 	jptm IJobPartTransferMgr
-	txInfo TransferInfo
+	txInfo *TransferInfo
 }
 
 func newBlobFSDownloader() downloader {
