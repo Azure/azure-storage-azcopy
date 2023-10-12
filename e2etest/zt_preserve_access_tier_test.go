@@ -99,3 +99,31 @@ func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
 		},
 	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }
+
+func TestSetTier_V2ToPremiumBBAccountCool(t *testing.T) {
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		accessTier: to.Ptr(blob.AccessTierCool),
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.PremiumBlockBlob(), EAccountType.Standard(), "")
+}
+
+func TestSetTier_V2ToPremiumBBAccountHot(t *testing.T) {
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		accessTier: to.Ptr(blob.AccessTierHot),
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.PremiumBlockBlob(), EAccountType.Standard(), "")
+}

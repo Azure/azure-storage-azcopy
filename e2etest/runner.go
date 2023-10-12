@@ -111,7 +111,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
-		set("preserve-posix-properties", p.preservePOSIXProperties, "")
+		set("preserve-posix-properties", p.preservePOSIXProperties, false)
 
 		switch p.symlinkHandling {
 		case common.ESymlinkHandlingType.Follow():

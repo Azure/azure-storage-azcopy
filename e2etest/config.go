@@ -65,6 +65,9 @@ func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, str
 	case EAccountType.Classic():
 		name = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_NAME")
 		key = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_KEY")
+	case EAccountType.PremiumBlockBlob():
+		name = os.Getenv("AZCOPY_E2E_PREMIUMBB_ACCOUNT_NAME")
+		key = os.Getenv("AZCOPY_E2E_PREMIUMBB_ACCOUNT_KEY")
 	default:
 		panic("Only the standard account type is supported for the moment.")
 	}
@@ -113,6 +116,7 @@ func (AccountType) HierarchicalNamespaceEnabled() AccountType { return AccountTy
 func (AccountType) Classic() AccountType                      { return AccountType(3) }
 func (AccountType) StdManagedDisk() AccountType               { return AccountType(4) }
 func (AccountType) OAuthManagedDisk() AccountType             { return AccountType(5) }
+func (AccountType) PremiumBlockBlob() AccountType             { return AccountType(6) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
