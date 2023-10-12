@@ -13,12 +13,12 @@ import (
 
 type blobSymlinkSender struct {
 	destinationClient *blockblob.Client
-	jptm             IJobPartTransferMgr
-	sip              ISourceInfoProvider
-	headersToApply   blob.HTTPHeaders
-	metadataToApply  common.Metadata
-	destBlobTier     *blob.AccessTier
-	blobTagsToApply common.BlobTags
+	jptm              IJobPartTransferMgr
+	sip               ISourceInfoProvider
+	headersToApply    blob.HTTPHeaders
+	metadataToApply   common.Metadata
+	destBlobTier      *blob.AccessTier
+	blobTagsToApply   common.BlobTags
 }
 
 func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
@@ -32,20 +32,20 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISou
 	var destBlobTier *blob.AccessTier
 	blockBlobTierOverride, _ := jptm.BlobTiers()
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
-		destBlobTier = to.Ptr(blockBlobTierOverride.ToAccessTierType())
+		destBlobTier = blockBlobTierOverride.ToAccessTierType()
 	} else {
 		destBlobTier = nil
 	}
 
 	var out sender
 	ssend := blobSymlinkSender{
-		jptm:             jptm,
-		sip:              sip,
+		jptm:              jptm,
+		sip:               sip,
 		destinationClient: destinationClient,
-		metadataToApply:  props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
-		headersToApply:   props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		blobTagsToApply:  props.SrcBlobTags,
-		destBlobTier:     destBlobTier,
+		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
+		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
+		blobTagsToApply:   props.SrcBlobTags,
+		destBlobTier:      destBlobTier,
 	}
 	fromTo := jptm.FromTo()
 	if fromTo.IsUpload() {
@@ -66,11 +66,11 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 
 	_, err = s.destinationClient.Upload(s.jptm.Context(), streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{
-			HTTPHeaders: &s.headersToApply,
-			Metadata: s.metadataToApply,
-			Tier: s.destBlobTier,
-			Tags: s.blobTagsToApply,
-			CPKInfo: s.jptm.CpkInfo(),
+			HTTPHeaders:  &s.headersToApply,
+			Metadata:     s.metadataToApply,
+			Tier:         s.destBlobTier,
+			Tags:         s.blobTagsToApply,
+			CPKInfo:      s.jptm.CpkInfo(),
 			CPKScopeInfo: s.jptm.CpkScopeInfo(),
 		})
 	return err

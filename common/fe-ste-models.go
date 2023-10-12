@@ -29,6 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/JeffreyRichter/enum/enum"
 	"math"
 	"os"
 	"reflect"
@@ -36,7 +37,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"github.com/JeffreyRichter/enum/enum"
 )
 
 const (
@@ -332,6 +332,7 @@ func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
+
 const (
 	// LogNone tells a logger not to log any entries passed to it.
 	LogNone LogLevel = iota
@@ -401,6 +402,7 @@ func (ll LogLevel) String() string {
 type LogSanitizer interface {
 	SanitizeLogMessage(raw string) string
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EJobPriority = JobPriority(0)
 
@@ -838,8 +840,8 @@ func (bbt *BlockBlobTier) Parse(s string) error {
 	return err
 }
 
-func (bbt BlockBlobTier) ToAccessTierType() blob.AccessTier {
-	return blob.AccessTier(bbt.String())
+func (bbt BlockBlobTier) ToAccessTierType() *blob.AccessTier {
+	return to.Ptr(blob.AccessTier(bbt.String()))
 }
 
 func (bbt BlockBlobTier) MarshalJSON() ([]byte, error) {
@@ -883,8 +885,8 @@ func (pbt *PageBlobTier) Parse(s string) error {
 	return err
 }
 
-func (pbt PageBlobTier) ToAccessTierType() blob.AccessTier {
-	return blob.AccessTier(pbt.String())
+func (pbt PageBlobTier) ToAccessTierType() *blob.AccessTier {
+	return to.Ptr(blob.AccessTier(pbt.String()))
 }
 
 func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
