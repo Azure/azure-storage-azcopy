@@ -1,5 +1,61 @@
 package e2etest
 
+import (
+	"fmt"
+	"runtime/debug"
+	"strings"
+)
+
+// ====== NoError ======
+
+// NoError works like IsNil but only asserts when there is an error, and formats errors
+type NoError struct {
+	// set stackTrace to true to get the panic stack trace
+	stackTrace bool
+}
+
+func (n NoError) Name() string {
+	return "NoError"
+}
+
+func (n NoError) MaxArgs() int {
+	return 0
+}
+
+func (n NoError) MinArgs() int {
+	return 0
+}
+
+func (n NoError) Assert(items ...any) bool {
+	for _, v := range items {
+		if _, ok := v.(error); ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (n NoError) Format(items ...any) string {
+	out := ""
+	for _, v := range items {
+		if err, ok := v.(error); ok {
+			out += err.Error() + "\n\n"
+		} else if v != nil {
+			out += fmt.Sprintf("item %s was not an error, but also not nil\n\n", v)
+		}
+	}
+
+	if n.stackTrace {
+		stack := debug.Stack()
+		out += string(stack)
+	}
+
+	strings.TrimSuffix(out, "\n\n")
+
+	return out
+}
+
 // ====== IsNil ======
 
 // IsNil checks that all parameters are nil.
@@ -14,7 +70,7 @@ func (i IsNil) MaxArgs() int {
 }
 
 func (i IsNil) MinArgs() int {
-	return 2
+	return 0
 }
 
 func (i IsNil) Assert(items ...any) bool {

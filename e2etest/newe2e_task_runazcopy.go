@@ -1,16 +1,9 @@
 package e2etest
 
-type RunAzCopyScenarioStep struct {
-	Verb          string
-	Targets       []ResourceManager
-	Flags         map[string]string
-	PlanStateName string
-}
+// AzCopyJobPlan todo probably load the job plan directly?
+type AzCopyJobPlan struct{}
 
-func (r RunAzCopyScenarioStep) MockVariations(mockState ScenarioState) []MockedVariation {
-	return []MockedVariation{{StrVariation{r.Verb, true}, mockState}}
-}
-
-func (r RunAzCopyScenarioStep) Run(a TestingAsserter, state ScenarioState, variation ScenarioVariation) ScenarioState {
-	return state
+// RunAzCopy todo define more cleanly, implement
+func RunAzCopy(sm *ScenarioVariationManager, verb string, params []ResourceManager, flags map[string]string, env map[string]string) (*AzCopyJobPlan, error) {
+	return nil, nil
 }

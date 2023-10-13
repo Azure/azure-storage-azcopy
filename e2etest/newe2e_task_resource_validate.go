@@ -1,14 +1,12 @@
 package e2etest
 
-type ResourceValidationScenarioStep struct {
-	Target     ResourceManager
-	Comparison ResourceSetupConfig
-}
+/*
+ValidateResource
 
-func (r ResourceValidationScenarioStep) MockVariations(mockState ScenarioState) (variations []MockedVariation) {
-	return []MockedVariation{{StrVariation{"ValidateResource", false}, mockState}}
-}
+todo: implement, perhaps add some features to resource definitions to tack on a prefix or perform other similar mutations of object path to AzCopy.
 
-func (r ResourceValidationScenarioStep) Run(a TestingAsserter, state ScenarioState, variation ScenarioVariation) ScenarioState {
-	return state
+Realistically, ValidateResource will be the inverse of CreateResource, utilizing the same concept of resource definitions.
+*/
+func ValidateResource(sm *ScenarioVariationManager, target ResourceManager, definition ResourceDefinition) {
+	return
 }

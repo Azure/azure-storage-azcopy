@@ -5,80 +5,51 @@ import (
 	"testing"
 )
 
-func TestSingleFileCopyS2S(t *testing.T) {
-	SourceRM := "Source"
-	DestRM := "Dest"
-	FileBody := []byte("hello, world!")
+func init() {
+	suiteManager.RegisterSuite(&ExampleSuite{})
+}
 
-	RunScenarioPipeline(
-		t,
-		[]ScenarioStepPreparer{
-			func(state ScenarioState) ScenarioStep { // Example of injecting a custom step
-				return CustomScenarioStep{
-					Variations: func(mockState ScenarioState) []MockedVariation {
-						commands := []string{"copy", "sync"}
-						out := make([]MockedVariation, len(commands))
+type ExampleSuite struct{}
 
-						for k, v := range commands {
-							newState := mockState.Clone()
-							newState.CustomState["command"] = v
+func (s *ExampleSuite) SetupSuite(a Asserter) {
+	a.Log("Setup logging!")
+}
 
-							out[k] = MockedVariation{StrVariation{v, false}, newState}
-						}
+func (s *ExampleSuite) TeardownSuite(a Asserter) {
+	a.Log("Teardown logging!")
+	//a.Error("Oops!")
+}
 
-						return out
-					},
-					Runner: func(a TestingAsserter, state ScenarioState, variation ScenarioVariation) ScenarioState {
-						state.CustomState["command"] = variation.ScenarioStepName()
-						return state
-					},
-				}
-			},
-			func(state ScenarioState) ScenarioStep { // Prepare a source
-				return ResourceSetupScenarioStep{
-					ResourceName: SourceRM,
-					Locations:    []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()},
-					Setup: ResourceSetupObject{
-						Name: "src",
-						Body: FileBody,
-					},
-				}
-			},
-			func(state ScenarioState) ScenarioStep { // Prepare a destination
-				return ResourceSetupScenarioStep{
-					ResourceName: DestRM,
-					Locations:    []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()},
-					Setup: ResourceSetupObject{
-						Name: "dst",
-					},
-				}
-			},
-			func(state ScenarioState) ScenarioStep { // Run AzCopy
-				return RunAzCopyScenarioStep{
-					Verb:    state.CustomState["command"].(string),
-					Targets: []ResourceManager{state.Resources[SourceRM], state.Resources[DestRM]},
-					Flags: map[string]string{
-						"as-subdir": "false",
-					},
-					PlanStateName: "plan",
-				}
-			},
-			func(state ScenarioState) ScenarioStep { // Validate against the real resource (if necessary)
-				return ResourceValidationScenarioStep{
-					Target: state.Resources[DestRM],
-					Comparison: ResourceSetupObject{
-						Name: "dst",
-						Body: FileBody,
-					},
-				}
-			},
-			func(state ScenarioState) ScenarioStep { // Validate the plan file (if necessary)
-				return AzCopyJobPlanValidationScenarioStep{
-					TargetPlan:       state.CustomState["plan"].(AzCopyJobPlan),
-					ExpectedEntities: []string{""}, // todo: this will definitely change, likely to similar format as the resource validation step.
-				}
-			},
-		},
+func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationManager) {
+	acct := AccountRegistry[PrimaryStandardAcct]
+	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()}))
+	svm.InsertVariationSeparator("->")
+	dstService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()}))
+
+	_, _ = srcService, dstService
+
+	svm.InsertVariationSeparator(":")
+	//body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+
+	//srcObj := CreateResource(svm, srcService, ResourceDefinitionObject{
+	//	Name: PtrOf("foobar"),
+	//	Body: body,
+	//})
+	//
+	//dstObj := CreateResource(svm, dstService, ResourceDefinitionContainer{}).(ContainerResourceManager).GetObject(svm, "foobar", common.EEntityType.File())
+
+	RunAzCopy(
+		svm,
+		ResolveVariation(svm, []string{"copy", "sync"}),
+		[]ResourceManager{},
 		nil,
-	)
+		nil)
+
+	//ValidateResource(svm, dstObj, ResourceDefinitionObject{
+	//	Body: body,
+	//})
+}
+
+func TestSingleFileCopyS2S(t *testing.T) {
+
 }

@@ -13,10 +13,15 @@ type ObjectContentContainer interface {
 	//CRC64() uint64
 }
 
-func NewRandomObjectContentContainer(size int64) (ObjectContentContainer, error) {
+func SizeFromString(objectSize string) int64 {
+	return 0 // todo stub
+}
+
+func NewRandomObjectContentContainer(a Asserter, size int64) ObjectContentContainer {
 	buf := make([]byte, size)
 	_, err := rand.Read(buf)
-	return &ObjectContentContainerBuffer{buf}, err
+	a.NoError("Generate random data", err)
+	return &ObjectContentContainerBuffer{buf}
 }
 
 func NewZeroObjectContentContainer(size int64) ObjectContentContainer {

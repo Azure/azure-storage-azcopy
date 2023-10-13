@@ -51,3 +51,23 @@ func IsZero[T comparable](in T) bool {
 	var zero T
 	return in == zero
 }
+
+func ListOfAny[T any](in []T) []any {
+	out := make([]any, len(in))
+
+	for k, v := range in {
+		out[k] = v
+	}
+
+	return out
+}
+
+func CloneMap[K comparable, V any](in map[K]V) map[K]V {
+	out := make(map[K]V)
+
+	for k, v := range in {
+		out[k] = v
+	}
+
+	return out
+}

@@ -1,16 +1,8 @@
 package e2etest
 
-type AzCopyJobPlan struct{} // nothing here yet
+/*
+ValidatePlanFiles
 
-type AzCopyJobPlanValidationScenarioStep struct {
-	TargetPlan       AzCopyJobPlan
-	ExpectedEntities []string
-}
-
-func (s AzCopyJobPlanValidationScenarioStep) MockVariations(mockState ScenarioState) (variations []MockedVariation) {
-	return []MockedVariation{{StrVariation{"JobPlanValidation", false}, mockState}}
-}
-
-func (s AzCopyJobPlanValidationScenarioStep) Run(a TestingAsserter, state ScenarioState, variation ScenarioVariation) ScenarioState {
-	return state
-}
+todo: Determine an interface for this. We could have it act like ValidateResource where it will validate against a resource definition.
+*/
+func ValidatePlanFiles(sm *ScenarioVariationManager, plan *AzCopyJobPlan, todo any) {}

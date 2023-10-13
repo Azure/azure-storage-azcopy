@@ -16,10 +16,10 @@ import (
 //}
 
 var FrameworkHooks = []TestFrameworkHook{
-	{HookName: "Config", SetupHook: LoadConfigHook},
-	{HookName: "OAuth Cache", SetupHook: SetupOAuthCache},
-	{HookName: "ARM Client", SetupHook: SetupArmClient, TeardownHook: TeardownArmClient},
-	{HookName: "Default accts", SetupHook: AccountRegistryInitHook, TeardownHook: AccountRegistryCleanupHook},
+	//{HookName: "Config", SetupHook: LoadConfigHook},
+	//{HookName: "OAuth Cache", SetupHook: SetupOAuthCache},
+	//{HookName: "ARM Client", SetupHook: SetupArmClient, TeardownHook: TeardownArmClient},
+	//{HookName: "Default accts", SetupHook: AccountRegistryInitHook, TeardownHook: AccountRegistryCleanupHook},
 }
 
 type TestFrameworkHook struct {
@@ -27,6 +27,10 @@ type TestFrameworkHook struct {
 	SetupHook    func() TieredError
 	TeardownHook func() TieredError
 	Ran          bool
+}
+
+func Test(t *testing.T) {
+	suiteManager.RunSuites(t)
 }
 
 func TestMain(m *testing.M) {
