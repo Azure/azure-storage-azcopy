@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
@@ -154,8 +155,8 @@ func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 	return resp.ACL, nil
 }
 
-func (p *blobSourceInfoProvider) BlobTier() blob.AccessTier {
-	return p.transferInfo.S2SSrcBlobTier
+func (p *blobSourceInfoProvider) BlobTier() *blob.AccessTier {
+	return to.Ptr(p.transferInfo.S2SSrcBlobTier)
 }
 
 func (p *blobSourceInfoProvider) BlobType() blob.BlobType {

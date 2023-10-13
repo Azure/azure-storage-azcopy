@@ -46,7 +46,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 	}
 	srcPageBlobClient := common.CreatePageBlobClient(srcURL, jptm.S2SSourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
-	var destBlobTier blob.AccessTier
+	var destBlobTier *blob.AccessTier
 	var pageRangeOptimizer *pageRangeOptimizer
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
 		if blobSrcInfoProvider.BlobType() == blob.BlobTypePageBlob {
@@ -129,8 +129,8 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 		_, err = c.destPageBlobClient.UploadPagesFromURL(enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize,
 			&pageblob.UploadPagesFromURLOptions{
-				CPKInfo: c.jptm.CpkInfo(),
-				CPKScopeInfo: c.jptm.CpkScopeInfo(),
+				CPKInfo:                 c.jptm.CpkInfo(),
+				CPKScopeInfo:            c.jptm.CpkScopeInfo(),
 				CopySourceAuthorization: token,
 			})
 		if err != nil {
@@ -146,8 +146,8 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 //  2. open to extending the logic, which could be re-used for both download and s2s scenarios
 type pageRangeOptimizer struct {
 	srcPageBlobClient *pageblob.Client
-	ctx            context.Context
-	srcPageList    *pageblob.PageList // nil if src is not a page blob, or it was not possible to get a response
+	ctx               context.Context
+	srcPageList       *pageblob.PageList // nil if src is not a page blob, or it was not possible to get a response
 }
 
 func newPageRangeOptimizer(srcPageBlobClient *pageblob.Client, ctx context.Context) *pageRangeOptimizer {

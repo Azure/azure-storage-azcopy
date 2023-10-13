@@ -48,7 +48,7 @@ type blockBlobSenderBase struct {
 	numChunks           uint32
 	pacer               pacer
 	blockIDs            []string
-	destBlobTier        blob.AccessTier
+	destBlobTier        *blob.AccessTier
 
 	// Headers and other info that we will apply to the destination object.
 	// 1. For S2S, these come from the source service.
@@ -122,7 +122,7 @@ func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32
 	return fmt.Sprintf("%s%s%05d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*blockBlobSenderBase, error) {
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*blockBlobSenderBase, error) {
 	// compute chunk count
 	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit(), jptm.CacheLimiter().StrictLimit())
 	if err != nil {
@@ -146,7 +146,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	if (props.SrcMetadata["hdi_isfolder"] != nil && *props.SrcMetadata["hdi_isfolder"] == "true") ||
 		(props.SrcMetadata["Hdi_isfolder"] != nil && *props.SrcMetadata["Hdi_isfolder"] == "true") {
-		destBlobTier = ""
+		destBlobTier = nil
 	}
 
 	partNum, transferIndex := jptm.TransferIndex()
@@ -214,7 +214,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 
 		// commit the blocks.
 		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient, s.jptm.Context(), false) {
-			s.destBlobTier = ""
+			s.destBlobTier = nil
 		}
 
 		blobTags := s.blobTagsToApply
@@ -224,18 +224,18 @@ func (s *blockBlobSenderBase) Epilogue() {
 		}
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
-		destBlobTier := &s.destBlobTier
+		destBlobTier := s.destBlobTier
 		if s.jptm.IsSourceEncrypted() {
 			destBlobTier = nil
 		}
 
 		_, err := s.destBlockBlobClient.CommitBlockList(jptm.Context(), blockIDs,
 			&blockblob.CommitBlockListOptions{
-				HTTPHeaders: &s.headersToApply,
-				Metadata: s.metadataToApply,
-				Tier: destBlobTier,
-				Tags: blobTags,
-				CPKInfo: s.jptm.CpkInfo(),
+				HTTPHeaders:  &s.headersToApply,
+				Metadata:     s.metadataToApply,
+				Tier:         destBlobTier,
+				Tags:         blobTags,
+				CPKInfo:      s.jptm.CpkInfo(),
 				CPKScopeInfo: s.jptm.CpkScopeInfo(),
 			})
 		if err != nil {
