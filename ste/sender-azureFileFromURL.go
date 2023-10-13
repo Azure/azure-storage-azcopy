@@ -21,7 +21,10 @@
 package ste
 
 import (
+	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"net/http"
 )
 
 type urlToAzureFileCopier struct {
@@ -61,8 +64,14 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		if err := u.pacer.RequestTrafficAllocation(u.jptm.Context(), adjustedChunkSize); err != nil {
 			u.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
+		// destination auth is OAuth, so we need to use the special policy to add the x-ms-file-request-intent header since the SDK has not yet implemented it.
+		ctx := u.ctx
+		if u.jptm.CredentialInfo().CredentialType == common.ECredentialType.OAuthToken() {
+			ctx = context.WithValue(u.ctx, addFileRequestIntent, true)
+		}
+
 		_, err := u.getFileClient().UploadRangeFromURL(
-			u.ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil)
+			ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil)
 		if err != nil {
 			u.jptm.FailActiveS2SCopy("Uploading range from URL", err)
 			return
@@ -72,4 +81,22 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 
 func (u *urlToAzureFileCopier) Epilogue() {
 	u.azureFileSenderBase.Epilogue()
+}
+
+type fileRequestIntent struct{}
+
+var addFileRequestIntent = fileRequestIntent{}
+
+type fileRequestIntentPolicy struct {
+}
+
+func newFileRequestIntentPolicy() policy.Policy {
+	return &fileRequestIntentPolicy{}
+}
+
+func (r *fileRequestIntentPolicy) Do(req *policy.Request) (*http.Response, error) {
+	if value := req.Raw().Context().Value(addFileRequestIntent); value != nil {
+		req.Raw().Header["x-ms-file-request-intent"] = []string{"backup"}
+	}
+	return req.Next()
 }
