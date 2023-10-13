@@ -159,7 +159,9 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 				jptm.FailActiveUpload("Getting hash", errNoHash)
 				return
 			}
-			u.headersToApply.BlobContentMD5 = md5Hash
+			if len(md5Hash) != 0 {
+				u.headersToApply.BlobContentMD5 = md5Hash
+			}
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
@@ -199,7 +201,9 @@ func (u *blockBlobUploader) Epilogue() {
 
 		md5Hash, ok := <-u.md5Channel
 		if ok {
-			u.headersToApply.BlobContentMD5 = md5Hash
+			if len(md5Hash) != 0 {
+				u.headersToApply.BlobContentMD5 = md5Hash
+			}
 		} else {
 			jptm.FailActiveSend("Getting hash", errNoHash)
 			return

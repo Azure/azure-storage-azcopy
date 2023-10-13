@@ -156,6 +156,9 @@ func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 }
 
 func (p *blobSourceInfoProvider) BlobTier() *blob.AccessTier {
+	if p.transferInfo.S2SSrcBlobTier == "" {
+		return nil
+	}
 	return to.Ptr(p.transferInfo.S2SSrcBlobTier)
 }
 
