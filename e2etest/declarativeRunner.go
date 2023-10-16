@@ -73,7 +73,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 
 	// determine source types
 	var sourceTypes []common.CredentialType
-	if fromTo.IsS2S() && fromTo != common.EFromTo.BlobBlob() {
+	if fromTo.IsS2S() && (fromTo != common.EFromTo.BlobBlob() && fromTo != common.EFromTo.BlobFile() && fromTo != common.EFromTo.FileFile()) {
 		// source must always be anonymous-- no exceptions until OAuth over S2S is introduced.
 		sourceTypes = []common.CredentialType{common.ECredentialType.Anonymous()}
 	} else {

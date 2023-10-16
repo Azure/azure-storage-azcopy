@@ -29,6 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/JeffreyRichter/enum/enum"
 	"math"
 	"os"
 	"reflect"
@@ -36,7 +37,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"github.com/JeffreyRichter/enum/enum"
 )
 
 const (
@@ -332,6 +332,7 @@ func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
+
 const (
 	// LogNone tells a logger not to log any entries passed to it.
 	LogNone LogLevel = iota
@@ -401,6 +402,7 @@ func (ll LogLevel) String() string {
 type LogSanitizer interface {
 	SanitizeLogMessage(raw string) string
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EJobPriority = JobPriority(0)
 
@@ -561,7 +563,7 @@ func (l Location) IsFolderAware() bool {
 }
 
 func (l Location) CanForwardOAuthTokens() bool {
-	return l == ELocation.Blob() || l == ELocation.BlobFS()
+	return l == ELocation.Blob() || l == ELocation.BlobFS() || l == ELocation.File()
 }
 
 func (l Location) SupportsHnsACLs() bool {

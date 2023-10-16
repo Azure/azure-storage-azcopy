@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 )
@@ -65,13 +66,21 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 			u.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
 		// destination auth is OAuth, so we need to use the special policy to add the x-ms-file-request-intent header since the SDK has not yet implemented it.
+		token, err := u.jptm.GetS2SSourceTokenCredential(u.jptm.Context())
+		if err != nil {
+			u.jptm.FailActiveS2SCopy("Getting source token credential", err)
+			return
+		}
 		ctx := u.ctx
-		if u.jptm.CredentialInfo().CredentialType == common.ECredentialType.OAuthToken() {
+		if u.jptm.CredentialInfo().CredentialType == common.ECredentialType.OAuthToken() || token != nil {
 			ctx = context.WithValue(u.ctx, addFileRequestIntent, true)
 		}
-
-		_, err := u.getFileClient().UploadRangeFromURL(
-			ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil)
+		ctx = context.WithValue(ctx, removeSourceContentCRC64, true)
+		_, err = u.getFileClient().UploadRangeFromURL(
+			ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize,
+			&file.UploadRangeFromURLOptions{
+				CopySourceAuthorization: token,
+			})
 		if err != nil {
 			u.jptm.FailActiveS2SCopy("Uploading range from URL", err)
 			return
@@ -87,14 +96,22 @@ type fileRequestIntent struct{}
 
 var addFileRequestIntent = fileRequestIntent{}
 
-type fileRequestIntentPolicy struct {
+type sourceContentCRC64 struct{}
+
+var removeSourceContentCRC64 = sourceContentCRC64{}
+
+type fileUploadRangeFromURLFixPolicy struct {
 }
 
-func newFileRequestIntentPolicy() policy.Policy {
-	return &fileRequestIntentPolicy{}
+func newFileUploadRangeFromURLFixPolicy() policy.Policy {
+	return &fileUploadRangeFromURLFixPolicy{}
 }
 
-func (r *fileRequestIntentPolicy) Do(req *policy.Request) (*http.Response, error) {
+func (r *fileUploadRangeFromURLFixPolicy) Do(req *policy.Request) (*http.Response, error) {
+	if value := req.Raw().Context().Value(removeSourceContentCRC64); value != nil {
+		delete(req.Raw().Header, "x-ms-source-content-crc64")
+	}
+
 	if value := req.Raw().Context().Value(addFileRequestIntent); value != nil {
 		req.Raw().Header["x-ms-file-request-intent"] = []string{"backup"}
 	}
