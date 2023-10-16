@@ -26,15 +26,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -222,22 +224,22 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		bURLParts.BlobName = ""
 		bURLParts.Snapshot = ""
 		bURLParts.VersionID = ""
-		containerClient := common.CreateContainerClient(bURLParts.String(), credInfo, nil, clientOptions)
 
 		if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
 			// Service level searches can't possibly be public.
 			return false
 		}
 
+		containerClient, _ := container.NewClientWithNoCredential(bURLParts.String(),
+										&container.ClientOptions{ClientOptions: clientOptions})
 		if _, err := containerClient.GetProperties(ctx, nil); err == nil {
 			return true
 		}
 
 		if !isContainer {
 			// Scenario 3: When resourceURL points to a blob
-			blobClient := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
-
-			if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
+			blobClient, _:= blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
+			if _, err = blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
 				return true
 			}
 		}

@@ -54,7 +54,12 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 
 	// step 1: create downloader instance for this transfer
 	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
-	dl := df()
+	dl, err := df(jptm)
+	if err != nil {
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
 
 	// step 2: get the source, destination info for the transfer.
 	fileSize := int64(info.SourceSize)

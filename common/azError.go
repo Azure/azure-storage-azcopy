@@ -58,3 +58,7 @@ func (err AzError) InvalidBlobName() AzError {
 func (err AzError) InvalidBlobOrWindowsName() AzError {
 	return AzError{uint64(2), "Invalid Blob or Windows Name.", ""}
 }
+
+func (err AzError) InvalidContainerClient() AzError {
+	return AzError{uint64(2), "Invalid type. Expecting a ", ""}
+}

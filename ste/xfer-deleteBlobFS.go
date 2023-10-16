@@ -2,14 +2,17 @@ package ste
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var logBlobFSDeleteWarnOnce = &sync.Once{}
@@ -65,7 +68,13 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 
 	// Deleting a filesystem
 	if datalakeURLParts.PathName == "" {
-		fsClient := common.CreateFilesystemClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		//fsClient := common.CreateFilesystemClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		fsClient, ok := jptm.SourceContainerClient().(*filesystem.Client)
+		if !ok {
+			transferDone(common.NewAzError(common.EAzError.InvalidContainerClient(), "FileSystem Client"))
+			return
+		}
+
 		_, err := fsClient.Delete(ctx, nil)
 		transferDone(err)
 		return

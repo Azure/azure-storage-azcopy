@@ -38,7 +38,15 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFa
 		return
 	}
 
-	dl, ok := df().(folderDownloader)
+	d, err := df(jptm)
+	if err != nil {
+		jptm.LogDownloadError(info.Source, info.Destination, "failed to create downloader", 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	dl, ok := d.(folderDownloader)
 	if !ok {
 		jptm.LogDownloadError(info.Source, info.Destination, "downloader implementation does not support folders", 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -50,7 +58,7 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFa
 	t := jptm.GetFolderCreationTracker()
 	defer t.StopTracking(info.Destination) // don't need it after this routine
 
-	err := common.CreateDirectoryIfNotExist(info.Destination, t) // we may create it here, or possible there's already a file transfer for the folder that has created it, or maybe it already existed before this job
+	err = common.CreateDirectoryIfNotExist(info.Destination, t) // we may create it here, or possible there's already a file transfer for the folder that has created it, or maybe it already existed before this job
 	if err != nil {
 		jptm.FailActiveDownload("ensuring destination folder exists", err)
 	} else {

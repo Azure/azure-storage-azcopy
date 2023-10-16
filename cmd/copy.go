@@ -1328,7 +1328,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := createClientOptions(common.LogNone, nil, nil)
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.LogNone, nil, nil)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1337,7 +1337,15 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobClient := common.CreateBlockBlobClient(u.String(), credInfo, nil, options)
+	var blockBlobClient *blockblob.Client
+	if credInfo.CredentialType.IsAzureOAuth() {
+		blockBlobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
+	} else {
+		blockBlobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
+	}
+	if err != nil {
+		return fmt.Errorf("fatal: Could not construct blob client: %s", err.Error())
+	}
 
 	metadataString := cca.metadata
 	metadataMap := common.Metadata{}

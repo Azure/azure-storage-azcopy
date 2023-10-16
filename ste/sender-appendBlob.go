@@ -23,9 +23,11 @@ package ste
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"time"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 
 	"golang.org/x/sync/semaphore"
 
@@ -68,7 +70,11 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	destAppendBlobClient := common.CreateAppendBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	c, ok := jptm.DestinationContainerClient().(*container.Client)
+	if !ok {
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
+	}
+	destAppendBlobClient := c.NewAppendBlobClient(transferInfo.SourceFilePath)
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {

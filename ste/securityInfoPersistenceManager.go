@@ -77,6 +77,9 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL st
 		return "", err
 	}
 	fileURLParts.SAS = filesas.QueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
+	
+	//GetPermission call only works against the share root, and not against a share snapshot
+	fileURLParts.ShareSnapshot = "" // clear the snapshot value
 	sddlKey := fileURLParts.String() + "|ID|" + id
 
 	sipm.sipmMu.Lock()
@@ -89,17 +92,7 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL st
 		return perm.(string), nil
 	}
 
-	actionableShareURL := common.CreateShareClient(shareURL, credInfo, credOpOptions, clientOptions)
-	// to clarify, the GetPermission call only works against the share root, and not against a share snapshot
-	// if we detect that the source is a snapshot, we simply get rid of the snapshot value
-	if len(fileURLParts.ShareSnapshot) != 0 {
-		fileURLParts, err := filesas.ParseURL(shareURL)
-		if err != nil {
-			return "", err
-		}
-		fileURLParts.ShareSnapshot = "" // clear the snapshot value
-		actionableShareURL = common.CreateShareClient(fileURLParts.String(), credInfo, credOpOptions, clientOptions)
-	}
+	actionableShareURL := common.CreateShareClient(fileURLParts.String(), credInfo, credOpOptions, clientOptions)
 
 	si, err := actionableShareURL.GetPermission(sipm.ctx, id, nil)
 	if err != nil {
