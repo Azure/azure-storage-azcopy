@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -71,6 +73,7 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 	source := info.Source
 	srcURL, _ := url.Parse(source)
 
+	//nakulkarmerge
 	srcFileClient := common.CreateShareFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
 
 	// Internal function which checks the transfer status and logs the msg respectively.
@@ -98,6 +101,13 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 		jptm.SetStatus(status)
 		jptm.ReportTransferDone()
 	}
+
+	s, ok := jptm.SourceContainerClient().(share.Client)
+	if !ok {
+		transferDone(common.ETransferStatus.Failed(),  common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
+		return
+	}
+	srcFileClient := s.NewRootDirectoryClient().NewFileClient(jptm.Info().SourceFilePath) 
 
 	// Delete the source file
 	helper := &azureFileSenderBase{}
@@ -133,10 +143,15 @@ func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr
 		return false
 	}
 
+	s, ok := jptm.SourceContainerClient().(share.Client)
+	if !ok {
+		return false
+	}
+	srcDirClient := s.NewDirectoryClient(jptm.Info().SourceFilePath)
 	loggableName := fileURLParts.DirectoryOrFilePath
-
 	logger.Log(common.LogDebug, "About to attempt to delete folder "+loggableName)
 
+	//nakulkarmerge
 	srcDirClient := common.CreateShareDirectoryClient(folder, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
 	helper := &azureFileSenderBase{}
 	err = helper.DoWithOverrideReadOnly(ctx,

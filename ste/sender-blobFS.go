@@ -23,6 +23,10 @@ package ste
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -32,10 +36,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-	"net/url"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -49,7 +51,7 @@ type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
 	sip             ISourceInfoProvider
 	fileOrDirClient DatalakeClientStub
-	serviceClient *service.Client
+	parentDirClient *directory.Client
 	chunkSize       int64
 	numChunks           uint32
 	pacer               pacer
@@ -70,17 +72,17 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	}
 	headers := props.SrcHTTPHeaders.ToBlobFSHTTPHeaders()
 
+	filesystemClient, ok := jptm.DestinationContainerClient().(*filesystem.Client)
+	if !ok {
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Filesystem Container")
+	}
+
 	datalakeURLParts, err := azdatalake.ParseURL(destination)
 	if err != nil {
 		return nil, err
 	}
-	filesystemName := datalakeURLParts.FileSystemName
 	directoryOrFilePath := datalakeURLParts.PathName
-	// Strip any non-service related things away
-	datalakeURLParts.FileSystemName = ""
-	datalakeURLParts.PathName = ""
-	serviceClient := common.CreateDatalakeServiceClient(datalakeURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-	filesystemClient := serviceClient.NewFileSystemClient(filesystemName)
+	parentPath := directoryOrFilePath[:strings.LastIndex(directoryOrFilePath, "/")]
 
 	var destClient DatalakeClientStub
 	if info.IsFolderPropertiesTransfer() {
@@ -91,8 +93,8 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	return &blobFSSenderBase{
 		jptm:                jptm,
 		sip:                 sip,
-		fileOrDirClient:        destClient,
-		serviceClient: serviceClient,
+		fileOrDirClient:     destClient,
+		parentDirClient:     filesystemClient.NewDirectoryClient(parentPath),
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
 		pacer:               pacer,
@@ -153,12 +155,7 @@ func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModi
 	// (Even tho there's not much in the way of properties to set in ADLS Gen 2 on folders, at least, not
 	// that we support right now, we still run the same folder logic here to be consistent with our other
 	// folder-aware sources).
-	parentDir, err := getParentDirectoryClient(u.fileOrDirClient, u.serviceClient)
-	if err != nil {
-		u.jptm.FailActiveUpload("Getting parent directory URL", err)
-		return
-	}
-	err = u.doEnsureDirExists(parentDir)
+	err := u.doEnsureDirExists(u.parentDirClient)
 	if err != nil {
 		u.jptm.FailActiveUpload("Ensuring parent directory exists", err)
 		return

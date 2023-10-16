@@ -25,15 +25,17 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -129,7 +131,11 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		return nil, err
 	}
 
-	destBlockBlobClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	c, ok := jptm.DestinationContainerClient().(*container.Client)
+	if !ok {
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
+	}
+	destBlockBlobClient := c.NewBlockBlobClient(jptm.Info().DestinationFilePath)
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {

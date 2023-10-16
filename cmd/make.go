@@ -23,15 +23,18 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+
 	"errors"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
@@ -88,10 +91,21 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
 	options := createClientOptions(common.LogNone)
+	resourceURL := cookedArgs.resourceURL.String()
+	cred := credentialInfo.OAuthTokenInfo.TokenCredential
 
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():
-		filesystemClient := common.CreateFilesystemClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		var filesystemClient *filesystem.Client
+		if credentialInfo.CredentialType.IsAzureOAuth() {
+			filesystemClient, err = filesystem.NewClient(resourceURL, cred, &filesystem.ClientOptions{ClientOptions: options})
+		} else {
+			filesystemClient, err = filesystem.NewClientWithNoCredential(resourceURL, &filesystem.ClientOptions{ClientOptions: options})
+		}
+		if err != nil {
+			return err
+		}
+
 		if _, err = filesystemClient.Create(ctx, nil); err != nil {
 			// print a nicer error message if container already exists
 			if datalakeerror.HasCode(err, datalakeerror.FileSystemAlreadyExists) {
@@ -104,7 +118,15 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		}
 	case common.ELocation.Blob():
 		// TODO : Ensure it is a container URL here and fail early?
-		containerClient := common.CreateContainerClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		var containerClient *container.Client
+		if credentialInfo.CredentialType.IsAzureOAuth() {
+			containerClient, err = container.NewClient(resourceURL, cred, &container.ClientOptions{ClientOptions: options})
+		} else {
+			containerClient, err = container.NewClientWithNoCredential(resourceURL, &container.ClientOptions{ClientOptions: options})
+		}
+		if err != nil {
+			return err
+		}
 		if _, err = containerClient.Create(ctx, nil); err != nil {
 			// print a nicer error message if container already exists
 			if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
@@ -116,7 +138,12 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.File():
-		shareClient := common.CreateShareClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options, to.Ptr(common.ETrailingDotOption.Disable()), &cookedArgs.resourceLocation)
+		var shareClient *share.Client
+		//nakulkarmerge - create a trailingdot client
+		shareClient, err = share.NewClientWithNoCredential(resourceURL, &share.ClientOptions{ClientOptions: options})
+		if err != nil {
+			return err
+		}
 		quota := &cookedArgs.quota
 		if quota != nil && *quota == 0 {
 			quota = nil

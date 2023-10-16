@@ -23,6 +23,7 @@ package ste
 import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -32,10 +33,18 @@ type azureFilesDownloader struct {
 	jptm   IJobPartTransferMgr
 	txInfo *TransferInfo
 	sip    ISourceInfoProvider
+	source *file.Client
 }
 
-func newAzureFilesDownloader() downloader {
-	return &azureFilesDownloader{}
+func newAzureFilesDownloader(jptm IJobPartTransferMgr) (downloader, error) {
+	shareClient, ok := jptm.SourceContainerClient().(share.Client)
+	if !ok {
+		return &azureFilesDownloader{}, errors.New("invalid fileshare client")
+	}
+
+	return &azureFilesDownloader{
+		source: shareClient.NewRootDirectoryClient().NewFileClient(jptm.Info().SourceFilePath),
+	}, nil
 }
 
 func (bd *azureFilesDownloader) init(jptm IJobPartTransferMgr) {
@@ -115,14 +124,12 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, d
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
-		source := jptm.Info().Source
-		fileClient := common.CreateShareFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
 		// TODO : Why no enriched context here? enrichedContext := withRetryNotification(jptm.Context(), bd.filePacer)
-		get, err := fileClient.DownloadStream(jptm.Context(), &file.DownloadStreamOptions{Range: file.HTTPRange{Offset: id.OffsetInFile(), Count: length}})
+		get, err := bd.source.DownloadStream(jptm.Context(), &file.DownloadStreamOptions{Range: file.HTTPRange{Offset: id.OffsetInFile(), Count: length}})
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
@@ -140,7 +147,7 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, d
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.NewRetryReader(jptm.Context(), &file.RetryReaderOptions{
 			MaxRetries:   MaxRetryPerDownloadBody,
-			OnFailedRead: common.NewFileReadLogFunc(jptm, source),
+			OnFailedRead: common.NewFileReadLogFunc(jptm, jptm.Info().Source),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

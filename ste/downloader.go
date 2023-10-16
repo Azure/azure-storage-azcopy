@@ -75,7 +75,7 @@ type smbPropertyAwareDownloader interface {
 	PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }
 
-type downloaderFactory func() downloader
+type downloaderFactory func(jptm IJobPartTransferMgr) (downloader, error)
 
 func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
 	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.

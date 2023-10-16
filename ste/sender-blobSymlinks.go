@@ -2,13 +2,15 @@ package ste
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
-	"time"
 )
 
 type blobSymlinkSender struct {
@@ -22,7 +24,11 @@ type blobSymlinkSender struct {
 }
 
 func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
-	destinationClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	c, ok := jptm.DestinationContainerClient().(*container.Client)
+	if !ok {
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
+	}
+	destinationClient := c.NewBlockBlobClient(jptm.Info().DestinationFilePath)
 
 	props, err := sip.Properties()
 	if err != nil {

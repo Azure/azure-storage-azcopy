@@ -33,8 +33,8 @@ type blobFSDownloader struct {
 	txInfo *TransferInfo
 }
 
-func newBlobFSDownloader() downloader {
-	return &blobFSDownloader{}
+func newBlobFSDownloader(jptm IJobPartTransferMgr) (downloader, error) {
+	return &blobFSDownloader{}, nil
 }
 
 func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr) {

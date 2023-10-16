@@ -63,6 +63,10 @@ type IJobPartMgr interface {
 	SourceTrailingDot() *common.TrailingDotOption
 	TrailingDot() *common.TrailingDotOption
 	From() *common.Location
+	// These functions return Container/fileshare clients.
+	// They must be type asserted before use.
+	SourceContainerClient() any
+	DestinationContainerClient() any
 
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -729,6 +733,14 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 
 func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
 	return jpm.credInfo
+}
+
+func (jpm *jobPartMgr) SourceContainerClient() any {
+	return jpm.sourceClient
+}
+
+func (jpm *jobPartMgr) DestinationContainerClient() any {
+	return jpm.destinationClient
 }
 
 func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {
