@@ -17,10 +17,12 @@ github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.3.1/go.mod h1:uE9zaUfEQT/nbQ
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0 h1:sXr+ck84g/ZlZUOZiNELInmMgOsuGwdjjVkEIde0OtY=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0/go.mod h1:okt5dMMTOFjX/aovMlrjvvXoPMBVSPzk9185BT0+eZM=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage v1.2.0 h1:Ma67P/GGprNwsslzEH6+Kb8nybI8jpDTm4Wmzu2ReK8=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0-beta.1 h1:QRcv7intN7/ZsCq9UpB7ybXMc2lor+DgqqUEOwervcA=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0-beta.1/go.mod h1:+6KLcKIVgxoBDMqMO/Nvy7bZ9a0nbU3I1DtFQK3YvB4=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0 h1:gggzg0SUMs6SQbEw+3LoSsYf9YMjkupeAnHMX8O9mmY=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0/go.mod h1:+6KLcKIVgxoBDMqMO/Nvy7bZ9a0nbU3I1DtFQK3YvB4=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1.0.20231004085529-0f4777781fa3 h1:dp6uNWfT/ifWAWIBan3tSfm7BqGHv29DgayaZCYyfHQ=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1.0.20231004085529-0f4777781fa3/go.mod h1:LOiiRCZKY9OlgPDmDrdM8uiL63lwSe01M0hklP3/4xc=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.1.0 h1:1MDP9LGZzH2Nd4NzS82YZpddy8xEvwkxpcVJz8/TffQ=
+github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.1.0/go.mod h1:qTVVvsSlVe5NZKdjBOJYxB0Ge5D+laQga/zckme+hw0=
 github.com/Azure/go-autorest v14.2.0+incompatible h1:V5VMDjClD3GiElqLWO7mz2MxNAK/vTfRHdAubSIPRgs=
 github.com/Azure/go-autorest v14.2.0+incompatible/go.mod h1:r+4oMnoxhatjLLJ6zxSWATqVooLgysK6ZNox3g/xq24=
 github.com/Azure/go-autorest/autorest/adal v0.9.18 h1:kLnPsRjzZZUF3K5REu/Kc+qMQrvuza2bwSnNdhmzLfQ=
@@ -56,8 +58,6 @@ github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymF
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
-github.com/gapra-msft/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20231003163444-0b9aca3543b5 h1:jK1L4Eya4gFEFo11BxYgsFzKwWWS/eGLmMXAYEWsqCI=
-github.com/gapra-msft/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20231003163444-0b9aca3543b5/go.mod h1:qTVVvsSlVe5NZKdjBOJYxB0Ge5D+laQga/zckme+hw0=
 github.com/go-ini/ini v1.66.4 h1:dKjMqkcbkzfddhIhyglTPgMoJnkvmG+bSLrU9cTHc5M=
 github.com/go-ini/ini v1.66.4/go.mod h1:ByCAeIL28uOIIG0E3PJtZPDL8WnHpFKFOtgjp+3Ies8=
 github.com/golang-jwt/jwt/v4 v4.0.0/go.mod h1:/xlHOz8bRuivTWchD4jCa+NbatV+wEUSzwAxVc6locg=
