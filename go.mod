@@ -2,9 +2,9 @@ module github.com/Azure/azure-storage-azcopy/v10
 
 require (
 	cloud.google.com/go/storage v1.29.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0-beta.1
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.1.0-beta.1
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.1.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.18
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.1.2
@@ -26,8 +26,6 @@ require (
 	google.golang.org/api v0.106.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
-
-replace github.com/Azure/azure-sdk-for-go/sdk/storage/azfile => github.com/gapra-msft/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20231003163444-0b9aca3543b5
 
 replace github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake => github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v0.1.0-beta.1.0.20231004085529-0f4777781fa3
 
