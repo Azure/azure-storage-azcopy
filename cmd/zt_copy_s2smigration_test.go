@@ -23,8 +23,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/stretchr/testify/assert"
 	"net/url"
 	"os"
@@ -32,7 +34,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -1306,46 +1307,51 @@ func TestCopyWithDFSResource(t *testing.T) {
 	ctx := context.Background()
 
 	// get service SAS for raw input
-	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
+	serviceClientWithSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
 
 	// Set up source
 	// set up the file system
-	bfsServiceURLSource := GetBFSSU()
-	fsURLSource, fsNameSource := createNewFilesystem(a, bfsServiceURLSource)
-	defer deleteFilesystem(a, fsURLSource)
+	bfsServiceClientSource := getDatalakeServiceClient()
+	fsClientSource, fsNameSource := createNewFilesystem(a, bfsServiceClientSource)
+	defer deleteFilesystem(a, fsClientSource)
 
 	// set up the parent
 	parentDirNameSource := generateName("dir", 0)
-	parentDirURLSource := fsURLSource.NewDirectoryURL(parentDirNameSource)
-	_, err := parentDirURLSource.Create(ctx, true)
+	parentDirClientSource := fsClientSource.NewDirectoryClient(parentDirNameSource)
+	_, err := parentDirClientSource.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
+		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
+			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	// set up the file
 	fileNameSource := generateName("file", 0)
-	fileURLSource := parentDirURLSource.NewFileURL(fileNameSource)
-	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
+	fileClientSource, err := parentDirClientSource.NewFileClient(fileNameSource)
+	a.Nil(err)
+	_, err = fileClientSource.Create(ctx, nil)
 	a.Nil(err)
 
-	dirURLWithSASSource := serviceURLWithSAS.NewFileSystemURL(fsNameSource).NewDirectoryURL(parentDirNameSource)
+	dirClientWithSASSource := serviceClientWithSAS.NewFileSystemClient(fsNameSource).NewDirectoryClient(parentDirNameSource)
 
 	// Set up destination
 	// set up the file system
-	bfsServiceURL := GetBFSSU()
-	fsURL, fsName := createNewFilesystem(a, bfsServiceURL)
-	defer deleteFilesystem(a, fsURL)
+	bfsServiceClient := getDatalakeServiceClient()
+	fsClient, fsName := createNewFilesystem(a, bfsServiceClient)
+	defer deleteFilesystem(a, fsClient)
 
 	// set up the parent
 	parentDirName := generateName("dir", 0)
-	parentDirURL := fsURL.NewDirectoryURL(parentDirName)
-	_, err = parentDirURL.Create(ctx, true)
+	parentDirClient := fsClient.NewDirectoryClient(parentDirName)
+	_, err = parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
+		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
+			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
-	dirURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName).NewDirectoryURL(parentDirName)
+	dirClientWithSAS := serviceClientWithSAS.NewFileSystemClient(fsName).NewDirectoryClient(parentDirName)
 	// =====================================
 
 	// 1. Verify that copy between dfs and dfs works.
 
-	rawCopy := getDefaultRawCopyInput(dirURLWithSASSource.String(), dirURLWithSAS.String())
+	rawCopy := getDefaultRawCopyInput(dirClientWithSASSource.DFSURL(), dirClientWithSAS.DFSURL())
 	rawCopy.recursive = true
 
 	// set up interceptor
@@ -1366,11 +1372,12 @@ func TestCopyWithDFSResource(t *testing.T) {
 	mockedRPC.reset()
 	// set up the file
 	fileNameSource = generateName("file2", 0)
-	fileURLSource = parentDirURLSource.NewFileURL(fileNameSource)
-	_, err = fileURLSource.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
+	fileClientSource, err = parentDirClientSource.NewFileClient(fileNameSource)
+	a.Nil(err)
+	_, err = fileClientSource.Create(ctx, nil)
 	a.Nil(err)
 
-	rawSync := getDefaultSyncRawInput(dirURLWithSASSource.String(), dirURLWithSAS.String())
+	rawSync := getDefaultSyncRawInput(dirClientWithSASSource.DFSURL(), dirClientWithSAS.DFSURL())
 	runSyncAndVerify(a, rawSync, func(err error) {
 		a.Nil(err)
 

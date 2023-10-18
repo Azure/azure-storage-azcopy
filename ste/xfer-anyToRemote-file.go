@@ -25,6 +25,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"hash"
 	"net/http"
@@ -33,7 +34,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -553,8 +553,8 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		shouldCheckLength := true
 		destLength, err := s.GetDestinationLength()
 
-		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
-			resp.Response().StatusCode == http.StatusForbidden {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusForbidden {
 			// The destination is write-only. Cannot verify length
 			shouldCheckLength = false
 			checkLengthFailureOnReadOnlyDst.Do(func() {

@@ -2,17 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"net/url"
 	"strings"
 
-	"github.com/pkg/errors"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/pkg/errors"
 )
 
 // ----- LOCATION LEVEL HANDLING -----
@@ -109,7 +106,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 
 	//noinspection GoNilness
 	case common.ELocation.Blob():
-		bURLParts, err := blob.ParseURL(resource)
+		bURLParts, err := blobsas.ParseURL(resource)
 		if err != nil {
 			return resource, err
 		}
@@ -126,7 +123,7 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 
 	//noinspection GoNilness
 	case common.ELocation.File():
-		fURLParts, err := sharefile.ParseURL(resource)
+		fURLParts, err := filesas.ParseURL(resource)
 		if err != nil {
 			return resource, err
 		}
@@ -142,21 +139,21 @@ func GetResourceRoot(resource string, location common.Location) (resourceBase st
 		return fURLParts.String(), nil
 
 	//noinspection GoNilness
-	case common.ELocation.BlobFS(): // TODO (gapra) change to datalake support
-		fURLParts, err := sharefile.ParseURL(resource)
+	case common.ELocation.BlobFS():
+		dURLParts, err := datalakesas.ParseURL(resource)
 		if err != nil {
 			return resource, err
 		}
 
-		if fURLParts.ShareName == "" || strings.Contains(fURLParts.ShareName, "*") {
-			if fURLParts.DirectoryOrFilePath != "" {
+		if dURLParts.FileSystemName == "" || strings.Contains(dURLParts.FileSystemName, "*") {
+			if dURLParts.PathName != "" {
 				return resource, errors.New("cannot combine account-level traversal and specific file/folder names.")
 			}
 
-			fURLParts.ShareName = ""
+			dURLParts.FileSystemName = ""
 		}
 
-		return fURLParts.String(), nil
+		return dURLParts.String(), nil
 
 	// noinspection GoNilness
 	case common.ELocation.S3():
@@ -242,7 +239,7 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 	// TODO: Find a clever way to reduce code duplication in here. Especially the URL parsing.
 	case common.ELocation.Blob():
 		var bURLParts blobsas.URLParts
-		bURLParts, err = blob.ParseURL(resource)
+		bURLParts, err = blobsas.ParseURL(resource)
 		if err != nil {
 			return resource, "", err
 		}
@@ -253,7 +250,7 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		return
 	case common.ELocation.File():
 		var fURLParts filesas.URLParts
-		fURLParts, err = sharefile.ParseURL(resource)
+		fURLParts, err = filesas.ParseURL(resource)
 		if err != nil {
 			return resource, "", err
 		}
@@ -269,18 +266,15 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		resourceBase = fURLParts.String()
 		return
 	case common.ELocation.BlobFS():
-		var baseURL *url.URL // Do not shadow err for clean return statement
-		baseURL, err = url.Parse(resource)
-
+		var dURLParts datalakesas.URLParts
+		dURLParts, err = datalakesas.ParseURL(resource)
 		if err != nil {
 			return resource, "", err
 		}
 
-		bfsURLParts := azbfs.NewBfsURLParts(*baseURL)
-		resourceToken = bfsURLParts.SAS.Encode()
-		bfsURLParts.SAS = azbfs.SASQueryParameters{}
-		bfsURL := bfsURLParts.URL() // Can't call .String() on .URL() because Go can't take the pointer of a function's return
-		resourceBase = bfsURL.String()
+		resourceToken = dURLParts.SAS.Encode()
+		dURLParts.SAS = datalakesas.QueryParameters{} // clear the SAS token and drop the raw, base URL
+		resourceBase = dURLParts.String()
 		return
 	default:
 		panic(fmt.Sprintf("One or more location(s) may be missing from SplitAuthTokenFromResource. Location: %s", location))
@@ -342,7 +336,7 @@ func GetAccountRoot(resource common.ResourceString, location common.Location) (s
 		}
 
 		// Clear the path
-		bURLParts, err := blob.ParseURL(baseURL)
+		bURLParts, err := blobsas.ParseURL(baseURL)
 		if err != nil {
 			return "", err
 		}
@@ -365,7 +359,7 @@ func GetContainerName(path string, location common.Location) (string, error) {
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS():
-		bURLParts, err := blob.ParseURL(path)
+		bURLParts, err := blobsas.ParseURL(path)
 		if err != nil {
 			return "", err
 		}

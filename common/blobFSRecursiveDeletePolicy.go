@@ -18,43 +18,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package common
 
 import (
-	"github.com/stretchr/testify/assert"
-	"testing"
+	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"net/http"
+	"strconv"
 )
 
-func TestCPKEncryptionInputTest(t *testing.T) {
-	a := assert.New(t)
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
+// CtxRecursiveKey is used as a context key to apply the recursive query parameter.
+type CtxRecursiveKey struct{}
 
-	dirPath := "this/is/a/dummy/path"
-	rawDFSEndpointWithSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
-	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.DFSURL())
-	raw.recursive = true
-	raw.cpkInfo = true
+// WithRecursive applies the recursive parameter to the request.
+func WithRecursive(parent context.Context, recursive bool) context.Context {
+	return context.WithValue(parent, CtxRecursiveKey{}, recursive)
+}
 
-	runCopyAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
-		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
-	})
+type recursivePolicy struct {
+}
 
-	mockedRPC.reset()
-	raw.cpkInfo = false
-	raw.cpkScopeInfo = "dummyscope"
-	runCopyAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
-		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
-	})
+// NewRecursivePolicy creates a policy that applies the recursive parameter to the request.
+func NewRecursivePolicy() policy.Policy {
+	return &recursivePolicy{}
+}
 
-	rawContainerURL := scenarioHelper{}.getContainerClient(a, "testcpkcontainer")
-	raw2 := getDefaultRawCopyInput(dirPath, rawContainerURL.URL())
-	raw2.recursive = true
-	raw2.cpkInfo = true
-
-	_, err := raw2.cook()
-	a.Nil(err)
+func (p *recursivePolicy) Do(req *policy.Request) (*http.Response, error) {
+	if recursive := req.Raw().Context().Value(CtxRecursiveKey{}); recursive != nil {
+		if req.Raw().URL.Query().Has("recursive") {
+			query := req.Raw().URL.Query()
+			query.Set("recursive", strconv.FormatBool(recursive.(bool)))
+			req.Raw().URL.RawQuery = query.Encode()
+		}
+	}
+	return req.Next()
 }

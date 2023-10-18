@@ -24,6 +24,7 @@ import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
@@ -52,6 +53,14 @@ type filePropertiesResponseAdapter struct {
 }
 
 func (a filePropertiesResponseAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
+type datalakePropertiesResponseAdapter struct {
+	datalakefile.GetPropertiesResponse
+}
+
+func (a datalakePropertiesResponseAdapter) LastModified() time.Time {
 	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 

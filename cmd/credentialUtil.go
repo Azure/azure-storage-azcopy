@@ -29,19 +29,16 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 
-	"github.com/minio/minio-go/pkg/s3utils"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/minio/minio-go/pkg/s3utils"
 )
 
 var once sync.Once
@@ -280,14 +277,14 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 // 2. If there is cached session OAuth token, indicating using token credential.
 // 3. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 4. Otherwise use shared key.
-func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standaloneSAS bool) (common.CredentialType, error) {
-	resourceURL, err := url.Parse(blobResourceURL)
+func getBlobFSCredentialType(blobResourceURL string, standaloneSAS bool) (common.CredentialType, error) {
+	datalakeURLParts, err := datalakesas.ParseURL(blobResourceURL)
 	if err != nil {
 		return common.ECredentialType.Unknown(), err
 	}
 
 	// Give preference to explicitly supplied SAS tokens
-	sas := azbfs.NewBfsURLParts(*resourceURL).SAS
+	sas := datalakeURLParts.SAS
 
 	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
 		return common.ECredentialType.Anonymous(), nil
@@ -548,7 +545,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 				return common.ECredentialType.Unknown(), false, err
 			}
 		case common.ELocation.BlobFS():
-			credType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != "")
+			credType, err = getBlobFSCredentialType(resource, resourceSAS != "")
 			if err != nil {
 				return common.ECredentialType.Unknown(), false, err
 			}
@@ -651,38 +648,3 @@ func createClientOptions(logLevel common.LogLevel, trailingDot *common.TrailingD
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
-
-func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo, logLevel common.LogLevel) (pipeline.Pipeline, error) {
-	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
-		// LogInfo:  glcm.Info, //Comment out for debugging
-		LogError: glcm.Info,
-	})
-
-	logOption := pipeline.LogOptions{}
-	if azcopyScanningLogger != nil {
-		logOption = pipeline.LogOptions{
-			Log:       func(l pipeline.LogLevel, msg string) { azcopyScanningLogger.Log(common.LogLevel(l), msg) },
-			ShouldLog: func(level pipeline.LogLevel) bool { return common.LogLevel(level) <= logLevel },
-		}
-	}
-
-	return ste.NewBlobFSPipeline(
-		credential,
-		azbfs.PipelineOptions{
-			Telemetry: azbfs.TelemetryOptions{
-				Value: glcm.AddUserAgentPrefix(common.UserAgent),
-			},
-			Log: logOption,
-		},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		},
-		nil,
-		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
-		nil, // we don't gather network stats on the credential pipeline
-	), nil
-}

@@ -30,22 +30,21 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"net/url"
+	"github.com/google/uuid"
 	"os"
 	"path"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/google/uuid"
 )
 
 // provide convenient methods to get access to test resources such as accounts, containers/shares, directories
@@ -85,13 +84,19 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) *fileservi
 	return fsc
 }
 
-func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.ServiceURL {
+func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) *datalakeservice.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
-	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", accountName))
+	resourceURL := fmt.Sprintf("https://%s.dfs.core.windows.net/", accountName)
 
-	cred := azbfs.NewSharedKeyCredential(accountName, accountKey)
-	pipeline := azbfs.NewPipeline(cred, azbfs.PipelineOptions{})
-	return azbfs.NewServiceURL(*u, pipeline)
+	credential, err := azdatalake.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	dsc, err := datalakeservice.NewClientWithSharedKeyCredential(resourceURL, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return dsc
 }
 
 func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType AccountType) *blobservice.Client {

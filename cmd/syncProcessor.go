@@ -25,12 +25,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"net/url"
@@ -342,9 +343,16 @@ func (b *remoteResourceDeleter) getObjectURL(object StoredObject) (url url.URL) 
 		}
 		url = *u
 	case common.ELocation.BlobFS():
-		blobFSURLParts := azbfs.NewBfsURLParts(*b.rootURL)
-		blobFSURLParts.DirectoryOrFilePath = path.Join(blobFSURLParts.DirectoryOrFilePath, object.relativePath)
-		url = blobFSURLParts.URL()
+		datalakeURLParts, err := azdatalake.ParseURL(b.rootURL.String())
+		if err != nil {
+			panic(err)
+		}
+		datalakeURLParts.PathName = path.Join(datalakeURLParts.PathName, object.relativePath)
+		u, err := url.Parse(datalakeURLParts.String())
+		if err != nil {
+			panic(err)
+		}
+		url = *u
 	default:
 		panic("unexpected location")
 	}
@@ -367,7 +375,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		var err error
 		switch b.targetLocation {
 		case common.ELocation.Blob():
-			blobURLParts, err := blob.ParseURL(b.rootURL.String())
+			var blobURLParts blob.URLParts
+			blobURLParts, err = blob.ParseURL(b.rootURL.String())
 			if err != nil {
 				return err
 			}
@@ -375,9 +384,9 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 
 			blobClient := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
 			_, err = blobClient.Delete(b.ctx, nil)
-			return err
 		case common.ELocation.File():
-			fileURLParts, err := sharefile.ParseURL(b.rootURL.String())
+			var fileURLParts sharefile.URLParts
+			fileURLParts, err = sharefile.ParseURL(b.rootURL.String())
 			if err != nil {
 				return err
 			}
@@ -406,11 +415,14 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				}
 			}
 		case common.ELocation.BlobFS():
-			bfsURLParts := azbfs.NewBfsURLParts(*b.rootURL)
-			bfsURLParts.DirectoryOrFilePath = path.Join(bfsURLParts.DirectoryOrFilePath, object.relativePath)
-			p, _ := createBlobFSPipeline(b.ctx, b.credInfo, azcopyLogVerbosity) // This function returns only nil error.
-			fileURL := azbfs.NewFileURL(bfsURLParts.URL(), p)
-			_, err = fileURL.Delete(b.ctx)
+			var datalakeURLParts azdatalake.URLParts
+			datalakeURLParts, err = azdatalake.ParseURL(b.rootURL.String())
+			if err != nil {
+				return err
+			}
+			datalakeURLParts.PathName = path.Join(datalakeURLParts.PathName, object.relativePath)
+			fileClient := common.CreateDatalakeFileClient(datalakeURLParts.String(), b.credInfo, nil, b.clientOptions)
+			_, err = fileClient.Delete(b.ctx, nil)
 		default:
 			panic("not implemented, check your code")
 		}
@@ -463,9 +475,11 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 					}
 				}
 			case common.ELocation.BlobFS():
-				p, _ := createBlobFSPipeline(b.ctx, b.credInfo, azcopyLogVerbosity) // This function returns only nil error.
-				dirURL := azbfs.NewDirectoryURL(objectURL, p)
-				_, err = dirURL.Delete(ctx, nil, false)
+				clientOptions := b.clientOptions
+				clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, clientOptions.PerCallPolicies...)
+				directoryClient := common.CreateDatalakeDirectoryClient(objectURL.String(), b.credInfo, nil, clientOptions)
+				recursiveContext := common.WithRecursive(ctx, false)
+				_, err = directoryClient.Delete(recursiveContext, nil)
 			default:
 				panic("not implemented, check your code")
 			}

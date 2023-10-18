@@ -10,6 +10,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
@@ -22,8 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/JeffreyRichter/enum/enum"
 	"github.com/spf13/cobra"
@@ -394,38 +395,64 @@ func createFileServiceClient(resourceURL string) *fileservice.Client {
 	return fsc
 }
 
-func createBlobFSPipeline(u url.URL) pipeline.Pipeline {
-	// Get the Account Name and Key variables from environment
+func createFileSystemClient(resourceURL string) *filesystem.Client {
+	datalakeURLParts, err := azdatalake.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	datalakeURLParts.FileSystemName = ""
+	datalakeURLParts.PathName = ""
+
+	// create the pipeline, preferring SAS over account name/key
+	if datalakeURLParts.SAS.Encode() != "" {
+		fsc, err := filesystem.NewClientWithNoCredential(datalakeURLParts.String(), nil)
+		if err != nil {
+			fmt.Println("Failed to create filesystem client")
+			os.Exit(1)
+		}
+		return fsc
+	}
+
+	// Get name and key variables from environment.
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
-	bfsURLParts := azbfs.NewBfsURLParts(u)
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if (name == "" && key == "") && bfsURLParts.SAS.Encode() == "" {
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in the environment, and there is no SAS token present
+	if (name == "" && key == "") && datalakeURLParts.SAS.Encode() == "" {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
 		os.Exit(1)
 	}
-	// create the blob fs pipeline
-	if bfsURLParts.SAS.Encode() != "" {
-		return azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
-	}
-
-	c := azbfs.NewSharedKeyCredential(name, key)
-	return azbfs.NewPipeline(c, azbfs.PipelineOptions{})
-}
-
-func cleanFileSystem(fsURLStr string) {
-	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	u, err := url.Parse(fsURLStr)
-
+	c, err := azdatalake.NewSharedKeyCredential(name, key)
 	if err != nil {
-		fmt.Println("error parsing the file system URL", err)
+		fmt.Println("Failed to create shared key credential!")
 		os.Exit(1)
 	}
 
-	fsURL := azbfs.NewFileSystemURL(*u, createBlobFSPipeline(*u))
+	fsc, err := filesystem.NewClientWithSharedKeyCredential(resourceURL, c, nil)
+	if err != nil {
+		fmt.Println("Failed to create filesystem client")
+		os.Exit(1)
+	}
+	return fsc
+}
+
+func createDatalakeFileClient(resourceURL string) *datalakefile.Client {
+	datalakeURLParts, err := azdatalake.ParseURL(resourceURL)
+	if err != nil {
+		fmt.Println("Failed to parse url")
+		os.Exit(1)
+	}
+	fileSystemClient := createFileSystemClient(resourceURL)
+	fileClient := fileSystemClient.NewFileClient(datalakeURLParts.PathName)
+	return fileClient
+}
+
+func cleanFileSystem(resourceURL string) {
+	fsc := createFileSystemClient(resourceURL)
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Instead of error checking the delete, error check the create.
 	// If the filesystem is deleted somehow, this recovers us from CI hell.
-	_, err = fsURL.Delete(ctx)
+	_, err := fsc.Delete(ctx, nil)
 	if err != nil {
 		fmt.Println(fmt.Fprintf(os.Stdout, "error deleting the file system for cleaning, %v", err))
 		// don't fail just log
@@ -434,24 +461,18 @@ func cleanFileSystem(fsURLStr string) {
 	// Sleep seconds to wait the share deletion got succeeded
 	time.Sleep(45 * time.Second)
 
-	_, err = fsURL.Create(ctx)
+	_, err = fsc.Create(ctx, nil)
 	if err != nil {
 		fmt.Println(fmt.Fprintf(os.Stdout, "error creating the file system for cleaning, %v", err))
 		os.Exit(1)
 	}
 }
 
-func cleanBfsFile(fileURLStr string) {
+func cleanBfsFile(resourceURL string) {
+	fc := createDatalakeFileClient(resourceURL)
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	u, err := url.Parse(fileURLStr)
 
-	if err != nil {
-		fmt.Println("error parsing the file system URL, ", err)
-		os.Exit(1)
-	}
-
-	fileURL := azbfs.NewFileURL(*u, createBlobFSPipeline(*u))
-	_, err = fileURL.Delete(ctx)
+	_, err := fc.Delete(ctx, nil)
 	if err != nil {
 		fmt.Printf("error deleting the blob FS file, %v\n", err)
 		os.Exit(1)

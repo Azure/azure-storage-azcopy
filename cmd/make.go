@@ -25,14 +25,13 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"net/url"
 	"strings"
 
 	"errors"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/spf13/cobra"
@@ -92,22 +91,14 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():
-		p, err := createBlobFSPipeline(ctx, credentialInfo, common.LogNone)
-		if err != nil {
-			return err
-		}
-		// here we assume the resourceURL is a proper file system URL
-		fsURL := azbfs.NewFileSystemURL(cookedArgs.resourceURL, p)
-		if _, err = fsURL.Create(ctx); err != nil {
-			// print a nicer error message if file system already exists
-			if storageErr, ok := err.(azbfs.StorageError); ok {
-				if storageErr.ServiceCode() == azbfs.ServiceCodeFileSystemAlreadyExists {
-					return fmt.Errorf("the file system already exists")
-				} else if storageErr.ServiceCode() == azbfs.ServiceCodeResourceNotFound {
-					return fmt.Errorf("please specify a valid file system URL with corresponding credentials")
-				}
+		filesystemClient := common.CreateFilesystemClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		if _, err = filesystemClient.Create(ctx, nil); err != nil {
+			// print a nicer error message if container already exists
+			if datalakeerror.HasCode(err, datalakeerror.FileSystemAlreadyExists) {
+				return fmt.Errorf("the filesystem already exists")
+			} else if datalakeerror.HasCode(err, datalakeerror.ResourceNotFound) {
+				return fmt.Errorf("please specify a valid filesystem URL with corresponding credentials")
 			}
-
 			// print the ugly error if unexpected
 			return err
 		}
@@ -119,7 +110,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
 				return fmt.Errorf("the container already exists")
 			} else if bloberror.HasCode(err, bloberror.ResourceNotFound) {
-				return fmt.Errorf("please specify a valid container URL with account SAS")
+				return fmt.Errorf("please specify a valid container URL with corresponding credentials")
 			}
 			// print the ugly error if unexpected
 			return err
@@ -135,7 +126,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
 				return fmt.Errorf("the file share already exists")
 			} else if fileerror.HasCode(err, fileerror.ResourceNotFound) {
-				return fmt.Errorf("please specify a valid share URL with account SAS")
+				return fmt.Errorf("please specify a valid share URL with corresponding credentials")
 			}
 			// print the ugly error if unexpected
 			return err

@@ -22,13 +22,10 @@ package ste
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
-	"net/url"
 	"strings"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Source info provider for Azure blob
@@ -133,15 +130,15 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
 }
 
-func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, error) {
+func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 	// We can only get access control via HNS, so we MUST switch here.
 	presignedURL, err := p.internalPresignedURL(true)
 	if err != nil {
-		return azbfs.BlobFSAccessControl{}, err
+		return nil, err
 	}
 	parsedURL, err := blob.ParseURL(presignedURL)
 	if err != nil {
-		return azbfs.BlobFSAccessControl{}, err
+		return nil, err
 	}
 	parsedURL.Host = strings.ReplaceAll(parsedURL.Host, ".blob", ".dfs")
 	if parsedURL.BlobName != "" {
@@ -149,13 +146,12 @@ func (p *blobSourceInfoProvider) AccessControl() (azbfs.BlobFSAccessControl, err
 	} else {
 		parsedURL.BlobName = "/" // container level perms MUST have a /
 	}
-	u, err := url.Parse(parsedURL.String())
+	fileClient := common.CreateDatalakeFileClient(parsedURL.String(), p.jptm.CredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.ClientOptions())
+	resp, err := fileClient.GetAccessControl(p.jptm.Context(), nil)
 	if err != nil {
-		return azbfs.BlobFSAccessControl{}, err
+		return nil, err
 	}
-	// todo: jank, and violates the principle of interfaces
-	fURL := azbfs.NewFileURL(*u, p.jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).secondarySourceProviderPipeline)
-	return fURL.GetAccessControl(p.jptm.Context())
+	return resp.ACL, nil
 }
 
 func (p *blobSourceInfoProvider) BlobTier() blob.AccessTier {

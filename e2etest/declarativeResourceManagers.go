@@ -23,9 +23,10 @@ package e2etest
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"net/url"
 	"os"
 	"path"
@@ -252,11 +253,10 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 					break
 				}
 
-				rootURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(containerURLParts.ContainerName).NewDirectoryURL("/")
+				rootURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(containerURLParts.ContainerName).NewDirectoryClient("/")
 
-				_, err := rootURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
-					ACL: *v.creationProperties.adlsPermissionsACL,
-				})
+				_, err := rootURL.SetAccessControl(ctx,
+					&datalakedirectory.SetAccessControlOptions{ACL: v.creationProperties.adlsPermissionsACL})
 				a.AssertNoErr(err)
 
 				break
@@ -326,34 +326,27 @@ func (r *resourceBlobContainer) appendSourcePath(filePath string, useSas bool) {
 }
 
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
-	var fileSystem *azbfs.FileSystemURL
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
 		urlParts, err := blob.ParseURL(r.containerClient.URL())
 		a.AssertNoErr(err)
-		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName)
-		fileSystem = &fsURL
-	}
+		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(urlParts.ContainerName)
+		objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient, fsURL)
 
-	objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient, fileSystem)
 
-	if fileSystem != nil {
-		fsURL := fileSystem.NewDirectoryURL("/")
-
-		ACL, err := fsURL.GetAccessControl(ctx)
-		if stgErr, ok := err.(azbfs.StorageError); ok {
-			if stgErr.ServiceCode() == "FilesystemNotFound" { // skip grabbing ACLs
-				return objects
-			}
+		resp, err := fsURL.NewDirectoryClient("/").GetAccessControl(ctx, nil)
+		if datalakeerror.HasCode(err, "FilesystemNotFound") {
+			return objects
 		}
 		a.AssertNoErr(err)
 
 		objects[""] = &objectProperties{
-			entityType:         common.EEntityType.Folder(),
-			adlsPermissionsACL: &ACL.ACL,
+			entityType: common.EEntityType.Folder(),
+			adlsPermissionsACL: resp.ACL,
 		}
-	}
 
-	return objects
+		return objects
+	}
+	return scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient, nil)
 }
 
 func (r *resourceBlobContainer) downloadContent(a asserter, options downloadContentOptions) []byte {
