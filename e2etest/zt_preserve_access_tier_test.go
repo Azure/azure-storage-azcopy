@@ -100,8 +100,11 @@ func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
 	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }
 
-func TestSetTier_V2ToPremiumBBAccountCool(t *testing.T) {
-
+// Set Tier on Premium Block Blob account is a private preview feature that requires a whitelisted subscription
+// and is only available in certain regions. The service version must be 2021-04-10 or above. To test this feature,
+// uncomment TestTier_V2ToPremiumBBAccountCool and TestTier_V2ToPremiumBBAccountHot.
+/*func TestTier_V2ToPremiumBBAccountCool(t *testing.T) {
+	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2021-04-10")
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		accessTier: to.Ptr(blob.AccessTierCool),
@@ -112,10 +115,11 @@ func TestSetTier_V2ToPremiumBBAccountCool(t *testing.T) {
 			f("filea"),
 		},
 	}, EAccountType.PremiumBlockBlob(), EAccountType.Standard(), "")
+	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2020-10-02")
 }
 
-func TestSetTier_V2ToPremiumBBAccountHot(t *testing.T) {
-
+func TestTier_V2ToPremiumBBAccountHot(t *testing.T) {
+	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2021-04-10")
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
 		accessTier: to.Ptr(blob.AccessTierHot),
@@ -126,4 +130,5 @@ func TestSetTier_V2ToPremiumBBAccountHot(t *testing.T) {
 			f("filea"),
 		},
 	}, EAccountType.PremiumBlockBlob(), EAccountType.Standard(), "")
-}
+	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2020-10-02")
+}*/

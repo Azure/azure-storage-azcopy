@@ -111,7 +111,7 @@ func BlobTierAllowed(destTier blob.AccessTier) bool {
 		}
 
 		if strings.Contains(destAccountKind, "Block") {
-			// Setting tier on Premium Block Blob accounts is allowable in certain regions.
+			// Setting tier on Premium Block Blob accounts is allowable in certain regions on whitelisted subscriptions.
 			// If setting tier fails, we allow service to throw error instead of taking preventative measures in AzCopy.
 			return true
 		}
