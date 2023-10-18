@@ -29,6 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/JeffreyRichter/enum/enum"
 	"math"
 	"os"
 	"reflect"
@@ -36,7 +37,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"github.com/JeffreyRichter/enum/enum"
 )
 
 const (
@@ -332,6 +332,7 @@ func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
+
 const (
 	// LogNone tells a logger not to log any entries passed to it.
 	LogNone LogLevel = iota
@@ -401,6 +402,7 @@ func (ll LogLevel) String() string {
 type LogSanitizer interface {
 	SanitizeLogMessage(raw string) string
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EJobPriority = JobPriority(0)
 
@@ -1056,6 +1058,7 @@ const (
 	MaxAppendBlobBlockSize         = 4 * 1024 * 1024
 	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
+	MaxRangeGetSize                = 4 * 1024 * 1024
 	MaxNumberOfBlocksPerBlob       = 50000
 	BlockSizeThreshold             = 256 * 1024 * 1024
 	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */

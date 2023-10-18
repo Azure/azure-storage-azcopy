@@ -21,7 +21,9 @@
 package ste
 
 import (
+	"bytes"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -68,12 +70,33 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
 		offset := id.OffsetInFile()
-		_, err := u.destAppendBlobClient.AppendBlock(u.jptm.Context(), body,
+		var timeoutFromCtx bool
+		ctx := withTimeoutNotification(u.jptm.Context(), &timeoutFromCtx)
+		_, err := u.destAppendBlobClient.AppendBlock(ctx, body,
 			&appendblob.AppendBlockOptions{
 				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
-				CPKInfo: u.jptm.CpkInfo(),
-				CPKScopeInfo: u.jptm.CpkScopeInfo(),
+				CPKInfo:                        u.jptm.CpkInfo(),
+				CPKScopeInfo:                   u.jptm.CpkScopeInfo(),
 			})
+		if err != nil && bloberror.HasCode(err, bloberror.AppendPositionConditionNotMet) && timeoutFromCtx {
+			// Download Range of last append
+			destMD5, destErr := u.GetMD5(offset, reader.Length())
+			if destErr != nil {
+				u.jptm.FailActiveS2SCopy("Appending block, get destination md5 after timeout", destErr)
+				return
+			}
+			sourceMD5, sourceErr := u.sip.GetMD5(offset, reader.Length())
+			if destErr != nil {
+				u.jptm.FailActiveS2SCopy("Appending block, get source md5 after timeout", sourceErr)
+				return
+			}
+			if destMD5 != nil && sourceMD5 != nil && len(destMD5) > 0 && len(sourceMD5) > 0 {
+				// Compare MD5
+				if bytes.Equal(destMD5, sourceMD5) {
+					err = nil
+				}
+			}
+		}
 		if err != nil {
 			u.jptm.FailActiveUpload("Appending block", err)
 			return

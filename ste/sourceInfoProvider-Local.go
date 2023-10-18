@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"crypto/md5"
 	"os"
 	"time"
 
@@ -100,4 +101,19 @@ func (f localFileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, 
 
 func (f localFileSourceInfoProvider) EntityType() common.EntityType {
 	return f.transferInfo.EntityType
+}
+
+func (f localFileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	localFile, err := f.OpenSourceFile()
+	if err != nil {
+		return nil, err
+	}
+	defer localFile.Close()
+	data := make([]byte, 0, count)
+	_, err = localFile.ReadAt(data, offset)
+	if err != nil {
+		return nil, err
+	}
+	h := md5.New()
+	return h.Sum(data), nil
 }

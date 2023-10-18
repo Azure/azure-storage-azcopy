@@ -21,17 +21,19 @@
 package ste
 
 import (
+	"crypto/md5"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type benchmarkSourceInfoProvider struct {
-	jptm IJobPartTransferMgr
+	jptm       IJobPartTransferMgr
+	randomData common.CloseableReaderAt
 }
 
 func newBenchmarkSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
-	return &benchmarkSourceInfoProvider{jptm}, nil
+	return &benchmarkSourceInfoProvider{jptm, nil}, nil
 }
 
 func (b benchmarkSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -47,7 +49,8 @@ func (b benchmarkSourceInfoProvider) IsLocal() bool {
 }
 
 func (b benchmarkSourceInfoProvider) OpenSourceFile() (common.CloseableReaderAt, error) {
-	return common.NewRandomDataGenerator(b.jptm.Info().SourceSize), nil
+	b.randomData = common.NewRandomDataGenerator(b.jptm.Info().SourceSize)
+	return b.randomData, nil
 }
 
 func (b benchmarkSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
@@ -56,4 +59,14 @@ func (b benchmarkSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, 
 
 func (b benchmarkSourceInfoProvider) EntityType() common.EntityType {
 	return common.EEntityType.File() // no folders in benchmark
+}
+
+func (b benchmarkSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	data := make([]byte, 0, count)
+	_, err := b.randomData.ReadAt(data, offset)
+	if err != nil {
+		return nil, err
+	}
+	h := md5.New()
+	return h.Sum(data), nil
 }

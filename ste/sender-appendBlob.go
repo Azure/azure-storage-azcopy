@@ -22,9 +22,12 @@ package ste
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"io"
 	"time"
 
 	"golang.org/x/sync/semaphore"
@@ -147,10 +150,10 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		blobTags = nil
 	}
 	_, err := s.destAppendBlobClient.Create(s.jptm.Context(), &appendblob.CreateOptions{
-		HTTPHeaders: &s.headersToApply,
-		Metadata: s.metadataToApply,
-		Tags: blobTags,
-		CPKInfo: s.jptm.CpkInfo(),
+		HTTPHeaders:  &s.headersToApply,
+		Metadata:     s.metadataToApply,
+		Tags:         blobTags,
+		CPKInfo:      s.jptm.CpkInfo(),
 		CPKScopeInfo: s.jptm.CpkScopeInfo(),
 	})
 	if err != nil {
@@ -202,4 +205,33 @@ func (s *appendBlobSenderBase) GetDestinationLength() (int64, error) {
 		return -1, fmt.Errorf("destination content length not returned")
 	}
 	return *prop.ContentLength, nil
+}
+
+func (s *appendBlobSenderBase) GetMD5(offset, adjustedChunkSize int64) ([]byte, error) {
+	var rangeGetContentMD5 *bool
+	if adjustedChunkSize <= common.MaxRangeGetSize {
+		rangeGetContentMD5 = to.Ptr(true)
+	}
+	response, err := s.destAppendBlobClient.DownloadStream(s.jptm.Context(),
+		&blob.DownloadStreamOptions{
+			Range:              blob.HTTPRange{Offset: offset, Count: adjustedChunkSize},
+			RangeGetContentMD5: rangeGetContentMD5,
+			CPKInfo:            s.jptm.CpkInfo(),
+			CPKScopeInfo:       s.jptm.CpkScopeInfo(),
+		})
+	if err != nil {
+		return nil, err
+	}
+	if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
+		return response.ContentMD5, nil
+	} else {
+		// compute md5
+		body := response.NewRetryReader(s.jptm.Context(), &blob.RetryReaderOptions{MaxRetries: MaxRetryPerDownloadBody})
+		defer body.Close()
+		h := md5.New()
+		if _, err = io.Copy(h, body); err != nil {
+			return nil, err
+		}
+		return h.Sum(nil), nil
+	}
 }
