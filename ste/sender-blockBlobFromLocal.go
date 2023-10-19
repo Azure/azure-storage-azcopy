@@ -37,7 +37,7 @@ type blockBlobUploader struct {
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, pacer, sip, "")
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, pacer, sip, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
 		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobClient, u.jptm.Context(), false) {
-			u.destBlobTier = ""
+			u.destBlobTier = nil
 		}
 
 		blobTags := u.blobTagsToApply
@@ -135,7 +135,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		}
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
-		destBlobTier := &u.destBlobTier
+		destBlobTier := u.destBlobTier
 		if u.jptm.IsSourceEncrypted() {
 			destBlobTier = nil
 		}
@@ -143,11 +143,11 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		if jptm.Info().SourceSize == 0 {
 			_, err = u.destBlockBlobClient.Upload(jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
 				&blockblob.UploadOptions{
-					HTTPHeaders: &u.headersToApply,
-					Metadata: u.metadataToApply,
-					Tier: destBlobTier,
-					Tags: blobTags,
-					CPKInfo: jptm.CpkInfo(),
+					HTTPHeaders:  &u.headersToApply,
+					Metadata:     u.metadataToApply,
+					Tier:         destBlobTier,
+					Tags:         blobTags,
+					CPKInfo:      jptm.CpkInfo(),
 					CPKScopeInfo: jptm.CpkScopeInfo(),
 				})
 		} else {
@@ -159,17 +159,19 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 				jptm.FailActiveUpload("Getting hash", errNoHash)
 				return
 			}
-			u.headersToApply.BlobContentMD5 = md5Hash
+			if len(md5Hash) != 0 {
+				u.headersToApply.BlobContentMD5 = md5Hash
+			}
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 			_, err = u.destBlockBlobClient.Upload(jptm.Context(), body,
 				&blockblob.UploadOptions{
-					HTTPHeaders: &u.headersToApply,
-					Metadata: u.metadataToApply,
-					Tier: destBlobTier,
-					Tags: blobTags,
-					CPKInfo: jptm.CpkInfo(),
+					HTTPHeaders:  &u.headersToApply,
+					Metadata:     u.metadataToApply,
+					Tier:         destBlobTier,
+					Tags:         blobTags,
+					CPKInfo:      jptm.CpkInfo(),
 					CPKScopeInfo: jptm.CpkScopeInfo(),
 				})
 		}
@@ -199,7 +201,9 @@ func (u *blockBlobUploader) Epilogue() {
 
 		md5Hash, ok := <-u.md5Channel
 		if ok {
-			u.headersToApply.BlobContentMD5 = md5Hash
+			if len(md5Hash) != 0 {
+				u.headersToApply.BlobContentMD5 = md5Hash
+			}
 		} else {
 			jptm.FailActiveSend("Getting hash", errNoHash)
 			return
