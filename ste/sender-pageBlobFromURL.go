@@ -22,12 +22,14 @@ package ste
 
 import (
 	"context"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
-	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -51,10 +53,15 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 		if blobSrcInfoProvider.BlobType() == blob.BlobTypePageBlob {
 			// if the source is page blob, preserve source's blob tier.
 			destBlobTier = blobSrcInfoProvider.BlobTier()
-			srcPageBlobClient := common.CreatePageBlobClient(srcURL, jptm.S2SSourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 			// capture the necessary info so that we can perform optimizations later
-			pageRangeOptimizer = newPageRangeOptimizer(srcPageBlobClient, jptm.Context())
+			// This is strictly an optimization, and not a necessity. We ignore
+			// any errors here.
+			if c, ok := jptm.SourceContainerClient().(*container.Client); ok {
+				pageRangeOptimizer = newPageRangeOptimizer(c.NewPageBlobClient(jptm.Info().SourceFilePath), jptm.Context())
+
+			}
+
 		}
 	}
 

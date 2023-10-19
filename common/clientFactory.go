@@ -27,7 +27,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
@@ -151,25 +150,6 @@ func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 		},
 		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*blockblob.Client, error) {
 			return blockblob.NewClientWithSharedKeyCredential(u, sharedKey, &blockblob.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*blob.SharedKeyCredential, error) {
-			return blob.NewSharedKeyCredential(accountName, accountKey)
-		},
-	}
-
-	return createClient(callbacks, u, credInfo, credOpOptions, options)
-}
-
-func CreatePageBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *pageblob.Client {
-	callbacks := newClientCallbacks[pageblob.Client, blob.SharedKeyCredential]{
-		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*pageblob.Client, error) {
-			return pageblob.NewClient(u, tc, &pageblob.ClientOptions{ClientOptions: options})
-		},
-		NoCredential: func(u string, options azcore.ClientOptions) (*pageblob.Client, error) {
-			return pageblob.NewClientWithNoCredential(u, &pageblob.ClientOptions{ClientOptions: options})
-		},
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*pageblob.Client, error) {
-			return pageblob.NewClientWithSharedKeyCredential(u, sharedKey, &pageblob.ClientOptions{ClientOptions: options})
 		},
 		NewSharedKeyCredential: func(accountName string, accountKey string) (*blob.SharedKeyCredential, error) {
 			return blob.NewSharedKeyCredential(accountName, accountKey)

@@ -22,10 +22,12 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -171,18 +173,18 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 }
 
 func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
-	source, err := p.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
+	share, ok := p.jptm.SourceContainerClient().(*share.Client)
+	if !ok {
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Azure Fileshare")
 	}
-
 	switch p.EntityType() {
 	case common.EEntityType.File():
-		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
+		//nakulkarmerge
+		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SourceFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
 	case common.EEntityType.Folder():
-		directoryClient := common.CreateShareDirectoryClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
+		directoryClient := share.NewDirectoryClient(p.transferInfo.SourceFilePath)
 		props, err := directoryClient.GetProperties(p.ctx, nil)
 		return &directoryGetPropertiesAdapter{props}, err
 	default:
