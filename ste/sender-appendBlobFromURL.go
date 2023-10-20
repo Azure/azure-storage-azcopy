@@ -21,10 +21,8 @@
 package ste
 
 import (
-	"bytes"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -74,28 +72,10 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 				CPKScopeInfo:                   c.jptm.CpkScopeInfo(),
 				CopySourceAuthorization:        token,
 			})
-
-		if err != nil && bloberror.HasCode(err, bloberror.AppendPositionConditionNotMet) && timeoutFromCtx {
-			// Download Range of last append
-			destMD5, destErr := c.GetMD5(offset, adjustedChunkSize)
-			if destErr != nil {
-				c.jptm.FailActiveS2SCopy("Appending block, get destination md5 after timeout", destErr)
-				return
-			}
-			sourceMD5, sourceErr := c.sip.GetMD5(offset, adjustedChunkSize)
-			if destErr != nil {
-				c.jptm.FailActiveS2SCopy("Appending block, get source md5 after timeout", sourceErr)
-				return
-			}
-			if destMD5 != nil && sourceMD5 != nil && len(destMD5) > 0 && len(sourceMD5) > 0 {
-				// Compare MD5
-				if bytes.Equal(destMD5, sourceMD5) {
-					err = nil
-				}
-			}
-		}
+		errString, err := c.transformAppendConditionMismatchError(timeoutFromCtx, offset, adjustedChunkSize, err)
 		if err != nil {
-			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
+			errString = "Appending block from URL" + errString
+			c.jptm.FailActiveS2SCopy(errString, err)
 			return
 		}
 	}

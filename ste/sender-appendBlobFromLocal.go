@@ -21,9 +21,7 @@
 package ste
 
 import (
-	"bytes"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -78,27 +76,10 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 				CPKInfo:                        u.jptm.CpkInfo(),
 				CPKScopeInfo:                   u.jptm.CpkScopeInfo(),
 			})
-		if err != nil && bloberror.HasCode(err, bloberror.AppendPositionConditionNotMet) && timeoutFromCtx {
-			// Download Range of last append
-			destMD5, destErr := u.GetMD5(offset, reader.Length())
-			if destErr != nil {
-				u.jptm.FailActiveS2SCopy("Appending block, get destination md5 after timeout", destErr)
-				return
-			}
-			sourceMD5, sourceErr := u.sip.GetMD5(offset, reader.Length())
-			if destErr != nil {
-				u.jptm.FailActiveS2SCopy("Appending block, get source md5 after timeout", sourceErr)
-				return
-			}
-			if destMD5 != nil && sourceMD5 != nil && len(destMD5) > 0 && len(sourceMD5) > 0 {
-				// Compare MD5
-				if bytes.Equal(destMD5, sourceMD5) {
-					err = nil
-				}
-			}
-		}
+		errString, err := u.transformAppendConditionMismatchError(timeoutFromCtx, offset, reader.Length(), err)
 		if err != nil {
-			u.jptm.FailActiveUpload("Appending block", err)
+			errString = "Appending block" + errString
+			u.jptm.FailActiveUpload(errString, err)
 			return
 		}
 	}

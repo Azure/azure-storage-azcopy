@@ -21,12 +21,14 @@
 package ste
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"io"
 	"time"
 
@@ -207,14 +209,14 @@ func (s *appendBlobSenderBase) GetDestinationLength() (int64, error) {
 	return *prop.ContentLength, nil
 }
 
-func (s *appendBlobSenderBase) GetMD5(offset, adjustedChunkSize int64) ([]byte, error) {
+func (s *appendBlobSenderBase) GetMD5(offset, count int64) ([]byte, error) {
 	var rangeGetContentMD5 *bool
-	if adjustedChunkSize <= common.MaxRangeGetSize {
+	if count <= common.MaxRangeGetSize {
 		rangeGetContentMD5 = to.Ptr(true)
 	}
 	response, err := s.destAppendBlobClient.DownloadStream(s.jptm.Context(),
 		&blob.DownloadStreamOptions{
-			Range:              blob.HTTPRange{Offset: offset, Count: adjustedChunkSize},
+			Range:              blob.HTTPRange{Offset: offset, Count: count},
 			RangeGetContentMD5: rangeGetContentMD5,
 			CPKInfo:            s.jptm.CpkInfo(),
 			CPKScopeInfo:       s.jptm.CpkScopeInfo(),
@@ -234,4 +236,25 @@ func (s *appendBlobSenderBase) GetMD5(offset, adjustedChunkSize int64) ([]byte, 
 		}
 		return h.Sum(nil), nil
 	}
+}
+
+func (s *appendBlobSenderBase) transformAppendConditionMismatchError(timeoutFromCtx bool, offset, count int64, err error) (string, error) {
+	if err != nil && bloberror.HasCode(err, bloberror.AppendPositionConditionNotMet) && timeoutFromCtx {
+		// Download Range of last append
+		destMD5, destErr := s.GetMD5(offset, count)
+		if destErr != nil {
+			return ", get destination md5 after timeout", destErr
+		}
+		sourceMD5, sourceErr := s.sip.GetMD5(offset, count)
+		if destErr != nil {
+			return ", get source md5 after timeout", sourceErr
+		}
+		if destMD5 != nil && sourceMD5 != nil && len(destMD5) > 0 && len(sourceMD5) > 0 {
+			// Compare MD5
+			if bytes.Equal(destMD5, sourceMD5) {
+				return "", nil
+			}
+		}
+	}
+	return "", err
 }
