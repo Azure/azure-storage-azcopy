@@ -114,7 +114,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonSameHash, false)
 			return nil
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
-			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteResaonNewerLMT, false)
+			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
 		}
 
