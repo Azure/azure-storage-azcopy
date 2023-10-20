@@ -71,6 +71,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.DisableSyslog(),
 	EEnvironmentVariable.MimeMapping(),
 	EEnvironmentVariable.DownloadToTempPath(),
+	EEnvironmentVariable.DisablePutBlob(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -376,5 +377,13 @@ func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 		Name:         "AZCOPY_DISABLE_INCOMPLETE_BLOB_TRANSFER",
 		DefaultValue: "false",
 		Description:  "An incomplete transfer to blob endpoint will be resumed from start if set to true",
+	}
+}
+
+func (EnvironmentVariable) DisablePutBlob() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DISABLE_PUT_BLOB",
+		DefaultValue: "false",
+		Description:  "Disables PutBlob and PutBlobFromURL calls, falling back to PutBlock/PutBlockFromURL and CommitBlockList for all blob operations",
 	}
 }

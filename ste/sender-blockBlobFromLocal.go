@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"strings"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -70,7 +71,9 @@ func (u *blockBlobUploader) Md5Channel() chan<- []byte {
 
 // Returns a chunk-func for blob uploads
 func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
-	if chunkIsWholeFile {
+	disablePutBlob := strings.EqualFold(common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DisablePutBlob()), "true")
+
+	if !disablePutBlob && chunkIsWholeFile {
 		if blockIndex > 0 {
 			panic("chunk cannot be whole file where there is more than one chunk")
 		}
@@ -143,11 +146,11 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		if jptm.Info().SourceSize == 0 {
 			_, err = u.destBlockBlobClient.Upload(jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
 				&blockblob.UploadOptions{
-					HTTPHeaders: &u.headersToApply,
-					Metadata: u.metadataToApply,
-					Tier: destBlobTier,
-					Tags: blobTags,
-					CPKInfo: jptm.CpkInfo(),
+					HTTPHeaders:  &u.headersToApply,
+					Metadata:     u.metadataToApply,
+					Tier:         destBlobTier,
+					Tags:         blobTags,
+					CPKInfo:      jptm.CpkInfo(),
 					CPKScopeInfo: jptm.CpkScopeInfo(),
 				})
 		} else {
@@ -165,11 +168,11 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 			_, err = u.destBlockBlobClient.Upload(jptm.Context(), body,
 				&blockblob.UploadOptions{
-					HTTPHeaders: &u.headersToApply,
-					Metadata: u.metadataToApply,
-					Tier: destBlobTier,
-					Tags: blobTags,
-					CPKInfo: jptm.CpkInfo(),
+					HTTPHeaders:  &u.headersToApply,
+					Metadata:     u.metadataToApply,
+					Tier:         destBlobTier,
+					Tags:         blobTags,
+					CPKInfo:      jptm.CpkInfo(),
 					CPKScopeInfo: jptm.CpkScopeInfo(),
 				})
 		}

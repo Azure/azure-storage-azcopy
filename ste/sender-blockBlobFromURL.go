@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"strings"
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -71,8 +72,10 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	 * While it is arguable that content can be inferred from size, it is better to fail transfer
 	 * for blobs of all sizes.
 	 */
+	disablePutBlob := strings.EqualFold(common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.DisablePutBlob()), "true")
+
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(blockblob.MaxUploadBlobBytes) {
+	if !disablePutBlob && c.NumChunks() == 1 && adjustedChunkSize <= int64(blockblob.MaxUploadBlobBytes) {
 		/*
 		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
 		 * invalid error from service due to PutBlockFromUrl.
