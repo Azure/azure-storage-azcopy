@@ -7,6 +7,15 @@
 
 1. Migrated to the latest [azdatalake SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake).
 
+### Bug Fixes
+
+1. Fixed an issue where http headers and access tier would sometimes be sent as empty headers.
+2. Fixed an issue where AzCopy would panic when passing an un-parseable URL. ([#2404](https://github.com/Azure/azure-storage-azcopy/issues/2404))
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
 ## Version 10.21.0
 
 ### New Features
