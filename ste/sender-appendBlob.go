@@ -240,13 +240,17 @@ func (s *appendBlobSenderBase) GetMD5(offset, count int64) ([]byte, error) {
 
 func (s *appendBlobSenderBase) transformAppendConditionMismatchError(timeoutFromCtx bool, offset, count int64, err error) (string, error) {
 	if err != nil && bloberror.HasCode(err, bloberror.AppendPositionConditionNotMet) && timeoutFromCtx {
+		if _, ok := s.sip.(benchmarkSourceInfoProvider); ok {
+			// If the source is a benchmark, then we don't need to check MD5 since the data is constantly changing.  This is OK.
+			return "", nil
+		}
 		// Download Range of last append
 		destMD5, destErr := s.GetMD5(offset, count)
 		if destErr != nil {
 			return ", get destination md5 after timeout", destErr
 		}
 		sourceMD5, sourceErr := s.sip.GetMD5(offset, count)
-		if destErr != nil {
+		if sourceErr != nil {
 			return ", get source md5 after timeout", sourceErr
 		}
 		if destMD5 != nil && sourceMD5 != nil && len(destMD5) > 0 && len(sourceMD5) > 0 {
