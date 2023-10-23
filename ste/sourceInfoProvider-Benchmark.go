@@ -21,19 +21,18 @@
 package ste
 
 import (
-	"crypto/md5"
+	"errors"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type benchmarkSourceInfoProvider struct {
-	jptm       IJobPartTransferMgr
-	randomData common.CloseableReaderAt
+	jptm IJobPartTransferMgr
 }
 
 func newBenchmarkSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
-	return &benchmarkSourceInfoProvider{jptm, nil}, nil
+	return &benchmarkSourceInfoProvider{jptm}, nil
 }
 
 func (b benchmarkSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -49,8 +48,7 @@ func (b benchmarkSourceInfoProvider) IsLocal() bool {
 }
 
 func (b benchmarkSourceInfoProvider) OpenSourceFile() (common.CloseableReaderAt, error) {
-	b.randomData = common.NewRandomDataGenerator(b.jptm.Info().SourceSize)
-	return b.randomData, nil
+	return common.NewRandomDataGenerator(b.jptm.Info().SourceSize), nil
 }
 
 func (b benchmarkSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
@@ -61,12 +59,6 @@ func (b benchmarkSourceInfoProvider) EntityType() common.EntityType {
 	return common.EEntityType.File() // no folders in benchmark
 }
 
-func (b benchmarkSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
-	data := make([]byte, 0, count)
-	_, err := b.randomData.ReadAt(data, offset)
-	if err != nil {
-		return nil, err
-	}
-	h := md5.New()
-	return h.Sum(data), nil
+func (b benchmarkSourceInfoProvider) GetMD5(_, _ int64) ([]byte, error) {
+	return nil, errors.New("benchmark does not support retrieving MD5")
 }
