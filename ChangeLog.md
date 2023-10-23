@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.22.0-Preview
+
+### New Features
+
+1. Migrated to the latest [azdatalake SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake).
+
 ## Version 10.21.0
 
 ### New Features
