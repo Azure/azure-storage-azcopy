@@ -430,6 +430,55 @@ func TestGCP(t *testing.T) {
 	a.True(bytes.Equal(localMd5[:], computedMd5))
 }
 
+func TestLocal(t *testing.T) {
+	a := assert.New(t)
+
+	// Setup
+	fName := generateBlobName()
+	f, err := os.CreateTemp("", fName)
+	a.Nil(err)
+	defer os.Remove(f.Name())
+
+	size := 1024 * 1024 * 10
+	a.Nil(err)
+	dataReader, data := getDataAndReader(t.Name(), size)
+	n, err := io.Copy(f, dataReader)
+	a.Nil(err)
+	a.Equal(int64(size), n)
+	f.Close()
+
+	jptm := testJobPartTransferManager{
+		info: TransferInfo{
+			Source: f.Name(),
+		},
+		fromTo: common.EFromTo.LocalBlob(),
+	}
+	localSIP, err := newLocalSourceInfoProvider(jptm)
+	a.Nil(err)
+
+	// Get MD5 range within service calculation
+	offset := rand.Int63n(int64(size) - 1)
+	count := int64(common.MaxRangeGetSize)
+	if offset+count > int64(size) {
+		count = int64(size) - offset
+	}
+	localMd5 := md5.Sum(data[offset : offset+count])
+	computedMd5, err := localSIP.GetMD5(offset, count)
+	a.Nil(err)
+	a.True(bytes.Equal(localMd5[:], computedMd5))
+
+	// Get MD5 range outside service calculation
+	offset = rand.Int63n(int64(size) - int64(common.MaxRangeGetSize) - 1)
+	count = int64(common.MaxRangeGetSize) + rand.Int63n(int64(size)-int64(common.MaxRangeGetSize))
+	if offset+count > int64(size) {
+		count = int64(size) - offset
+	}
+	localMd5 = md5.Sum(data[offset : offset+count])
+	computedMd5, err = localSIP.GetMD5(offset, count)
+	a.Nil(err)
+	a.True(bytes.Equal(localMd5[:], computedMd5))
+}
+
 func TestS3(t *testing.T) {
 	a := assert.New(t)
 	skipIfS3Disabled(t)

@@ -21,7 +21,10 @@
 package ste
 
 import (
+	"bytes"
 	"crypto/md5"
+	"errors"
+	"io"
 	"os"
 	"time"
 
@@ -109,11 +112,17 @@ func (f localFileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error)
 		return nil, err
 	}
 	defer localFile.Close()
-	data := make([]byte, 0, count)
-	_, err = localFile.ReadAt(data, offset)
+	data := make([]byte, count)
+	size, err := localFile.ReadAt(data, offset)
 	if err != nil {
 		return nil, err
 	}
+	if int64(size) != count {
+		return nil, errors.New("failed to read the full range of the local file")
+	}
 	h := md5.New()
-	return h.Sum(data), nil
+	if _, err = io.Copy(h, bytes.NewReader(data)); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }
