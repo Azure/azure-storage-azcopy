@@ -22,8 +22,10 @@ package ste
 
 import (
 	"bytes"
+	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -33,8 +35,10 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/minio/minio-go"
 	"github.com/stretchr/testify/assert"
 	"hash/crc64"
+	"io"
 	"math/rand"
 	"os"
 	"runtime"
@@ -135,6 +139,61 @@ func getDataAndReader(testName string, n int) (*bytes.Reader, []byte) {
 	data := make([]byte, n)
 	_, _ = random.Read(data)
 	return bytes.NewReader(data), data
+}
+
+// If TEST_GCP == True, we'll run GCP testcases
+func gcpTestsDisabled() bool {
+	return strings.ToLower(os.Getenv("GCP_TESTS_OFF")) != ""
+}
+
+func skipIfGCPDisabled(t *testing.T) {
+	if gcpTestsDisabled() {
+		t.Skip("GCP testing is disabled for this run")
+	}
+}
+
+// if S3_TESTS_OFF is set at all, S3 tests are disabled.
+func isS3Disabled() bool {
+	return strings.ToLower(os.Getenv("S3_TESTS_OFF")) != ""
+}
+
+func skipIfS3Disabled(t *testing.T) {
+	if isS3Disabled() {
+		t.Skip("S3 testing is disabled for this unit test suite run.")
+	}
+}
+
+func createS3ClientWithMinio() (*minio.Client, error) {
+	if isS3Disabled() {
+		return nil, errors.New("s3 testing is disabled")
+	}
+
+	accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+
+	if accessKeyID == "" || secretAccessKey == "" {
+		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")
+	}
+
+	s3Client, err := minio.NewWithRegion("s3.amazonaws.com", accessKeyID, secretAccessKey, true, "")
+	if err != nil {
+		return nil, err
+	}
+	return s3Client, nil
+}
+
+func TestBenchmark(t *testing.T) {
+	a := assert.New(t)
+
+	jptm := testJobPartTransferManager{
+		info:   TransferInfo{},
+		fromTo: common.EFromTo.BenchmarkBlob(),
+	}
+	benchSIP, err := newBenchmarkSourceInfoProvider(jptm)
+	a.Nil(err)
+
+	_, err = benchSIP.GetMD5(0, 1)
+	a.NotNil(err)
 }
 
 func TestBlockBlob(t *testing.T) {
@@ -314,16 +373,113 @@ func TestShareDirectory(t *testing.T) {
 	a.NotNil(err)
 }
 
-func TestBenchmark(t *testing.T) {
+func TestGCP(t *testing.T) {
 	a := assert.New(t)
+	skipIfGCPDisabled(t)
+
+	// Setup
+	gcpClient, err := gcpUtils.NewClient(context.Background())
+	a.Nil(err)
+	bName := generateContainerName()
+	bucket := gcpClient.Bucket(bName)
+	err = bucket.Create(context.Background(), os.Getenv("GOOGLE_CLOUD_PROJECT"), &gcpUtils.BucketAttrs{})
+	a.Nil(err)
+	defer bucket.Delete(context.Background())
+
+	oName := generateBlobName()
+	oc := bucket.Object(oName)
+	size := 1024 * 1024 * 10
+	wc := oc.NewWriter(context.Background())
+	a.Nil(err)
+	dataReader, data := getDataAndReader(t.Name(), size)
+	written, err := io.Copy(wc, dataReader)
+	a.Nil(err)
+	a.Equal(size, written)
+
+	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s/%s", bName, oName)
 
 	jptm := testJobPartTransferManager{
-		info:   TransferInfo{},
-		fromTo: common.EFromTo.BenchmarkBlob(),
+		info: TransferInfo{
+			Source: rawURL,
+		},
+		fromTo: common.EFromTo.GCPBlob(),
 	}
-	benchSIP, err := newBenchmarkSourceInfoProvider(jptm)
+	gcpSIP, err := newGCPSourceInfoProvider(jptm)
 	a.Nil(err)
 
-	_, err = benchSIP.GetMD5(0, 1)
-	a.NotNil(err)
+	// Get MD5 range within service calculation
+	offset := rand.Int63n(int64(size) - 1)
+	count := int64(common.MaxRangeGetSize)
+	if offset+count > int64(size) {
+		count = int64(size) - offset
+	}
+	localMd5 := md5.Sum(data[offset : offset+count])
+	computedMd5, err := gcpSIP.GetMD5(offset, count)
+	a.Nil(err)
+	a.True(bytes.Equal(localMd5[:], computedMd5))
+
+	// Get MD5 range outside service calculation
+	offset = rand.Int63n(int64(size) - int64(common.MaxRangeGetSize) - 1)
+	count = int64(common.MaxRangeGetSize) + rand.Int63n(int64(size)-int64(common.MaxRangeGetSize))
+	if offset+count > int64(size) {
+		count = int64(size) - offset
+	}
+	localMd5 = md5.Sum(data[offset : offset+count])
+	computedMd5, err = gcpSIP.GetMD5(offset, count)
+	a.Nil(err)
+	a.True(bytes.Equal(localMd5[:], computedMd5))
+}
+
+func TestS3(t *testing.T) {
+	a := assert.New(t)
+	skipIfS3Disabled(t)
+
+	// Setup
+	s3Client, err := createS3ClientWithMinio()
+	a.Nil(err)
+	bName := generateContainerName()
+	err = s3Client.MakeBucket(bName, "")
+	a.Nil(err)
+	defer s3Client.RemoveBucket(bName)
+
+	oName := generateBlobName()
+	size := 1024 * 1024 * 10
+	a.Nil(err)
+	dataReader, data := getDataAndReader(t.Name(), size)
+	n, err := s3Client.PutObjectWithContext(context.Background(), bName, oName, dataReader, int64(size), minio.PutObjectOptions{})
+	a.Nil(err)
+	a.Equal(size, n)
+
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", "", bName, oName)
+
+	jptm := testJobPartTransferManager{
+		info: TransferInfo{
+			Source: rawURL,
+		},
+		fromTo: common.EFromTo.S3Blob(),
+	}
+	s3SIP, err := newS3SourceInfoProvider(jptm)
+	a.Nil(err)
+
+	// Get MD5 range within service calculation
+	offset := rand.Int63n(int64(size) - 1)
+	count := int64(common.MaxRangeGetSize)
+	if offset+count > int64(size) {
+		count = int64(size) - offset
+	}
+	localMd5 := md5.Sum(data[offset : offset+count])
+	computedMd5, err := s3SIP.GetMD5(offset, count)
+	a.Nil(err)
+	a.True(bytes.Equal(localMd5[:], computedMd5))
+
+	// Get MD5 range outside service calculation
+	offset = rand.Int63n(int64(size) - int64(common.MaxRangeGetSize) - 1)
+	count = int64(common.MaxRangeGetSize) + rand.Int63n(int64(size)-int64(common.MaxRangeGetSize))
+	if offset+count > int64(size) {
+		count = int64(size) - offset
+	}
+	localMd5 = md5.Sum(data[offset : offset+count])
+	computedMd5, err = s3SIP.GetMD5(offset, count)
+	a.Nil(err)
+	a.True(bytes.Equal(localMd5[:], computedMd5))
 }
