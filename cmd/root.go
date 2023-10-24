@@ -21,12 +21,13 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -244,54 +245,69 @@ func beginDetectNewVersion() chan struct{} {
 	go func() {
 		const versionMetadataUrl = "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
 
-		// step 0: check the Stderr before checking version
+		// step 0: check the Stderr, check local version
 		_, err := os.Stderr.Stat()
 		if err != nil {
 			return
 		}
 
-		// step 1: initialize pipeline
+		localVersion, err := NewVersion(common.AzcopyVersion)
+		if err != nil {
+			return
+		}
+
+		// step 1: fetch & validate cached version and if it is updated, return without making API calls
+		filePath := filepath.Join(AzcopyAppPathFolder, "latest_version.txt") // TODO: should we use AzCopy path folder or log folder to store the latest_version.txt?
+		cachedVersion, err := ValidateCachedVersion(filePath)                // same as the remote version
+		if err == nil {
+			if localVersion.OlderThan(*cachedVersion) {
+				executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
+				executableName := executablePathSegments[len(executablePathSegments)-1]
+
+				// output in info mode instead of stderr, as it was crashing CI jobs of some people
+				glcm.Info(executableName + " " + localVersion.original + ": A newer version " + cachedVersion.original + " is available to download\n")
+			}
+			return
+		}
+
+		// step 2: initialize pipeline
 		options := createClientOptions(common.LogNone, nil, nil)
 
-		// step 2: start download
+		// step 3: start download
 		blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
 		if err != nil {
 			return
 		}
 
-		blobStream, err := blobClient.DownloadStream(context.TODO(), nil)
+		downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
 		if err != nil {
 			return
 		}
-
-		blobBody := blobStream.NewRetryReader(context.TODO(), &blob.RetryReaderOptions{MaxRetries: ste.MaxRetryPerDownloadBody})
-		defer blobBody.Close()
 
 		// step 4: read newest version str
-		buf := new(bytes.Buffer)
-		n, err := buf.ReadFrom(blobBody)
-		if n == 0 || err != nil {
+		data := make([]byte, *downloadBlobResp.ContentLength)
+		_, err = downloadBlobResp.Body.Read(data)
+		if err != nil && err != io.EOF {
 			return
 		}
-		// only take the first line, in case the version metadata file is upgraded in the future
-		remoteVersion := strings.Split(buf.String(), "\n")[0]
 
-		// step 5: compare remote version to local version to see if there's a newer AzCopy
-		v1, err := NewVersion(common.AzcopyVersion)
-		if err != nil {
-			return
-		}
-		v2, err := NewVersion(remoteVersion)
+		remoteVersion, err := NewVersion(string(data))
 		if err != nil {
 			return
 		}
 
-		if v1.OlderThan(*v2) {
+		if localVersion.OlderThan(*remoteVersion) {
 			executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
 			executableName := executablePathSegments[len(executablePathSegments)-1]
 
 			// output in info mode instead of stderr, as it was crashing CI jobs of some people
-			glcm.Info(executableName + " " + common.AzcopyVersion + ": A newer version " + remoteVersion + " is available to download\n")
+			glcm.Info(executableName + " " + common.AzcopyVersion + ": A newer version " + remoteVersion.original + " is available to download\n")
+		}
+
+		// step 5: persist remote version in local
+		err = localVersion.CacheNewerVersion(*remoteVersion, filePath)
+		if err != nil {
+			return
 		}
 
 		// let caller know we have finished, if they want to know

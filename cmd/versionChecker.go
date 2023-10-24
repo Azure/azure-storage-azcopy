@@ -22,8 +22,11 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Version struct {
@@ -32,12 +35,15 @@ type Version struct {
 	original string
 }
 
+const versionFileTimeFormat = "2006-01-02T15:04:05Z"
+
 // To keep the code simple, we assume we only use a simple subset of semantic versions.
 // Namely, the version is either a normal stable version, or a pre-release version with '-preview' attached.
 // Examples: 10.1.0, 11.2.0-preview
 func NewVersion(raw string) (*Version, error) {
 	const standardError = "invalid version string"
 
+	raw = strings.Trim(raw, "\n")
 	rawSegments := strings.Split(raw, ".")
 	if len(rawSegments) != 3 {
 		return nil, errors.New(standardError)
@@ -104,4 +110,37 @@ func (v Version) OlderThan(v2 Version) bool {
 // detect if version v is newer than v2
 func (v Version) NewerThan(v2 Version) bool {
 	return v.compare(v2) == 1
+}
+
+// CacheNewerVersion caches the version v2 to filePath if v2 is newer than v1
+func (v Version) CacheNewerVersion(v2 Version, filePath string) error {
+	// if v.OlderThan(v2) {
+	expiry := time.Now().Add(24 * time.Hour).Format(versionFileTimeFormat)
+	if err := os.WriteFile(filePath, []byte(v2.original+","+expiry), 0666); err != nil {
+		return err
+	}
+	// }
+	return nil
+}
+
+// ValidateCachedVersion checks if the given filepath contains cached version, expiry or not.
+// If yes, then it reads the cache, checks if the cache is still fresh and finally creates Version object from it and returns it.
+func ValidateCachedVersion(filePath string) (*Version, error) {
+	// Check the locally cached file to get the version.
+	data, err := os.ReadFile(filePath)
+	if err == nil {
+		// If the data is fresh, don't make the call and return right away
+		versionAndExpiry := strings.Split(fmt.Sprintf("%s", data), ",")
+		if len(versionAndExpiry) == 2 {
+			version, err := NewVersion(versionAndExpiry[0])
+			if err == nil {
+				expiry, err := time.Parse(versionFileTimeFormat, versionAndExpiry[1])
+				currentTime := time.Now()
+				if err == nil && expiry.After(currentTime) {
+					return version, nil
+				}
+			}
+		}
+	}
+	return nil, errors.New("failed to fetch or validate the cached version")
 }
