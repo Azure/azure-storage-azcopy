@@ -10,7 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -56,14 +56,14 @@ func doDeleteBlob(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	c, ok := jptm.SourceContainerClient().(container.Client)
+	s, ok := jptm.SrcServiceClient().(*service.Client)
 	if !ok {
-		transferDone(common.ETransferStatus.Failed(),  common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
+		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Service"))
 		return
 	}
 	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob
 	// we still count this delete operation as successful since we accomplished the desired outcome
-	_, err := c.NewBlobClient(jptm.Info().SourceFilePath).Delete(jptm.Context(), &blob.DeleteOptions{
+	_, err := s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).Delete(jptm.Context(), &blob.DeleteOptions{
 		DeleteSnapshots: jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(),
 		BlobDeleteType:  jptm.PermanentDeleteOption().ToPermanentDeleteOptionType(),
 	})

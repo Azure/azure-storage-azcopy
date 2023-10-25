@@ -3,11 +3,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
 	"net/http"
@@ -17,6 +12,12 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sync/semaphore"
@@ -64,9 +65,10 @@ type IJobPartMgr interface {
 	TrailingDot() *common.TrailingDotOption
 	From() *common.Location
 	// These functions return Container/fileshare clients.
-	// They must be type asserted before use.
-	SourceContainerClient() any
-	DestinationContainerClient() any
+	// They must be type asserted before use. In cases where they dont
+	// make sense (say SrcServiceClient for upload) they are il
+	SrcServiceClient() any
+	DstServiceClient() any
 
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -183,8 +185,8 @@ type jobPartMgr struct {
 
 	// These fields hold the container/fileshare client of this jobPart,
 	// whatever is appropriate for this scenario
-	sourceClient any
-	destinationClient any 
+	srcServiceClient any
+	dstServiceClient any
 
 	credInfo               common.CredentialInfo
 	clientOptions          azcore.ClientOptions
@@ -735,12 +737,12 @@ func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
 	return jpm.credInfo
 }
 
-func (jpm *jobPartMgr) SourceContainerClient() any {
-	return jpm.sourceClient
+func (jpm *jobPartMgr) SrcServiceClient() any {
+	return jpm.srcServiceClient
 }
 
-func (jpm *jobPartMgr) DestinationContainerClient() any {
-	return jpm.destinationClient
+func (jpm *jobPartMgr) DstServiceClient() any {
+	return jpm.dstServiceClient
 }
 
 func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {

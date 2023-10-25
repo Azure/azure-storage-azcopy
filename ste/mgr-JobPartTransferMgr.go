@@ -67,8 +67,8 @@ type IJobPartTransferMgr interface {
 	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
-	SourceContainerClient() any
-	DestinationContainerClient() any
+	SrcServiceClient() any
+	DstServiceClient() any
 
 	SourceTrailingDot() *common.TrailingDotOption
 	TrailingDot() *common.TrailingDotOption
@@ -126,15 +126,17 @@ type TransferInfo struct {
 	BlobFSRecursiveDelete   bool
 
 	// Paths of targets excluding the container/fileshare name.
-	// ie. for https://acc1.blob.core.windows.net/c1/a/b/c/d.txt, 
+	// ie. for https://acc1.blob.core.windows.net/c1/a/b/c/d.txt,
 	// SourceFilePath (or destination) would be a/b/c/d.txt.
 	// If they point to local resources, these strings would be empty.
-	SourceFilePath          string
-	DestinationFilePath     string
+	SrcContainer string
+	DstContainer string
+	SrcFilePath  string
+	DstFilePath  string
 
 	// Depending on FromTo, clients are blob/file clients appropriately
-	SourceClient            any
-	DestinationClient       any
+	SrcServiceClient any
+	DstServiceClient any
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -283,12 +285,12 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	srcURI, dstURI, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcPath, err := common.TargetPathExcludingContainer(srcURI)
+	srcContainer, srcPath, err := common.SplitContainerNameFromPath(srcURI)
 	if err != nil {
 		panic(err)
 	}
 
-	dstPath, err := common.TargetPathExcludingContainer(dstURI)
+	dstContainer, dstPath, err := common.SplitContainerNameFromPath(dstURI)
 	if err != nil {
 		panic(err)
 	}
@@ -401,8 +403,10 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		Source:                         srcURI,
 		SourceSize:                     sourceSize,
 		Destination:                    dstURI,
-		SourceFilePath: 				srcPath,
-		DestinationFilePath:            dstPath,
+		SrcContainer:                   srcContainer,
+		SrcFilePath:                    srcPath,
+		DstContainer:                   dstContainer,
+		DstFilePath:                    dstPath,
 		EntityType:                     entityType,
 		PreserveSMBPermissions:         plan.PreservePermissions,
 		PreserveSMBInfo:                plan.PreserveSMBInfo,
@@ -1011,14 +1015,13 @@ func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context)
 	return nil, nil
 }
 
-func (jptm *jobPartTransferMgr) SourceContainerClient() any {
-	return jptm.jobPartMgr.SourceContainerClient()
+func (jptm *jobPartTransferMgr) SrcServiceClient() any {
+	return jptm.jobPartMgr.SrcServiceClient()
 }
 
-func (jptm *jobPartTransferMgr) DestinationContainerClient() any {
-	return jptm.jobPartMgr.DestinationContainerClient()
+func (jptm *jobPartTransferMgr) DstServiceClient() any {
+	return jptm.jobPartMgr.DstServiceClient()
 }
-
 func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
 	return jptm.jobPartMgr.S2SSourceClientOptions()
 }

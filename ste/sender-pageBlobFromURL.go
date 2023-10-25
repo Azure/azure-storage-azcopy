@@ -28,8 +28,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -57,8 +57,10 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 			// capture the necessary info so that we can perform optimizations later
 			// This is strictly an optimization, and not a necessity. We ignore
 			// any errors here.
-			if c, ok := jptm.SourceContainerClient().(*container.Client); ok {
-				pageRangeOptimizer = newPageRangeOptimizer(c.NewPageBlobClient(jptm.Info().SourceFilePath), jptm.Context())
+			if s, ok := jptm.SrcServiceClient().(*service.Client); ok {
+				pageRangeOptimizer = newPageRangeOptimizer(
+					s.NewContainerClient(jptm.Info().SrcContainer).NewPageBlobClient(
+					jptm.Info().SrcFilePath), jptm.Context())
 
 			}
 
@@ -149,7 +151,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 
 // isolate the logic to fetch page ranges for a page blob, and check whether a given range has data
 // for two purposes:
-//	1. capture the necessary info to do so, so that fetchPages can be invoked anywhere
+//  1. capture the necessary info to do so, so that fetchPages can be invoked anywhere
 //  2. open to extending the logic, which could be re-used for both download and s2s scenarios
 type pageRangeOptimizer struct {
 	srcPageBlobClient *pageblob.Client

@@ -21,13 +21,12 @@
 package ste
 
 import (
-	"errors"
 	"os"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -42,7 +41,7 @@ type blobDownloader struct {
 
 	// used to avoid downloading zero ranges of page blobs
 	pageRangeOptimizer *pageRangeOptimizer
-	source      *blob.Client
+	source             *blob.Client
 
 	jptm   IJobPartTransferMgr
 	txInfo *TransferInfo
@@ -63,14 +62,14 @@ func (bd *blobDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 }
 
 func newBlobDownloader(jptm IJobPartTransferMgr) (downloader, error) {
-	c, ok := jptm.SourceContainerClient().(container.Client)
+	s, ok := jptm.SrcServiceClient().(*service.Client)
 	if !ok {
-		return &blobDownloader{}, errors.New("invalid Container client") 
+		return &blobDownloader{}, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Service")
 	}
 
 	return &blobDownloader{
 		filePacer: NewNullAutoPacer(), // defer creation of real one, if needed, to Prologue
-		source: c.NewBlobClient(jptm.Info().SourceFilePath),
+		source:    s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath),
 	}, nil
 }
 
@@ -83,10 +82,10 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr) {
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
 		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
 
-		// This is safe. We've already asserted that SourceContainerClient() is
-		// a container.Client
-		c := jptm.SourceContainerClient().(container.Client)
-		bd.pageRangeOptimizer = newPageRangeOptimizer(c.NewPageBlobClient(bd.txInfo.SourceFilePath), jptm.Context())
+		// This is safe. We've already asserted that SrcServiceClient() is
+		// a blob service client.
+		c := jptm.SrcServiceClient().(*service.Client).NewContainerClient(jptm.Info().SrcContainer)
+		bd.pageRangeOptimizer = newPageRangeOptimizer(c.NewPageBlobClient(bd.txInfo.SrcFilePath), jptm.Context())
 		bd.pageRangeOptimizer.fetchPages()
 	}
 }

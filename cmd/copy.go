@@ -26,9 +26,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"io"
 	"math"
 	"net/url"
@@ -37,6 +34,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -1383,6 +1383,13 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 // get source credential - if there is a token it will be used to get passed along our pipeline
 func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialInfo, error) {
+	switch cca.FromTo.From() {
+	case common.ELocation.Local(), common.ELocation.Benchmark():
+		return common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, nil
+	case common.ELocation.S3(), common.ELocation.GCP(), common.ELocation.Pipe():
+		panic("Invalid Source")
+	}
+
 	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions)
 	if err != nil {
 		return srcCredInfo, err
@@ -1506,8 +1513,20 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	from := cca.FromTo.From()
+	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+	if err != nil {
+		return err
+	}
+	sourceURL, _ := cca.Source.String()
+	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, sourceCredInfo.OAuthTokenInfo.TokenCredential, nil)
+	if err != nil {
+		return err
+	}
 
+	dstURL, _ := cca.Destination.String()
+	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(cca.FromTo.To(), dstURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, nil)
+
+	from := cca.FromTo.From()
 	jobPartOrder.DestinationRoot = cca.Destination
 
 	jobPartOrder.SourceRoot = cca.Source

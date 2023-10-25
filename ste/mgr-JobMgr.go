@@ -415,17 +415,17 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart2(partNum PartNumber,
-							  planFile JobPartPlanFileName,
-							  existingPlanMMF *JobPartPlanMMF,
-							  sourceClient any,
-							  destiationClient any,
-							  scheduleTransfers bool,
-							  completionChan chan struct{}) IJobPartMgr {
+	planFile JobPartPlanFileName,
+	existingPlanMMF *JobPartPlanMMF,
+	sourceClient any,
+	destiationClient any,
+	scheduleTransfers bool,
+	completionChan chan struct{}) IJobPartMgr {
 	jpm := &jobPartMgr{
 		jobMgr:            jm,
 		filename:          planFile,
-		sourceClient:      sourceClient,
-		destinationClient: destiationClient,
+		srcServiceClient:  sourceClient,
+		dstServiceClient:  destiationClient,
 		pacer:             jm.pacer,
 		slicePool:         jm.slicePool,
 		cacheLimiter:      jm.cacheLimiter,
@@ -468,6 +468,7 @@ func (jm *jobMgr) AddJobPart2(partNum PartNumber,
 	}
 	return jpm
 }
+
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 	destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr {

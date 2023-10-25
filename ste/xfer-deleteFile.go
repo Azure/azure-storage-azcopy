@@ -11,7 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -102,12 +102,12 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	s, ok := jptm.SourceContainerClient().(share.Client)
+	s, ok := jptm.SrcServiceClient().(*service.Client)
 	if !ok {
-		transferDone(common.ETransferStatus.Failed(),  common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
+		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
 		return
 	}
-	srcFileClient := s.NewRootDirectoryClient().NewFileClient(jptm.Info().SourceFilePath) 
+	srcFileClient := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
 
 	// Delete the source file
 	helper := &azureFileSenderBase{}
@@ -143,11 +143,11 @@ func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr
 		return false
 	}
 
-	s, ok := jptm.SourceContainerClient().(share.Client)
+	s, ok := jptm.SrcServiceClient().(*service.Client)
 	if !ok {
 		return false
 	}
-	srcDirClient := s.NewDirectoryClient(jptm.Info().SourceFilePath)
+	srcDirClient := s.NewShareClient(jptm.Info().SrcContainer).NewDirectoryClient(jptm.Info().SrcFilePath)
 	loggableName := fileURLParts.DirectoryOrFilePath
 	logger.Log(common.LogDebug, "About to attempt to delete folder "+loggableName)
 

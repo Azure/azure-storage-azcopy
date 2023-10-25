@@ -178,7 +178,7 @@ var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
 type PermanentDeleteOption uint8
 
 func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
-func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) Versions()  PermanentDeleteOption  { return PermanentDeleteOption(1) }
 func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
 	return PermanentDeleteOption(2)
 }

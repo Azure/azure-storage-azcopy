@@ -162,7 +162,7 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                                                                                        // Convert the order to a plan file
+	jppfn.Create(order)                                                                  // Convert the order to a plan file
 	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 
 	if len(order.Transfers.List) == 0 && order.IsFinalPart {
@@ -180,7 +180,8 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 			S2SSourceCredentialType: order.S2SSourceCredentialType,
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
-	jm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true, nil) // Add this part to the Job and schedule its transfers
+	// Add this part to the Job and schedule its transfers
+	jm.AddJobPart2(order.PartNum, jppfn, nil, order.SrcServiceClient, order.DstServiceClient, true, nil)
 
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),

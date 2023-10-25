@@ -31,7 +31,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -95,12 +95,12 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	c, ok := jptm.DestinationContainerClient().(container.Client)
+	bsc, ok := jptm.DstServiceClient().(*service.Client)
 	if !ok {
 		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
 	}
-	
-	destPageBlobClient := c.NewPageBlobClient(jptm.Info().DestinationFilePath)
+
+	destPageBlobClient := bsc.NewContainerClient(jptm.Info().DstContainer).NewPageBlobClient(jptm.Info().DstFilePath)
 
 	// This is only necessary if our destination is a managed disk impexp account.
 	// Read the in struct explanation if necessary.

@@ -4,6 +4,11 @@ import (
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	blobService "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	fileService "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
 
 var AzcopyJobPlanFolder string
@@ -28,17 +33,17 @@ func isIPEndpointStyle(host string) bool {
 	return net.ParseIP(host) != nil
 }
 
-// TargetPathExcludingContainer returns blob/file/dir path excluding container.
+// SplitContainerNameFromPath returns blob/file/dir path excluding container.
 // Ex. For input https://account1.blob.core.windows.net/container1/a/b/c/d
 // a/b/c/d is returned.
-func TargetPathExcludingContainer(u string) (string, error) {
+func SplitContainerNameFromPath(u string) (container string, filepath string, err error) {
 	uri, err := url.Parse(u)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	if uri.Path == "" {
-		return "", nil
+		return "", "", nil
 	}
 
 	path := uri.Path
@@ -49,38 +54,81 @@ func TargetPathExcludingContainer(u string) (string, error) {
 	if isIPEndpointStyle(uri.Host) {
 		if accountEndIndex := strings.Index(path, "/"); accountEndIndex == -1 {
 			// Slash not found; path has account name & no container name or blob
-			return "", nil
+			return "", "", nil
 		} else {
-			path = path[accountEndIndex+1:]// path refers to portion after the account name now (container & blob names)
+			path = path[accountEndIndex+1:] // path refers to portion after the account name now (container & blob names)
 		}
 	}
 
 	containerEndIndex := strings.Index(path, "/") // Find the next slash (if it exists)
-	if containerEndIndex == -1 {// Slash not found; path has container name & no blob name
-		return "", nil
+	if containerEndIndex == -1 {                  // Slash not found; path has container name & no blob name
+		return path, "", nil
 	}
 
-	return path[containerEndIndex+1:], nil
+	return path[:containerEndIndex], path[containerEndIndex+1:], nil
 }
 
-func VerifyIsURLResolvable(url_string string) (error) {
+func VerifyIsURLResolvable(url_string string) error {
 	/* This function is disabled. But we should still fix this after fixing the below stuff.
 	 * We can take this up after migration to new SDK. The pipeline infra may not be same then.
 	 * 1. At someplaces we use Blob SDK directly to create pipeline - ex getBlobCredentialType()
 	 *    We should create pipeline through helper functions create<Blob/File/blobfs>pipeline, where we
 	 *    handle errors appropriately.
-	 * 2. We should either do a http.Get or net.Dial instead of lookIP. If we are behind a proxy, we may 
+	 * 2. We should either do a http.Get or net.Dial instead of lookIP. If we are behind a proxy, we may
 	 *    not resolve this IP. #2144
 	 * 3. DNS errors may by temporary, we should try for a minute before we give up.
 	 */
 	return nil
 	/*
-	url, err := url.Parse(url_string)
-	if (err != nil) {
-		return err
-	}
+		url, err := url.Parse(url_string)
+		if (err != nil) {
+			return err
+		}
 
-	_, err = net.LookupIP(url.Host)
-	return err
+		_, err = net.LookupIP(url.Host)
+		return err
 	*/
+}
+
+// GetServiceClientForLocation returns service client for the resourceURL. It strips the
+// container and file related details before creating the client.
+func GetServiceClientForLocation(loc Location,
+	resourceURL string,
+	cred azcore.TokenCredential,
+	options *azcore.ClientOptions) (any, error) {
+
+	u, err := url.Parse(resourceURL)
+	if err != nil {
+		return nil, nil
+	}
+	u.Path = ""
+
+	switch loc {
+	case ELocation.Blob():
+		var o *blobService.ClientOptions
+		if options != nil {
+			o = &blobService.ClientOptions{ClientOptions: *options}
+		}
+		if cred != nil {
+			return blobService.NewClient(resourceURL, cred, o)
+		}
+		return blobService.NewClientWithNoCredential(resourceURL, o)
+	case ELocation.File():
+		var o *fileService.ClientOptions
+		if options != nil {
+			o = &fileService.ClientOptions{ClientOptions: *options}
+		}
+		return fileService.NewClientWithNoCredential(resourceURL, o)
+	case ELocation.BlobFS():
+		var o *datalake.ClientOptions
+		if options != nil {
+			o = &datalake.ClientOptions{ClientOptions: *options}
+		}
+		if cred != nil {
+			return datalake.NewClient(resourceURL, cred, o)
+		}
+		return datalake.NewClientWithNoCredential(resourceURL, o)
+	default:
+		return nil, nil
+	}
 }

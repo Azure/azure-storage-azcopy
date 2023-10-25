@@ -27,7 +27,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
 	"golang.org/x/sync/semaphore"
 
@@ -70,11 +70,11 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	c, ok := jptm.DestinationContainerClient().(*container.Client)
+	bsc, ok := jptm.DstServiceClient().(*service.Client)
 	if !ok {
 		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
 	}
-	destAppendBlobClient := c.NewAppendBlobClient(transferInfo.SourceFilePath)
+	destAppendBlobClient := bsc.NewContainerClient(transferInfo.DstContainer).NewAppendBlobClient(transferInfo.DstFilePath)
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
@@ -153,10 +153,10 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		blobTags = nil
 	}
 	_, err := s.destAppendBlobClient.Create(s.jptm.Context(), &appendblob.CreateOptions{
-		HTTPHeaders: &s.headersToApply,
-		Metadata: s.metadataToApply,
-		Tags: blobTags,
-		CPKInfo: s.jptm.CpkInfo(),
+		HTTPHeaders:  &s.headersToApply,
+		Metadata:     s.metadataToApply,
+		Tags:         blobTags,
+		CPKInfo:      s.jptm.CpkInfo(),
 		CPKScopeInfo: s.jptm.CpkScopeInfo(),
 	})
 	if err != nil {

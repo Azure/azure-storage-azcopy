@@ -22,9 +22,10 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -37,13 +38,13 @@ type azureFilesDownloader struct {
 }
 
 func newAzureFilesDownloader(jptm IJobPartTransferMgr) (downloader, error) {
-	shareClient, ok := jptm.SourceContainerClient().(share.Client)
+	fsc, ok := jptm.SrcServiceClient().(*service.Client)
 	if !ok {
-		return &azureFilesDownloader{}, errors.New("invalid fileshare client")
+		return &azureFilesDownloader{}, common.NewAzError(common.EAzError.InvalidContainerClient(), "File Service")
 	}
 
 	return &azureFilesDownloader{
-		source: shareClient.NewRootDirectoryClient().NewFileClient(jptm.Info().SourceFilePath),
+		source: fsc.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath),
 	}, nil
 }
 

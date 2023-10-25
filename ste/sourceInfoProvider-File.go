@@ -27,7 +27,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -173,18 +173,19 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 }
 
 func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
-	share, ok := p.jptm.SourceContainerClient().(*share.Client)
+	fsc, ok := p.jptm.SrcServiceClient().(*service.Client)
+	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	if !ok {
 		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Azure Fileshare")
 	}
 	switch p.EntityType() {
-	case common.EEntityType.File():
 		//nakulkarmerge
-		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SourceFilePath)
+	case common.EEntityType.File():
+		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
 	case common.EEntityType.Folder():
-		directoryClient := share.NewDirectoryClient(p.transferInfo.SourceFilePath)
+		directoryClient := share.NewDirectoryClient(p.transferInfo.SrcFilePath)
 		props, err := directoryClient.GetProperties(p.ctx, nil)
 		return &directoryGetPropertiesAdapter{props}, err
 	default:

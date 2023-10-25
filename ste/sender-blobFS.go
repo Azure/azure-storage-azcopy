@@ -36,7 +36,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -72,29 +71,30 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	}
 	headers := props.SrcHTTPHeaders.ToBlobFSHTTPHeaders()
 
-	filesystemClient, ok := jptm.DestinationContainerClient().(*filesystem.Client)
+	s, ok := jptm.DstServiceClient().(*service.Client)
 	if !ok {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Filesystem Container")
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Datalake service")
 	}
 
 	datalakeURLParts, err := azdatalake.ParseURL(destination)
 	if err != nil {
 		return nil, err
 	}
+	fsc := s.NewFileSystemClient(datalakeURLParts.FileSystemName)
 	directoryOrFilePath := datalakeURLParts.PathName
 	parentPath := directoryOrFilePath[:strings.LastIndex(directoryOrFilePath, "/")]
 
 	var destClient DatalakeClientStub
 	if info.IsFolderPropertiesTransfer() {
-		destClient = filesystemClient.NewDirectoryClient(directoryOrFilePath)
+		destClient = fsc.NewDirectoryClient(directoryOrFilePath)
 	} else {
-		destClient = filesystemClient.NewFileClient(directoryOrFilePath)
+		destClient = fsc.NewFileClient(directoryOrFilePath)
 	}
 	return &blobFSSenderBase{
 		jptm:                jptm,
 		sip:                 sip,
 		fileOrDirClient:     destClient,
-		parentDirClient:     filesystemClient.NewDirectoryClient(parentPath),
+		parentDirClient:     fsc.NewDirectoryClient(parentPath),
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
 		pacer:               pacer,
@@ -125,19 +125,6 @@ func (u *blobFSSenderBase) ChunkSize() int64 {
 
 func (u *blobFSSenderBase) NumChunks() uint32 {
 	return u.numChunks
-}
-
-// getParentDirectoryClient gets parent directory client of a path.
-func getParentDirectoryClient(uh DatalakeClientStub, serviceClient *service.Client) (*directory.Client, error) {
-	rawURL, _ := url.Parse(uh.DFSURL())
-	rawURL.Path = rawURL.Path[:strings.LastIndex(rawURL.Path, "/")]
-	directoryURLParts, err := azdatalake.ParseURL(rawURL.String())
-	if err != nil {
-		return nil, err
-	}
-	directoryOrFilePath := directoryURLParts.PathName
-	shareClient := serviceClient.NewFileSystemClient(directoryURLParts.FileSystemName)
-	return shareClient.NewDirectoryClient(directoryOrFilePath), nil
 }
 
 func (u *blobFSSenderBase) RemoteFileExists() (bool, time.Time, error) {

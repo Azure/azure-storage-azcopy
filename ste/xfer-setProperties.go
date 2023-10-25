@@ -8,9 +8,9 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	fileservice  "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -57,13 +57,13 @@ func setPropertiesBlob(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	c, ok := jptm.SourceContainerClient().(container.Client)
+	bsc, ok := jptm.SrcServiceClient().(*blobservice.Client)
 	if !ok {
-		transferDone(common.ETransferStatus.Failed(),  common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
+		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
 		return
 	}
-	
-	srcBlobClient := c.NewBlobClient(info.SourceFilePath) 
+
+	srcBlobClient := bsc.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(info.SrcFilePath)
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 	_, metadata, blobTags, _ := jptm.ResourceDstData(nil)
@@ -126,13 +126,13 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	c, ok := jptm.SourceContainerClient().(container.Client)
+	bsc, ok := jptm.SrcServiceClient().(*blobservice.Client)
 	if !ok {
-		transferDone(common.ETransferStatus.Failed(),  common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
+		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
 		return
 	}
-	
-	srcBlobClient := c.NewBlobClient(info.SourceFilePath)
+
+	srcBlobClient := bsc.NewContainerClient(info.SrcContainer).NewBlobClient(info.SrcFilePath)
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 	_, metadata, blobTags, _ := jptm.ResourceDstData(nil)
@@ -191,12 +191,12 @@ func setPropertiesFile(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	s, ok := jptm.SourceContainerClient().(share.Client)
+	s, ok := jptm.SrcServiceClient().(*fileservice.Client)
 	if !ok {
-		transferDone(common.ETransferStatus.Failed(),  common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
+		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
 		return
 	}
-	srcFileClient := s.NewRootDirectoryClient().NewFileClient(jptm.Info().SourceFilePath)
+	srcFileClient := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 	_, metadata, _, _ := jptm.ResourceDstData(nil)
 

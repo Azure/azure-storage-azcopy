@@ -27,7 +27,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -52,7 +52,7 @@ func (p *blobSourceInfoProvider) internalPresignedURL() (string, error) {
 }
 
 func (p *blobSourceInfoProvider) PreSignedSourceURL() (string, error) {
-	return p.internalPresignedURL()  // prefer to return the blob URL; data can be read from either endpoint.
+	return p.internalPresignedURL() // prefer to return the blob URL; data can be read from either endpoint.
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
@@ -108,14 +108,14 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	c, ok := jptm.SourceContainerClient().(*container.Client)
+	s, ok := jptm.SrcServiceClient().(*service.Client)
 	if !ok {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob service")
 	}
 
 	return &blobSourceInfoProvider{
 		defaultRemoteSourceInfoProvider: *base,
-		source: c.NewBlobClient(jptm.Info().SourceFilePath),
+		source: s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath),
 	}, nil
 }
 
