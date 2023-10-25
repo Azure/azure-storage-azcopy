@@ -320,11 +320,10 @@ func (t testJobPartTransferManager) GetFolderCreationTracker() FolderCreationTra
 }
 
 func (t testJobPartTransferManager) ShouldLog(level common.LogLevel) bool {
-	panic("implement me")
+	return false
 }
 
 func (t testJobPartTransferManager) Log(level common.LogLevel, msg string) {
-	panic("implement me")
 }
 
 func (t testJobPartTransferManager) Panic(err error) {
