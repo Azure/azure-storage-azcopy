@@ -16,6 +16,12 @@
 
 1. Updated dependencies to address security vulnerabilities.
 
+## Version 10.21.1
+
+### Bug Fixes
+
+1. Fixed an issue where validating destination length would fail a job instead of logging the error if read permissions are not provided.
+
 ## Version 10.21.0
 
 ### New Features
