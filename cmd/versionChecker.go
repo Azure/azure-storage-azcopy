@@ -21,8 +21,8 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -123,18 +123,19 @@ func (v Version) CacheNewerVersion(v2 Version, filePath string) error {
 	return nil
 }
 
-// ValidateCachedVersion checks if the given filepath contains cached version, expiry or not.
-// If yes, then it reads the cache, checks if the cache is still fresh and finally creates Version object from it and returns it.
+// ValidateCachedVersion checks if the given file on filepath contains cached version and expiry.
+// Reads the cache and checks if the cache is still fresh.
+// Returns Version object from cache.
 func ValidateCachedVersion(filePath string) (*Version, error) {
 	// Check the locally cached file to get the version.
 	data, err := os.ReadFile(filePath)
 	if err == nil {
 		// If the data is fresh, don't make the call and return right away
-		versionAndExpiry := strings.Split(fmt.Sprintf("%s", data), ",")
+		versionAndExpiry := bytes.Split(data, []byte(","))
 		if len(versionAndExpiry) == 2 {
-			version, err := NewVersion(versionAndExpiry[0])
+			version, err := NewVersion(string(versionAndExpiry[0]))
 			if err == nil {
-				expiry, err := time.Parse(versionFileTimeFormat, versionAndExpiry[1])
+				expiry, err := time.Parse(versionFileTimeFormat, string(versionAndExpiry[1]))
 				currentTime := time.Now()
 				if err == nil && expiry.After(currentTime) {
 					return version, nil
