@@ -497,7 +497,7 @@ func TestS3(t *testing.T) {
 	dataReader, data := getDataAndReader(t.Name(), size)
 	n, err := s3Client.PutObjectWithContext(context.Background(), bName, oName, dataReader, int64(size), minio.PutObjectOptions{})
 	a.Nil(err)
-	a.Equal(size, n)
+	a.Equal(int64(size), n)
 
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", "", bName, oName)
 
