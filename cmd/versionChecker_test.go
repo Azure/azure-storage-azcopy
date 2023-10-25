@@ -123,7 +123,7 @@ func TestCacheNewerVersion1(t *testing.T) {
 	localVer, err := NewVersion("10.19.0")
 	a.NoError(err)
 
-	err = localVer.CacheNewerVersion(*remoteVer, testFilePath+fileName)
+	err = localVer.CacheRemoteVersion(*remoteVer, testFilePath+fileName)
 	a.NoError(err)
 
 	cacheVer, err := ValidateCachedVersion(testFilePath + fileName)
@@ -137,14 +137,14 @@ func TestCacheNewerVersion2(t *testing.T) {
 	testFilePath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(testFilePath)
 
-	// 2. local version is newer than remote version, remote ver is cached (technically this is unlikely to happen)
+	// 2. local version is same as remote version, remote ver is cached
 	fileName := "\\test_file.txt"
-	remoteVer, err := NewVersion("10.19.0")
+	remoteVer, err := NewVersion("10.20.0")
 	a.NoError(err)
 	localVer, err := NewVersion("10.20.0")
 	a.NoError(err)
 
-	err = localVer.CacheNewerVersion(*remoteVer, testFilePath+fileName)
+	err = localVer.CacheRemoteVersion(*remoteVer, testFilePath+fileName)
 	a.NoError(err)
 
 	// remote version is cached
@@ -158,20 +158,21 @@ func TestCacheNewerVersion3(t *testing.T) {
 	testFilePath := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(testFilePath)
 
-	// 3. local version is same as remote version, remote ver is cached
+	// 3. local version is newer than remote version
+	// sanity test bc this should never happen and will never happen
 	fileName := "\\test_file.txt"
-	remoteVer, err := NewVersion("10.20.0")
+	remoteVer, err := NewVersion("10.19.0")
 	a.NoError(err)
 	localVer, err := NewVersion("10.20.0")
 	a.NoError(err)
 
-	err = localVer.CacheNewerVersion(*remoteVer, testFilePath+fileName)
+	err = localVer.CacheRemoteVersion(*remoteVer, testFilePath+fileName)
 	a.NoError(err)
 
-	// remote version is cached
+	// remote version is not cached
 	cacheVer, err := ValidateCachedVersion(testFilePath + fileName)
-	a.NoError(err)
-	a.Equal(cacheVer, remoteVer)
+	a.Error(err)
+	a.Nil(cacheVer)
 }
 
 func TestValidateCachedVersion(t *testing.T) {

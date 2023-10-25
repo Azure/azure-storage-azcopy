@@ -102,24 +102,29 @@ func (v Version) compare(v2 Version) int {
 	return 1
 }
 
-// detect if version v is older than v2
+// OlderThan detects if version v is older than v2
 func (v Version) OlderThan(v2 Version) bool {
 	return v.compare(v2) == -1
 }
 
-// detect if version v is newer than v2
+// NewerThan detects if version v is newer than v2
 func (v Version) NewerThan(v2 Version) bool {
 	return v.compare(v2) == 1
 }
 
-// CacheNewerVersion caches the version v2 to filePath if v2 is newer than v1
-func (v Version) CacheNewerVersion(v2 Version, filePath string) error {
-	// if v.OlderThan(v2) {
-	expiry := time.Now().Add(24 * time.Hour).Format(versionFileTimeFormat)
-	if err := os.WriteFile(filePath, []byte(v2.original+","+expiry), 0666); err != nil {
-		return err
+func (v Version) EqualTo(v2 Version) bool {
+	return v.compare(v2) == 0
+}
+
+// CacheRemoteVersion caches the remote version in file located on filePath for a day
+// if version v (local version) is older than or equal to the remote version
+func (v Version) CacheRemoteVersion(remoteVer Version, filePath string) error {
+	if v.OlderThan(remoteVer) || v.EqualTo(remoteVer) {
+		expiry := time.Now().Add(24 * time.Hour).Format(versionFileTimeFormat)
+		if err := os.WriteFile(filePath, []byte(remoteVer.original+","+expiry), 0666); err != nil {
+			return err
+		}
 	}
-	// }
 	return nil
 }
 

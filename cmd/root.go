@@ -257,8 +257,8 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: fetch & validate cached version and if it is updated, return without making API calls
-		filePath := filepath.Join(AzcopyAppPathFolder, "latest_version.txt") // TODO: should we use AzCopy path folder or log folder to store the latest_version.txt?
-		cachedVersion, err := ValidateCachedVersion(filePath)                // same as the remote version
+		filePath := filepath.Join(azcopyLogPathFolder, "latest_version.txt")
+		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			if localVersion.OlderThan(*cachedVersion) {
 				executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
@@ -305,7 +305,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 5: persist remote version in local
-		err = localVersion.CacheNewerVersion(*remoteVersion, filePath)
+		err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
 		if err != nil {
 			return
 		}
