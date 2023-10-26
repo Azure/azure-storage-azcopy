@@ -103,6 +103,7 @@ func GetServiceClientForLocation(loc Location,
 	}
 	u.Path = ""
 
+	resourceURL = u.String()
 	switch loc {
 	case ELocation.Blob():
 		var o *blobService.ClientOptions

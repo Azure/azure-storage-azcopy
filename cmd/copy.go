@@ -1513,20 +1513,25 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
+	from := cca.FromTo.From()
+	options := createClientOptions(azcopyLogVerbosity, &cca.trailingDot, &from)
+
 	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
 		return err
 	}
 	sourceURL, _ := cca.Source.String()
-	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, sourceCredInfo.OAuthTokenInfo.TokenCredential, nil)
+	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, sourceCredInfo.OAuthTokenInfo.TokenCredential, &options)
 	if err != nil {
 		return err
 	}
 
 	dstURL, _ := cca.Destination.String()
-	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(cca.FromTo.To(), dstURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, nil)
-
-	from := cca.FromTo.From()
+	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(cca.FromTo.To(), dstURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options)
+	if err != nil {
+		return err
+	}
+	
 	jobPartOrder.DestinationRoot = cca.Destination
 
 	jobPartOrder.SourceRoot = cca.Source
