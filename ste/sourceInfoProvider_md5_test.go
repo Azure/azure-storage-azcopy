@@ -53,22 +53,6 @@ const (
 	containerPrefix        = "container"
 	blobPrefix             = "blob"
 	crc64Polynomial uint64 = 0x9A6C9329AC4BC9B5
-	//blockBlobDefaultData = "AzCopy Random Test Data"
-	//// 512 bytes of alphanumeric random data
-	//pageBlobDefaultData   = "lEYvPHhS2c9T7DDNtM7f0gccgbqe7DMYByLj7d1XS6jV5Y0Cuiz5i86e5llkBwzCahnR4n1MUvfpniNBxgRgJ4oNk8oaIlCevtsPaCZgOMpKdPohp7yYTfawiz8MtHlTwM8OmfgngbH2BNiqtSFEx9GArvkwkVF0dPoG6RRBug0BqHiWyMd0mZifrBTneG13bqKg7A8EjRmBHIqCMGoxOYo1ufojJjYKiv8dfBYGib4pNpfrcxlEWrMKEPcgs3YG3AGg2lIKrMVs7yWnSzwqeEnl9oMFjdwc7XB2e7y2IH1JLt8CzaYgW6qvaPzhFXWbUkIJ6KznQAaKExJt9my625REjn8G4WT5tfo82J2gpdJNAveaF1O09Irjb93Yg07CfeSOrUBo4WwORrfJ60O4nc3MWWvHT2CsJ4b3MtjtVR0nb084SQpRycXPSF9rMympZrwmP0mutBYCVOEWDjsaLOQJoHo2UOiBD2sM5rm4N5mqt0mEInyGO8pKnV7NKn0N"
-	//appendBlobDefaultData = "AzCopy Random Append Test Data"
-	//
-	//bucketPrefix      = "s3bucket"
-	//objectPrefix      = "s3object"
-	//objectDefaultData = "AzCopy default data for S3 object"
-	//
-	//fileDefaultData             = "AzCopy Random Test Data"
-	//sharePrefix                 = "share"
-	//azureFilePrefix             = "azfile"
-	//defaultAzureFileSizeInBytes = 1000
-	//
-	//blobfsPrefix                 = "blobfs"
-	//defaultBlobFSFileSizeInBytes = 1000
 )
 
 var CRC64Table = crc64.MakeTable(crc64Polynomial)
