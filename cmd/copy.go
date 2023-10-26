@@ -1514,7 +1514,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	from := cca.FromTo.From()
-	options := createClientOptions(azcopyLogVerbosity, &cca.trailingDot, &from)
+	options := createClientOptionsForSTE(azcopyLogVerbosity,  &cca.trailingDot, &from)
 
 	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
@@ -1531,7 +1531,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if err != nil {
 		return err
 	}
-	
+
 	jobPartOrder.DestinationRoot = cca.Destination
 
 	jobPartOrder.SourceRoot = cca.Source
