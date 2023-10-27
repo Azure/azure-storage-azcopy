@@ -90,7 +90,8 @@ func prepareDestAccountInfo(client IBlobClient, jptm IJobPartTransferMgr, ctx co
 }
 
 // // TODO: Infer availability based upon blob size as well, for premium page blobs.
-func BlobTierAllowed(destTier blob.AccessTier) bool {
+func BlobTierAllowed(destTier *blob.AccessTier) bool {
+	// Note: destTier is guaranteed to be non nil.
 	// If we failed to get the account info, just return true.
 	// This is because we can't infer whether it's possible or not, and the setTier operation could possibly succeed (or fail)
 	if tierSetPossibleFail {
@@ -102,7 +103,7 @@ func BlobTierAllowed(destTier blob.AccessTier) bool {
 		// storage V1/V2
 		if destAccountKind == "StorageV2" {
 			// P1-80 possible.
-			return premiumPageBlobTierRegex.MatchString(string(destTier))
+			return premiumPageBlobTierRegex.MatchString(string(*destTier))
 		}
 
 		if destAccountKind == "Storage" {
@@ -124,13 +125,13 @@ func BlobTierAllowed(destTier blob.AccessTier) bool {
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
-		return destTier == blob.AccessTierArchive || destTier == blob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || destTier == blob.AccessTierHot
+		return *destTier == blob.AccessTierArchive || *destTier == blob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || *destTier == blob.AccessTierHot
 	}
 }
 
-func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, client IBlobClient, ctx context.Context, performQuietly bool) (isValid bool) {
+func ValidateTier(jptm IJobPartTransferMgr, blobTier *blob.AccessTier, client IBlobClient, ctx context.Context, performQuietly bool) (isValid bool) {
 
-	if jptm.IsLive() && blobTier != "" {
+	if jptm.IsLive() && blobTier != nil {
 
 		// Let's check if we can confirm we'll be able to check the destination blob's account info.
 		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
@@ -150,7 +151,7 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier blob.AccessTier, client IBl
 		} else if !performQuietly {
 			tierNotAllowedFailure.Do(func() {
 				glcm := common.GetLifecycleMgr()
-				glcm.Info("Destination could not accommodate the tier " + string(blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
+				glcm.Info("Destination could not accommodate the tier " + string(*blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
 			})
 		}
 		return false

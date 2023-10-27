@@ -73,7 +73,7 @@ type IBlobSourceInfoProvider interface {
 	IRemoteSourceInfoProvider
 
 	// BlobTier returns source's blob tier.
-	BlobTier() blob.AccessTier
+	BlobTier() *blob.AccessTier
 
 	// BlobType returns source's blob type.
 	BlobType() blob.BlobType

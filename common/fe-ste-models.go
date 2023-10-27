@@ -840,8 +840,8 @@ func (bbt *BlockBlobTier) Parse(s string) error {
 	return err
 }
 
-func (bbt BlockBlobTier) ToAccessTierType() blob.AccessTier {
-	return blob.AccessTier(bbt.String())
+func (bbt BlockBlobTier) ToAccessTierType() *blob.AccessTier {
+	return to.Ptr(blob.AccessTier(bbt.String()))
 }
 
 func (bbt BlockBlobTier) MarshalJSON() ([]byte, error) {
@@ -885,8 +885,8 @@ func (pbt *PageBlobTier) Parse(s string) error {
 	return err
 }
 
-func (pbt PageBlobTier) ToAccessTierType() blob.AccessTier {
-	return blob.AccessTier(pbt.String())
+func (pbt PageBlobTier) ToAccessTierType() *blob.AccessTier {
+	return to.Ptr(blob.AccessTier(pbt.String()))
 }
 
 func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
@@ -1343,36 +1343,36 @@ type ResourceHTTPHeaders struct {
 // ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 	return blob.HTTPHeaders{
-		BlobContentType:        &h.ContentType,
+		BlobContentType:        IffNotEmpty(h.ContentType),
 		BlobContentMD5:         h.ContentMD5,
-		BlobContentEncoding:    &h.ContentEncoding,
-		BlobContentLanguage:    &h.ContentLanguage,
-		BlobContentDisposition: &h.ContentDisposition,
-		BlobCacheControl:       &h.CacheControl,
+		BlobContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		BlobContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		BlobContentDisposition: IffNotEmpty(h.ContentDisposition),
+		BlobCacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToFileHTTPHeaders converts ResourceHTTPHeaders to sharefile's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
 	return sharefile.HTTPHeaders{
-		ContentType:        &h.ContentType,
+		ContentType:        IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    &h.ContentEncoding,
-		ContentLanguage:    &h.ContentLanguage,
-		ContentDisposition: &h.ContentDisposition,
-		CacheControl:       &h.CacheControl,
+		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: IffNotEmpty(h.ContentDisposition),
+		CacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
 func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() datalakefile.HTTPHeaders {
 	return datalakefile.HTTPHeaders{
-		ContentType:        &h.ContentType,
+		ContentType:        IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    &h.ContentEncoding,
-		ContentLanguage:    &h.ContentLanguage,
-		ContentDisposition: &h.ContentDisposition,
-		CacheControl:       &h.CacheControl,
+		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: IffNotEmpty(h.ContentDisposition),
+		CacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 

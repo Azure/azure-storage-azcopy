@@ -51,7 +51,7 @@ type pageBlobSenderBase struct {
 	metadataToApply common.Metadata
 	blobTagsToApply common.BlobTags
 
-	destBlobTier blob.AccessTier
+	destBlobTier *blob.AccessTier
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
@@ -78,7 +78,7 @@ var (
 	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
 )
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -224,8 +224,10 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
 
-	t := pageblob.PremiumPageBlobAccessTier(s.destBlobTier)
-	destBlobTier := &t
+	var destBlobTier *pageblob.PremiumPageBlobAccessTier
+	if s.destBlobTier != nil {
+		destBlobTier = to.Ptr(pageblob.PremiumPageBlobAccessTier(*s.destBlobTier))
+	}
 	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobClient, s.jptm.Context(), false) {
 		destBlobTier = nil
 	}
@@ -243,12 +245,12 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	_, err := s.destPageBlobClient.Create(s.jptm.Context(), s.srcSize,
 		&pageblob.CreateOptions{
 			SequenceNumber: to.Ptr(int64(0)),
-			HTTPHeaders: &s.headersToApply,
-			Metadata: s.metadataToApply,
-			Tier: destBlobTier,
-			Tags: blobTags,
-			CPKInfo: s.jptm.CpkInfo(),
-			CPKScopeInfo: s.jptm.CpkScopeInfo(),
+			HTTPHeaders:    &s.headersToApply,
+			Metadata:       s.metadataToApply,
+			Tier:           destBlobTier,
+			Tags:           blobTags,
+			CPKInfo:        s.jptm.CpkInfo(),
+			CPKScopeInfo:   s.jptm.CpkScopeInfo(),
 		})
 	if err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)

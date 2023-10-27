@@ -156,8 +156,11 @@ func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 	return resp.ACL, nil
 }
 
-func (p *blobSourceInfoProvider) BlobTier() blob.AccessTier {
-	return p.transferInfo.S2SSrcBlobTier
+func (p *blobSourceInfoProvider) BlobTier() *blob.AccessTier {
+	if p.transferInfo.S2SSrcBlobTier == "" {
+		return nil
+	}
+	return to.Ptr(p.transferInfo.S2SSrcBlobTier)
 }
 
 func (p *blobSourceInfoProvider) BlobType() blob.BlobType {

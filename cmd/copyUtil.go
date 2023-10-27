@@ -108,7 +108,7 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 			argUrl, err := url.Parse(arg)
 			// If there is an error parsing the url, then throw the error
 			if err != nil {
-				panic(fmt.Errorf("error parsing the url %s. Failed with error %s", argUrl.String(), err.Error()))
+				panic(fmt.Errorf("error parsing the url %s. Failed with error %s", arg, err.Error()))
 			}
 			// Check for the signature query parameter
 			_, rawQuery := util.redactSigQueryParam(argUrl.RawQuery)
