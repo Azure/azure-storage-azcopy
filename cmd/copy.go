@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"io"
@@ -1348,9 +1349,9 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		}
 	}
 	blobTags := cca.blobTags
-	bbAccessTier := blob.AccessTier("")
+	var bbAccessTier *blob.AccessTier
 	if cca.blockBlobTier != common.EBlockBlobTier.None() {
-		bbAccessTier = blob.AccessTier(cca.blockBlobTier.String())
+		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
 	}
 	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
 		BlockSize:   blockSize,
@@ -1358,13 +1359,13 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		Metadata:    metadataMap,
 		Tags:        blobTags,
 		HTTPHeaders: &blob.HTTPHeaders{
-			BlobContentType:        &cca.contentType,
-			BlobContentLanguage:    &cca.contentLanguage,
-			BlobContentEncoding:    &cca.contentEncoding,
-			BlobContentDisposition: &cca.contentDisposition,
-			BlobCacheControl:       &cca.cacheControl,
+			BlobContentType:        common.IffNotEmpty(cca.contentType),
+			BlobContentLanguage:    common.IffNotEmpty(cca.contentLanguage),
+			BlobContentEncoding:    common.IffNotEmpty(cca.contentEncoding),
+			BlobContentDisposition: common.IffNotEmpty(cca.contentDisposition),
+			BlobCacheControl:       common.IffNotEmpty(cca.cacheControl),
 		},
-		AccessTier:   &bbAccessTier,
+		AccessTier:   bbAccessTier,
 		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
 		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})

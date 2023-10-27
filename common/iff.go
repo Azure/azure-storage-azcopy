@@ -40,3 +40,10 @@ func IffNotNil[T any](wanted *T, instead T) T {
 
 	return *wanted
 }
+
+func IffNotEmpty(wanted string) *string {
+	if wanted == "" {
+		return nil
+	}
+	return &wanted
+}

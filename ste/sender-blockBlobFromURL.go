@@ -37,7 +37,7 @@ type urlToBlockBlobCopier struct {
 
 func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
-	var destBlobTier blob.AccessTier
+	var destBlobTier *blob.AccessTier
 	// If the source is block blob, preserve source's blob tier.
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
 		if blobSrcInfoProvider.BlobType() == blob.BlobTypeBlockBlob {
@@ -134,7 +134,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		// Create blob and finish.
 		if !ValidateTier(c.jptm, c.destBlobTier, c.destBlockBlobClient, c.jptm.Context(), false) {
-			c.destBlobTier = ""
+			c.destBlobTier = nil
 		}
 
 		blobTags := c.blobTagsToApply
@@ -144,7 +144,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 		}
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
-		destBlobTier := &c.destBlobTier
+		destBlobTier := c.destBlobTier
 		if c.jptm.IsSourceEncrypted() {
 			destBlobTier = nil
 		}
