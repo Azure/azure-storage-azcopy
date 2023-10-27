@@ -66,6 +66,10 @@ type IJobPartTransferMgr interface {
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
+	SourceTrailingDot() *common.TrailingDotOption
+	TrailingDot() *common.TrailingDotOption
+	From() *common.Location
+
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -379,7 +383,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
-		BlobFSRecursiveDelete: 			plan.BlobFSRecursiveDelete,
+		BlobFSRecursiveDelete:          plan.BlobFSRecursiveDelete,
 		DestLengthValidation:           DestLengthValidation,
 		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,
@@ -988,6 +992,18 @@ func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
 
 func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
 	return jptm.jobPartMgr.CredentialOpOptions()
+}
+
+func (jptm *jobPartTransferMgr) SourceTrailingDot() *common.TrailingDotOption {
+	return jptm.jobPartMgr.SourceTrailingDot()
+}
+
+func (jptm *jobPartTransferMgr) TrailingDot() *common.TrailingDotOption {
+	return jptm.jobPartMgr.TrailingDot()
+}
+
+func (jptm *jobPartTransferMgr) From() *common.Location {
+	return jptm.jobPartMgr.From()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {

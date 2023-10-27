@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -296,7 +295,7 @@ type jobMgr struct {
 	cancel               context.CancelFunc
 	pipelineNetworkStats *PipelineNetworkStats
 
-	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
+	// Share the same HTTP Client across all job parts, so that the we maximize reuse of
 	// its internal connection pool
 	httpClient *http.Client
 
@@ -334,7 +333,7 @@ type jobMgr struct {
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
 
-	isDaemon        bool /* is it running as service */
+	isDaemon bool /* is it running as service */
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -701,7 +700,7 @@ func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
 	jm.inMemoryTransitJobState = state
 }
 
-func (jm *jobMgr) Context() context.Context                { return jm.ctx }
+func (jm *jobMgr) Context() context.Context { return jm.ctx }
 func (jm *jobMgr) Cancel() {
 	jm.cancel()
 	jm.jobPartProgress <- jobPartProgressInfo{} // in case we're waiting on another job part; we can just shoot in a zeroed out version & achieve a cancel immediately

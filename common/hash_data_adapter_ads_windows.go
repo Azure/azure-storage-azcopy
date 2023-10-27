@@ -21,7 +21,7 @@ func (HashStorageMode) AlternateDataStreams() HashStorageMode { return 11 } // I
 func (e *HashStorageMode) osDefault() HashStorageMode { return e.AlternateDataStreams() }
 
 func init() { // Override the default hash data adapter behaviour
-	osAgnosticBehavior := NewHashDataAdapter // Copy the function for re-use
+	osAgnosticBehavior := NewHashDataAdapter // Copy the function for reuse
 
 	NewHashDataAdapter = func(hashPath, dataPath string, mode HashStorageMode) (adapter HashDataAdapter, err error) {
 		switch mode {
@@ -48,19 +48,19 @@ func init() { // Override the default hash data adapter behaviour
 			var volumeFlags uint32
 			err = windows.GetVolumeInformation( // https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumeinformationa
 				&volumePath[0],
-				nil, // optional, ignoring name
-				0, // No buffer
-				nil, // No volume serial
-				nil, // No need for volume component length
+				nil,          // optional, ignoring name
+				0,            // No buffer
+				nil,          // No volume serial
+				nil,          // No need for volume component length
 				&volumeFlags, // read volume flags
-				nil, // no need for FS name
+				nil,          // no need for FS name
 				0,
-				)
+			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get volume information of data path: %w", err)
 			}
 
-			if volumeFlags & windows.FILE_NAMED_STREAMS != windows.FILE_NAMED_STREAMS {
+			if volumeFlags&windows.FILE_NAMED_STREAMS != windows.FILE_NAMED_STREAMS {
 				return nil, errors.New("source volume does not support named streams")
 			}
 
@@ -152,5 +152,5 @@ func (a *HiddenFileDataAdapter) HideFile(fullPath string) error {
 		return fmt.Errorf("failed to read existing attributes: %w", err)
 	}
 
-	return syscall.SetFileAttributes(pathPtr, baseAttr | syscall.FILE_ATTRIBUTE_HIDDEN)
+	return syscall.SetFileAttributes(pathPtr, baseAttr|syscall.FILE_ATTRIBUTE_HIDDEN)
 }

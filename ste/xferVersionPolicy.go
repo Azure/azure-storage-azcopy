@@ -37,7 +37,7 @@ var DefaultServiceApiVersion = common.GetLifecycleMgr().GetEnvironmentVariable(c
 type versionPolicy struct {
 }
 
-func newVersionPolicy() policy.Policy {
+func NewVersionPolicy() policy.Policy {
 	return &versionPolicy{}
 }
 
@@ -45,42 +45,6 @@ func (r *versionPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// get the service api version value using the ServiceAPIVersionOverride set in the context.
 	if value := req.Raw().Context().Value(ServiceAPIVersionOverride); value != nil {
 		req.Raw().Header["x-ms-version"] = []string{value.(string)}
-	}
-	return req.Next()
-}
-
-// TODO: Delete me when bumping the service version is no longer relevant.
-type coldTierPolicy struct {
-}
-
-func newColdTierPolicy() policy.Policy {
-	return &coldTierPolicy{}
-}
-
-func (r *coldTierPolicy) Do(req *policy.Request) (*http.Response, error) {
-	if req.Raw().Header.Get("x-ms-access-tier") == common.EBlockBlobTier.Cold().String() {
-		req.Raw().Header["x-ms-version"] = []string{"2021-12-02"}
-	}
-	return req.Next()
-}
-
-// TODO: Delete me when bumping the service version is no longer relevant.
-type trailingDotPolicy struct {
-	trailingDot *common.TrailingDotOption
-	from *common.Location
-}
-
-func NewTrailingDotPolicy(trailingDot *common.TrailingDotOption, from *common.Location) policy.Policy {
-	return &trailingDotPolicy{trailingDot: trailingDot, from: from}
-}
-
-func (r *trailingDotPolicy) Do(req *policy.Request) (*http.Response, error) {
-	if r.trailingDot != nil && *r.trailingDot == common.ETrailingDotOption.Enable() {
-		req.Raw().Header.Set("x-ms-allow-trailing-dot", "true")
-		if r.from != nil && *r.from == common.ELocation.File() {
-			req.Raw().Header.Set("x-ms-source-allow-trailing-dot", "true")
-		}
-		req.Raw().Header["x-ms-version"] = []string{"2022-11-02"}
 	}
 	return req.Next()
 }

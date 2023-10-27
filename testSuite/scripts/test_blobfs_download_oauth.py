@@ -5,6 +5,19 @@ import unittest
 import utility as util
 
 class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
+    def setUp(self):
+        # ensure account key is not being used
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = 'SPN'
+        os.environ['AZCOPY_SPA_APPLICATION_ID'] = os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']
+        os.environ['AZCOPY_TENANT_ID'] = os.environ['OAUTH_TENANT_ID']
+
+    def tearDown(self):
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = ''
+        os.environ['AZCOPY_SPA_APPLICATION_ID'] = ''
+        os.environ['AZCOPY_TENANT_ID'] = ''
 
     def util_test_blobfs_download_1Kb_file(
         self,
@@ -22,9 +35,12 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the file uploaded file
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
         fileUrl = util.test_bfs_account_url + filename
         result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
         self.assertTrue(result)
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
 
         # delete the file locally
         try:
@@ -42,8 +58,11 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # validate the downloaded file
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
         result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
         self.assertTrue(result)
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
 
     def util_test_blobfs_download_64MB_file(
         self,
@@ -61,9 +80,12 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the file uploaded
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
         fileUrl = util.test_bfs_account_url + filename
         result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
         self.assertTrue(result)
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
 
         # delete the file locally
         try:
@@ -81,8 +103,11 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # validate the downloaded file
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
         result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
         self.assertTrue(result)
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
 
     def util_test_blobfs_download_100_1Kb_file(
         self,
@@ -101,10 +126,13 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded directory
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
         dirUrl = util.test_bfs_account_url + dir_name
         result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
 
         # delete the local directory created
         try:
@@ -122,9 +150,12 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # validate the downloaded directory
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
         result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl).\
                     add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
 
     def test_blobfs_download_200_1Kb_file(self):
         # create dir with 100 1KB files inside it
@@ -137,10 +168,13 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded directory
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
         dirUrl = util.test_bfs_account_url + dir_name
         result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
 
     # Using shared key only when oauth token is not preset
     def test_blobfs_download_1Kb_file_with_oauth(self):

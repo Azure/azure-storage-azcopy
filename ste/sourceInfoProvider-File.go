@@ -178,11 +178,11 @@ func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider
 
 	switch p.EntityType() {
 	case common.EEntityType.File():
-		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
 	case common.EEntityType.Folder():
-		directoryClient := common.CreateShareDirectoryClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+		directoryClient := common.CreateShareDirectoryClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
 		props, err := directoryClient.GetProperties(p.ctx, nil)
 		return &directoryGetPropertiesAdapter{props}, err
 	default:
@@ -228,7 +228,7 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 		return "", err
 	}
 	fURLParts.DirectoryOrFilePath = ""
-	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.String(), p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.String(), p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
 
 	return sddlString, err
 }

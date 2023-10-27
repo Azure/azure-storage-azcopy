@@ -33,8 +33,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
@@ -135,7 +135,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
-	options := createClientOptions(azcopyLogVerbosity, nil, nil)
+	options := createClientOptions(azcopyLogVerbosity)
 	// attempt to parse the source url
 	sourceURL, err := cca.Source.String()
 	if err != nil {
