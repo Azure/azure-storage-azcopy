@@ -231,7 +231,8 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 		return "", err
 	}
 	fURLParts.DirectoryOrFilePath = ""
-	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.String(), p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
+	// files supports only SAS for now.
+	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.String(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 
 	return sddlString, err
 }

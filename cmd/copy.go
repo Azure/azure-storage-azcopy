@@ -1388,7 +1388,11 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 	switch cca.FromTo.From() {
 	case common.ELocation.Local(), common.ELocation.Benchmark():
 		return common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, nil
-	case common.ELocation.S3(), common.ELocation.GCP(), common.ELocation.Pipe():
+	case common.ELocation.S3():
+		return common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}, nil
+	case common.ELocation.GCP():
+		return common.CredentialInfo{CredentialType: common.ECredentialType.GoogleAppCredentials()}, nil
+	case common.ELocation.Pipe():
 		panic("Invalid Source")
 	}
 
@@ -1416,13 +1420,15 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 			// get token from env var or cache
 			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 				return srcCredInfo, err
-			} else {
-				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-				jpo.CredentialInfo.OAuthTokenInfo = *tokenInfo
-			}
-			jpo.CredentialInfo.S2SSourceTokenCredential, err = common.GetSourceBlobCredential(srcCredInfo, common.CredentialOpOptions{LogError: glcm.Info})
-			if err != nil {
+			} else if tokenCred, err := tokenInfo.GetTokenCredential(); err != nil {
 				return srcCredInfo, err
+			} else {
+				scopes := []string{common.StorageScope}
+				if jpo.S2SSourceCredentialType == common.ECredentialType.MDOAuthToken() {
+					scopes = []string{common.ManagedDiskScope}
+				}
+				srcCredInfo.OAuthTokenInfo = *tokenInfo
+				jpo.CredentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenCred, scopes)
 			}
 			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
 			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential

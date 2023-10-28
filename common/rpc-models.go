@@ -1,12 +1,12 @@
 package common
 
 import (
+	"context"
 	"net/url"
 	"reflect"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/JeffreyRichter/enum/enum"
@@ -181,7 +181,7 @@ type CredentialInfo struct {
 	OAuthTokenInfo           OAuthTokenInfo
 	S3CredentialInfo         S3CredentialInfo
 	GCPCredentialInfo        GCPCredentialInfo
-	S2SSourceTokenCredential azcore.TokenCredential
+	S2SSourceTokenCredential func(ctx context.Context) (*string, error)
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {

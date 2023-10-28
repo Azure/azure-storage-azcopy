@@ -57,7 +57,7 @@ type IJobPartMgr interface {
 
 	CredentialInfo() common.CredentialInfo
 	ClientOptions() azcore.ClientOptions
-	S2SSourceCredentialInfo() common.CredentialInfo
+	S2SSourceTokenCredential(context.Context) (*string, error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
@@ -190,7 +190,7 @@ type jobPartMgr struct {
 
 	credInfo               common.CredentialInfo
 	clientOptions          azcore.ClientOptions
-	s2sSourceCredInfo      common.CredentialInfo
+	s2sSourceToken         func (context.Context) (*string, error)
 	s2sSourceClientOptions azcore.ClientOptions
 	credOption             *common.CredentialOpOptions
 
@@ -450,20 +450,7 @@ func (jpm *jobPartMgr) clientInfo() {
 	}
 	fromTo := jpm.planMMF.Plan().FromTo
 
-	// S2S source credential
-	// Default credential type assumed to be SAS
-	s2sSourceCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	// For Blob and BlobFS, there are other options for the source credential
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS() || fromTo.From() == common.ELocation.File()) {
-		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
-				s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
-			}
-		} else if fromTo.IsDownload() && (jobState.CredentialInfo.CredentialType.IsAzureOAuth() || jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
-			s2sSourceCredInfo = jobState.CredentialInfo
-		}
-	}
-	jpm.s2sSourceCredInfo = s2sSourceCredInfo
+	jpm.s2sSourceToken = jpm.credInfo.S2SSourceTokenCredential
 
 	jpm.credOption = &common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
@@ -745,8 +732,11 @@ func (jpm *jobPartMgr) DstServiceClient() any {
 	return jpm.dstServiceClient
 }
 
-func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {
-	return jpm.s2sSourceCredInfo
+func (jpm *jobPartMgr) S2SSourceTokenCredential(ctx context.Context) (*string, error) {
+	if jpm.s2sSourceToken != nil {
+		return jpm.s2sSourceToken(ctx)
+	}
+	return nil, nil
 }
 
 func (jpm *jobPartMgr) ClientOptions() azcore.ClientOptions {

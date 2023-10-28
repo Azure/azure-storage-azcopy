@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"net/url"
@@ -63,7 +62,6 @@ type IJobPartTransferMgr interface {
 
 	CredentialInfo() common.CredentialInfo
 	ClientOptions() azcore.ClientOptions
-	S2SSourceCredentialInfo() common.CredentialInfo
 	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
@@ -992,27 +990,8 @@ func (jptm *jobPartTransferMgr) ClientOptions() azcore.ClientOptions {
 	return jptm.jobPartMgr.ClientOptions()
 }
 
-func (jptm *jobPartTransferMgr) S2SSourceCredentialInfo() common.CredentialInfo {
-	return jptm.jobPartMgr.S2SSourceCredentialInfo()
-}
-
 func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {
-	if jptm.S2SSourceCredentialInfo().CredentialType.IsAzureOAuth() {
-		tokenInfo := jptm.S2SSourceCredentialInfo().OAuthTokenInfo
-		tc, err := tokenInfo.GetTokenCredential()
-		if err != nil {
-			return nil, err
-		}
-		scope := []string{common.StorageScope}
-		if jptm.S2SSourceCredentialInfo().CredentialType == common.ECredentialType.MDOAuthToken() {
-			scope = []string{common.ManagedDiskScope}
-		}
-
-		token, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scope})
-		t := "Bearer " + token.Token
-		return &t, err
-	}
-	return nil, nil
+	return jptm.jobPartMgr.S2SSourceTokenCredential(ctx)
 }
 
 func (jptm *jobPartTransferMgr) SrcServiceClient() any {

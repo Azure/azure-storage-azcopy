@@ -418,14 +418,14 @@ func (jm *jobMgr) AddJobPart2(partNum PartNumber,
 	planFile JobPartPlanFileName,
 	existingPlanMMF *JobPartPlanMMF,
 	sourceClient any,
-	destiationClient any,
+	destinationClient any,
 	scheduleTransfers bool,
 	completionChan chan struct{}) IJobPartMgr {
 	jpm := &jobPartMgr{
 		jobMgr:            jm,
 		filename:          planFile,
 		srcServiceClient:  sourceClient,
-		dstServiceClient:  destiationClient,
+		dstServiceClient:  destinationClient,
 		pacer:             jm.pacer,
 		slicePool:         jm.slicePool,
 		cacheLimiter:      jm.cacheLimiter,
@@ -521,21 +521,18 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jppfn.Create(order) // Convert the order to a plan file
 
 	s2sSourceCredInfo := order.CredentialInfo.WithType(order.S2SSourceCredentialType)
-	if order.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
-		s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
-	}
 
 	jpm := &jobPartMgr{
-		jobMgr:            jm,
-		filename:          jppfn,
-		sourceSAS:         order.SourceRoot.SAS,
-		destinationSAS:    order.DestinationRoot.SAS,
-		pacer:             jm.pacer,
-		slicePool:         jm.slicePool,
-		cacheLimiter:      jm.cacheLimiter,
-		fileCountLimiter:  jm.fileCountLimiter,
-		credInfo:          order.CredentialInfo,
-		s2sSourceCredInfo: s2sSourceCredInfo,
+		jobMgr:           jm,
+		filename:         jppfn,
+		sourceSAS:        order.SourceRoot.SAS,
+		destinationSAS:   order.DestinationRoot.SAS,
+		pacer:            jm.pacer,
+		slicePool:        jm.slicePool,
+		cacheLimiter:     jm.cacheLimiter,
+		fileCountLimiter: jm.fileCountLimiter,
+		credInfo:         order.CredentialInfo,
+		s2sSourceToken:   s2sSourceCredInfo.S2SSourceTokenCredential,
 	}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(order.PartNum, jpm)

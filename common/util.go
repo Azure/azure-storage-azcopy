@@ -1,11 +1,13 @@
 package common
 
 import (
+	"context"
 	"net"
 	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	blobService "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	fileService "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
@@ -131,5 +133,17 @@ func GetServiceClientForLocation(loc Location,
 		return datalake.NewClientWithNoCredential(resourceURL, o)
 	default:
 		return nil, nil
+	}
+}
+
+// ScopedCredential takes in a azcore.TokenCredential object & a list of scopes
+// and returns a function object. This function object on invocation returns 
+// a bearer token with specified scope and is of format "Bearer + <Token>".
+// TODO: Token should be cached.
+func ScopedCredential(cred azcore.TokenCredential, scopes []string) (func (context.Context) (*string, error)) {
+	return func(ctx context.Context) (*string, error) {
+		token, err := cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
+		t := "Bearer " + token.Token
+		return &t, err
 	}
 }
