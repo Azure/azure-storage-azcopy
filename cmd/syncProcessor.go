@@ -288,7 +288,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 		from = to.Ptr(cca.fromTo.From())
 	}
 
-	clientOptions := createClientOptions(azcopyLogVerbosity)
+	clientOptions := createClientOptions(azcopyScanningLogger)
 
 	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly, trailingDot, from).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil

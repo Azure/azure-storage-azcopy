@@ -438,7 +438,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
+		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(azcopyScanningLogger))
 
 		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
@@ -472,8 +472,8 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		// Strip any non-service related things away
 		fileURLParts.ShareName = ""
 		fileURLParts.ShareSnapshot = ""
-		fileURLParts.DirectoryOrFilePath = ""
-		fsc := common.CreateFileServiceClient(fileURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel), to.Ptr(trailingDot), destination)
+		fileURLParts.DirectoryOrFilePath = ""//nakulkarmerge-trailingdot?
+		fsc := common.CreateFileServiceClient(fileURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(azcopyScanningLogger))
 
 		if shareName == "" || strings.Contains(shareName, "*") {
 			if !recursive {
@@ -506,7 +506,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
+		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(azcopyScanningLogger))
 
 		includeDirectoryStubs = true // DFS is supposed to feed folders in
 		if containerName == "" || strings.Contains(containerName, "*") {

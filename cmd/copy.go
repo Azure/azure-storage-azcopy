@@ -35,6 +35,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 
@@ -1282,7 +1283,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := createClientOptions(common.LogNone)
+	//nakulkarmerge logger???
+	options := createClientOptions(azcopyScanningLogger)
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1329,7 +1331,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.LogNone)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1514,7 +1516,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	from := cca.FromTo.From()
-	options := createClientOptionsForSTE(azcopyLogVerbosity,  &cca.trailingDot, &from)
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
 
 	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {

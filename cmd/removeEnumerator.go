@@ -135,7 +135,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
-	options := createClientOptions(azcopyLogVerbosity)
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
 	// attempt to parse the source url
 	sourceURL, err := cca.Source.String()
 	if err != nil {

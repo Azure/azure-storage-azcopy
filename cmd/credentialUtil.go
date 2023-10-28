@@ -647,11 +647,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logLevel common.LogLevel) azcore.ClientOptions {
+func createClientOptions(logger common.ILoggerResetable) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
-	logOptions.ShouldLog = func(level common.LogLevel) bool { return level <= logLevel }
 
-	if azcopyScanningLogger != nil {
+	if logger != nil {
 		logOptions.Log = azcopyScanningLogger.Log
 	}
 	return ste.NewClientOptions(policy.RetryOptions{
@@ -664,20 +663,4 @@ func createClientOptions(logLevel common.LogLevel) azcore.ClientOptions {
 	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions)
 }
 
-func createClientOptionsForSTE(logLevel common.LogLevel, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
-	logOptions := ste.LogOptions{}
-	logOptions.ShouldLog = func(level common.LogLevel) bool {return level <= logLevel}
-
-	if common.AzcopyCurrentJobLogger != nil {
-		logOptions.Log = common.AzcopyCurrentJobLogger.Log
-	}
-	return ste.NewClientOptions(policy.RetryOptions{
-		MaxRetries:    ste.UploadMaxTries,
-		TryTimeout:    ste.UploadTryTimeout,
-		RetryDelay:    ste.UploadRetryDelay,
-		MaxRetryDelay: ste.UploadMaxRetryDelay,
-	}, policy.TelemetryOptions{
-		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, trailingDot, from)
-}
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

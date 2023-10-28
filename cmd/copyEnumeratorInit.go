@@ -444,7 +444,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	options := createClientOptions(logLevel)
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
 
 	// Because the only use-cases for createDstContainer will be on service-level S2S and service-level download
 	// We only need to create "containers" on local and blob.
