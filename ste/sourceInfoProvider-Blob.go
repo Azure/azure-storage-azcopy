@@ -41,18 +41,12 @@ func (p *blobSourceInfoProvider) IsDFSSource() bool {
 	return p.jptm.FromTo().From() == common.ELocation.BlobFS()
 }
 
-func (p *blobSourceInfoProvider) internalPresignedURL() (string, error) {
-	uri, err := p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return "", err
-	}
-
-	return uri, nil
-
+func (p *blobSourceInfoProvider) PreSignedSourceURL() (string, error) {
+	return p.source.URL(), nil // prefer to return the blob URL; data can be read from either endpoint.
 }
 
-func (p *blobSourceInfoProvider) PreSignedSourceURL() (string, error) {
-	return p.internalPresignedURL() // prefer to return the blob URL; data can be read from either endpoint.
+func (p *blobSourceInfoProvider) RawSource() string {
+	return p.source.URL()
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
@@ -121,7 +115,7 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 	// We can only get access control via HNS, so we MUST switch here.
-	presignedURL, err := p.internalPresignedURL()
+	presignedURL, err := p.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
 	}

@@ -157,6 +157,7 @@ type fileSourceInfoProvider struct {
 	cachedPermissionKey string
 	cacheOnce           *sync.Once
 	cachedProperties    shareFilePropertyProvider // use interface because may be file or directory properties
+	sourceURL           string
 	defaultRemoteSourceInfoProvider
 }
 
@@ -166,10 +167,29 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
+	s, ok := jptm.SrcServiceClient().(*service.Client)
+	if !ok {
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob service")
+	}
+
+	source := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
+
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
 	//TODO: Should we do that?
-	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: jptm.Context(), cacheOnce: &sync.Once{}}, nil
+	return &fileSourceInfoProvider{
+		defaultRemoteSourceInfoProvider: *base,
+		ctx: jptm.Context(),
+		cacheOnce: &sync.Once{},
+		sourceURL: source.URL()}, nil
+}
+
+func (p *fileSourceInfoProvider) PreSignedSourceURL() (string, error) {
+	return p.sourceURL, nil
+}
+
+func (p *fileSourceInfoProvider) RawSource() string {
+	return p.sourceURL
 }
 
 func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
