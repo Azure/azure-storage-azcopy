@@ -72,7 +72,15 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 	}
 
-	transferScheduler := setPropertiesTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
+	targetURL, _ := cca.Source.String()
+	from := cca.FromTo.From()
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, &from)
+	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), targetURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options)
+	if err != nil {
+		return nil, err
+	}
+
+	transferScheduler := setPropertiesTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()

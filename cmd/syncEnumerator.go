@@ -136,7 +136,17 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		jobsAdmin.JobsAdmin.LogToJobLog(folderMessage, common.LogInfo)
 	}
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
+	from := cca.fromTo.From()
+	options := createClientOptions(common.AzcopyCurrentJobLogger, &cca.trailingDot, &from)
+	sourceURL, _ := cca.source.String()
+	srcServiceClient, err := common.GetServiceClientForLocation(cca.fromTo.From(), sourceURL, srcCredInfo.OAuthTokenInfo.TokenCredential, &options)
+	if err != nil {
+		return nil, err
+	}
+
+	dstURL, _ := cca.destination.String()
+	dstServiceClient, err := common.GetServiceClientForLocation(cca.fromTo.To(), dstURL, dstCredInfo.OAuthTokenInfo.TokenCredential, &options)
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, srcServiceClient, dstServiceClient)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()

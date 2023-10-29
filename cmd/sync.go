@@ -673,11 +673,13 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
-
+	var srcCredInfo common.CredentialInfo
+	/*
+	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
 		return err
 	}
+	*/
 
 	// Download is the only time our primary credential type will be based on source
 	if cca.fromTo.IsDownload() {
