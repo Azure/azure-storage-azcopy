@@ -137,6 +137,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	from := cca.fromTo.From()
+	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
+		cca.trailingDot = common.ETrailingDotOption.Disable()
+	}
 	options := createClientOptions(common.AzcopyCurrentJobLogger, &cca.trailingDot, &from)
 	sourceURL, _ := cca.source.String()
 	srcServiceClient, err := common.GetServiceClientForLocation(cca.fromTo.From(), sourceURL, srcCredInfo.OAuthTokenInfo.TokenCredential, &options)

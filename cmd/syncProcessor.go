@@ -287,10 +287,9 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	var trailingDot *common.TrailingDotOption
 	var from *common.Location
-	if cca.fromTo.To() == common.ELocation.File() {
-		trailingDot = &cca.trailingDot
+	if cca.fromTo.To() != common.ELocation.File() {
+		cca.trailingDot = common.ETrailingDotOption.Disable()
 		from = to.Ptr(cca.fromTo.From())
 	}
 

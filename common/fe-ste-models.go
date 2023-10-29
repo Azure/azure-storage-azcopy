@@ -25,18 +25,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"os"
+	"reflect"
+	"regexp"
+	"runtime"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/JeffreyRichter/enum/enum"
-	"math"
-	"os"
-	"reflect"
-	"regexp"
-	"strings"
-	"sync/atomic"
-	"time"
 )
 
 const (
@@ -332,7 +334,6 @@ func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
-
 const (
 	// LogNone tells a logger not to log any entries passed to it.
 	LogNone LogLevel = iota
@@ -402,7 +403,6 @@ func (ll LogLevel) String() string {
 type LogSanitizer interface {
 	SanitizeLogMessage(raw string) string
 }
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EJobPriority = JobPriority(0)
 
@@ -563,13 +563,20 @@ func (l Location) IsFolderAware() bool {
 }
 
 func (l Location) CanForwardOAuthTokens() bool {
-	return l == ELocation.Blob() || l == ELocation.BlobFS() || l == ELocation.File()
+	return l == ELocation.Blob() || l == ELocation.BlobFS()
 }
 
 func (l Location) SupportsHnsACLs() bool {
 	return l == ELocation.Blob() || l == ELocation.BlobFS()
 }
 
+func (l Location) SupportsTrailingDot() bool {
+	if (l == ELocation.File()) || (l == ELocation.Local() && runtime.GOOS != "windows") {
+		return true
+	}
+	
+	return false
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -673,6 +680,10 @@ func (ft FromTo) IsSetProperties() bool {
 
 func (ft FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
+func (ft FromTo) BothSupportTrailingDot() bool {
+	return ft.From().SupportsTrailingDot() && ft.To().SupportsTrailingDot()
 }
 
 func (ft FromTo) IsPropertyOnlyTransfer() bool {
@@ -840,8 +851,8 @@ func (bbt *BlockBlobTier) Parse(s string) error {
 	return err
 }
 
-func (bbt BlockBlobTier) ToAccessTierType() *blob.AccessTier {
-	return to.Ptr(blob.AccessTier(bbt.String()))
+func (bbt BlockBlobTier) ToAccessTierType() blob.AccessTier {
+	return blob.AccessTier(bbt.String())
 }
 
 func (bbt BlockBlobTier) MarshalJSON() ([]byte, error) {
@@ -885,8 +896,8 @@ func (pbt *PageBlobTier) Parse(s string) error {
 	return err
 }
 
-func (pbt PageBlobTier) ToAccessTierType() *blob.AccessTier {
-	return to.Ptr(blob.AccessTier(pbt.String()))
+func (pbt PageBlobTier) ToAccessTierType() blob.AccessTier {
+	return blob.AccessTier(pbt.String())
 }
 
 func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
@@ -1342,36 +1353,36 @@ type ResourceHTTPHeaders struct {
 // ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 	return blob.HTTPHeaders{
-		BlobContentType:        IffNotEmpty(h.ContentType),
+		BlobContentType:        &h.ContentType,
 		BlobContentMD5:         h.ContentMD5,
-		BlobContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		BlobContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		BlobContentDisposition: IffNotEmpty(h.ContentDisposition),
-		BlobCacheControl:       IffNotEmpty(h.CacheControl),
+		BlobContentEncoding:    &h.ContentEncoding,
+		BlobContentLanguage:    &h.ContentLanguage,
+		BlobContentDisposition: &h.ContentDisposition,
+		BlobCacheControl:       &h.CacheControl,
 	}
 }
 
 // ToFileHTTPHeaders converts ResourceHTTPHeaders to sharefile's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
 	return sharefile.HTTPHeaders{
-		ContentType:        IffNotEmpty(h.ContentType),
+		ContentType:        &h.ContentType,
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		ContentDisposition: IffNotEmpty(h.ContentDisposition),
-		CacheControl:       IffNotEmpty(h.CacheControl),
+		ContentEncoding:    &h.ContentEncoding,
+		ContentLanguage:    &h.ContentLanguage,
+		ContentDisposition: &h.ContentDisposition,
+		CacheControl:       &h.CacheControl,
 	}
 }
 
 // ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
 func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() datalakefile.HTTPHeaders {
 	return datalakefile.HTTPHeaders{
-		ContentType:        IffNotEmpty(h.ContentType),
+		ContentType:        &h.ContentType,
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
-		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
-		ContentDisposition: IffNotEmpty(h.ContentDisposition),
-		CacheControl:       IffNotEmpty(h.CacheControl),
+		ContentEncoding:    &h.ContentEncoding,
+		ContentLanguage:    &h.ContentLanguage,
+		ContentDisposition: &h.ContentDisposition,
+		CacheControl:       &h.CacheControl,
 	}
 }
 
