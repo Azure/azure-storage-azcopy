@@ -226,15 +226,15 @@ func CreateFileServiceClient(u string, credInfo CredentialInfo, credOpOptions *C
 	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
 	callbacks := newClientCallbacks[fileservice.Client, sharefile.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*fileservice.Client, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+			return fileservice.NewClient(u, tc, &fileservice.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot), FileRequestIntent: to.Ptr(fileservice.ShareTokenIntentBackup)})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*fileservice.Client, error) {
 			return fileservice.NewClientWithNoCredential(u, &fileservice.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot)})
 		},
-		SharedKeyCredential: func(u string, sharedKey *sharefile.SharedKeyCredential, options azcore.ClientOptions) (*fileservice.Client, error) {
+		SharedKeyCredential: func(u string, sharedKey *fileservice.SharedKeyCredential, options azcore.ClientOptions) (*fileservice.Client, error) {
 			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
 		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*sharefile.SharedKeyCredential, error) {
+		NewSharedKeyCredential: func(accountName string, accountKey string) (*fileservice.SharedKeyCredential, error) {
 			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
 		},
 	}
@@ -247,15 +247,15 @@ func CreateShareClient(u string, credInfo CredentialInfo, credOpOptions *Credent
 	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
 	callbacks := newClientCallbacks[share.Client, sharefile.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*share.Client, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+			return share.NewClient(u, tc, &share.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot), FileRequestIntent: to.Ptr(share.TokenIntentBackup)})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*share.Client, error) {
 			return share.NewClientWithNoCredential(u, &share.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot)})
 		},
-		SharedKeyCredential: func(u string, sharedKey *sharefile.SharedKeyCredential, options azcore.ClientOptions) (*share.Client, error) {
+		SharedKeyCredential: func(u string, sharedKey *share.SharedKeyCredential, options azcore.ClientOptions) (*share.Client, error) {
 			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
 		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*sharefile.SharedKeyCredential, error) {
+		NewSharedKeyCredential: func(accountName string, accountKey string) (*share.SharedKeyCredential, error) {
 			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
 		},
 	}
@@ -268,7 +268,7 @@ func CreateShareFileClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
 	callbacks := newClientCallbacks[sharefile.Client, sharefile.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*sharefile.Client, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+			return sharefile.NewClient(u, tc, &sharefile.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot), FileRequestIntent: to.Ptr(sharefile.ShareTokenIntentBackup)})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*sharefile.Client, error) {
 			return sharefile.NewClientWithNoCredential(u, &sharefile.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot)})
@@ -287,17 +287,17 @@ func CreateShareFileClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 func CreateShareDirectoryClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions, trailingDot *TrailingDotOption, from *Location) *sharedirectory.Client {
 	allowTrailingDot := trailingDot != nil && *trailingDot == trailingDot.Enable()
 	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
-	callbacks := newClientCallbacks[sharedirectory.Client, sharefile.SharedKeyCredential]{
+	callbacks := newClientCallbacks[sharedirectory.Client, sharedirectory.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*sharedirectory.Client, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
+			return sharedirectory.NewClient(u, tc, &sharedirectory.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot), FileRequestIntent: to.Ptr(sharedirectory.ShareTokenIntentBackup)})
 		},
 		NoCredential: func(u string, options azcore.ClientOptions) (*sharedirectory.Client, error) {
 			return sharedirectory.NewClientWithNoCredential(u, &sharedirectory.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot)})
 		},
-		SharedKeyCredential: func(u string, sharedKey *sharefile.SharedKeyCredential, options azcore.ClientOptions) (*sharedirectory.Client, error) {
+		SharedKeyCredential: func(u string, sharedKey *sharedirectory.SharedKeyCredential, options azcore.ClientOptions) (*sharedirectory.Client, error) {
 			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
 		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*sharefile.SharedKeyCredential, error) {
+		NewSharedKeyCredential: func(accountName string, accountKey string) (*sharedirectory.SharedKeyCredential, error) {
 			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
 		},
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
@@ -336,9 +337,24 @@ func oAuthTokenExists() (oauthTokenExists bool) {
 }
 
 // getAzureFileCredentialType is used to get Azure file's credential type
-func getAzureFileCredentialType() (common.CredentialType, error) {
-	// Azure file only support anonymous credential currently.
-	return common.ECredentialType.Anonymous(), nil
+func getAzureFileCredentialType(fileResourceURL string, standaloneSAS bool) (common.CredentialType, error) {
+	fileURLParts, err := filesas.ParseURL(fileResourceURL)
+	if err != nil {
+		return common.ECredentialType.Unknown(), err
+	}
+
+	// Give preference to explicitly supplied SAS tokens
+	sas := fileURLParts.SAS
+
+	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
+		return common.ECredentialType.Anonymous(), nil
+	}
+
+	if oAuthTokenExists() {
+		return common.ECredentialType.OAuthToken(), nil
+	}
+	return common.ECredentialType.Unknown(),
+		common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 }
 
 var stashedEnvCredType = ""
@@ -541,7 +557,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 				return common.ECredentialType.Unknown(), false, err
 			}
 		case common.ELocation.File():
-			if credType, err = getAzureFileCredentialType(); err != nil {
+			if credType, err = getAzureFileCredentialType(resource, resourceSAS != ""); err != nil {
 				return common.ECredentialType.Unknown(), false, err
 			}
 		case common.ELocation.BlobFS():
