@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Title>Microsoft.AzCopy.Linux.X64</Title>
+    <Version>10.21.0</Version>
+    <Authors>adreed@microsoft.com</Authors>
+    <Company>Microsoft</Company>
+    <Description>A .NET wrapper around AzCopy v10. https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10</Description>
+    <Copyright>Microsoft, 2023</Copyright>
+    <PackageProjectUrl>https://github.com/azure/azure-storage-azcopy</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/azure/azure-storage-azcopy</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="contentFiles\any\any\Executable\Linux\X64\azcopy" PackagePath="contentFiles\any\any\Executable\Linux\X64\azcopy">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NuGet.Build.Tasks.Pack" Version="6.7.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
