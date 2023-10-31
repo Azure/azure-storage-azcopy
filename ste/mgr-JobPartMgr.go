@@ -16,7 +16,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -483,6 +482,12 @@ func (jpm *jobPartMgr) clientInfo() {
 	networkStats := jpm.jobMgr.PipelineNetworkStats()
 	logOptions := jpm.jobMgr.PipelineLogInfo()
 
+	/* XXX This code/logic is moved to cmd where we create clients once for 
+	   lifetime for transfer.  
+
+	var sourceTrailingDot *common.TrailingDotOption
+	var trailingDot *common.TrailingDotOption
+	var from *common.Location
 	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
 		jpm.sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
 	}

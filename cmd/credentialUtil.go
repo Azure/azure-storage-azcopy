@@ -176,7 +176,12 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		RequestLogOptions: ste.RequestLogOptions{
 			SyslogDisabled: common.IsForceLoggingDisabled(),
 		},
+<<<<<<< HEAD
 	})
+=======
+	}, ste.NewNilTrailingDotPolicy())
+	credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
+>>>>>>> eb10667a (Temp)
 	if isSASExisted := sas.Signature() != ""; isSASExisted {
 		if isMDAccount {
 			// Ping the account anyway, and discern if we need OAuth.
