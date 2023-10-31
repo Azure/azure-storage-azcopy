@@ -85,6 +85,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		if retryStatusCodes != "" {
+			retryStatusCodes = retryStatusCodes + ";408;429;500;502;503;504"
 			rsc, err := ste.ParseRetryCodes(retryStatusCodes)
 			if err != nil {
 				return err
