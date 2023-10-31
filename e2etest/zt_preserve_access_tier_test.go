@@ -30,7 +30,7 @@ import (
 func TestTier_UploadCold(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:  true,
-		accessTier: to.Ptr(blob.AccessTierCold), // this is not valid yet on the service, so this test is disabled.
+		accessTier: to.Ptr(blob.AccessTierCold),
 	}, nil, testFiles{
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{
