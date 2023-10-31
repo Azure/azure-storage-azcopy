@@ -54,6 +54,7 @@ var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
 var azcopySkipVersionCheck bool
+var retryStatusCodes string
 
 type jobLoggerInfo struct {
 	jobID         common.JobID
@@ -82,6 +83,15 @@ var rootCmd = &cobra.Command{
 				ste.UploadTryTimeout = timeout
 			}
 		}
+
+		if retryStatusCodes != "" {
+			rsc, err := ste.ParseRetryCodes(retryStatusCodes)
+			if err != nil {
+				return err
+			}
+			ste.RetryStatusCodes = rsc
+		}
+
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
 		if azcopyAwaitContinue {
 			glcm.E2EAwaitContinue()
@@ -227,6 +237,10 @@ func init() {
 
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+
+	// special flags to be used in case of unexpected service errors.
+	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "", "Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
+	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
 
 	// debug-only
 	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
