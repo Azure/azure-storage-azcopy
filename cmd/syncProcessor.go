@@ -169,7 +169,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 		msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
 		glcm.Info(msg + "; check the scanning log file for more details")
 		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(common.LogError, msg + ": " + err.Error())
+			azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 		}
 	}
 
@@ -233,8 +233,8 @@ func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderProper
 }
 
 type localFileDeleter struct {
-	rootPath string
-	fpo common.FolderPropertyOption
+	rootPath      string
+	fpo           common.FolderPropertyOption
 	folderManager common.FolderDeletionManager
 }
 
@@ -288,33 +288,37 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 		from = to.Ptr(cca.fromTo.From())
 	}
 
-	clientOptions := createClientOptions(azcopyLogVerbosity, trailingDot, from)
+	clientOptions := createClientOptions(azcopyLogVerbosity)
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly, trailingDot, from).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {
-	rootURL        *url.URL
-	credInfo       common.CredentialInfo
-	clientOptions  azcore.ClientOptions
-	ctx            context.Context
-	targetLocation common.Location
-	folderManager common.FolderDeletionManager
-	folderOption  common.FolderPropertyOption
+	rootURL         *url.URL
+	credInfo        common.CredentialInfo
+	clientOptions   azcore.ClientOptions
+	ctx             context.Context
+	targetLocation  common.Location
+	folderManager   common.FolderDeletionManager
+	folderOption    common.FolderPropertyOption
 	forceIfReadOnly bool
+	trailingDot     *common.TrailingDotOption
+	from            *common.Location
 }
 
-func newRemoteResourceDeleter(rawRootURL *url.URL, credInfo common.CredentialInfo, clientOptions azcore.ClientOptions, ctx context.Context, targetLocation common.Location, fpo common.FolderPropertyOption, forceIfReadOnly bool) *remoteResourceDeleter {
+func newRemoteResourceDeleter(rawRootURL *url.URL, credInfo common.CredentialInfo, clientOptions azcore.ClientOptions, ctx context.Context, targetLocation common.Location, fpo common.FolderPropertyOption, forceIfReadOnly bool, trailingDot *common.TrailingDotOption, from *common.Location) *remoteResourceDeleter {
 	return &remoteResourceDeleter{
-		rootURL:        rawRootURL,
-		credInfo:       credInfo,
-		clientOptions:  clientOptions,
-		ctx:            ctx,
-		targetLocation: targetLocation,
-		folderManager:  common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger),
-		folderOption: fpo,
+		rootURL:         rawRootURL,
+		credInfo:        credInfo,
+		clientOptions:   clientOptions,
+		ctx:             ctx,
+		targetLocation:  targetLocation,
+		folderManager:   common.NewFolderDeletionManager(ctx, fpo, azcopyScanningLogger),
+		folderOption:    fpo,
 		forceIfReadOnly: forceIfReadOnly,
+		trailingDot:     trailingDot,
+		from:            from,
 	}
 }
 
@@ -392,7 +396,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			}
 			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
 
-			fileClient := common.CreateShareFileClient(fileURLParts.String(), b.credInfo, nil, b.clientOptions)
+			fileClient := common.CreateShareFileClient(fileURLParts.String(), b.credInfo, nil, b.clientOptions, b.trailingDot, b.from)
 
 			_, err = fileClient.Delete(b.ctx, nil)
 			if err != nil && b.forceIfReadOnly && fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
@@ -410,7 +414,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 					msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
 					glcm.Info(msg + "; check the scanning log file for more details")
 					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(common.LogError, msg + ": " + err.Error())
+						azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 					}
 				}
 			}
@@ -431,7 +435,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			msg := fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath)
 			glcm.Info(msg + "; check the scanning log file for more details")
 			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(common.LogError, msg + ": " + err.Error())
+				azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 			}
 		}
 
@@ -452,7 +456,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				// HNS endpoint doesn't like delete snapshots on a directory
 				_, err = blobClient.Delete(b.ctx, nil)
 			case common.ELocation.File():
-				directoryClient := common.CreateShareDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
+				directoryClient := common.CreateShareDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions, b.trailingDot, b.from)
 				_, err = directoryClient.Delete(ctx, nil)
 
 				if err != nil && b.forceIfReadOnly && fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
@@ -470,7 +474,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 						msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
 						glcm.Info(msg + "; check the scanning log file for more details")
 						if azcopyScanningLogger != nil {
-							azcopyScanningLogger.Log(common.LogError, msg + ": " + err.Error())
+							azcopyScanningLogger.Log(common.LogError, msg+": "+err.Error())
 						}
 					}
 				}

@@ -444,13 +444,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	var trailingDot *common.TrailingDotOption
-	var from *common.Location
-	if cca.FromTo.To() == common.ELocation.File() {
-		trailingDot = &cca.trailingDot
-		from = to.Ptr(cca.FromTo.From())
-	}
-	options := createClientOptions(logLevel, trailingDot, from)
+	options := createClientOptions(logLevel)
 
 	// Because the only use-cases for createDstContainer will be on service-level S2S and service-level download
 	// We only need to create "containers" on local and blob.
@@ -487,7 +481,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		fsc := common.CreateFileServiceClient(accountRoot, dstCredInfo, nil, options)
+		fsc := common.CreateFileServiceClient(accountRoot, dstCredInfo, nil, options, &cca.trailingDot, to.Ptr(cca.FromTo.From()))
 		sc := fsc.NewShareClient(containerName)
 
 		_, err = sc.GetProperties(ctx, nil)

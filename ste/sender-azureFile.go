@@ -54,20 +54,20 @@ type azureFileSenderBase struct {
 	jptm            IJobPartTransferMgr
 	fileOrDirClient FileClientStub
 	shareClient     *share.Client
-	serviceClient *service.Client
-	chunkSize    int64
-	numChunks    uint32
-	pacer        pacer
-	ctx          context.Context
-	sip          ISourceInfoProvider
+	serviceClient   *service.Client
+	chunkSize       int64
+	numChunks       uint32
+	pacer           pacer
+	ctx             context.Context
+	sip             ISourceInfoProvider
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
 	// the properties of the local file
-	headersToApply  file.HTTPHeaders
+	headersToApply       file.HTTPHeaders
 	smbPropertiesToApply file.SMBProperties
-	permissionsToApply file.Permissions
-	metadataToApply common.Metadata
+	permissionsToApply   file.Permissions
+	metadataToApply      common.Metadata
 }
 
 func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*azureFileSenderBase, error) {
@@ -108,7 +108,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	fileURLParts.ShareName = ""
 	fileURLParts.ShareSnapshot = ""
 	fileURLParts.DirectoryOrFilePath = ""
-	serviceClient := common.CreateFileServiceClient(fileURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	serviceClient := common.CreateFileServiceClient(fileURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
 
 	shareClient := serviceClient.NewShareClient(shareName)
 	if shareSnapshot != "" {
@@ -130,19 +130,19 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	}
 
 	return &azureFileSenderBase{
-		jptm:            jptm,
-		serviceClient: serviceClient,
-		shareClient: shareClient,
-		fileOrDirClient: client,
-		chunkSize:       chunkSize,
-		numChunks:       numChunks,
-		pacer:           pacer,
-		ctx:             jptm.Context(),
-		headersToApply:  props.SrcHTTPHeaders.ToFileHTTPHeaders(),
+		jptm:                 jptm,
+		serviceClient:        serviceClient,
+		shareClient:          shareClient,
+		fileOrDirClient:      client,
+		chunkSize:            chunkSize,
+		numChunks:            numChunks,
+		pacer:                pacer,
+		ctx:                  jptm.Context(),
+		headersToApply:       props.SrcHTTPHeaders.ToFileHTTPHeaders(),
 		smbPropertiesToApply: file.SMBProperties{},
-		permissionsToApply: file.Permissions{},
-		sip:             sip,
-		metadataToApply: props.SrcMetadata,
+		permissionsToApply:   file.Permissions{},
+		sip:                  sip,
+		metadataToApply:      props.SrcMetadata,
 	}, nil
 }
 
@@ -217,10 +217,10 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		err = u.DoWithOverrideReadOnly(u.ctx,
 			func() (interface{}, error) {
 				return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{
-					HTTPHeaders:  &u.headersToApply,
+					HTTPHeaders:   &u.headersToApply,
 					SMBProperties: &creationProperties,
-					Permissions:  &u.permissionsToApply,
-					Metadata: u.metadataToApply,
+					Permissions:   &u.permissionsToApply,
+					Metadata:      u.metadataToApply,
 				})
 			},
 			u.fileOrDirClient,
@@ -390,8 +390,8 @@ func (u *azureFileSenderBase) Epilogue() {
 	if u.jptm.IsLive() && u.jptm.Info().PreserveSMBInfo {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
 		_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-			HTTPHeaders: &u.headersToApply,
-			Permissions: &u.permissionsToApply,
+			HTTPHeaders:   &u.headersToApply,
+			Permissions:   &u.permissionsToApply,
 			SMBProperties: &u.smbPropertiesToApply,
 		})
 		if err != nil {
@@ -455,9 +455,10 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 	err = u.DoWithOverrideReadOnly(u.ctx,
 		func() (interface{}, error) {
 			return u.getDirectoryClient().SetProperties(u.ctx, &directory.SetPropertiesOptions{
-			FileSMBProperties: &u.smbPropertiesToApply,
-			FilePermissions: &u.permissionsToApply,
-		}) },
+				FileSMBProperties: &u.smbPropertiesToApply,
+				FilePermissions:   &u.permissionsToApply,
+			})
+		},
 		u.fileOrDirClient,
 		u.jptm.GetForceIfReadOnly())
 	return err

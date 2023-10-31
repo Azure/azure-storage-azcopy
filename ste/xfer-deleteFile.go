@@ -71,7 +71,7 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 	source := info.Source
 	srcURL, _ := url.Parse(source)
 
-	srcFileClient := common.CreateShareFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	srcFileClient := common.CreateShareFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
@@ -137,7 +137,7 @@ func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr
 
 	logger.Log(common.LogDebug, "About to attempt to delete folder "+loggableName)
 
-	srcDirClient := common.CreateShareDirectoryClient(folder, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	srcDirClient := common.CreateShareDirectoryClient(folder, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
 	helper := &azureFileSenderBase{}
 	err = helper.DoWithOverrideReadOnly(ctx,
 		func() (interface{}, error) { return srcDirClient.Delete(ctx, nil) },

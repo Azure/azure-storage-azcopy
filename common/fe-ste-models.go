@@ -563,7 +563,7 @@ func (l Location) IsFolderAware() bool {
 }
 
 func (l Location) CanForwardOAuthTokens() bool {
-	return l == ELocation.Blob() || l == ELocation.BlobFS()
+	return l == ELocation.Blob() || l == ELocation.BlobFS() || l == ELocation.File()
 }
 
 func (l Location) SupportsHnsACLs() bool {
