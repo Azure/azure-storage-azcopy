@@ -31,7 +31,7 @@ import (
 
 func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
@@ -45,8 +45,8 @@ func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
 	scenarioHelper{}.setAttributesForLocalFiles(a, srcDirName, filesToExclude, attrList)
 
 	// set up the destination as an empty container
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -65,7 +65,7 @@ func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
 
 func TestSyncUploadWithIncludeAttrFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
@@ -79,8 +79,8 @@ func TestSyncUploadWithIncludeAttrFlag(t *testing.T) {
 	scenarioHelper{}.setAttributesForLocalFiles(a, srcDirName, filesToInclude, attrList)
 
 	// set up the destination as an empty container
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -104,7 +104,7 @@ func TestSyncUploadWithIncludeAttrFlag(t *testing.T) {
 // Only the last file should be transferred
 func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
@@ -117,8 +117,8 @@ func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
 	attrList := []string{"H", "I", "C"}
 	scenarioHelper{}.setAttributesForLocalFiles(a, srcDirName, fileList[1:], attrList)
 
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
@@ -142,7 +142,7 @@ func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
 // None of them should be transferred
 func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(srcDirName)
@@ -155,8 +155,8 @@ func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
 	attrList := []string{"H", "I", "C"}
 	scenarioHelper{}.setAttributesForLocalFiles(a, srcDirName, fileList[1:], attrList)
 
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	mockedRPC := interceptor{}
 	Rpc = mockedRPC.intercept
@@ -176,16 +176,16 @@ func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
 // mouthfull of a test name, but this ensures that case insensitivity doesn't cause the unintended deletion of files
 func TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dstDirName)
 	fileList := []string{"FileWithCaps", "FiLeTwO", "FoOBaRBaZ"}
 
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, fileList, "Hello, World!")
+	scenarioHelper{}.generateBlobsFromList(a, cc, fileList, "Hello, World!")
 
 	// let the local files be in the future; we don't want to do _anything_ to them; not delete nor download.
 	time.Sleep(time.Second * 5)

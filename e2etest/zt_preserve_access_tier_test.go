@@ -21,8 +21,9 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"testing"
 )
 
@@ -44,7 +45,7 @@ func TestTier_V2ToClassicAccount(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:             true,
 		s2sPreserveAccessTier: true,
-		accessTier:            azblob.AccessTierHot,
+		accessTier:            to.Ptr(blob.AccessTierHot),
 	}, nil, testFiles{
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{
@@ -59,7 +60,7 @@ func TestTier_V2ToClassicAccountNoPreserve(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:             true,
 		s2sPreserveAccessTier: false,
-		accessTier:            azblob.AccessTierHot,
+		accessTier:            to.Ptr(blob.AccessTierHot),
 	}, nil, testFiles{
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{
@@ -74,7 +75,7 @@ func TestTier_V2ToClassicAccountCool(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:             true,
 		s2sPreserveAccessTier: true,
-		accessTier:            azblob.AccessTierCool,
+		accessTier:            to.Ptr(blob.AccessTierCool),
 	}, nil, testFiles{
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{
@@ -89,7 +90,7 @@ func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:             true,
 		s2sPreserveAccessTier: false,
-		accessTier:            azblob.AccessTierCool,
+		accessTier:            to.Ptr(blob.AccessTierCool),
 	}, nil, testFiles{
 		defaultSize: "4M",
 		shouldTransfer: []interface{}{

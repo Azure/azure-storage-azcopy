@@ -23,7 +23,6 @@ package e2etest
 import (
 	"context"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"runtime"
 	"testing"
 )
@@ -101,12 +100,12 @@ func TestTrailingDot_Disabled(t *testing.T) {
 			trailingDot: common.ETrailingDotOption.Disable(),
 		}, &hooks{
 			afterValidation: func(h hookHelper) {
-				shareURL := h.GetDestination().(*resourceAzureFileShare).shareURL
-				l, err := shareURL.NewRootDirectoryURL().ListFilesAndDirectoriesSegment(context.Background(), azfile.Marker{}, azfile.ListFilesAndDirectoriesOptions{})
+				shareURL := h.GetDestination().(*resourceAzureFileShare).shareClient
+				l, err := shareURL.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil).NextPage(context.Background())
 				if err != nil {
 					panic(err)
 				}
-				if len(l.FileItems) != 1 {
+				if len(l.Segment.Files) != 1 {
 					panic("expected 1 file named `file`")
 				}
 			},

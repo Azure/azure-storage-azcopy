@@ -26,7 +26,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"hash"
@@ -426,7 +425,7 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 		if !errors.Is(err, fs.ErrNotExist) {
 			common.LogHashStorageFailure()
 			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("failed to read hash data for %s: %s", relPath, err.Error()))
+				azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to read hash data for %s: %s", relPath, err.Error()))
 			}
 		}
 
@@ -557,7 +556,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 				if err != nil {
 					common.LogHashStorageFailure()
 					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("failed to write hash data for %s: %s", relPath, err.Error()))
+						azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to write hash data for %s: %s", relPath, err.Error()))
 					}
 				}
 
@@ -585,7 +584,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 						fi.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 						noBlobProps,
-						noMetdata,
+						noMetadata,
 						"", // Local has no such thing as containers
 					),
 					processor, // the original processor is wrapped in the mutex processor.
@@ -644,7 +643,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
 	if err != nil {
-		azcopyScanningLogger.Log(pipeline.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
 		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
 	}
 
@@ -666,7 +665,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				singleFileInfo.Size(),
 				noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 				noBlobProps,
-				noMetdata,
+				noMetadata,
 				"", // Local has no such thing as containers
 			),
 			hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -720,7 +719,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 						noBlobProps,
-						noMetdata,
+						noMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper
@@ -796,7 +795,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
 						noBlobProps,
-						noMetdata,
+						noMetadata,
 						"", // Local has no such thing as containers
 					),
 					hashingProcessor, // hashingProcessor handles the mutex wrapper

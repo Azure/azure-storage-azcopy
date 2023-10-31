@@ -3,12 +3,14 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"net/url"
 	"os"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -38,10 +40,10 @@ func init() {
 	cleanCmd.PersistentFlags().Int64Var(&numberOfResource, "resource-num", 0, "number of resource inside the container")
 }
 
-func getContainerURLFromString(url url.URL) url.URL {
+func getContainerURLFromString(url url.URL) string {
 	containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
 	url.Path = "/" + containerName
-	return url
+	return url.String()
 }
 
 // checks if a given url points to a container, as opposed to a blob or prefix match
@@ -62,20 +64,7 @@ func getBlobNameFromURL(path string) string {
 	return strings.SplitAfterN(path[1:], "/", 2)[1]
 }
 
-func listContainer(resourceUrl string, numberOfresource int64) {
-
-	p := azblob.NewPipeline(
-		azblob.NewAnonymousCredential(),
-		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-		})
-
+func listContainer(resourceUrl string, numberOfResources int64) {
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(resourceUrl)
 	if err != nil {
@@ -85,7 +74,18 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 
 	// get the container url to be used for listing
 	literalContainerUrl := getContainerURLFromString(*sourceUrl)
-	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
+	cc, err := container.NewClientWithNoCredential(literalContainerUrl, &container.ClientOptions{ClientOptions: azcore.ClientOptions{
+		Retry: policy.RetryOptions{
+			MaxRetries: ste.UploadMaxTries,
+			TryTimeout: ste.UploadTryTimeout,
+			RetryDelay: ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay,
+		},
+	}})
+	if err != nil {
+		fmt.Printf("cannot create container client. Failed with error %s\n", err.Error())
+		os.Exit(1)
+	}
 
 	// get the search prefix to query the service
 	searchPrefix := ""
@@ -99,13 +99,14 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 			searchPrefix += "/"
 		}
 	}
-	numberOfblobs := int64(0)
+	numberOfBlobs := int64(0)
 
 	// perform a list blob
-	for marker := (azblob.Marker{}); marker.NotDone(); {
-		// look for all blobs that start with the prefix
-		listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
+	// look for all blobs that start with the prefix
+	pager := cc.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: &searchPrefix})
+
+	for pager.More() {
+		listBlob, err := pager.NextPage(context.TODO())
 		if err != nil {
 			fmt.Printf("cannot list blobs for download. Failed with error %s\n", err.Error())
 			os.Exit(1)
@@ -113,18 +114,17 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
-			blobName := blobInfo.Name
+			blobName := *blobInfo.Name
 			if len(searchPrefix) > 0 {
 				// strip away search prefix from the blob name.
 				blobName = strings.Replace(blobName, searchPrefix, "", 1) //nolint:ineffassign,staticcheck
 			}
-			numberOfblobs++
+			numberOfBlobs++
 		}
-		marker = listBlob.NextMarker
 	}
 
-	if numberOfblobs != numberOfresource {
-		fmt.Printf("expected number of blobs / file %d inside the resource does not match the actual %d\n", numberOfresource, numberOfblobs)
+	if numberOfBlobs != numberOfResources {
+		fmt.Printf("expected number of blobs / file %d inside the resource does not match the actual %d\n", numberOfResources, numberOfBlobs)
 		os.Exit(1)
 	}
 }

@@ -24,31 +24,33 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/stretchr/testify/assert"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // regular blob->file sync
 func TestSyncS2SWithSingleBlob(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	for _, blobName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobList, blockBlobDefaultData)
+		scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 
 		// set up the destination container with the same single blob
-		scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
+		scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobList, blockBlobDefaultData)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -69,7 +71,7 @@ func TestSyncS2SWithSingleBlob(t *testing.T) {
 		})
 
 		// recreate the source blob to have a later last modified time
-		scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobList, blockBlobDefaultData)
+		scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
 
 		runSyncAndVerify(a, raw, func(err error) {
@@ -82,14 +84,14 @@ func TestSyncS2SWithSingleBlob(t *testing.T) {
 // regular container->container sync but destination is empty, so everything has to be transferred
 func TestSyncS2SWithEmptyDestination(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -129,18 +131,18 @@ func TestSyncS2SWithEmptyDestination(t *testing.T) {
 // regular container->container sync but destination is identical to the source, transfers are scheduled based on lmt
 func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// set up the destination with the exact same files
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobList, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -161,7 +163,7 @@ func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 	})
 
 	// refresh the source blobs' last modified time so that they get synced
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -173,22 +175,22 @@ func TestSyncS2SWithIdenticalDestination(t *testing.T) {
 func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// set up the destination with half of the blobs from source
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList[0:len(blobList)/2], blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobList[0:len(blobList)/2], blockBlobDefaultData)
 	expectedOutput := blobList[len(blobList)/2:] // the missing half of source blobs should be transferred
 
 	// add some extra blobs that shouldn't be included
-	scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, dstContainerURL, "extra")
+	scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, dstContainerClient, "extra")
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -206,14 +208,14 @@ func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 
 		// make sure the extra blobs were deleted
 		extraFilesFound := false
-		for marker := (azblob.Marker{}); marker.NotDone(); {
-			listResponse, err := dstContainerURL.ListBlobsFlatSegment(ctx, marker, azblob.ListBlobsSegmentOptions{})
+		pager := dstContainerClient.NewListBlobsFlatPager(nil)
+		for pager.More() {
+			listResponse, err := pager.NextPage(ctx)
 			a.Nil(err)
-			marker = listResponse.NextMarker
 
 			// if ever the extra blobs are found, note it down
 			for _, blob := range listResponse.Segment.BlobItems {
-				if strings.Contains(blob.Name, "extra") {
+				if strings.Contains(*blob.Name, "extra") {
 					extraFilesFound = true
 				}
 			}
@@ -226,19 +228,19 @@ func TestSyncS2SWithMismatchedDestination(t *testing.T) {
 // include flag limits the scope of source/destination comparison
 func TestSyncS2SWithIncludePatternFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -262,19 +264,19 @@ func TestSyncS2SWithIncludePatternFlag(t *testing.T) {
 // exclude flag limits the scope of source/destination comparison
 func TestSyncS2SWithExcludePatternFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToExclude, blockBlobDefaultData)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -298,25 +300,25 @@ func TestSyncS2SWithExcludePatternFlag(t *testing.T) {
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func TestSyncS2SWithIncludeAndExcludePatternFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToExclude, blockBlobDefaultData)
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -341,19 +343,19 @@ func TestSyncS2SWithIncludeAndExcludePatternFlag(t *testing.T) {
 // a specific path is avoided in the comparison
 func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"excludeSub/notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToExclude, blockBlobDefaultData)
 	excludeString := "excludeSub;exactName"
 
 	// set up interceptor
@@ -374,10 +376,10 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 	})
 
 	// now set up the destination with the blobs to be excluded, and make sure they are not touched
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobsToExclude, blockBlobDefaultData)
 
 	// re-create the ones at the source so that their lmts are newer
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToExclude, blockBlobDefaultData)
 
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
@@ -386,7 +388,7 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 
 		// make sure the extra blobs were not touched
 		for _, blobName := range blobsToExclude {
-			exists := scenarioHelper{}.blobExists(dstContainerURL.NewBlobURL(blobName))
+			exists := scenarioHelper{}.blobExists(dstContainerClient.NewBlobClient(blobName))
 			a.True(exists)
 		}
 	})
@@ -395,16 +397,16 @@ func TestSyncS2SWithExcludePathFlag(t *testing.T) {
 // validate the bug fix for this scenario
 func TestSyncS2SWithMissingDestination(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
 
 	// delete the destination container to simulate non-existing destination, or recently removed destination
-	deleteContainer(a, dstContainerURL)
+	deleteContainer(a, dstContainerClient)
 
 	// set up the container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -430,19 +432,19 @@ func TestSyncS2SWithMissingDestination(t *testing.T) {
 // there is a type mismatch between the source and destination
 func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// set up the destination container with a single blob
 	singleBlobName := "single"
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, []string{singleBlobName}, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, []string{singleBlobName}, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -477,14 +479,14 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 // container <-> virtual dir sync
 func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -525,19 +527,19 @@ func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 // regular vdir -> vdir sync
 func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
 	vdirName := "vdir"
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	a.NotZero(len(blobList))
 
 	// set up the destination with the exact same files
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobList, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -560,7 +562,7 @@ func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 	})
 
 	// refresh the blobs' last modified time so that they are newer
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 	expectedList := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	runSyncAndVerify(a, raw, func(err error) {
@@ -574,23 +576,22 @@ func TestSyncS2SBetweenVirtualDirs(t *testing.T) {
 func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
 	vdirName := "vdir"
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL,
-		vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	a.NotZero(len(blobList))
 
 	// set up the destination with the exact same files
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobList, blockBlobDefaultData)
 
 	// create a blob at the destination with the exact same name as the vdir
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, []string{vdirName}, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, []string{vdirName}, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -622,7 +623,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 
 	// case 3: blob -> blob: if source is also a blob, then single blob to blob sync happens
 	// create a blob at the source with the exact same name as the vdir
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, []string{vdirName}, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, []string{vdirName}, blockBlobDefaultData)
 	raw = getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -630,7 +631,7 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 	})
 
 	// refresh the dst blobs' last modified time so that they are newer
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 
 	// case 4: vdir -> vdir: adding a trailing slash helps to clarify it should be treated as virtual dir
@@ -648,24 +649,25 @@ func TestSyncS2SBetweenVirtualDirsWithConflictingBlob(t *testing.T) {
 // we should recognize this and sync with the virtual directory instead
 func TestSyncS2SADLSDirectory(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
 	vdirName := "vdir"
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL,
-		vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	a.NotZero(len(blobList))
 
 	// set up the destination with the exact same files
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobList, blockBlobDefaultData)
 
 	// create an ADLS Gen2 directory at the source with the exact same name as the vdir
-	_, err := srcContainerURL.NewBlockBlobURL(vdirName).Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+	_, err := srcContainerClient.NewBlockBlobClient(vdirName).Upload(context.Background(), streaming.NopCloser(bytes.NewReader(nil)),
+		&blockblob.UploadOptions{
+			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
+		})
 	a.Nil(err)
 
 	// set up interceptor
@@ -689,7 +691,7 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 	})
 
 	// refresh the sources blobs' last modified time so that they are newer
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 
 	expectedTransfers := scenarioHelper{}.shaveOffPrefix(blobList, vdirName+common.AZCOPY_PATH_SEPARATOR_STRING)
@@ -702,19 +704,19 @@ func TestSyncS2SADLSDirectory(t *testing.T) {
 // testing multiple include regular expression
 func TestSyncS2SWithIncludeRegexFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg", "subOne/subTwo/tessssst.pdf"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToInclude, blockBlobDefaultData)
 	includeString := "es{4,};^zxc"
 
 	// set up interceptor
@@ -749,19 +751,19 @@ func TestSyncS2SWithIncludeRegexFlag(t *testing.T) {
 // testing multiple exclude regular expressions
 func TestSyncS2SWithExcludeRegexFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"tessssssssssssst.txt", "subOne/dogs.jpeg", "subOne/subTwo/tessssst.pdf"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToExclude, blockBlobDefaultData)
 	excludeString := "es{4,};o(g)"
 
 	// set up interceptor
@@ -788,24 +790,24 @@ func TestSyncS2SWithExcludeRegexFlag(t *testing.T) {
 // testing with both include and exclude regular expression flags
 func TestSyncS2SWithIncludeAndExcludeRegexFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	bsc := getBlobServiceClient()
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
 	// set up the source container with numerous blobs
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, srcContainerClient, "")
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"tessssssssssssst.txt", "zxcfile.txt", "subOne/tetingessssss.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToInclude, blockBlobDefaultData)
 	includeString := "es{4,};^zxc"
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"zxca.txt", "subOne/dogs.jpeg", "subOne/subTwo/zxcat.pdf"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToExclude, blockBlobDefaultData)
 	excludeString := "^zxca;o(g)"
 
 	// set up interceptor
@@ -840,19 +842,19 @@ func TestSyncS2SWithIncludeAndExcludeRegexFlag(t *testing.T) {
 
 func TestDryrunSyncBlobtoBlob(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up src container
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
 	blobsToInclude := []string{"AzURE2.jpeg", "sub1/aTestOne.txt", "sub1/sub2/testTwo.pdf"}
-	scenarioHelper{}.generateBlobsFromList(a, srcContainerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, srcContainerClient, blobsToInclude, blockBlobDefaultData)
 
 	// set up dst container
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
 	blobsToDelete := []string{"testThree.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobsToDelete, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobsToDelete, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -876,11 +878,11 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 		sort.Strings(msg)
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
-				a.True(strings.Contains(msg[i], dstContainerURL.String()))
+				a.True(strings.Contains(msg[i], dstContainerClient.URL()))
 			} else {
 				a.True(strings.Contains(msg[i], "DRYRUN: copy"))
-				a.True(strings.Contains(msg[i], srcContainerURL.String()))
-				a.True(strings.Contains(msg[i], dstContainerURL.String()))
+				a.True(strings.Contains(msg[i], srcContainerClient.URL()))
+				a.True(strings.Contains(msg[i], dstContainerClient.URL()))
 			}
 		}
 
@@ -891,17 +893,17 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 
 func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up src container
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, srcContainerURL)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, srcContainerClient)
 
 	// set up dst container
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, dstContainerURL)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, dstContainerClient)
 	blobsToDelete := []string{"testThree.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(a, dstContainerURL, blobsToDelete, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, dstContainerClient, blobsToDelete, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}

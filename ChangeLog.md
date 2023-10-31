@@ -1,10 +1,73 @@
 
 # Change Log
 
+## Version 10.22.0-Preview
+
+### New Features
+
+1. Migrated to the latest [azdatalake SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake).
+
+### Bug Fixes
+
+1. Fixed an issue where http headers and access tier would sometimes be sent as empty headers.
+2. Fixed an issue where AzCopy would panic when passing an un-parseable URL. ([#2404](https://github.com/Azure/azure-storage-azcopy/issues/2404))
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
+## Version 10.21.1
+
+### Bug Fixes
+
+1. Fixed an issue where validating destination length would fail a job instead of logging the error if read permissions are not provided.
+
+## Version 10.21.0
+
+### New Features
+
+1. Migrated to the latest [azblob SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob).
+2. Migrated to the latest [azfile SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azfile).
+3. Migrated from deprecated ADAL to MSAL through the latest [azidentity SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity).
+4. Added support for sync with Azure Data Lake Storage Gen2. ([#2376](https://github.com/Azure/azure-storage-azcopy/pull/2376))
+
+### Bug Fixes
+
+1. Fixed an issue where ACL data would not copy when specifying `*.dfs.core.windows.net` endpoints ([#2347](https://github.com/Azure/azure-storage-azcopy/pull/2347)).
+2. Fixed an issue where Sync would incorrectly log that _all_ files, even those that didn't get overwritten, would be overwritten. ([#2372](https://github.com/Azure/azure-storage-azcopy/pull/2372))
+
+### Documentation
+
+1. Updated `--dry-run` documentation to indicate the effects of `--overwrite` are ignored. ([#2325](https://github.com/Azure/azure-storage-azcopy/pull/2325))
+
+### Special notes
+
+1. Due to the migration from ADAL to MSAL, tenant ID must now be set when authorizing with single tenant applications created after 10/15/2018.
+
+## Version 10.21.0-Preview
+
+### New Features
+
+1. Migrated to the latest [azblob SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob).
+2. Migrated to the latest [azfile SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azfile).
+3. Migrated from deprecated ADAL to MSAL through the latest [azidentity SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity).
+4. Deprecated support for object IDs in MSI. Client ID or Resource ID can be used as an alternative.
+
+### Special notes
+
+1. Due to the migration from ADAL to MSAL, tenant ID must now be set when authorizing with single tenant applications created after 10/15/2018.
+
+## Version 10.20.1
+
+### Bug Fixes
+
+1. Fixed an issue where LMT data is not returned on `list` command for Azure Files.
+
 ## Version 10.20.0
 
 ### New Features
 
+1. Mac M1/ARM64 Support
 1. Force small blobs to use PutBlob for any source.
 2. Support to delete CPK encrypted blobs.
 3. Support to follow symlinks when `--preserve-smb-permissions` is enabled.
@@ -21,6 +84,7 @@
 7. Fixed an issue where `--skip-version-check` would not be honored for `login`,` logout`, `help` commands. [#2299](https://github.com/Azure/azure-storage-azcopy/issues/2299)
 
 ### Documentation
+
 1. Add a log for LMTs when a mismatch is encountered.
 2. Added documentation indicating the `login` and `logout` commands will be deprecated in the future.
 

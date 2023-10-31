@@ -3,7 +3,6 @@ package ste
 import (
 	gcpUtils "cloud.google.com/go/storage"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/oauth2/google"
 	"os"
@@ -45,8 +44,8 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 			GCPCredentialInfo: common.GCPCredentialInfo{},
 		},
 		common.CredentialOpOptions{
-			LogInfo:  func(str string) { p.jptm.Log(pipeline.LogInfo, str) },
-			LogError: func(str string) { p.jptm.Log(pipeline.LogError, str) },
+			LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
+			LogError: func(str string) { p.jptm.Log(common.LogError, str) },
 			Panic:    func(err error) { panic(err) },
 		})
 	if err != nil {
@@ -60,11 +59,10 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 	return &p, nil
 }
 
-func (p *gcpSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
-
+func (p *gcpSourceInfoProvider) PreSignedSourceURL() (string, error) {
 	conf, err := google.JWTConfigFromJSON(jsonKey)
 	if err != nil {
-		return nil, fmt.Errorf("Could not get config from json key. Error: %v", err)
+		return "", fmt.Errorf("Could not get config from json key. Error: %v", err)
 	}
 	opts := &gcpUtils.SignedURLOptions{
 		Scheme:         gcpUtils.SigningSchemeV4,
@@ -76,15 +74,10 @@ func (p *gcpSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	u, err := gcpUtils.SignedURL(p.gcpURLParts.BucketName, p.gcpURLParts.ObjectKey, opts)
 
 	if err != nil {
-		return nil, fmt.Errorf("Unable to Generate Signed URL for given GCP Object: %v", err)
+		return "", fmt.Errorf("Unable to Generate Signed URL for given GCP Object: %v", err)
 	}
 
-	parsedURL, err := url.Parse(u)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to parse signed URL: %v", err)
-	}
-
-	return parsedURL, nil
+	return u, nil
 }
 
 func (p *gcpSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -126,8 +119,8 @@ func (p *gcpSourceInfoProvider) handleInvalidMetadataKeys(m common.Metadata) (co
 	switch p.transferInfo.S2SInvalidMetadataHandleOption {
 	case common.EInvalidMetadataHandleOption.ExcludeIfInvalid():
 		retainedMetadata, excludedMetadata, invalidKeyExists := m.ExcludeInvalidKey()
-		if invalidKeyExists && p.jptm.ShouldLog(pipeline.LogWarning) {
-			p.jptm.Log(pipeline.LogWarning,
+		if invalidKeyExists && p.jptm.ShouldLog(common.LogWarning) {
+			p.jptm.Log(common.LogWarning,
 				fmt.Sprintf("METADATAWARNING: For source %q, invalid metadata with keys %s are excluded", p.transferInfo.Source, excludedMetadata.ConcatenatedKeys()))
 		}
 		return retainedMetadata, nil

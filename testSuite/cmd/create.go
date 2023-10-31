@@ -6,6 +6,14 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"net/url"
 	"os"
 	"time"
@@ -16,8 +24,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	minio "github.com/minio/minio-go"
 	"github.com/spf13/cobra"
 )
@@ -45,7 +51,7 @@ func init() {
 	resourceTypeStr := ""
 
 	blobSize := uint32(0)
-	metaData := ""
+	metadata := ""
 	contentType := ""
 	contentEncoding := ""
 	contentDisposition := ""
@@ -53,7 +59,7 @@ func init() {
 	cacheControl := ""
 	contentMD5 := ""
 	location := ""
-	tier := azblob.DefaultAccessTier
+	var tier *blob.AccessTier = nil
 
 	createCmd := &cobra.Command{
 		Use:     "create",
@@ -91,14 +97,14 @@ func init() {
 					createBlob(
 						resourceURL,
 						blobSize,
-						getBlobMetadata(metaData),
-						azblob.BlobHTTPHeaders{
-							ContentType:        contentType,
-							ContentDisposition: contentDisposition,
-							ContentEncoding:    contentEncoding,
-							ContentLanguage:    contentLanguage,
-							ContentMD5:         md5,
-							CacheControl:       cacheControl,
+						getMetadata(metadata),
+						&blob.HTTPHeaders{
+							BlobContentType:        &contentType,
+							BlobContentDisposition: &contentDisposition,
+							BlobContentEncoding:    &contentEncoding,
+							BlobContentLanguage:    &contentLanguage,
+							BlobContentMD5:         md5,
+							BlobCacheControl:       &cacheControl,
 						}, tier)
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
@@ -111,14 +117,14 @@ func init() {
 					createFile(
 						resourceURL,
 						blobSize,
-						getFileMetadata(metaData),
-						azfile.FileHTTPHeaders{
-							ContentType:        contentType,
-							ContentDisposition: contentDisposition,
-							ContentEncoding:    contentEncoding,
-							ContentLanguage:    contentLanguage,
+						getMetadata(metadata),
+						&sharefile.HTTPHeaders{
+							ContentType:        &contentType,
+							ContentDisposition: &contentDisposition,
+							ContentEncoding:    &contentEncoding,
+							ContentLanguage:    &contentLanguage,
 							ContentMD5:         md5,
-							CacheControl:       cacheControl,
+							CacheControl:       &cacheControl,
 						})
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
@@ -140,7 +146,7 @@ func init() {
 							ContentEncoding:    contentEncoding,
 							ContentLanguage:    contentLanguage,
 							CacheControl:       cacheControl,
-							UserMetadata:       getS3Metadata(metaData),
+							UserMetadata:       getS3Metadata(metadata),
 						})
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
@@ -156,7 +162,7 @@ func init() {
 						ContentEncoding:    contentEncoding,
 						ContentLanguage:    contentLanguage,
 						CacheControl:       cacheControl,
-						Metadata:           getS3Metadata(metaData),
+						Metadata:           getS3Metadata(metadata),
 					})
 				}
 			case EServiceType.BlobFS():
@@ -171,7 +177,7 @@ func init() {
 	createCmd.PersistentFlags().StringVar(&serviceTypeStr, "serviceType", "Blob", "Service type, could be blob, file or blobFS currently.")
 	createCmd.PersistentFlags().StringVar(&resourceTypeStr, "resourceType", "SingleFile", "Resource type, could be a single file, bucket.")
 	createCmd.PersistentFlags().Uint32Var(&blobSize, "blob-size", 0, "")
-	createCmd.PersistentFlags().StringVar(&metaData, "metadata", "", "metadata for blob.")
+	createCmd.PersistentFlags().StringVar(&metadata, "metadata", "", "metadata for blob.")
 	createCmd.PersistentFlags().StringVar(&contentType, "content-type", "", "content type for blob.")
 	createCmd.PersistentFlags().StringVar(&contentEncoding, "content-encoding", "", "content encoding for blob.")
 	createCmd.PersistentFlags().StringVar(&contentDisposition, "content-disposition", "", "content disposition for blob.")
@@ -183,28 +189,14 @@ func init() {
 
 }
 
-func getBlobMetadata(metadataString string) azblob.Metadata {
-	var metadata azblob.Metadata
+func getMetadata(metadataString string) map[string]*string {
+	var metadata map[string]*string
 
 	if len(metadataString) > 0 {
-		metadata = azblob.Metadata{}
+		metadata = map[string]*string{}
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadata[kv[0]] = kv[1]
-		}
-	}
-
-	return metadata
-}
-
-func getFileMetadata(metadataString string) azfile.Metadata {
-	var metadata azfile.Metadata
-
-	if len(metadataString) > 0 {
-		metadata = azfile.Metadata{}
-		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadata[kv[0]] = kv[1]
+			metadata[kv[0]] = to.Ptr(kv[1])
 		}
 	}
 
@@ -225,18 +217,9 @@ func getS3Metadata(metadataString string) map[string]string {
 }
 
 // Can be used for overwrite scenarios.
-func createContainer(container string) {
-	u, err := url.Parse(container)
-
-	if err != nil {
-		fmt.Println("error parsing the container URL with SAS ", err)
-		os.Exit(1)
-	}
-
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-
-	containerURL := azblob.NewContainerURL(*u, p)
-	_, err = containerURL.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
+func createContainer(containerURL string) {
+	containerClient, _ := container.NewClientWithNoCredential(containerURL, nil)
+	_, err := containerClient.Create(context.Background(), nil)
 
 	if ignoreStorageConflictStatus(err) != nil {
 		fmt.Println("fail to create container, ", err)
@@ -244,74 +227,55 @@ func createContainer(container string) {
 	}
 }
 
-func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders, tier azblob.AccessTierType) {
-	url, err := url.Parse(blobURL)
-	if err != nil {
-		fmt.Println("error parsing the blob sas ", err)
-		os.Exit(1)
-	}
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	blobUrl := azblob.NewBlockBlobURL(*url, p)
+func createBlob(blobURL string, blobSize uint32, metadata map[string]*string, blobHTTPHeaders *blob.HTTPHeaders, tier *blob.AccessTier) {
+	blobClient, _ := blockblob.NewClientWithNoCredential(blobURL, nil)
 
 	randomString := createStringWithRandomChars(int(blobSize))
-	if blobHTTPHeaders.ContentType == "" {
-		blobHTTPHeaders.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
+	if blobHTTPHeaders.BlobContentType == nil {
+		blobHTTPHeaders.BlobContentType = to.Ptr(strings.Split(http.DetectContentType([]byte(randomString)), ";")[0])
 	}
 
 	// Generate a content MD5 for the new blob if requested
 	if genMD5 {
 		md5hasher := md5.New()
 		md5hasher.Write([]byte(randomString))
-		blobHTTPHeaders.ContentMD5 = md5hasher.Sum(nil)
+		blobHTTPHeaders.BlobContentMD5 = md5hasher.Sum(nil)
 	}
 
-	putBlobResp, err := blobUrl.Upload(
-		context.Background(),
-		strings.NewReader(randomString),
-		blobHTTPHeaders,
-		metadata,
-		azblob.BlobAccessConditions{},
-		tier,
-		nil,
-		azblob.ClientProvidedKeyOptions{},
-		azblob.ImmutabilityPolicyOptions{})
+	_, err := blobClient.Upload(context.Background(), streaming.NopCloser(strings.NewReader(randomString)),
+		&blockblob.UploadOptions{
+			HTTPHeaders: blobHTTPHeaders,
+			Metadata: metadata,
+			Tier: tier,
+		})
 	if err != nil {
 		fmt.Printf("error uploading the blob %v\n", err)
 		os.Exit(1)
 	}
-	if putBlobResp.Response() != nil {
-		_, _ = io.Copy(io.Discard, putBlobResp.Response().Body)
-		putBlobResp.Response().Body.Close()
-	}
 }
 
 func createShareOrDirectory(shareOrDirectoryURLStr string) {
-	u, err := url.Parse(shareOrDirectoryURLStr)
-
+	fileURLParts, err := sharefile.ParseURL(shareOrDirectoryURLStr)
 	if err != nil {
-		fmt.Println("error parsing the share or directory URL with SAS ", err)
+		fmt.Println("error createShareOrDirectory with URL, ", err)
 		os.Exit(1)
 	}
 
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-
-	fileURLPart := azfile.NewFileURLParts(*u)
-
 	isShare := false
-	if fileURLPart.ShareName != "" && fileURLPart.DirectoryOrFilePath == "" {
+	if fileURLParts.ShareName != "" && fileURLParts.DirectoryOrFilePath == "" {
 		isShare = true
 		// This is a share
-		shareURL := azfile.NewShareURL(*u, p)
-		_, err := shareURL.Create(context.Background(), azfile.Metadata{}, 0)
+		shareClient, _ := share.NewClientWithNoCredential(shareOrDirectoryURLStr, nil)
+		_, err := shareClient.Create(context.Background(), nil)
 		if ignoreStorageConflictStatus(err) != nil {
 			fmt.Println("fail to create share, ", err)
 			os.Exit(1)
 		}
 	}
 
-	dirURL := azfile.NewDirectoryURL(*u, p) // i.e. root directory, in share's case
+	directoryClient, _ := sharedirectory.NewClientWithNoCredential(shareOrDirectoryURLStr, nil) // i.e. root directory, in share's case
 	if !isShare {
-		_, err := dirURL.Create(context.Background(), azfile.Metadata{}, azfile.SMBProperties{})
+		_, err := directoryClient.Create(context.Background(), nil)
 		if ignoreStorageConflictStatus(err) != nil {
 			fmt.Println("fail to create directory, ", err)
 			os.Exit(1)
@@ -321,25 +285,19 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 	// Finally valdiate if directory with specified URL exists, if doesn't exist, then report create failure.
 	time.Sleep(1 * time.Second)
 
-	_, err = dirURL.GetProperties(context.Background())
+	_, err = directoryClient.GetProperties(context.Background(), nil)
 	if err != nil {
 		fmt.Println("error createShareOrDirectory with URL, ", err)
 		os.Exit(1)
 	}
 }
 
-func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fileHTTPHeaders azfile.FileHTTPHeaders) {
-	url, err := url.Parse(fileURLStr)
-	if err != nil {
-		fmt.Println("error parsing the blob sas ", err)
-		os.Exit(1)
-	}
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-	fileURL := azfile.NewFileURL(*url, p)
+func createFile(fileURLStr string, fileSize uint32, metadata map[string]*string, fileHTTPHeaders *sharefile.HTTPHeaders) {
+	fileClient, _ := sharefile.NewClientWithNoCredential(fileURLStr, nil)
 
 	randomString := createStringWithRandomChars(int(fileSize))
-	if fileHTTPHeaders.ContentType == "" {
-		fileHTTPHeaders.ContentType = strings.Split(http.DetectContentType([]byte(randomString)), ";")[0]
+	if fileHTTPHeaders.ContentType == nil {
+		fileHTTPHeaders.ContentType = to.Ptr(strings.Split(http.DetectContentType([]byte(randomString)), ";")[0])
 	}
 
 	// Generate a content MD5 for the new blob if requested
@@ -349,13 +307,20 @@ func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fi
 		fileHTTPHeaders.ContentMD5 = md5hasher.Sum(nil)
 	}
 
-	err = azfile.UploadBufferToAzureFile(context.Background(), []byte(randomString), fileURL, azfile.UploadToAzureFileOptions{
-		FileHTTPHeaders: fileHTTPHeaders,
-		Metadata:        metadata,
-	})
+	_, err := fileClient.Create(context.Background(), int64(fileSize), &sharefile.CreateOptions{HTTPHeaders: fileHTTPHeaders, Metadata: metadata})
+
 	if err != nil {
-		fmt.Printf("error uploading the file %v\n", err)
+		fmt.Printf("error creating the file %v\n", err)
 		os.Exit(1)
+	}
+
+	if fileSize > 0 {
+		err = fileClient.UploadBuffer(context.Background(), []byte(randomString), nil)
+
+		if err != nil {
+			fmt.Printf("error uploading the file %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 

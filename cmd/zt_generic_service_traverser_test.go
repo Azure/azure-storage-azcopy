@@ -6,14 +6,12 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 func TestServiceTraverserWithManyObjects(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 	testS3 := false // Only test S3 if credentials are present.
 	testGCP := false
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
@@ -39,8 +37,8 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 		cleanGCPAccount(gcpClient)
 	}
 	// BlobFS is tested on the same account, therefore this is safe to clean up this way
-	cleanBlobAccount(a, bsu)
-	cleanFileAccount(a, fsu)
+	cleanBlobAccount(a, bsc)
+	cleanFileAccount(a, fsc)
 
 	containerList := []string{
 		generateName("suchcontainermanystorage", 63),
@@ -65,8 +63,8 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	objectData := "Hello world!"
 
 	// Generate remote scenarios
-	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(a, bsu, containerList, objectList, objectData)
-	scenarioHelper{}.generateFileSharesAndFilesFromLists(a, fsu, containerList, objectList, objectData)
+	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(a, bsc, containerList, objectList, objectData)
+	scenarioHelper{}.generateFileSharesAndFilesFromLists(a, fsc, containerList, objectList, objectData)
 	if testS3 {
 		scenarioHelper{}.generateS3BucketsAndObjectsFromLists(a, s3Client, containerList, objectList, objectData)
 	}
@@ -78,8 +76,8 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	defer func() {
 		for _, v := range containerList {
 			// create container URLs
-			blobContainer := bsu.NewContainerURL(v)
-			fileShare := fsu.NewShareURL(v)
+			cc := bsc.NewContainerClient(v)
+			sc := fsc.NewShareClient(v)
 
 			// Ignore errors from cleanup.
 			if testS3 {
@@ -88,8 +86,8 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 			if testGCP {
 				deleteGCPBucket(gcpClient, v, true)
 			}
-			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
-			_, _ = fileShare.Delete(ctx, azfile.DeleteSnapshotsOptionNone)
+			_, _ = cc.Delete(ctx, nil)
+			_, _ = sc.Delete(ctx, nil)
 		}
 	}()
 
@@ -106,9 +104,8 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	a.Nil(err)
 
 	// construct a blob account traverser
-	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
+	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -116,9 +113,8 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 	a.Nil(err)
 
 	// construct a file account traverser
-	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
+	fileAccountTraverser := newFileAccountTraverser(rawFSU, "", ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -182,8 +178,8 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 
 func TestServiceTraverserWithWildcards(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	fsu := getFSU()
+	bsc := getBlobServiceClient()
+	fsc := getFileServiceClient()
 	testS3 := false // Only test S3 if credentials are present.
 	testGCP := false
 
@@ -208,8 +204,8 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	if testGCP {
 		cleanGCPAccount(gcpClient)
 	}
-	cleanBlobAccount(a, bsu)
-	cleanFileAccount(a, fsu)
+	cleanBlobAccount(a, bsc)
+	cleanFileAccount(a, fsc)
 
 	containerList := []string{
 		generateName("objectmatchone", 63),
@@ -234,8 +230,8 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	objectData := "Hello world!"
 
 	// Generate remote scenarios
-	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(a, bsu, containerList, objectList, objectData)
-	scenarioHelper{}.generateFileSharesAndFilesFromLists(a, fsu, containerList, objectList, objectData)
+	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(a, bsc, containerList, objectList, objectData)
+	scenarioHelper{}.generateFileSharesAndFilesFromLists(a, fsc, containerList, objectList, objectData)
 	if testS3 {
 		scenarioHelper{}.generateS3BucketsAndObjectsFromLists(a, s3Client, containerList, objectList, objectData)
 	}
@@ -247,8 +243,8 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	defer func() {
 		for _, v := range containerList {
 			// create container URLs
-			blobContainer := bsu.NewContainerURL(v)
-			fileShare := fsu.NewShareURL(v)
+			cc := bsc.NewContainerClient(v)
+			sc := fsc.NewShareClient(v)
 
 			// Ignore errors from cleanup.
 			if testS3 {
@@ -257,8 +253,8 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 			if testGCP {
 				deleteGCPBucket(gcpClient, v, true)
 			}
-			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
-			_, _ = fileShare.Delete(ctx, azfile.DeleteSnapshotsOptionNone)
+			_, _ = cc.Delete(ctx, nil)
+			_, _ = sc.Delete(ctx, nil)
 		}
 	}()
 
@@ -275,11 +271,9 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	a.Nil(err)
 
 	// construct a blob account traverser
-	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	rawBSU := scenarioHelper{}.getRawBlobServiceURLWithSAS(a)
-	rawBSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := newBlobAccountTraverser(&rawBSU, blobPipeline, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
-
+	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
+	container := "objectmatch*" // set the container name to contain a wildcard
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -287,10 +281,9 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	a.Nil(err)
 
 	// construct a file account traverser
-	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(a)
-	rawFSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
+	rawFSU := scenarioHelper{}.getFileServiceClientWithSAS(a)
+	share := "objectmatch*" // set the container name to contain a wildcard
+	fileAccountTraverser := newFileAccountTraverser(rawFSU, share, ctx, false, func(common.EntityType) {}, common.ETrailingDotOption.Enable(), nil)
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}

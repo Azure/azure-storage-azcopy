@@ -28,8 +28,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -78,14 +76,14 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
-		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
+		copyTransfer.BlobTier = *s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
 
 		metadataString := s.copyJobTemplate.BlobAttributes.Metadata
 		metadataMap := common.Metadata{}
 		if len(metadataString) > 0 {
 			for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 				kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-				metadataMap[kv[0]] = kv[1]
+				metadataMap[kv[0]] = &kv[1]
 			}
 		}
 		copyTransfer.Metadata = metadataMap
@@ -202,7 +200,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	}
 
 	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, common.LogInfo)
 	}
 
 	if s.reportFinalPartDispatched != nil {

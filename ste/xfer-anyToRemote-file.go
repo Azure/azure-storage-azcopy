@@ -25,7 +25,8 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"hash"
 	"net/http"
 	"net/url"
@@ -33,9 +34,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+// IBlobClient is an interface to allow ValidateTier to accept any type of client
+type IBlobClient interface {
+	URL() string
+	GetAccountInfo(ctx context.Context, o *blob.GetAccountInfoOptions) (blob.GetAccountInfoResponse, error)
+}
 
 // This code for blob tier safety is _not_ safe for multiple jobs at once.
 // That's alright, but it's good to know on the off chance.
@@ -53,9 +59,9 @@ var tierSetPossibleFail bool
 var getDestAccountInfo sync.Once
 var getDestAccountInfoError error
 
-func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
+func prepareDestAccountInfo(client IBlobClient, jptm IJobPartTransferMgr, ctx context.Context, mustGet bool) {
 	getDestAccountInfo.Do(func() {
-		infoResp, err := bURL.GetAccountInfo(ctx)
+		infoResp, err := client.GetAccountInfo(ctx, nil)
 		if err != nil {
 			// If GetAccountInfo fails, this transfer should fail because we lack at least one available permission
 			// UNLESS the user is using OAuth. In which case, the account owner can still get the info.
@@ -71,8 +77,10 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 				destAccountKind = "failget"
 			}
 		} else {
-			destAccountSKU = string(infoResp.SkuName())
-			destAccountKind = string(infoResp.AccountKind())
+			sku := infoResp.SKUName
+			kind := infoResp.AccountKind
+			destAccountSKU = string(*sku)
+			destAccountKind = string(*kind)
 		}
 	})
 
@@ -82,7 +90,8 @@ func prepareDestAccountInfo(bURL azblob.BlobURL, jptm IJobPartTransferMgr, ctx c
 }
 
 // // TODO: Infer availability based upon blob size as well, for premium page blobs.
-func BlobTierAllowed(destTier azblob.AccessTierType) bool {
+func BlobTierAllowed(destTier *blob.AccessTier) bool {
+	// Note: destTier is guaranteed to be non nil.
 	// If we failed to get the account info, just return true.
 	// This is because we can't infer whether it's possible or not, and the setTier operation could possibly succeed (or fail)
 	if tierSetPossibleFail {
@@ -94,7 +103,7 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// storage V1/V2
 		if destAccountKind == "StorageV2" {
 			// P1-80 possible.
-			return premiumPageBlobTierRegex.MatchString(string(destTier))
+			return premiumPageBlobTierRegex.MatchString(string(*destTier))
 		}
 
 		if destAccountKind == "Storage" {
@@ -116,22 +125,25 @@ func BlobTierAllowed(destTier azblob.AccessTierType) bool {
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
-		return destTier == azblob.AccessTierArchive || destTier == azblob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || destTier == azblob.AccessTierHot
+		return *destTier == blob.AccessTierArchive || *destTier == blob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || *destTier == blob.AccessTierHot
 	}
 }
 
-func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blobURL azblob.BlobURL, ctx context.Context, performQuietly bool) (isValid bool) {
+func ValidateTier(jptm IJobPartTransferMgr, blobTier *blob.AccessTier, client IBlobClient, ctx context.Context, performQuietly bool) (isValid bool) {
 
-	if jptm.IsLive() && blobTier != azblob.AccessTierNone {
+	if jptm.IsLive() && blobTier != nil {
 
 		// Let's check if we can confirm we'll be able to check the destination blob's account info.
 		// A SAS token, even with write-only permissions is enough. OR, OAuth with the account owner.
 		// We can't guess that last information, so we'll take a gamble and try to get account info anyway.
 		// User delegation SAS is the same as OAuth
-		destParts := azblob.NewBlobURLParts(blobURL.URL())
-		mustGet := destParts.SAS.Encode() != "" && destParts.SAS.SignedTid() == ""
+		destParts, err := blob.ParseURL(client.URL())
+		if err != nil {
+			return false
+		}
+		mustGet := destParts.SAS.Encode() != "" && destParts.SAS.SignedTID() == ""
 
-		prepareDestAccountInfo(blobURL, jptm, ctx, mustGet)
+		prepareDestAccountInfo(client, jptm, ctx, mustGet)
 		tierAvailable := BlobTierAllowed(blobTier)
 
 		if tierAvailable {
@@ -139,7 +151,7 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blob
 		} else if !performQuietly {
 			tierNotAllowedFailure.Do(func() {
 				glcm := common.GetLifecycleMgr()
-				glcm.Info("Destination could not accommodate the tier " + string(blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
+				glcm.Info("Destination could not accommodate the tier " + string(*blobTier) + ". Going ahead with the default tier. In case of service to service transfer, consider setting the flag --s2s-preserve-access-tier=false.")
 			})
 		}
 		return false
@@ -150,7 +162,7 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier azblob.AccessTierType, blob
 
 // xfer.go requires just a single xfer function for the whole job.
 // This routine serves that role for uploads and S2S copies, and redirects for each transfer to a file or folder implementation
-func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 	info := jptm.Info()
 	fromTo := jptm.FromTo()
 
@@ -181,22 +193,22 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 	switch info.EntityType {
 	case common.EEntityType.Folder():
-		anyToRemote_folder(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_folder(jptm, info, pacer, senderFactory, sipf)
 	case common.EEntityType.FileProperties():
-		anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
 	case common.EEntityType.File():
 		if jptm.GetOverwriteOption() == common.EOverwriteOption.PosixProperties() {
-			anyToRemote_fileProperties(jptm, info, p, pacer, senderFactory, sipf)
+			anyToRemote_fileProperties(jptm, info, pacer, senderFactory, sipf)
 		} else {
-			anyToRemote_file(jptm, info, p, pacer, senderFactory, sipf)
+			anyToRemote_file(jptm, info, pacer, senderFactory, sipf)
 		}
 	case common.EEntityType.Symlink():
-		anyToRemote_symlink(jptm, info, p, pacer, senderFactory, sipf)
+		anyToRemote_symlink(jptm, info, pacer, senderFactory, sipf)
 	}
 }
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
-func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())
@@ -224,7 +236,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 		panic("configuration error. Source Info Provider does not have File entity type")
 	}
 
-	s, err := senderFactory(jptm, info.Destination, p, pacer, srcInfoProvider)
+	s, err := senderFactory(jptm, info.Destination, pacer, srcInfoProvider)
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -234,7 +246,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 
 	// step 2b. Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
 	numChunks := s.NumChunks()
-	if jptm.ShouldLog(pipeline.LogInfo) {
+	if jptm.ShouldLog(common.LogInfo) {
 		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", s.ChunkSize()))
 	}
 	if s.NumChunks() == 0 {
@@ -271,7 +283,7 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, p pipeline.Pi
 
 			if !shouldOverwrite {
 				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "File already exists, so will be skipped")
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return
@@ -526,7 +538,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 				//      corrupt or inconsistent data. It's also essential to the integrity of our MD5 hashes.
 				common.DocumentationForDependencyOnChangeDetection() // <-- read the documentation here ***
 
-				jptm.Log(pipeline.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
+				jptm.Log(common.LogError, fmt.Sprintf("Source Modified during transfer. Enumeration %v, current %v", jptm.LastModifiedTime(), lmt))
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}
@@ -541,16 +553,16 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		shouldCheckLength := true
 		destLength, err := s.GetDestinationLength()
 
-		if resp, respOk := err.(pipeline.Response); respOk && resp.Response() != nil &&
-			resp.Response().StatusCode == http.StatusForbidden {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusForbidden {
 			// The destination is write-only. Cannot verify length
 			shouldCheckLength = false
 			checkLengthFailureOnReadOnlyDst.Do(func() {
 				var glcm = common.GetLifecycleMgr()
 				msg := "Could not read destination length. If the destination is write-only, use --check-length=false on the command line."
 				glcm.Info(msg)
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, msg)
+				if jptm.ShouldLog(common.LogError) {
+					jptm.Log(common.LogError, msg)
 				}
 			})
 		}
@@ -558,9 +570,9 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		if shouldCheckLength {
 			if err != nil {
 				wrapped := fmt.Errorf("Could not read destination length. %w", err)
-				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
+				jptm.FailActiveSend(common.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check: Get destination length", wrapped)
 			} else if destLength != jptm.Info().SourceSize {
-				jptm.FailActiveSend(common.IffString(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
+				jptm.FailActiveSend(common.Iff(isS2SCopier, "S2S ", "Upload ")+"Length check", errors.New("destination length does not match source length"))
 			}
 		}
 	}
@@ -595,22 +607,22 @@ func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInf
 		jptm.SetStatus(common.ETransferStatus.Success())
 
 		// Final logging
-		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
+		if jptm.ShouldLog(common.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
 			if _, ok := s.(s2sCopier); ok {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
+				jptm.Log(common.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
 			} else if _, ok := s.(uploader); ok {
 				// Output relative path of file, includes file name.
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
+				jptm.Log(common.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s%s", info.entityTypeLogIndicator(), strings.Split(info.Destination, "?")[0]))
 			} else {
 				panic("invalid state: epilogueWithCleanupSendToRemote should be used by COPY and UPLOAD")
 			}
 		}
-		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
+		if jptm.ShouldLog(common.LogDebug) {
+			jptm.Log(common.LogDebug, "Finalizing Transfer")
 		}
 	} else {
-		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation/Failure")
+		if jptm.ShouldLog(common.LogDebug) {
+			jptm.Log(common.LogDebug, "Finalizing Transfer Cancellation/Failure")
 		}
 	}
 	// successful or unsuccessful, it's definitely over

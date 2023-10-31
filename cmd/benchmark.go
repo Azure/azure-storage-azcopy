@@ -23,15 +23,14 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -176,43 +175,43 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 }
 
 func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (string, error) {
-
-	u, err := url.Parse(target)
-	if err != nil {
-		return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
-	}
-
-	var result url.URL
-
 	switch InferArgumentLocation(target) {
 	case common.ELocation.Blob():
-		p := azblob.NewBlobURLParts(*u)
+		p, err := blob.ParseURL(target)
+		if err != nil {
+			return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
+		}
 		if p.ContainerName == "" || p.BlobName != "" {
 			return "", errors.New("the blob target must be a container")
 		}
 		p.BlobName = virtualDir
-		result = p.URL()
+		return p.String(), err
 
 	case common.ELocation.File():
-		p := azfile.NewFileURLParts(*u)
+		p, err := sharefile.ParseURL(target)
+		if err != nil {
+			return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
+		}
 		if p.ShareName == "" || p.DirectoryOrFilePath != "" {
-			return "", errors.New("the Azure Files target must be a file share root")
+			return "", errors.New("the file share target must be a file share root")
 		}
 		p.DirectoryOrFilePath = virtualDir
-		result = p.URL()
+		return p.String(), err
 
 	case common.ELocation.BlobFS():
-		p := azbfs.NewBfsURLParts(*u)
-		if p.FileSystemName == "" || p.DirectoryOrFilePath != "" {
-			return "", errors.New("the blobFS target must be a file system")
+		p, err := azdatalake.ParseURL(target)
+		if err != nil {
+			return "", fmt.Errorf("error parsing the url %s. Failed with error %s", target, err.Error())
 		}
-		p.DirectoryOrFilePath = virtualDir
-		result = p.URL()
+		if p.FileSystemName == "" || p.PathName != "" {
+			return "", errors.New("the blobFS target must be a filesystem")
+		}
+		p.PathName = virtualDir
+		return p.String(), err
 	default:
 		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLS Gen2")
 	}
 
-	return result.String(), nil
 }
 
 // define a cleanup job

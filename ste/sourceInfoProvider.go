@@ -21,15 +21,12 @@
 package ste
 
 import (
-	"net/url"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
 	"time"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // ISourceInfoProvider is the abstraction of generic source info provider which provides source's properties.
@@ -56,7 +53,7 @@ type IRemoteSourceInfoProvider interface {
 	ISourceInfoProvider
 
 	// SourceURL returns source's URL.
-	PreSignedSourceURL() (*url.URL, error)
+	PreSignedSourceURL() (string, error)
 
 	// SourceSize returns size of source
 	SourceSize() int64
@@ -72,16 +69,16 @@ type IBlobSourceInfoProvider interface {
 	IRemoteSourceInfoProvider
 
 	// BlobTier returns source's blob tier.
-	BlobTier() azblob.AccessTierType
+	BlobTier() *blob.AccessTier
 
 	// BlobType returns source's blob type.
-	BlobType() azblob.BlobType
+	BlobType() blob.BlobType
 }
 
 type TypedSMBPropertyHolder interface {
 	FileCreationTime() time.Time
 	FileLastWriteTime() time.Time
-	FileAttributes() azfile.FileAttributeFlags
+	FileAttributes() (*file.NTFSFileAttributes, error)
 }
 
 type ISMBPropertyBearingSourceInfoProvider interface {
@@ -125,13 +122,8 @@ func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (*defaultRemot
 	return &defaultRemoteSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
 }
 
-func (p *defaultRemoteSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
-	srcURL, err := url.Parse(p.transferInfo.Source)
-	if err != nil {
-		return nil, err
-	}
-
-	return srcURL, nil
+func (p *defaultRemoteSourceInfoProvider) PreSignedSourceURL() (string, error) {
+	return p.transferInfo.Source, nil
 }
 
 func (p *defaultRemoteSourceInfoProvider) Properties() (*SrcProperties, error) {

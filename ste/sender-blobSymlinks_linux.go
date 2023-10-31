@@ -3,7 +3,6 @@ package ste
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -11,14 +10,14 @@ func (s *blobSymlinkSender) getExtraProperties() error {
 	if s.jptm.Info().PreservePOSIXProperties {
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = common.Metadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+			s.metadataToApply = s.metadataToApply.Clone()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
 				return err
 			}
 
-			s.jptm.Log(pipeline.LogInfo, fmt.Sprintf("MODE: %b", statAdapter.FileMode()))
+			s.jptm.Log(common.LogInfo, fmt.Sprintf("MODE: %b", statAdapter.FileMode()))
 			if !(statAdapter.FileMode()&common.S_IFLNK == common.S_IFLNK) { // sanity check this is actually targeting the symlink
 				return errors.New("sanity check: GetUNIXProperties did not return symlink properties")
 			}

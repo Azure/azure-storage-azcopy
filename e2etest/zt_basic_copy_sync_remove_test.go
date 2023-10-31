@@ -24,9 +24,10 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -387,16 +388,14 @@ func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
 				a := h.GetAsserter()
 				s := h.(*scenario)
 				r := s.state.source.(*resourceBlobContainer)
-				urlParts := azblob.NewBlobURLParts(r.containerURL.URL())
-				fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("")
+				urlParts, err := blob.ParseURL(r.containerClient.URL())
+				a.Assert(err, equals(), nil)
+				fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(urlParts.ContainerName).NewDirectoryClient("/")
 
-				_, err := fsURL.GetAccessControl(ctx)
+				_, err = fsURL.GetAccessControl(ctx, nil)
 				a.Assert(err, notEquals(), nil)
-				stgErr, ok := err.(azbfs.StorageError)
-				a.Assert(ok, equals(), true)
-				if ok {
-					a.Assert(stgErr.ServiceCode(), equals(), azbfs.ServiceCodeType("FilesystemNotFound"))
-				}
+				a.Assert(datalakeerror.HasCode(err, "FilesystemNotFound"), equals(), true)
+
 			},
 		},
 		testFiles{
@@ -840,7 +839,7 @@ func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 		anonymousAuthOnly,
 		anonymousAuthOnly,
 		params{
-      preserveSMBInfo: BoolPointer(false),
+      preserveSMBInfo: to.Ptr(false),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
@@ -888,7 +887,7 @@ func TestBasic_SyncLMTSwitch_PreferSMBLMT(t *testing.T) {
 		anonymousAuthOnly,
 		params{
 			// enforce for Linux/MacOS tests
-			preserveSMBInfo: BoolPointer(true),
+			preserveSMBInfo: to.Ptr(true),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {

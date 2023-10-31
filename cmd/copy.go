@@ -26,6 +26,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"io"
 	"math"
 	"net/url"
@@ -37,9 +40,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -837,7 +837,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			if err != nil {
 				return cooked, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
 			}
-			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
+			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToBlobType())
 		}
 	}
 
@@ -947,7 +947,7 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, ov
 	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.IffString(flagName == PreservePermissionsFlag, "permission", "SMB"))
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
@@ -1116,7 +1116,7 @@ type CookedCopyCmdArgs struct {
 	// options from flags
 	blockSize int64
 	// list of blobTypes to exclude while enumerating the transfer
-	excludeBlobType []azblob.BlobType
+	excludeBlobType []blob.BlobType
 	blobType        common.BlobType
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes.
 	// These tags are automatically indexed and exposed as a queryable multi-dimensional index to easily find data.
@@ -1281,11 +1281,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
 	}
 
-	// step 1: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
-	if err != nil {
-		return err
-	}
+	// step 1: create client options
+	options := createClientOptions(common.LogNone, nil, nil)
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1294,17 +1291,17 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 3: start download
-	blobURL := azblob.NewBlobURL(*u, p)
-	clientProvidedKey := azblob.ClientProvidedKeyOptions{}
-	if cca.CpkOptions.IsSourceEncrypted {
-		clientProvidedKey = common.GetClientProvidedKey(cca.CpkOptions)
-	}
-	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, clientProvidedKey)
+	blobClient := common.CreateBlobClient(u.String(), credInfo, nil, options)
+
+	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
+		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
+	})
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody, ClientProvidedKeyOptions: clientProvidedKey})
+	blobBody := blobStream.NewRetryReader(ctx, &blob.RetryReaderOptions{MaxRetries: ste.MaxRetryPerDownloadBody})
 	defer blobBody.Close()
 
 	// step 4: pipe everything into Stdout
@@ -1328,14 +1325,11 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false, cca.CpkOptions)
 
 	if err != nil {
-		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
+		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
 	}
 
 	// step 0: initialize pipeline
-	p, err := createBlobPipeline(ctx, credInfo, pipeline.LogNone)
-	if err != nil {
-		return err
-	}
+	options := createClientOptions(common.LogNone, nil, nil)
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1344,34 +1338,36 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
+	blockBlobClient := common.CreateBlockBlobClient(u.String(), credInfo, nil, options)
+
 	metadataString := cca.metadata
 	metadataMap := common.Metadata{}
 	if len(metadataString) > 0 {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-			metadataMap[kv[0]] = kv[1]
+			metadataMap[kv[0]] = &kv[1]
 		}
 	}
 	blobTags := cca.blobTags
-	bbAccessTier := azblob.DefaultAccessTier
+	var bbAccessTier *blob.AccessTier
 	if cca.blockBlobTier != common.EBlockBlobTier.None() {
-		bbAccessTier = azblob.AccessTierType(cca.blockBlobTier.String())
+		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
 	}
-	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		BufferSize:  int(blockSize),
-		MaxBuffers:  pipingUploadParallelism,
-		Metadata:    metadataMap.ToAzBlobMetadata(),
-		BlobTagsMap: blobTags.ToAzBlobTagsMap(),
-		BlobHTTPHeaders: azblob.BlobHTTPHeaders{
-			ContentType:        cca.contentType,
-			ContentLanguage:    cca.contentLanguage,
-			ContentEncoding:    cca.contentEncoding,
-			ContentDisposition: cca.contentDisposition,
-			CacheControl:       cca.cacheControl,
+	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
+		BlockSize:   blockSize,
+		Concurrency: pipingUploadParallelism,
+		Metadata:    metadataMap,
+		Tags:        blobTags,
+		HTTPHeaders: &blob.HTTPHeaders{
+			BlobContentType:        common.IffNotEmpty(cca.contentType),
+			BlobContentLanguage:    common.IffNotEmpty(cca.contentLanguage),
+			BlobContentEncoding:    common.IffNotEmpty(cca.contentEncoding),
+			BlobContentDisposition: common.IffNotEmpty(cca.contentDisposition),
+			BlobCacheControl:       common.IffNotEmpty(cca.cacheControl),
 		},
-		BlobAccessTier:           bbAccessTier,
-		ClientProvidedKeyOptions: common.GetClientProvidedKey(cca.CpkOptions),
+		AccessTier:   bbAccessTier,
+		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
+		CPKScopeInfo: cca.CpkOptions.GetCPKScopeInfo(),
 	})
 
 	return err
@@ -1407,13 +1403,12 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 				jpo.CredentialInfo.OAuthTokenInfo = *tokenInfo
 			}
+			jpo.CredentialInfo.S2SSourceTokenCredential, err = common.GetSourceBlobCredential(srcCredInfo, common.CredentialOpOptions{LogError: glcm.Info})
+			if err != nil {
+				return srcCredInfo, err
+			}
 			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
-			jpo.CredentialInfo.SourceBlobToken = common.CreateBlobCredential(ctx, srcCredInfo, common.CredentialOpOptions{
-				// LogInfo:  glcm.Info, //Comment out for debugging
-				LogError: glcm.Info,
-			})
-			cca.credentialInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
-			srcCredInfo.SourceBlobToken = jpo.CredentialInfo.SourceBlobToken
+			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
 		}
 	}
 	return srcCredInfo, nil
@@ -1685,7 +1680,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 		cca.intervalStartTime = time.Now()
 		cca.intervalBytesTransferred = summary.BytesOverWire
 
-		return common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+		return common.Iff(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 	glcm.Progress(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
@@ -1781,7 +1776,7 @@ Final Job Status: %v%s%s
 				// log to job log
 				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
-					jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
+					jobMan.Log(common.LogInfo, logStats+"\n"+output)
 				}
 				return output
 			}
@@ -1977,7 +1972,8 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "Optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from the container "+
 		"or the account. Use of this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';'. ")
 	// options change how the transfers are performed
-	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
+	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25)."+
+		" When uploading or downloading, maximum allowed block size is 0.75 * AZCOPY_BUFFER_GB. Please refer https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#optimize-memory-use.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
 		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier. (default 'None'). Valid options are Hot, Cold, Cool, Archive")
@@ -2025,8 +2021,8 @@ func init() {
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks")
-	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. " +
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation." +
+	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. "+
+		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys

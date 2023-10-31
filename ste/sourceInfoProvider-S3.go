@@ -26,7 +26,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	minio "github.com/minio/minio-go"
 )
@@ -75,8 +74,8 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 			Region:   p.s3URLPart.Region,
 		},
 	}, common.CredentialOpOptions{
-		LogInfo:  func(str string) { p.jptm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { p.jptm.Log(pipeline.LogError, str) },
+		LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
+		LogError: func(str string) { p.jptm.Log(common.LogError, str) },
 		Panic:    func(err error) { panic(err) },
 	}, jptm)
 	if err != nil {
@@ -86,11 +85,15 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 	return &p, nil
 }
 
-func (p *s3SourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+func (p *s3SourceInfoProvider) PreSignedSourceURL() (string, error) {
 	if p.credType == common.ECredentialType.S3PublicBucket() {
-		return p.rawSourceURL, nil
+		return p.rawSourceURL.String(), nil
 	}
-	return p.s3Client.PresignedGetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
+	source, err := p.s3Client.PresignedGetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
+	if err != nil {
+		return "", err
+	}
+	return source.String(), nil
 }
 
 func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -141,8 +144,8 @@ func (p *s3SourceInfoProvider) handleInvalidMetadataKeys(m common.Metadata) (com
 	switch p.transferInfo.S2SInvalidMetadataHandleOption {
 	case common.EInvalidMetadataHandleOption.ExcludeIfInvalid():
 		retainedMetadata, excludedMetadata, invalidKeyExists := m.ExcludeInvalidKey()
-		if invalidKeyExists && p.jptm.ShouldLog(pipeline.LogWarning) {
-			p.jptm.Log(pipeline.LogWarning,
+		if invalidKeyExists && p.jptm.ShouldLog(common.LogWarning) {
+			p.jptm.Log(common.LogWarning,
 				fmt.Sprintf("METADATAWARNING: For source %q, invalid metadata with keys %s are excluded", p.transferInfo.Source, excludedMetadata.ConcatenatedKeys()))
 		}
 		return retainedMetadata, nil

@@ -1,5 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.20.2'
+  AZCOPY_GOLANG_VERSION: '1.19.12'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.20.2'
 
 trigger:
   branches:
@@ -153,7 +154,7 @@ jobs:
     steps:
       - task: GoTool@0
         inputs:
-          version: $(AZCOPY_GOLANG_VERSION)
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
       - script: |
           go install github.com/jstemmer/go-junit-report@v0.9.1
           go install github.com/axw/gocov/gocov@v1.1.0
@@ -233,7 +234,7 @@ jobs:
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
-          version: $(AZCOPY_GOLANG_VERSION)
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
       - task: DownloadSecureFile@1
         name: ciGCSServiceAccountKey
         displayName: 'Download GCS Service Account Key'
@@ -256,10 +257,6 @@ jobs:
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
         name: 'Acquire_the_distributed_mutex'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'azbfs'
-          coverage_name: 'azbfs'
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'cmd'

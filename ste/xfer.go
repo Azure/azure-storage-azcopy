@@ -21,13 +21,11 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -58,23 +56,23 @@ var cpkAccessFailureLogGLCM sync.Once
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // These types are define the STE Coordinator
-type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer)
+type newJobXfer func(jptm IJobPartTransferMgr, pacer pacer)
 
 // same as newJobXfer, but with an extra parameter
-type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, df downloaderFactory)
-type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
+type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory)
+type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pacer pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
 // Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
-	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
-		targetFunction(jptm, pipeline, pacer, df)
+	return func(jptm IJobPartTransferMgr, pacer pacer) {
+		targetFunction(jptm, pacer, df)
 	}
 }
 
 // Takes a multi-purpose send function, and makes it ready to use with a specific type of sender
 func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFactory, sipf sourceInfoProviderFactory) newJobXfer {
-	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer pacer) {
-		targetFunction(jptm, pipeline, pacer, sf, sipf)
+	return func(jptm IJobPartTransferMgr, pacer pacer) {
+		targetFunction(jptm, pacer, sf, sipf)
 	}
 }
 
@@ -166,13 +164,13 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	}
 }
 
-var inferExtensions = map[string]azblob.BlobType{
-	".vhd":  azblob.BlobPageBlob,
-	".vhdx": azblob.BlobPageBlob,
+var inferExtensions = map[string]blob.BlobType{
+	".vhd":  blob.BlobTypePageBlob,
+	".vhdx": blob.BlobTypePageBlob,
 }
 
 // infers a blob type from the extension specified.
-func inferBlobType(filename string, defaultBlobType azblob.BlobType) azblob.BlobType {
+func inferBlobType(filename string, defaultBlobType blob.BlobType) blob.BlobType {
 	if b, ok := inferExtensions[strings.ToLower(filepath.Ext(filename))]; ok {
 		return b
 	}

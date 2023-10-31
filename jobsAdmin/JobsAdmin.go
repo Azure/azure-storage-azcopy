@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -37,7 +36,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -75,7 +73,7 @@ var JobsAdmin interface {
 
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (ste.IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string, sourceBlobToken azblob.Credential) ste.IJobMgr
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) ste.IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
@@ -91,7 +89,7 @@ var JobsAdmin interface {
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
 
-	LogToJobLog(msg string, level pipeline.LogLevel)
+	LogToJobLog(msg string, level common.LogLevel)
 
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
@@ -230,7 +228,7 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
 		}
 		common.GetLifecycleMgr().Info("")
-		ja.LogToJobLog(msg, pipeline.LogInfo)
+		ja.LogToJobLog(msg, common.LogInfo)
 	}
 }
 
@@ -293,12 +291,12 @@ func (ja *jobsAdmin) AppPathFolder() string {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
-	level common.LogLevel, commandString string, sourceBlobToken azblob.Credential) ste.IJobMgr {
+	level common.LogLevel, commandString string) ste.IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() ste.IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false, sourceBlobToken)
+			return ste.NewJobMgr(ja.concurrency, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir, ja.concurrencyTuner, ja.pacer, ja.slicePool, ja.cacheLimiter, ja.fileCountLimiter, ja.jobLogger, false)
 		})
 }
 
@@ -315,12 +313,12 @@ func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
 		 * Change log level to Info, so that we can capture these messages in job log file.
 		 * These log messages useful in debuggability and tells till what stage cleanup done.
 		 */
-		jm.Log(pipeline.LogInfo, "JobMgrCleanUp Enter")
+		jm.Log(common.LogInfo, "JobMgrCleanUp Enter")
 
 		// Delete the jobMgr from jobIDtoJobMgr map, so that next call will fail.
 		ja.DeleteJob(jobId)
 
-		jm.Log(pipeline.LogInfo, "Job deleted from jobMgr map")
+		jm.Log(common.LogInfo, "Job deleted from jobMgr map")
 
 		/*
 		 * Rest of jobMgr related cleanup done by DeferredCleanupJobMgr function.
@@ -387,7 +385,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 			continue
 		}
 		mmf := planFile.Map()
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "", nil)
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, mmf, sourceSAS, destinationSAS, false, nil)
 	}
 
@@ -421,7 +419,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		}
 		mmf := planFile.Map()
 		//todo : call the compute transfer function here for each job.
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "", nil)
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false, nil)
 	}
 }
@@ -511,8 +509,8 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 	ja.DeleteJob(jobID)
 }
 */
-func (ja *jobsAdmin) ShouldLog(level pipeline.LogLevel) bool  { return ja.logger.ShouldLog(level) }
-func (ja *jobsAdmin) Log(level pipeline.LogLevel, msg string) { ja.logger.Log(level, msg) }
+func (ja *jobsAdmin) ShouldLog(level common.LogLevel) bool  { return ja.logger.ShouldLog(level) }
+func (ja *jobsAdmin) Log(level common.LogLevel, msg string) { ja.logger.Log(level, msg) }
 func (ja *jobsAdmin) Panic(err error)                         { ja.logger.Panic(err) }
 func (ja *jobsAdmin) CloseLog()                               { ja.logger.CloseLog() }
 
@@ -540,9 +538,9 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 // TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use individual job logs because there could
 // be several concurrent jobs running. That's not the case any more, so this is safe now, but it doesn't quite fit with the
 // architecture around it.
-func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
+func (ja *jobsAdmin) LogToJobLog(msg string, level common.LogLevel) {
 	prefix := ""
-	if level <= pipeline.LogWarning {
+	if level <= common.LogWarning {
 		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 	}
 	ja.jobLogger.Log(level, prefix+msg)

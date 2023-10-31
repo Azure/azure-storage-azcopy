@@ -24,15 +24,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"net/http"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
@@ -49,7 +50,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity.ToPipelineLogLevel(), cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, nil)
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
 
 	// report failure to create traverser
 	if err != nil {
@@ -83,7 +84,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		glcm.Info(message)
 	}
 	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(message, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
@@ -134,28 +135,26 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		return errors.New("pattern matches are not supported in this command")
 	}
 
-	// create bfs pipeline
-	p, err := createBlobFSPipeline(ctx, cca.credentialInfo, azcopyLogVerbosity.ToPipelineLogLevel())
-	if err != nil {
-		return err
-	}
-
+	options := createClientOptions(azcopyLogVerbosity, nil, nil)
 	// attempt to parse the source url
-	sourceURL, err := cca.Source.FullURL()
+	sourceURL, err := cca.Source.String()
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
 
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path
-	urlParts := azbfs.NewBfsURLParts(*sourceURL)
+	datalakeURLParts, err := azdatalake.ParseURL(sourceURL)
+	if err != nil {
+		return err
+	}
 
 	if cca.ListOfFilesChannel == nil {
 		if cca.dryrunMode {
-			return dryrunRemoveSingleDFSResource(ctx, urlParts, p, cca.Recursive)
+			return dryrunRemoveSingleDFSResource(ctx, datalakeURLParts, cca.credentialInfo, options, cca.Recursive)
 		} else {
 			err := transferProcessor.scheduleCopyTransfer(newStoredObject(
 				nil,
-				path.Base(urlParts.DirectoryOrFilePath),
+				path.Base(datalakeURLParts.PathName),
 				"",
 				common.EEntityType.File(), // blobfs deleter doesn't differentiate
 				time.Now(),
@@ -172,19 +171,19 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		}
 	} else {
 		// list of files is given, record the parent path
-		parentPath := urlParts.DirectoryOrFilePath
+		parentPath := datalakeURLParts.PathName
 
 		// read from the list of files channel to find out what needs to be deleted.
 		childPath, ok := <-cca.ListOfFilesChannel
 		for ; ok; childPath, ok = <-cca.ListOfFilesChannel {
 			//remove the child path
-			urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
+			datalakeURLParts.PathName = common.GenerateFullPath(parentPath, childPath)
 			if cca.dryrunMode {
-				return dryrunRemoveSingleDFSResource(ctx, urlParts, p, cca.Recursive)
+				return dryrunRemoveSingleDFSResource(ctx, datalakeURLParts, cca.credentialInfo, options, cca.Recursive)
 			} else {
 				err := transferProcessor.scheduleCopyTransfer(newStoredObject(
 					nil,
-					path.Base(urlParts.DirectoryOrFilePath),
+					path.Base(datalakeURLParts.PathName),
 					childPath,
 					common.EEntityType.File(), // blobfs deleter doesn't differentiate
 					time.Now(),
@@ -206,45 +205,45 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	return err
 }
 
-func dryrunRemoveSingleDFSResource(ctx context.Context, urlParts azbfs.BfsURLParts, p pipeline.Pipeline, recursive bool) error {
+func dryrunRemoveSingleDFSResource(ctx context.Context, datalakeURLParts azdatalake.URLParts, credInfo common.CredentialInfo, options azcore.ClientOptions, recursive bool) error {
 	//deleting a filesystem
-	if urlParts.DirectoryOrFilePath == "" {
-
+	if datalakeURLParts.PathName == "" {
 		glcm.Dryrun(func(_ common.OutputFormat) string {
-			return fmt.Sprintf("DRYRUN: remove filesystem %s", urlParts.FileSystemName)
+			return fmt.Sprintf("DRYRUN: remove filesystem %s", datalakeURLParts.FileSystemName)
 		})
 		return nil
 	}
-
 	// we do not know if the source is a file or a directory
 	// we assume it is a directory and get its properties
-	directoryURL := azbfs.NewDirectoryURL(urlParts.URL(), p)
-	props, err := directoryURL.GetProperties(ctx)
+	directoryClient := common.CreateDatalakeDirectoryClient(datalakeURLParts.String(), credInfo, nil, options)
+	var respFromCtx *http.Response
+	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
+	_, err := directoryClient.GetProperties(ctxWithResp, nil)
 	if err != nil {
 		return fmt.Errorf("cannot verify resource due to error: %s", err)
 	}
 
 	// if the source URL is actually a file
 	// then we should short-circuit and simply remove that file
-	if strings.EqualFold(props.XMsResourceType(), "file") {
+	resourceType := respFromCtx.Header.Get("x-ms-resource-type")
+	if strings.EqualFold(resourceType, "file") {
 		glcm.Dryrun(func(_ common.OutputFormat) string {
-			return fmt.Sprintf("DRYRUN: remove file %s", urlParts.DirectoryOrFilePath)
+			return fmt.Sprintf("DRYRUN: remove file %s", datalakeURLParts.PathName)
 		})
 		return nil
 	}
 
-	// otherwise, remove the directory and follow the continuation token if necessary
-	// initialize an empty continuation marker
-	marker := ""
-
-	for {
-		listResp, err := directoryURL.ListDirectorySegment(ctx, &marker, recursive)
-
+	pathName := datalakeURLParts.PathName
+	datalakeURLParts.PathName = ""
+	filesystemClient := common.CreateFilesystemClient(datalakeURLParts.String(), credInfo, nil, options)
+	pager := filesystemClient.NewListPathsPager(recursive, &filesystem.ListPathsOptions{Prefix: &pathName})
+	for pager.More() {
+		resp, err := pager.NextPage(ctx)
 		if err != nil {
 			return err
 		}
 
-		for _, v := range listResp.Paths {
+		for _, v := range resp.Paths {
 			entityType := "directory"
 			if v.IsDirectory == nil || !*v.IsDirectory {
 				entityType = "file"
@@ -253,11 +252,6 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, urlParts azbfs.BfsURLPar
 			glcm.Dryrun(func(_ common.OutputFormat) string {
 				return fmt.Sprintf("DRYRUN: remove %s %s", entityType, *v.Name)
 			})
-		}
-
-		marker = listResp.XMsContinuation()
-		if marker == "" { // do-while pattern
-			break
 		}
 	}
 	return nil

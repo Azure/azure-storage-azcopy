@@ -9,7 +9,7 @@ import utility as util
 
 class Block_Upload_User_Scenarios(unittest.TestCase):
     def setUp(self):
-        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID'])
+        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']).add_flags("tenant-id", os.environ['OAUTH_TENANT_ID'])
         cmd.execute_azcopy_copy_command()
 
     def tearDown(self):
@@ -101,7 +101,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
     # test_metaData_content_encoding_content_type verifies the meta data, content type,
     # content encoding of 2kb upload to container through azcopy.
-    def test_blob_metaData_content_encoding_content_type(self):
+    def test_blob_metadata_content_encoding_content_type(self):
         # create 2kb file test_mcect.txt
         filename = "test_mcect.txt"
         file_path = util.create_test_file(filename, 2048)

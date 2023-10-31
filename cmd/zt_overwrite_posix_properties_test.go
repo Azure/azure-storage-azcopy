@@ -22,6 +22,8 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
@@ -31,7 +33,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 func TestOverwritePosixProperties(t *testing.T) {
@@ -39,10 +40,9 @@ func TestOverwritePosixProperties(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("This test will run only on linux")
 	}
-
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	containerClient, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, containerClient)
 
 	files := []string{
 		"filea",
@@ -89,8 +89,11 @@ func TestOverwritePosixProperties(t *testing.T) {
 		validateDownloadTransfersAreScheduled(a, "/", "/"+filepath.Base(dirPath)+"/", files[:], mockedRPC)
 	})
 
-	listBlob, err := containerURL.ListBlobsFlatSegment(context.TODO(), azblob.Marker{},
-		azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true, Tags: true}, Prefix: filepath.Base(dirPath)})
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Include: container.ListBlobsInclude{Metadata: true, Tags: true},
+		Prefix: to.Ptr(filepath.Base(dirPath)),
+	})
+	listBlob, err := pager.NextPage(context.TODO())
 
 	a.Nil(err)
 

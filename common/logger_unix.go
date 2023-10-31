@@ -27,8 +27,6 @@ import (
 	"fmt"
 	"log/syslog"
 	"runtime"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // ////////////////////////////////////////
@@ -36,23 +34,23 @@ type sysLogger struct {
 	// minimum loglevel represents the minimum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	jobID             JobID
-	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
+	minimumLevelToLog LogLevel // The maximum customer-desired log level for this job
 	writer            *syslog.Writer    // The Job's logger
 	logSuffix         string
-	sanitizer         pipeline.LogSanitizer
+	sanitizer         LogSanitizer
 }
 
 func NewSysLogger(jobID JobID, minimumLevelToLog LogLevel, logSuffix string) ILoggerResetable {
 	return &sysLogger{
 		jobID:             jobID,
-		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
+		minimumLevelToLog: minimumLevelToLog,
 		logSuffix:         logSuffix,
 		sanitizer:         NewAzCopyLogSanitizer(),
 	}
 }
 
 func (sl *sysLogger) OpenLog() {
-	if sl.minimumLevelToLog == pipeline.LogNone {
+	if sl.minimumLevelToLog == LogNone {
 		return
 	}
 	writer, err := syslog.New(syslog.LOG_NOTICE, fmt.Sprintf("%s %s", sl.logSuffix, sl.jobID.String()))
@@ -66,19 +64,19 @@ func (sl *sysLogger) OpenLog() {
 	_ = sl.writer.Notice("OS-Architecture " + runtime.GOARCH)
 }
 
-func (sl *sysLogger) MinimumLogLevel() pipeline.LogLevel {
+func (sl *sysLogger) MinimumLogLevel() LogLevel {
 	return sl.minimumLevelToLog
 }
 
-func (jl *sysLogger) ShouldLog(level pipeline.LogLevel) bool {
-	if level == pipeline.LogNone {
+func (jl *sysLogger) ShouldLog(level LogLevel) bool {
+	if level == LogNone {
 		return false
 	}
 	return level <= jl.minimumLevelToLog
 }
 
 func (sl *sysLogger) CloseLog() {
-	if sl.minimumLevelToLog == pipeline.LogNone {
+	if sl.minimumLevelToLog == LogNone {
 		return
 	}
 
@@ -91,7 +89,7 @@ func (sl *sysLogger) Panic(err error) {
 	//we just log it. We should never reach this line of code!
 }
 
-func (sl *sysLogger) Log(loglevel pipeline.LogLevel, msg string) {
+func (sl *sysLogger) Log(loglevel LogLevel, msg string) {
 	if !sl.ShouldLog(loglevel) {
 		return
 	}
@@ -100,19 +98,19 @@ func (sl *sysLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	msg = sl.sanitizer.SanitizeLogMessage(msg)
 
 	switch loglevel {
-	case pipeline.LogNone:
+	case LogNone:
 		//nothing to do
-	case pipeline.LogFatal:
+	case LogFatal:
 		_ = w.Emerg(msg)
-	case pipeline.LogPanic:
+	case LogPanic:
 		_ = w.Crit(msg)
-	case pipeline.LogError:
+	case LogError:
 		_ = w.Err(msg)
-	case pipeline.LogWarning:
+	case LogWarning:
 		_ = w.Warning(msg)
-	case pipeline.LogInfo:
+	case LogInfo:
 		_ = w.Info(msg)
-	case pipeline.LogDebug:
+	case LogDebug:
 		_ = w.Debug(msg)
 	}
 }

@@ -30,8 +30,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
@@ -165,7 +163,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                                                                                        // Convert the order to a plan file
-	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString, order.CredentialInfo.SourceBlobToken) // Get a this job part's job manager (create it if it doesn't exist)
+	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 
 	if len(order.Transfers.List) == 0 && order.IsFinalPart {
 		/*
@@ -173,7 +171,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		 * immediately after it is scheduled, and wind down
 		 * the transfer
 		 */
-		jm.Log(pipeline.LogError, "No transfers were scheduled.")
+		jm.Log(common.LogError, "No transfers were scheduled.")
 	}
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jm.SetInMemoryTransitJobState(
@@ -260,7 +258,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 			jpp0.SetJobStatus(desiredJobStatus)
 			msg := fmt.Sprintf("JobID=%v %s", jobID,
-				common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
+				common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
 
 			if jm.ShouldLog(pipeline.LogInfo) {
 				jm.Log(pipeline.LogInfo, msg)
@@ -410,8 +408,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		summaryResp.JobStatus = common.EJobStatus.InProgress()
 		jm.ResurrectSummary(summaryResp)
 
-		if jm.ShouldLog(pipeline.LogInfo) {
-			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
+		if jm.ShouldLog(common.LogInfo) {
+			jm.Log(common.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
 		}
 
 		// Iterate through all transfer of the Job Parts and reset the transfer status

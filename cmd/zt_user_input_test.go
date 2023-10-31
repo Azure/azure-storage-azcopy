@@ -32,8 +32,8 @@ func TestCPKEncryptionInputTest(t *testing.T) {
 	mockedRPC.init()
 
 	dirPath := "this/is/a/dummy/path"
-	rawDFSEndpointWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(a)
-	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.String())
+	rawDFSEndpointWithSAS := scenarioHelper{}.getDatalakeServiceClientWithSAS(a)
+	raw := getDefaultRawCopyInput(dirPath, rawDFSEndpointWithSAS.DFSURL())
 	raw.recursive = true
 	raw.cpkInfo = true
 
@@ -50,8 +50,8 @@ func TestCPKEncryptionInputTest(t *testing.T) {
 		a.Contains(err.Error(), "client provided keys (CPK) based encryption is only supported with blob endpoints (blob.core.windows.net)")
 	})
 
-	rawContainerURL := scenarioHelper{}.getContainerURL(a, "testcpkcontainer")
-	raw2 := getDefaultRawCopyInput(dirPath, rawContainerURL.String())
+	rawContainerURL := scenarioHelper{}.getContainerClient(a, "testcpkcontainer")
+	raw2 := getDefaultRawCopyInput(dirPath, rawContainerURL.URL())
 	raw2.recursive = true
 	raw2.cpkInfo = true
 

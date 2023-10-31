@@ -2,12 +2,12 @@ package ste
 
 import (
 	"errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"reflect"
 	"sync/atomic"
 	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
@@ -208,7 +208,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
-func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier,
 	s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags) {
 	var err error
 	t := jpph.Transfer(transferIndex)
@@ -254,12 +254,12 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	}
 	if t.SrcBlobTypeLength != 0 {
 		tmpBlobTypeStr := []byte(jpph.getString(offset, t.SrcBlobTypeLength))
-		blobType = azblob.BlobType(tmpBlobTypeStr)
+		blobType = blob.BlobType(tmpBlobTypeStr)
 		offset += int64(t.SrcBlobTypeLength)
 	}
 	if t.SrcBlobTierLength != 0 {
 		tmpBlobTierStr := []byte(jpph.getString(offset, t.SrcBlobTierLength))
-		blobTier = azblob.AccessTierType(tmpBlobTierStr)
+		blobTier = blob.AccessTier(tmpBlobTierStr)
 		offset += int64(t.SrcBlobTierLength)
 	}
 	if t.SrcBlobVersionIDLength != 0 {
@@ -426,7 +426,7 @@ func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus,
 		common.AtomicMorphInt32((*int32)(&jppt.atomicTransferStatus),
 			func(startVal int32) (val int32, morphResult interface{}) {
 				// If current transfer status has some completed value, then it will not be changed.
-				return common.Iffint32(common.TransferStatus(startVal).StatusLocked(), startVal, int32(status)), nil
+				return common.Iff(common.TransferStatus(startVal).StatusLocked(), startVal, int32(status)), nil
 			})
 	} else {
 		(&jppt.atomicTransferStatus).AtomicStore(status)
@@ -447,7 +447,7 @@ func (jppt *JobPartPlanTransfer) SetErrorCode(errorCode int32, overwrite bool) {
 			func(startErrorCode int32) (val int32, morphResult interface{}) {
 				// startErrorCode != 0 means that error code is already set.
 				// If current error code is already set to some error code, then it will not be changed.
-				return common.Iffint32(startErrorCode != 0, startErrorCode, errorCode), nil
+				return common.Iff(startErrorCode != 0, startErrorCode, errorCode), nil
 			})
 	} else {
 		atomic.StoreInt32(&jppt.atomicErrorCode, errorCode)

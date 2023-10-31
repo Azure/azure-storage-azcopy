@@ -24,16 +24,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -52,7 +52,7 @@ type StoredObject struct {
 	smbLastModifiedTime time.Time
 	size                int64
 	md5                 []byte
-	blobType            azblob.BlobType // will be "None" when unknown or not applicable
+	blobType            blob.BlobType // will be "None" when unknown or not applicable
 
 	// all of these will be empty when unknown or not applicable.
 	contentDisposition string
@@ -76,8 +76,8 @@ type StoredObject struct {
 	// destination container name. Included in the processor after resolving container names.
 	DstContainerName string
 	// access tier, only included by blob traverser.
-	blobAccessTier azblob.AccessTierType
-	archiveStatus  azblob.ArchiveStatusType
+	blobAccessTier blob.AccessTier
+	archiveStatus  blob.ArchiveStatus
 	// metadata, included in S2S transfers
 	Metadata       common.Metadata
 	blobVersionID  string
@@ -86,9 +86,9 @@ type StoredObject struct {
 	blobDeleted    bool
 
 	// Lease information
-	leaseState    azblob.LeaseStateType
-	leaseStatus   azblob.LeaseStatusType
-	leaseDuration azblob.LeaseDurationType
+	leaseState    lease.StateType
+	leaseStatus   lease.StatusType
+	leaseDuration lease.DurationType
 }
 
 func (s *StoredObject) isMoreRecentThan(storedObject2 StoredObject, preferSMBTime bool) bool {
@@ -228,12 +228,19 @@ type contentPropsProvider interface {
 	ContentMD5() []byte
 }
 type blobPropsProvider interface {
-	BlobType() azblob.BlobType
-	AccessTier() azblob.AccessTierType
-	LeaseStatus() azblob.LeaseStatusType
-	LeaseDuration() azblob.LeaseDurationType
-	LeaseState() azblob.LeaseStateType
-	ArchiveStatus() azblob.ArchiveStatusType
+	BlobType() blob.BlobType
+	AccessTier() blob.AccessTier
+	LeaseStatus() lease.StatusType
+	LeaseDuration() lease.DurationType
+	LeaseState() lease.StateType
+	ArchiveStatus() blob.ArchiveStatus
+}
+type filePropsProvider interface {
+	contentPropsProvider
+	Metadata() common.Metadata
+	LastModified() time.Time
+	FileLastWriteTime() time.Time
+	ContentLength() int64
 }
 
 // a constructor is used so that in case the StoredObject has to change, the callers would get a compilation error
@@ -327,7 +334,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 // If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
 // To avoid slowdowns, use a buffered channel of enough capacity.
-func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, p pipeline.Pipeline, destination *common.Location) (ResourceTraverser, error) {
+func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel common.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, destination *common.Location) (ResourceTraverser, error) {
 	var output ResourceTraverser
 
 	var includeDeleted bool
@@ -351,22 +358,12 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
 	}
 
-	// Initialize the pipeline if creds and ctx is provided
-	if p == nil && ctx != nil && credential != nil {
-		tmppipe, err := InitPipeline(*ctx, location, *credential, logLevel, trailingDot, location)
-		if err != nil {
-			return nil, err
-		}
-
-		p = tmppipe
-	}
-
 	// Feed list of files channel into new list traverser
 	if listOfFilesChannel != nil {
 		if location.IsLocal() {
 			// First, ignore all escaped stars. Stars can be valid characters on many platforms (out of the 3 we support though, Windows is the only that cannot support it).
 			// In the future, should we end up supporting another OS that does not treat * as a valid character, we should turn these checks into a map-check against runtime.GOOS.
-			tmpResource := common.IffString(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
+			tmpResource := common.Iff(runtime.GOOS == "windows", resource.ValueLocal(), strings.ReplaceAll(resource.ValueLocal(), `\*`, ``))
 			// check for remaining stars. We can't combine list traversers, and wildcarded list traversal occurs below.
 			if strings.Contains(tmpResource, "*") {
 				return nil, errors.New("cannot combine local wildcards with include-path or list-of-files")
@@ -374,7 +371,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		}
 
 		output = newListTraverser(resource, location, credential, ctx, recursive, symlinkHandling, getProperties,
-			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, p, destination)
+			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
 		return output, nil
 	}
 
@@ -402,7 +399,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
 			output = newListTraverser(baseResource, location, nil, nil, recursive, symlinkHandling, getProperties,
-				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, p, destination)
+				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
 		} else {
 			if ctx != nil {
 				output, _ = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
@@ -418,6 +415,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		output = ben
 
 	case common.ELocation.Blob():
+		// TODO (last service migration) : Remove dependency on URLs.
 		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
@@ -425,25 +423,35 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 		recommendHttpsIfNecessary(*resourceURL)
 
-		if ctx == nil || p == nil {
-			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a blob traverser")
 		}
+		r := resourceURL.String()
 
-		burl := azblob.NewBlobURLParts(*resourceURL)
+		blobURLParts, err := blob.ParseURL(r)
+		if err != nil {
+			return nil, err
+		}
+		containerName := blobURLParts.ContainerName
+		// Strip any non-service related things away
+		blobURLParts.ContainerName = ""
+		blobURLParts.BlobName = ""
+		blobURLParts.Snapshot = ""
+		blobURLParts.VersionID = ""
+		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, nil, nil))
 
-		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
-
+		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-
-			output = newBlobAccountTraverser(resourceURL, p, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, false)
+			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, false)
 		} else if listOfVersionIds != nil {
-			output = newBlobVersionsTraverser(resourceURL, p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
+			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(resourceURL, p, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, false)
+			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, false)
 		}
 	case common.ELocation.File():
+		// TODO (last service migration) : Remove dependency on URLs.
 		resourceURL, err := resource.FullURL()
 		if err != nil {
 			return nil, err
@@ -451,20 +459,29 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 		recommendHttpsIfNecessary(*resourceURL)
 
-		if ctx == nil || p == nil {
-			return nil, errors.New("a valid credential and context must be supplied to create a file traverser")
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a file traverser")
 		}
+		r := resourceURL.String()
 
-		furl := azfile.NewFileURLParts(*resourceURL)
+		fileURLParts, err := file.ParseURL(r)
+		if err != nil {
+			return nil, err
+		}
+		shareName := fileURLParts.ShareName
+		// Strip any non-service related things away
+		fileURLParts.ShareName = ""
+		fileURLParts.ShareSnapshot = ""
+		fileURLParts.DirectoryOrFilePath = ""
+		fsc := common.CreateFileServiceClient(fileURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, to.Ptr(trailingDot), destination))
 
-		if furl.ShareName == "" || strings.Contains(furl.ShareName, "*") {
+		if shareName == "" || strings.Contains(shareName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-
-			output = newFileAccountTraverser(resourceURL, p, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination)
+			output = newFileAccountTraverser(fsc, shareName, *ctx, getProperties, incrementEnumerationCounter, trailingDot, destination)
 		} else {
-			output = newFileTraverser(resourceURL, p, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination)
+			output = newFileTraverser(r, fsc, *ctx, recursive, getProperties, incrementEnumerationCounter, trailingDot, destination)
 		}
 	case common.ELocation.BlobFS():
 		resourceURL, err := resource.FullURL()
@@ -472,47 +489,35 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 			return nil, err
 		}
 
-		// check if credential is also nil here (would never trigger) to tame syntax highlighting.
-		// As a precondition to pipeline p, credential must not be nil anyway.
-		if ctx == nil || p == nil || credential == nil {
-			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
-		}
-
 		recommendHttpsIfNecessary(*resourceURL)
 
-		// Convert BlobFS pipeline to blob-compatible pipeline
-		var credElement azblob.Credential
-		if credential.CredentialType == common.ECredentialType.SharedKey() {
-			// Convert the shared key credential to a blob credential & re-use it
-			credElement, err = azblob.NewSharedKeyCredential(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName()), glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey()))
-
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// Get a standard blob credential, anything else is compatible
-			credElement = common.CreateBlobCredential(*ctx, *credential, common.CredentialOpOptions{
-				LogError: glcm.Info,
-			})
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a blob traverser")
 		}
-
-		blobPipeline := createBlobPipelineFromCred(credElement, logLevel)
-
-		burl := azblob.NewBlobURLParts(*resourceURL)
-		burl.Host = strings.Replace(burl.Host, ".dfs", ".blob", 1)
-		blobResourceURL := burl.URL()
+		r := resourceURL.String()
+		r = strings.Replace(r, ".dfs", ".blob", 1)
+		blobURLParts, err := blob.ParseURL(r)
+		if err != nil {
+			return nil, err
+		}
+		containerName := blobURLParts.ContainerName
+		// Strip any non-service related things away
+		blobURLParts.ContainerName = ""
+		blobURLParts.BlobName = ""
+		blobURLParts.Snapshot = ""
+		blobURLParts.VersionID = ""
+		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, nil, nil))
 
 		includeDirectoryStubs = true // DFS is supposed to feed folders in
-		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
+		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-
-			output = newBlobAccountTraverser(&blobResourceURL, blobPipeline, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, true)
+			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, true)
 		} else if listOfVersionIds != nil {
-			output = newBlobVersionsTraverser(&blobResourceURL, blobPipeline, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
+			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(&blobResourceURL, blobPipeline, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true)
+			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true)
 		}
 	case common.ELocation.S3():
 		resourceURL, err := resource.FullURL()
@@ -726,7 +731,7 @@ func WarnStdoutAndScanningLog(toLog string) {
 	glcm.Info(toLog)
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
-		azcopyScanningLogger.Log(pipeline.LogWarning, toLog)
+		azcopyScanningLogger.Log(common.LogWarning, toLog)
 	}
 }
 

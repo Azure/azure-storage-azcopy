@@ -21,13 +21,18 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"time"
 )
 
 var noContentProps = emptyPropertiesAdapter{}
 var noBlobProps = emptyPropertiesAdapter{}
-var noMetdata common.Metadata = nil
+var noMetadata common.Metadata = nil
 
 // emptyPropertiesAdapter supplies empty (zero-like) values
 // for all methods in contentPropsProvider and blobPropsProvider
@@ -57,96 +62,227 @@ func (e emptyPropertiesAdapter) ContentMD5() []byte {
 	return make([]byte, 0)
 }
 
-func (e emptyPropertiesAdapter) BlobType() azblob.BlobType {
-	return azblob.BlobNone
+func (e emptyPropertiesAdapter) BlobType() blob.BlobType {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) AccessTier() azblob.AccessTierType {
-	return azblob.AccessTierNone
+func (e emptyPropertiesAdapter) AccessTier() blob.AccessTier {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) ArchiveStatus() azblob.ArchiveStatusType {
-	return azblob.ArchiveStatusNone
+func (e emptyPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
-	return azblob.LeaseDurationNone
+func (e emptyPropertiesAdapter) LeaseDuration() lease.DurationType {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) LeaseState() azblob.LeaseStateType {
-	return azblob.LeaseStateNone
+func (e emptyPropertiesAdapter) LeaseState() lease.StateType {
+	return ""
 }
 
-func (e emptyPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
-	return azblob.LeaseStatusNone
+func (e emptyPropertiesAdapter) LeaseStatus() lease.StatusType {
+	return ""
 }
 
 // blobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to the blobPropsProvider interface
 type blobPropertiesResponseAdapter struct {
-	*azblob.BlobGetPropertiesResponse
+	*blob.GetPropertiesResponse
 }
 
-func (a blobPropertiesResponseAdapter) AccessTier() azblob.AccessTierType {
-	return azblob.AccessTierType(a.BlobGetPropertiesResponse.AccessTier())
+func (a blobPropertiesResponseAdapter) CacheControl() string {
+	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
 }
 
-func (a blobPropertiesResponseAdapter) ArchiveStatus() azblob.ArchiveStatusType {
-	return azblob.ArchiveStatusType(a.BlobGetPropertiesResponse.ArchiveStatus())
+func (a blobPropertiesResponseAdapter) ContentDisposition() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentEncoding() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentLanguage() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentType() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentType, "")
+}
+
+func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
+	return a.GetPropertiesResponse.ContentMD5
+}
+
+func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
+	return common.IffNotNil(a.GetPropertiesResponse.BlobType, "")
+}
+
+func (a blobPropertiesResponseAdapter) AccessTier() blob.AccessTier {
+	return blob.AccessTier(common.IffNotNil(a.GetPropertiesResponse.AccessTier, ""))
+}
+
+func (a blobPropertiesResponseAdapter) ArchiveStatus() blob.ArchiveStatus {
+	return blob.ArchiveStatus(common.IffNotNil(a.GetPropertiesResponse.ArchiveStatus, ""))
+}
+
+// LeaseDuration returns the value for header x-ms-lease-duration.
+func (a blobPropertiesResponseAdapter) LeaseDuration() lease.DurationType {
+	return common.IffNotNil(a.GetPropertiesResponse.LeaseDuration, "")
+}
+
+// LeaseState returns the value for header x-ms-lease-state.
+func (a blobPropertiesResponseAdapter) LeaseState() lease.StateType {
+	return common.IffNotNil(a.GetPropertiesResponse.LeaseState, "")
+}
+
+// LeaseStatus returns the value for header x-ms-lease-status.
+func (a blobPropertiesResponseAdapter) LeaseStatus() lease.StatusType {
+	return common.IffNotNil(a.GetPropertiesResponse.LeaseStatus, "")
 }
 
 // blobPropertiesAdapter adapts a BlobProperties object to both the
 // contentPropsProvider and blobPropsProvider interfaces
 type blobPropertiesAdapter struct {
-	BlobProperties azblob.BlobPropertiesInternal
+	BlobProperties *container.BlobProperties
 }
 
 func (a blobPropertiesAdapter) CacheControl() string {
-	return common.IffStringNotNil(a.BlobProperties.CacheControl, "")
+	return common.IffNotNil(a.BlobProperties.CacheControl, "")
 }
 
 func (a blobPropertiesAdapter) ContentDisposition() string {
-	return common.IffStringNotNil(a.BlobProperties.ContentDisposition, "")
+	return common.IffNotNil(a.BlobProperties.ContentDisposition, "")
 }
 
 func (a blobPropertiesAdapter) ContentEncoding() string {
-	return common.IffStringNotNil(a.BlobProperties.ContentEncoding, "")
+	return common.IffNotNil(a.BlobProperties.ContentEncoding, "")
 }
 
 func (a blobPropertiesAdapter) ContentLanguage() string {
-	return common.IffStringNotNil(a.BlobProperties.ContentLanguage, "")
+	return common.IffNotNil(a.BlobProperties.ContentLanguage, "")
 }
 
 func (a blobPropertiesAdapter) ContentType() string {
-	return common.IffStringNotNil(a.BlobProperties.ContentType, "")
+	return common.IffNotNil(a.BlobProperties.ContentType, "")
 }
 
 func (a blobPropertiesAdapter) ContentMD5() []byte {
 	return a.BlobProperties.ContentMD5
 }
 
-func (a blobPropertiesAdapter) BlobType() azblob.BlobType {
-	return a.BlobProperties.BlobType
+func (a blobPropertiesAdapter) BlobType() blob.BlobType {
+	return common.IffNotNil(a.BlobProperties.BlobType, "")
 }
 
-func (a blobPropertiesAdapter) AccessTier() azblob.AccessTierType {
-	return a.BlobProperties.AccessTier
+func (a blobPropertiesAdapter) AccessTier() blob.AccessTier {
+	return common.IffNotNil(a.BlobProperties.AccessTier, "")
 }
 
 // LeaseDuration returns the value for header x-ms-lease-duration.
-func (a blobPropertiesAdapter) LeaseDuration() azblob.LeaseDurationType {
-	return a.BlobProperties.LeaseDuration
+func (a blobPropertiesAdapter) LeaseDuration() lease.DurationType {
+	return common.IffNotNil(a.BlobProperties.LeaseDuration, "")
 }
 
 // LeaseState returns the value for header x-ms-lease-state.
-func (a blobPropertiesAdapter) LeaseState() azblob.LeaseStateType {
-	return a.BlobProperties.LeaseState
+func (a blobPropertiesAdapter) LeaseState() lease.StateType {
+	return common.IffNotNil(a.BlobProperties.LeaseState, "")
 }
 
 // LeaseStatus returns the value for header x-ms-lease-status.
-func (a blobPropertiesAdapter) LeaseStatus() azblob.LeaseStatusType {
-	return a.BlobProperties.LeaseStatus
+func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
+	return common.IffNotNil(a.BlobProperties.LeaseStatus, "")
 }
 
-func (a blobPropertiesAdapter) ArchiveStatus() azblob.ArchiveStatusType {
-	return a.BlobProperties.ArchiveStatus
+func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
+	return common.IffNotNil(a.BlobProperties.ArchiveStatus, "")
+}
+
+type shareFilePropertiesAdapter struct {
+	*sharefile.GetPropertiesResponse
+}
+
+func (a shareFilePropertiesAdapter) Metadata() common.Metadata {
+	return a.GetPropertiesResponse.Metadata
+}
+
+func (a shareFilePropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
+func (a shareFilePropertiesAdapter) FileLastWriteTime() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
+}
+
+func (a shareFilePropertiesAdapter) CacheControl() string {
+	return common.IffNotNil(a.GetPropertiesResponse.CacheControl, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentDisposition() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentDisposition, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentEncoding() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentEncoding, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentLanguage() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentLanguage, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentType() string {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentType, "")
+}
+
+func (a shareFilePropertiesAdapter) ContentMD5() []byte {
+	return a.GetPropertiesResponse.ContentMD5
+}
+
+func (a shareFilePropertiesAdapter) ContentLength() int64 {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
+}
+
+type shareDirectoryPropertiesAdapter struct {
+	*sharedirectory.GetPropertiesResponse
+}
+
+func (a shareDirectoryPropertiesAdapter) Metadata() common.Metadata {
+	return a.GetPropertiesResponse.Metadata
+}
+
+func (a shareDirectoryPropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
+}
+
+func (a shareDirectoryPropertiesAdapter) FileLastWriteTime() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.FileLastWriteTime, time.Time{})
+}
+
+func (a shareDirectoryPropertiesAdapter) CacheControl() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentDisposition() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentEncoding() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentLanguage() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentType() string {
+	return ""
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentMD5() []byte {
+	return make([]byte, 0)
+}
+
+func (a shareDirectoryPropertiesAdapter) ContentLength() int64 {
+	return 0
 }

@@ -24,19 +24,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
-	"net/url"
 	"os"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -150,7 +147,7 @@ var rootCmd = &cobra.Command{
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
 			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
 		if !azcopySkipVersionCheck {
 			// spawn a routine to fetch and compare the local application's version against the latest version available
@@ -254,25 +251,20 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: initialize pipeline
-		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, pipeline.LogNone)
+		options := createClientOptions(common.LogNone, nil, nil)
+
+		// step 2: start download
+		blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
 		if err != nil {
 			return
 		}
 
-		// step 2: parse source url
-		u, err := url.Parse(versionMetadataUrl)
+		blobStream, err := blobClient.DownloadStream(context.TODO(), nil)
 		if err != nil {
 			return
 		}
 
-		// step 3: start download
-		blobURL := azblob.NewBlobURL(*u, p)
-		blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
-		if err != nil {
-			return
-		}
-
-		blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
+		blobBody := blobStream.NewRetryReader(context.TODO(), &blob.RetryReaderOptions{MaxRetries: ste.MaxRetryPerDownloadBody})
 		defer blobBody.Close()
 
 		// step 4: read newest version str

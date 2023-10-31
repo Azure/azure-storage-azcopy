@@ -23,6 +23,9 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
@@ -31,7 +34,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 const (
@@ -41,15 +43,15 @@ const (
 // regular blob->file sync
 func TestSyncDownloadWithSingleFile(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(a, containerURL, blobList, blockBlobDefaultData)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromList(a, cc, blobList, blockBlobDefaultData)
+		a.NotNil(cc)
 
 		// set up the destination as a single file
 		time.Sleep(time.Second)
@@ -79,7 +81,7 @@ func TestSyncDownloadWithSingleFile(t *testing.T) {
 		time.Sleep(5 * time.Second)
 		// recreate the blob to have a later last modified time
 		time.Sleep(time.Second)
-		scenarioHelper{}.generateBlobsFromList(a, containerURL, blobList, blockBlobDefaultData)
+		scenarioHelper{}.generateBlobsFromList(a, cc, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
 
 		runSyncAndVerify(a, raw, func(err error) {
@@ -93,13 +95,13 @@ func TestSyncDownloadWithSingleFile(t *testing.T) {
 // regular container->directory sync but destination is empty, so everything has to be transferred
 func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up the destination with an empty folder
@@ -142,13 +144,13 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 // regular container->directory sync but destination is identical to the source, transfers are scheduled based on lmt
 func TestSyncDownloadWithIdenticalDestination(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up the destination with a folder that have the exact same files
@@ -173,7 +175,7 @@ func TestSyncDownloadWithIdenticalDestination(t *testing.T) {
 	})
 
 	// refresh the blobs' last modified time so that they are newer
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobList, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
@@ -185,13 +187,13 @@ func TestSyncDownloadWithIdenticalDestination(t *testing.T) {
 // regular container->directory sync where destination is missing some files from source, and also has some extra files
 func TestSyncDownloadWithMismatchedDestination(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up the destination with a folder that have half of the files from source
@@ -230,18 +232,19 @@ func TestSyncDownloadWithMismatchedDestination(t *testing.T) {
 // include flag limits the scope of source/destination comparison
 func TestSyncDownloadWithIncludePatternFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobsToInclude, blockBlobDefaultData)
+
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination with an empty folder
@@ -267,18 +270,18 @@ func TestSyncDownloadWithIncludePatternFlag(t *testing.T) {
 // exclude flag limits the scope of source/destination comparison
 func TestSyncDownloadWithExcludePatternFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobsToExclude, blockBlobDefaultData)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination with an empty folder
@@ -304,24 +307,24 @@ func TestSyncDownloadWithExcludePatternFlag(t *testing.T) {
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func TestSyncDownloadWithIncludeAndExcludePatternFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobsToInclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobsToExclude, blockBlobDefaultData)
 	excludeString := "so*;not*;exactName"
 
 	// set up the destination with an empty folder
@@ -348,18 +351,19 @@ func TestSyncDownloadWithIncludeAndExcludePatternFlag(t *testing.T) {
 // a specific path is avoided in the comparison
 func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"excludeSub/notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobsToExclude, blockBlobDefaultData)
+
 	excludeString := "excludeSub;exactName"
 
 	// set up the destination with an empty folder
@@ -385,7 +389,7 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, blobsToExclude)
 
 	// re-create the ones at the source so that their lmts are newer
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobsToExclude, blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobsToExclude, blockBlobDefaultData)
 
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
@@ -403,13 +407,13 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 // validate the bug fix for this scenario
 func TestSyncDownloadWithMissingDestination(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up the destination as a missing folder
@@ -438,13 +442,13 @@ func TestSyncDownloadWithMissingDestination(t *testing.T) {
 // there is a type mismatch between the source and destination
 func TestSyncMismatchContainerAndFile(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, "")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, cc, "")
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up the destination as a single file
@@ -485,15 +489,15 @@ func TestSyncMismatchContainerAndFile(t *testing.T) {
 // there is a type mismatch between the source and destination
 func TestSyncMismatchBlobAndDirectory(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with a single blob
 	blobName := "singleblobisbest"
 	blobList := []string{blobName}
-	containerURL, containerName := createNewContainer(a, bsu)
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobList, blockBlobDefaultData)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobList, blockBlobDefaultData)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 
 	// set up the destination as a directory
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
@@ -532,7 +536,7 @@ func TestSyncMismatchBlobAndDirectory(t *testing.T) {
 // we should recognize that there is a type mismatch
 func TestSyncDownloadADLSDirectoryTypeMismatch(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	blobName := "adlsdir"
 
 	// set up the destination as a single file
@@ -542,13 +546,15 @@ func TestSyncDownloadADLSDirectoryTypeMismatch(t *testing.T) {
 	scenarioHelper{}.generateLocalFilesFromList(a, dstDirName, []string{blobName})
 
 	// set up the container
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	containerClient, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, containerClient)
+	a.NotNil(containerClient)
 
 	// create a single blob that represents an ADLS directory
-	_, err := containerURL.NewBlockBlobURL(blobName).Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+	_, err := containerClient.NewBlockBlobClient(blobName).Upload(context.Background(), streaming.NopCloser(bytes.NewReader(nil)),
+		&blockblob.UploadOptions{
+			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
+		})
 	a.Nil(err)
 
 	// set up interceptor
@@ -573,25 +579,28 @@ func TestSyncDownloadADLSDirectoryTypeMismatch(t *testing.T) {
 // we should download every blob except the blob representing the directory
 func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	adlsDirName := "adlsdir"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerURL, adlsDirName+"/")
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	containerClient, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(a, containerClient, adlsDirName+"/")
+	defer deleteContainer(a, containerClient)
+	a.NotNil(containerClient)
 	a.NotZero(len(blobList))
 
 	// create a single blob that represents the ADLS directory
-	dirBlob := containerURL.NewBlockBlobURL(adlsDirName)
-	_, err := dirBlob.Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+	_, err := containerClient.NewBlockBlobClient(adlsDirName).Upload(context.Background(), streaming.NopCloser(bytes.NewReader(nil)),
+		&blockblob.UploadOptions{
+			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
+		})
 	a.Nil(err)
 
 	// create an extra blob that represents an empty ADLS directory, which should never be picked up
-	_, err = containerURL.NewBlockBlobURL(adlsDirName+"/neverpickup").Upload(context.Background(), bytes.NewReader(nil),
-		azblob.BlobHTTPHeaders{}, azblob.Metadata{"hdi_isfolder": "true"}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+	_, err = containerClient.NewBlockBlobClient(adlsDirName+"/neverpickup").Upload(context.Background(), streaming.NopCloser(bytes.NewReader(nil)),
+		&blockblob.UploadOptions{
+			Metadata: map[string]*string{"hdi_isfolder": to.Ptr("true")},
+		})
 	a.Nil(err)
 
 	// set up the destination with an empty folder

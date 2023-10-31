@@ -8,10 +8,6 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 // ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -68,8 +64,8 @@ func (u URLExtension) RedactSecretQueryParamForLogging() string {
 	return u.String()
 }
 
-const SigAzure = azbfs.SigAzure
-const SigXAmzForAws = azbfs.SigXAmzForAws
+const SigAzure = "sig"
+const SigXAmzForAws = "x-amz-signature"
 
 func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
 	values, _ := url.ParseQuery(rawQuery)
@@ -82,22 +78,6 @@ func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) 
 	}
 
 	return sigFound, values.Encode()
-}
-
-// ///////////////////////////////////////////////////////////////////////////////////////////////
-type FileURLPartsExtension struct {
-	azfile.FileURLParts
-}
-
-func (parts FileURLPartsExtension) GetShareURL() url.URL {
-	parts.DirectoryOrFilePath = ""
-	return parts.URL()
-}
-
-func (parts FileURLPartsExtension) GetServiceURL() url.URL {
-	parts.ShareName = ""
-	parts.DirectoryOrFilePath = ""
-	return parts.URL()
 }
 
 // ///////////////////////////////////////////////////////////////////////////////////////////////

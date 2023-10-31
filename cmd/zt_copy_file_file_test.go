@@ -29,16 +29,16 @@ import (
 // regular file->file copy
 func TestFileCopyS2SWithSingleFile(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	for _, fileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source share with a single file
 		fileList := []string{fileName}
-		scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, fileList)
+		scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, fileList)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -83,14 +83,14 @@ func TestFileCopyS2SWithSingleFile(t *testing.T) {
 // regular share->share copy
 func TestFileCopyS2SWithShares(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// set up interceptor
@@ -129,19 +129,19 @@ func TestFileCopyS2SWithShares(t *testing.T) {
 // include flag limits the scope of source/destination comparison
 func TestFileCopyS2SWithIncludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToInclude)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -166,19 +166,19 @@ func TestFileCopyS2SWithIncludeFlag(t *testing.T) {
 // exclude flag limits the scope of source/destination comparison
 func TestFileCopyS2SWithExcludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to exclude
 	filesToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToExclude)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToExclude)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -203,25 +203,25 @@ func TestFileCopyS2SWithExcludeFlag(t *testing.T) {
 // include and exclude flag can work together to limit the scope of source/destination comparison
 func TestFileCopyS2SWithIncludeAndExcludeFlag(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
 	a.NotZero(len(fileList))
 
 	// add special files that we wish to include
 	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToInclude)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special files that we wish to exclude
 	// note that the excluded files also match the include string
 	filesToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateAzureFilesFromList(a, srcShareURL, filesToExclude)
+	scenarioHelper{}.generateShareFilesFromList(a, srcShareClient, fsc, filesToExclude)
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -247,19 +247,19 @@ func TestFileCopyS2SWithIncludeAndExcludeFlag(t *testing.T) {
 // regular dir -> dir copy
 func TestFileCopyS2SWithDirectory(t *testing.T) {
 	a := assert.New(t)
-	fsu := getFSU()
-	srcShareURL, srcShareName := createNewAzureShare(a, fsu)
-	dstShareURL, dstShareName := createNewAzureShare(a, fsu)
-	defer deleteShare(a, srcShareURL)
-	defer deleteShare(a, dstShareURL)
+	fsc := getFileServiceClient()
+	srcShareClient, srcShareName := createNewShare(a, fsc)
+	dstShareClient, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, srcShareClient)
+	defer deleteShare(a, dstShareClient)
 
 	// set up the source share with numerous files
 	dirName := "dir"
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareURL, dirName+"/")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, dirName+"/")
 	a.NotZero(len(fileList))
 
 	// set up the destination with the exact same files
-	scenarioHelper{}.generateAzureFilesFromList(a, dstShareURL, fileList)
+	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, fileList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}

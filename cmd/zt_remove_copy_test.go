@@ -9,18 +9,18 @@ import (
 func TestCopyBlobsWithDirectoryStubsS2S(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/"
 
 	// create container and dest container
-	srcContainerURL, srcContainerName := createNewContainer(a, bsu)
-	dstContainerURL, dstContainerName := createNewContainer(a, bsu)
+	srcContainerClient, srcContainerName := createNewContainer(a, bsc)
+	dstContainerClient, dstContainerName := createNewContainer(a, bsc)
 	dstBlobName := "testcopyblobswithdirectorystubs" + generateBlobName()
-	defer deleteContainer(a, srcContainerURL)
-	defer deleteContainer(a, dstContainerURL)
+	defer deleteContainer(a, srcContainerClient)
+	defer deleteContainer(a, dstContainerClient)
 
-	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(a, srcContainerURL, vdirName)
-	a.NotNil(srcContainerURL)
+	blobAndDirStubsList := scenarioHelper{}.generateCommonRemoteScenarioForWASB(a, srcContainerClient, vdirName)
+	a.NotNil(srcContainerClient)
 	a.NotZero(len(blobAndDirStubsList))
 
 	// set up interceptor

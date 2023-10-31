@@ -23,10 +23,9 @@ package ste
 import (
 	"bytes"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"sync/atomic"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -37,8 +36,8 @@ type blockBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
+func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, pacer, sip, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +50,7 @@ func (s *blockBlobUploader) Prologue(ps common.PrologueState) (destinationModifi
 
 		if unixSIP, ok := s.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 			// Clone the metadata before we write to it, we shouldn't be writing to the same metadata as every other blob.
-			s.metadataToApply = common.Metadata(s.metadataToApply).Clone().ToAzBlobMetadata()
+			s.metadataToApply = s.metadataToApply.Clone()
 
 			statAdapter, err := unixSIP.GetUNIXProperties()
 			if err != nil {
@@ -90,7 +89,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		encodedBlockID := u.generateEncodedBlockID(blockIndex)
 
 		if u.ChunkAlreadyTransferred(blockIndex) {
-			u.jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug,
+			u.jptm.LogAtLevelForCurrentTransfer(common.LogDebug,
 				fmt.Sprintf("Skipping chunk %d as it was already transferred.", blockIndex))
 			atomic.AddInt32(&u.atomicChunksWritten, 1)
 			return
@@ -102,7 +101,11 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		// step 3: put block to remote
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
-		_, err := u.destBlockBlobURL.StageBlock(u.jptm.Context(), encodedBlockID, body, azblob.LeaseAccessConditions{}, nil, u.cpkToApply)
+		_, err := u.destBlockBlobClient.StageBlock(u.jptm.Context(), encodedBlockID, body,
+			&blockblob.StageBlockOptions{
+				CPKInfo:      u.jptm.CpkInfo(),
+				CPKScopeInfo: u.jptm.CpkScopeInfo(),
+			})
 		if err != nil {
 			u.jptm.FailActiveUpload("Staging block", err)
 			return
@@ -121,24 +124,32 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		// Upload the blob
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
-		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobURL.BlobURL, u.jptm.Context(), false) {
-			u.destBlobTier = azblob.DefaultAccessTier
+		if !ValidateTier(jptm, u.destBlobTier, u.destBlockBlobClient, u.jptm.Context(), false) {
+			u.destBlobTier = nil
 		}
 
 		blobTags := u.blobTagsToApply
-		separateSetTagsRequired := separateSetTagsRequired(blobTags)
-		if separateSetTagsRequired || len(blobTags) == 0 {
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
 			blobTags = nil
 		}
 
 		// TODO: Remove this snippet once service starts supporting CPK with blob tier
 		destBlobTier := u.destBlobTier
-		if u.cpkToApply.EncryptionScope != nil || (u.cpkToApply.EncryptionKey != nil && u.cpkToApply.EncryptionKeySha256 != nil) {
-			destBlobTier = azblob.AccessTierNone
+		if u.jptm.IsSourceEncrypted() {
+			destBlobTier = nil
 		}
 
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{}, destBlobTier, blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+			_, err = u.destBlockBlobClient.Upload(jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
+				&blockblob.UploadOptions{
+					HTTPHeaders:  &u.headersToApply,
+					Metadata:     u.metadataToApply,
+					Tier:         destBlobTier,
+					Tags:         blobTags,
+					CPKInfo:      jptm.CpkInfo(),
+					CPKScopeInfo: jptm.CpkScopeInfo(),
+				})
 		} else {
 			// File with content
 
@@ -148,12 +159,21 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 				jptm.FailActiveUpload("Getting hash", errNoHash)
 				return
 			}
-			u.headersToApply.ContentMD5 = md5Hash
+			if len(md5Hash) != 0 {
+				u.headersToApply.BlobContentMD5 = md5Hash
+			}
 
 			// Upload the file
 			body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply,
-				azblob.BlobAccessConditions{}, u.destBlobTier, blobTags, u.cpkToApply, azblob.ImmutabilityPolicyOptions{})
+			_, err = u.destBlockBlobClient.Upload(jptm.Context(), body,
+				&blockblob.UploadOptions{
+					HTTPHeaders:  &u.headersToApply,
+					Metadata:     u.metadataToApply,
+					Tier:         destBlobTier,
+					Tags:         blobTags,
+					CPKInfo:      jptm.CpkInfo(),
+					CPKScopeInfo: jptm.CpkScopeInfo(),
+				})
 		}
 
 		// if the put blob is a failure, update the transfer status to failed
@@ -164,9 +184,9 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 		atomic.AddInt32(&u.atomicChunksWritten, 1)
 
-		if separateSetTagsRequired {
-			if _, err := u.destBlockBlobURL.SetTags(jptm.Context(), nil, nil, nil, u.blobTagsToApply); err != nil {
-				u.jptm.Log(pipeline.LogWarning, err.Error())
+		if setTags {
+			if _, err := u.destBlockBlobClient.SetTags(jptm.Context(), u.blobTagsToApply, nil); err != nil {
+				u.jptm.Log(common.LogWarning, err.Error())
 			}
 		}
 	})
@@ -181,7 +201,9 @@ func (u *blockBlobUploader) Epilogue() {
 
 		md5Hash, ok := <-u.md5Channel
 		if ok {
-			u.headersToApply.ContentMD5 = md5Hash
+			if len(md5Hash) != 0 {
+				u.headersToApply.BlobContentMD5 = md5Hash
+			}
 		} else {
 			jptm.FailActiveSend("Getting hash", errNoHash)
 			return
@@ -189,14 +211,4 @@ func (u *blockBlobUploader) Epilogue() {
 	}
 
 	u.blockBlobSenderBase.Epilogue()
-}
-
-func (u *blockBlobUploader) GetDestinationLength() (int64, error) {
-	prop, err := u.destBlockBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}, u.cpkToApply)
-
-	if err != nil {
-		return -1, err
-	}
-
-	return prop.ContentLength(), nil
 }

@@ -22,20 +22,21 @@ package common
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"log"
-	"net/url"
 	"os"
 	"path"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 type ILogger interface {
-	ShouldLog(level pipeline.LogLevel) bool
-	Log(level pipeline.LogLevel, msg string)
+	ShouldLog(level LogLevel) bool
+	Log(level LogLevel, msg string)
 	Panic(err error)
 }
 
@@ -46,7 +47,7 @@ type ILoggerCloser interface {
 
 type ILoggerResetable interface {
 	OpenLog()
-	MinimumLogLevel() pipeline.LogLevel
+	MinimumLogLevel() LogLevel
 	ILoggerCloser
 }
 
@@ -56,18 +57,18 @@ type jobLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	jobID             JobID
-	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
+	minimumLevelToLog LogLevel // The maximum customer-desired log level for this job
 	file              *os.File          // The job's log file
 	logFileFolder     string            // The log file's parent folder, needed for opening the file at the right place
 	logger            *log.Logger       // The Job's logger
-	sanitizer         pipeline.LogSanitizer
+	sanitizer         LogSanitizer
 	logFileNameSuffix string // Used to allow more than 1 log per job, ex: front-end and back-end logs should be separate
 }
 
 func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, logFileFolder string, logFileNameSuffix string) ILoggerResetable {
 	return &jobLogger{
 		jobID:             jobID,
-		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
+		minimumLevelToLog: minimumLevelToLog,
 		logFileFolder:     logFileFolder,
 		sanitizer:         NewAzCopyLogSanitizer(),
 		logFileNameSuffix: logFileNameSuffix,
@@ -75,7 +76,7 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, logFileFolder string,
 }
 
 func (jl *jobLogger) OpenLog() {
-	if jl.minimumLevelToLog == pipeline.LogNone {
+	if jl.minimumLevelToLog == LogNone {
 		return
 	}
 
@@ -97,19 +98,19 @@ func (jl *jobLogger) OpenLog() {
 	jl.logger.Println(utcMessage)
 }
 
-func (jl *jobLogger) MinimumLogLevel() pipeline.LogLevel {
+func (jl *jobLogger) MinimumLogLevel() LogLevel {
 	return jl.minimumLevelToLog
 }
 
-func (jl *jobLogger) ShouldLog(level pipeline.LogLevel) bool {
-	if level == pipeline.LogNone {
+func (jl *jobLogger) ShouldLog(level LogLevel) bool {
+	if level == LogNone {
 		return false
 	}
 	return level <= jl.minimumLevelToLog
 }
 
 func (jl *jobLogger) CloseLog() {
-	if jl.minimumLevelToLog == pipeline.LogNone {
+	if jl.minimumLevelToLog == LogNone {
 		return
 	}
 
@@ -118,7 +119,7 @@ func (jl *jobLogger) CloseLog() {
 	PanicIfErr(err)
 }
 
-func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {
+func (jl jobLogger) Log(loglevel LogLevel, msg string) {
 	// If the logger for Job is not initialized i.e file is not open
 	// or logger instance is not initialized, then initialize it
 
@@ -143,15 +144,15 @@ func (jl jobLogger) Panic(err error) {
 
 const TryEquals string = "Try=" // TODO: refactor so that this can be used by the retry policies too?  So that when you search the logs for Try= you are guaranteed to find both types of retry (i.e. request send retries, and body read retries)
 
-func NewReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, int64, bool) {
-	redactedUrl := URLStringExtension(fullUrl.String()).RedactSecretQueryParamForLogging()
+func NewBlobReadLogFunc(logger ILogger, fullUrl string) func(int32, error, blob.HTTPRange, bool) {
+	redactedUrl := URLStringExtension(fullUrl).RedactSecretQueryParamForLogging()
 
-	return func(failureCount int, err error, offset int64, count int64, willRetry bool) {
+	return func(failureCount int32, err error, r blob.HTTPRange, willRetry bool) {
 		retryMessage := "Will retry"
 		if !willRetry {
 			retryMessage = "Will NOT retry"
 		}
-		logger.Log(pipeline.LogInfo, fmt.Sprintf(
+		logger.Log(LogInfo, fmt.Sprintf(
 			"Error reading body of reply. Next try (if any) will be %s%d. %s. Error: %s. Offset: %d  Count: %d URL: %s",
 			TryEquals, // so that retry wording for body-read retries is similar to that for URL-hitting retries
 
@@ -163,8 +164,60 @@ func NewReadLogFunc(logger ILogger, fullUrl *url.URL) func(int, error, int64, in
 
 			retryMessage,
 			err,
-			offset,
-			count,
+			r.Offset,
+			r.Count,
+			redactedUrl))
+	}
+}
+
+func NewFileReadLogFunc(logger ILogger, fullUrl string) func(int32, error, sharefile.HTTPRange, bool) {
+	redactedUrl := URLStringExtension(fullUrl).RedactSecretQueryParamForLogging()
+
+	return func(failureCount int32, err error, r sharefile.HTTPRange, willRetry bool) {
+		retryMessage := "Will retry"
+		if !willRetry {
+			retryMessage = "Will NOT retry"
+		}
+		logger.Log(LogInfo, fmt.Sprintf(
+			"Error reading body of reply. Next try (if any) will be %s%d. %s. Error: %s. Offset: %d  Count: %d URL: %s",
+			TryEquals, // so that retry wording for body-read retries is similar to that for URL-hitting retries
+
+			// We log the number of the NEXT try, not the failure just done, so that users searching the log for "Try=2"
+			// will find ALL retries, both the request send retries (which are logged as try 2 when they are made) and
+			// body read retries (for which only the failure is logged - so if we did the actual failure number, there would be
+			// not Try=2 in the logs if the retries work).
+			failureCount+1,
+
+			retryMessage,
+			err,
+			r.Offset,
+			r.Count,
+			redactedUrl))
+	}
+}
+
+func NewDatalakeReadLogFunc(logger ILogger, fullUrl string) func(int32, error, datalakefile.HTTPRange, bool) {
+	redactedUrl := URLStringExtension(fullUrl).RedactSecretQueryParamForLogging()
+
+	return func(failureCount int32, err error, r datalakefile.HTTPRange, willRetry bool) {
+		retryMessage := "Will retry"
+		if !willRetry {
+			retryMessage = "Will NOT retry"
+		}
+		logger.Log(LogInfo, fmt.Sprintf(
+			"Error reading body of reply. Next try (if any) will be %s%d. %s. Error: %s. Offset: %d  Count: %d URL: %s",
+			TryEquals, // so that retry wording for body-read retries is similar to that for URL-hitting retries
+
+			// We log the number of the NEXT try, not the failure just done, so that users searching the log for "Try=2"
+			// will find ALL retries, both the request send retries (which are logged as try 2 when they are made) and
+			// body read retries (for which only the failure is logged - so if we did the actual failure number, there would be
+			// not Try=2 in the logs if the retries work).
+			failureCount+1,
+
+			retryMessage,
+			err,
+			r.Offset,
+			r.Count,
 			redactedUrl))
 	}
 }
@@ -175,10 +228,10 @@ func IsForceLoggingDisabled() bool {
 
 type S3HTTPTraceLogger struct {
 	logger   ILogger
-	logLevel pipeline.LogLevel
+	logLevel LogLevel
 }
 
-func NewS3HTTPTraceLogger(logger ILogger, level pipeline.LogLevel) S3HTTPTraceLogger {
+func NewS3HTTPTraceLogger(logger ILogger, level LogLevel) S3HTTPTraceLogger {
 	return S3HTTPTraceLogger{
 		logger:   logger,
 		logLevel: level,
@@ -189,4 +242,20 @@ func (e S3HTTPTraceLogger) Write(msg []byte) (n int, err error) {
 	toPrint := string(msg)
 	e.logger.Log(e.logLevel, toPrint)
 	return len(toPrint), nil
+}
+
+type causer interface {
+	Cause() error
+}
+
+// Cause walks all the preceding errors and return the originating error.
+func Cause(err error) error {
+	for err != nil {
+		cause, ok := err.(causer)
+		if !ok {
+			break
+		}
+		err = cause.Cause()
+	}
+	return err
 }

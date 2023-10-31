@@ -21,8 +21,12 @@
 package cmd
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/stretchr/testify/assert"
 	"net/url"
 	"strings"
@@ -47,40 +51,35 @@ func (tp transferParams) getMetadata() common.Metadata {
 	return metadataMap
 }
 
-func (scenarioHelper) generateBlobsFromListWithAccessTier(a *assert.Assertions, containerURL azblob.ContainerURL, blobList []string, data string, accessTier azblob.AccessTierType) {
+func (scenarioHelper) generateBlobsFromListWithAccessTier(a *assert.Assertions, cc *container.Client, blobList []string, data string, accessTier *blob.AccessTier) {
 	for _, blobName := range blobList {
-		blob := containerURL.NewBlockBlobURL(blobName)
-		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+		bc := cc.NewBlockBlobClient(blobName)
+		_, err := bc.Upload(ctx, streaming.NopCloser(strings.NewReader(data)), &blockblob.UploadOptions{Tier: accessTier})
 		a.Nil(err)
-		a.Equal(201, cResp.StatusCode())
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func createNewBlockBlobWithAccessTier(a *assert.Assertions, container azblob.ContainerURL, prefix string, accessTier azblob.AccessTierType) (blob azblob.BlockBlobURL, name string) {
-	blob, name = getBlockBlobURL(a, container, prefix)
+func createNewBlockBlobWithAccessTier(a *assert.Assertions, cc *container.Client, prefix string, accessTier *blob.AccessTier) (bbc *blockblob.Client, name string) {
+	bbc, name = getBlockBlobClient(a, cc, prefix)
 
-	cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
-		nil, azblob.BlobAccessConditions{}, accessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
-
+	_, err := bbc.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), &blockblob.UploadOptions{Tier: accessTier})
 	a.Nil(err)
-	a.Equal(201, cResp.StatusCode())
 
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForBlobWithAccessTier(a *assert.Assertions, containerURL azblob.ContainerURL, prefix string, accessTier azblob.AccessTierType) (blobList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForBlobWithAccessTier(a *assert.Assertions, cc *container.Client, prefix string, accessTier *blob.AccessTier) (blobList []string) {
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, blobName1 := createNewBlockBlobWithAccessTier(a, containerURL, prefix+"top", accessTier)
-		_, blobName2 := createNewBlockBlobWithAccessTier(a, containerURL, prefix+"sub1/", accessTier)
-		_, blobName3 := createNewBlockBlobWithAccessTier(a, containerURL, prefix+"sub2/", accessTier)
-		_, blobName4 := createNewBlockBlobWithAccessTier(a, containerURL, prefix+"sub1/sub3/sub5/", accessTier)
-		_, blobName5 := createNewBlockBlobWithAccessTier(a, containerURL, prefix+specialNames[i], accessTier)
+		_, blobName1 := createNewBlockBlobWithAccessTier(a, cc, prefix+"top", accessTier)
+		_, blobName2 := createNewBlockBlobWithAccessTier(a, cc, prefix+"sub1/", accessTier)
+		_, blobName3 := createNewBlockBlobWithAccessTier(a, cc, prefix+"sub2/", accessTier)
+		_, blobName4 := createNewBlockBlobWithAccessTier(a, cc, prefix+"sub1/sub3/sub5/", accessTier)
+		_, blobName5 := createNewBlockBlobWithAccessTier(a, cc, prefix+specialNames[i], accessTier)
 
 		blobList[5*i] = blobName1
 		blobList[5*i+1] = blobName2
@@ -94,10 +93,17 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlobWithAccessTier(a *asser
 	return
 }
 
-func checkMapsEqual(a *assert.Assertions, mapA map[string]string, mapB map[string]string) {
+func checkTagsEqual(a *assert.Assertions, mapA map[string]string, mapB map[string]string) {
 	a.Equal(len(mapB), len(mapA))
 	for k, v := range mapA {
 		a.Equal(v, mapB[k])
+	}
+}
+
+func checkMetadataEqual(a *assert.Assertions, mapA map[string]*string, mapB map[string]*string) {
+	a.Equal(len(mapB), len(mapA))
+	for k, v := range mapA {
+		a.Equal(*v, *mapB[k])
 	}
 }
 
@@ -110,9 +116,9 @@ func validateSetPropertiesTransfersAreScheduled(a *assert.Assertions, isSrcEncod
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
 		srcRelativeFilePath := transfer.Source
-		a.Equal(transferParams.blockBlobTier.ToAccessTierType(), transfer.BlobTier)
-		checkMapsEqual(a, transfer.Metadata, transferParams.getMetadata())
-		checkMapsEqual(a, transfer.BlobTags, transferParams.blobTags)
+		a.Equal(*transferParams.blockBlobTier.ToAccessTierType(), transfer.BlobTier)
+		checkMetadataEqual(a, transfer.Metadata, transferParams.getMetadata())
+		checkTagsEqual(a, transfer.BlobTags, transferParams.blobTags)
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
@@ -128,17 +134,17 @@ func validateSetPropertiesTransfersAreScheduled(a *assert.Assertions, isSrcEncod
 
 func TestSetPropertiesSingleBlobForBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
 
 		// upload the data with given accessTier
-		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobList, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -166,13 +172,13 @@ func TestSetPropertiesSingleBlobForBlobTier(t *testing.T) {
 
 func TestSetPropertiesBlobsUnderContainerForBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -221,18 +227,18 @@ func TestSetPropertiesBlobsUnderContainerForBlobTier(t *testing.T) {
 
 func TestSetPropertiesWithIncludeFlagForBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -261,18 +267,18 @@ func TestSetPropertiesWithIncludeFlagForBlobTier(t *testing.T) {
 
 func TestSetPropertiesWithExcludeFlagForBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -303,24 +309,24 @@ func TestSetPropertiesWithExcludeFlagForBlobTier(t *testing.T) {
 
 func TestSetPropertiesWithIncludeAndExcludeFlagForBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -353,15 +359,15 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForBlobTier(t *testing.T) {
 func TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTier(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
-	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName+"/", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName+"/", to.Ptr(blob.AccessTierHot))
 
 	blobList := append(blobListPart1, blobListPart2...)
 	a.NotZero(len(blobList))
@@ -424,26 +430,26 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTier(t *testing.T) {
 
 func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
-	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName+"/", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName+"/", to.Ptr(blob.AccessTierHot))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -491,15 +497,15 @@ func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTier(t *testing.T) 
 
 func TestSetPropertiesSingleBlobWithFromToForBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobList, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -529,14 +535,14 @@ func TestSetPropertiesSingleBlobWithFromToForBlobTier(t *testing.T) {
 
 func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTier(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
 
-	a.NotNil(containerURL)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -585,15 +591,15 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTier(t *testing.T) {
 func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTier(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName, azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName, to.Ptr(blob.AccessTierHot))
 
-	a.NotNil(containerURL)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -643,17 +649,17 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTier(t *testing.T) {
 
 func TestSetPropertiesSingleBlobForMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
 
 		// upload the data with given accessTier
-		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobList, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -681,17 +687,17 @@ func TestSetPropertiesSingleBlobForMetadata(t *testing.T) {
 
 func TestSetPropertiesSingleBlobForEmptyMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
 
 		// upload the data with given accessTier
-		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobList, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -719,13 +725,13 @@ func TestSetPropertiesSingleBlobForEmptyMetadata(t *testing.T) {
 
 func TestSetPropertiesBlobsUnderContainerForMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -771,18 +777,18 @@ func TestSetPropertiesBlobsUnderContainerForMetadata(t *testing.T) {
 
 func TestSetPropertiesWithIncludeFlagForMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -811,18 +817,18 @@ func TestSetPropertiesWithIncludeFlagForMetadata(t *testing.T) {
 
 func TestSetPropertiesWithExcludeFlagForMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -853,24 +859,24 @@ func TestSetPropertiesWithExcludeFlagForMetadata(t *testing.T) {
 
 func TestSetPropertiesWithIncludeAndExcludeFlagForMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -903,15 +909,15 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForMetadata(t *testing.T) {
 func TestSetPropertiesListOfBlobsAndVirtualDirsForMetadata(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
-	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName+"/", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName+"/", to.Ptr(blob.AccessTierHot))
 
 	blobList := append(blobListPart1, blobListPart2...)
 	a.NotZero(len(blobList))
@@ -974,26 +980,26 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForMetadata(t *testing.T) {
 
 func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
-	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName+"/", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName+"/", to.Ptr(blob.AccessTierHot))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -1041,15 +1047,15 @@ func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForMetadata(t *testing.T) 
 
 func TestSetPropertiesSingleBlobWithFromToForMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobList, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -1079,14 +1085,14 @@ func TestSetPropertiesSingleBlobWithFromToForMetadata(t *testing.T) {
 
 func TestSetPropertiesBlobsUnderContainerWithFromToForMetadata(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
 
-	a.NotNil(containerURL)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -1135,15 +1141,15 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForMetadata(t *testing.T) {
 func TestSetPropertiesBlobsUnderVirtualDirWithFromToForMetadata(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName, azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName, to.Ptr(blob.AccessTierHot))
 
-	a.NotNil(containerURL)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -1193,17 +1199,17 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForMetadata(t *testing.T) {
 
 func TestSetPropertiesSingleBlobForBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
 
 		// upload the data with given accessTier
-		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobList, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -1231,17 +1237,17 @@ func TestSetPropertiesSingleBlobForBlobTags(t *testing.T) {
 
 func TestSetPropertiesSingleBlobForEmptyBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
 
 		// upload the data with given accessTier
-		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobList, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -1269,13 +1275,13 @@ func TestSetPropertiesSingleBlobForEmptyBlobTags(t *testing.T) {
 
 func TestSetPropertiesBlobsUnderContainerForBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -1321,18 +1327,18 @@ func TestSetPropertiesBlobsUnderContainerForBlobTags(t *testing.T) {
 
 func TestSetPropertiesWithIncludeFlagForBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -1361,18 +1367,18 @@ func TestSetPropertiesWithIncludeFlagForBlobTags(t *testing.T) {
 
 func TestSetPropertiesWithExcludeFlagForBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -1403,24 +1409,24 @@ func TestSetPropertiesWithExcludeFlagForBlobTags(t *testing.T) {
 
 func TestSetPropertiesWithIncludeAndExcludeFlagForBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
+	cc, containerName := createNewContainer(a, bsc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -1453,15 +1459,15 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForBlobTags(t *testing.T) {
 func TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTags(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
-	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName+"/", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName+"/", to.Ptr(blob.AccessTierHot))
 
 	blobList := append(blobListPart1, blobListPart2...)
 	a.NotZero(len(blobList))
@@ -1524,26 +1530,26 @@ func TestSetPropertiesListOfBlobsAndVirtualDirsForBlobTags(t *testing.T) {
 
 func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "megadir"
 
 	// set up the container with numerous blobs and a vdir
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	a.NotNil(containerURL)
-	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
-	scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName+"/", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	a.NotNil(cc)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
+	scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName+"/", to.Ptr(blob.AccessTierHot))
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToInclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToInclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobsToExclude, blockBlobDefaultData, azblob.AccessTierHot)
+	scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobsToExclude, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -1591,15 +1597,15 @@ func TestSetPropertiesListOfBlobsWithIncludeAndExcludeForBlobTags(t *testing.T) 
 
 func TestSetPropertiesSingleBlobWithFromToForBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, containerURL, blobList, blockBlobDefaultData, azblob.AccessTierHot)
-		a.NotNil(containerURL)
+		scenarioHelper{}.generateBlobsFromListWithAccessTier(a, cc, blobList, blockBlobDefaultData, to.Ptr(blob.AccessTierHot))
+		a.NotNil(cc)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -1629,14 +1635,14 @@ func TestSetPropertiesSingleBlobWithFromToForBlobTags(t *testing.T) {
 
 func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTags(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, "", azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, "", to.Ptr(blob.AccessTierHot))
 
-	a.NotNil(containerURL)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor
@@ -1685,15 +1691,15 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTags(t *testing.T) {
 func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTags(t *testing.T) {
 	a := assert.New(t)
 	t.Skip("Enable after setting Account to non-HNS")
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 	vdirName := "vdir1/vdir2/vdir3/"
 
 	// set up the container with numerous blobs
-	containerURL, containerName := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
-	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, containerURL, vdirName, azblob.AccessTierHot)
+	cc, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlobWithAccessTier(a, cc, vdirName, to.Ptr(blob.AccessTierHot))
 
-	a.NotNil(containerURL)
+	a.NotNil(cc)
 	a.NotZero(len(blobList))
 
 	// set up interceptor

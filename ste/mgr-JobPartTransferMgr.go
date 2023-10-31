@@ -2,19 +2,18 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"net/url"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"net/url"
 )
 
 type IJobPartTransferMgr interface {
@@ -59,9 +58,14 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
-	SourceProviderPipeline() pipeline.Pipeline
-	SecondarySourceProviderPipeline() pipeline.Pipeline
-	SourceCredential() pipeline.Factory
+
+	CredentialInfo() common.CredentialInfo
+	ClientOptions() azcore.ClientOptions
+	S2SSourceCredentialInfo() common.CredentialInfo
+	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
+	S2SSourceClientOptions() azcore.ClientOptions
+	CredentialOpOptions() *common.CredentialOpOptions
+
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -76,11 +80,11 @@ type IJobPartTransferMgr interface {
 	LogS2SCopyError(source, destination, errorMsg string, status int)
 	LogSendError(source, destination, errorMsg string, status int)
 	LogError(resource, context string, err error)
-	LogTransferInfo(level pipeline.LogLevel, source, destination, msg string)
+	LogTransferInfo(level common.LogLevel, source, destination, msg string)
 	LogTransferStart(source, destination, description string)
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	ChunkStatusLogger() common.ChunkStatusLogger
-	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
+	LogAtLevelForCurrentTransfer(level common.LogLevel, msg string)
 	GetOverwritePrompter() *overwritePrompter
 	GetFolderCreationTracker() FolderCreationTracker
 	common.ILogger
@@ -90,10 +94,9 @@ type IJobPartTransferMgr interface {
 	FolderDeletionManager() common.FolderDeletionManager
 	GetDestinationRoot() string
 	ShouldInferContentType() bool
-	CpkInfo() common.CpkInfo
-	CpkScopeInfo() common.CpkScopeInfo
+	CpkInfo() *blob.CPKInfo
+	CpkScopeInfo() *blob.CPKScopeInfo
 	IsSourceEncrypted() bool
-	GetS2SSourceBlobTokenCredential() azblob.TokenCredential
 	PropertiesToTransfer() common.SetPropertiesFlags
 	ResetSourceSize() // sets source size to 0 (made to be used by setProperties command to make number of bytes transferred = 0)
 	SuccessfulBytesTransferred() int64
@@ -122,12 +125,11 @@ type TransferInfo struct {
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// Blob
-	SrcBlobType    azblob.BlobType       // used for both S2S and for downloads to local from blob
-	S2SSrcBlobTier azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
+	SrcBlobType    blob.BlobType   // used for both S2S and for downloads to local from blob
+	S2SSrcBlobTier blob.AccessTier // AccessTierType (string) is used to accommodate service-side support matrix change.
 
-	RehydratePriority azblob.RehydratePriorityType
+	RehydratePriority blob.RehydratePriority
 }
-
 
 func (i TransferInfo) IsFilePropertiesTransfer() bool {
 	return i.EntityType == common.EEntityType.FileProperties()
@@ -214,20 +216,6 @@ type jobPartTransferMgr struct {
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
 		chunkChannel chan<- ChunkMsg*/
-}
-
-func (jptm *jobPartTransferMgr) GetS2SSourceBlobTokenCredential() azblob.TokenCredential {
-	cred := jptm.SourceCredential()
-
-	if cred == nil {
-		return nil
-	} else {
-		if tc, ok := cred.(azblob.TokenCredential); ok {
-			return tc
-		} else {
-			return nil
-		}
-	}
 }
 
 func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
@@ -366,7 +354,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			}
 		}
 	}
-	blockSize = common.Iffint64(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	var srcBlobTags common.BlobTags
 	if blobTags != nil {
@@ -541,11 +529,11 @@ func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier,
 	return jptm.jobPartMgr.BlobTiers()
 }
 
-func (jptm *jobPartTransferMgr) CpkInfo() common.CpkInfo {
+func (jptm *jobPartTransferMgr) CpkInfo() *blob.CPKInfo {
 	return jptm.jobPartMgr.CpkInfo()
 }
 
-func (jptm *jobPartTransferMgr) CpkScopeInfo() common.CpkScopeInfo {
+func (jptm *jobPartTransferMgr) CpkScopeInfo() *blob.CPKScopeInfo {
 	return jptm.jobPartMgr.CpkScopeInfo()
 }
 
@@ -671,7 +659,7 @@ func (jptm *jobPartTransferMgr) SetDestinationIsModified() {
 	//   because the default is currently (2019) "Started".  So the NotStarted state is never used.
 	//   Starting to use it would require analysis and testing that we don't have time for right now.
 	if old == 0 {
-		jptm.LogAtLevelForCurrentTransfer(pipeline.LogDebug, "destination modified flag is set to true")
+		jptm.LogAtLevelForCurrentTransfer(common.LogDebug, "destination modified flag is set to true")
 	}
 }
 
@@ -706,7 +694,7 @@ func (jptm *jobPartTransferMgr) IsLive() bool {
 	return !jptm.isDead()
 }
 
-func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
+func (jptm *jobPartTransferMgr) ShouldLog(level common.LogLevel) bool {
 	return jptm.jobPartMgr.ShouldLog(level)
 }
 
@@ -840,26 +828,22 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	// TODO: ... if all expected chunks report as done
 }
 
-func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
+func (jptm *jobPartTransferMgr) PipelineLogInfo() LogOptions {
 	return jptm.jobPartMgr.(*jobPartMgr).jobMgr.(*jobMgr).PipelineLogInfo()
 }
 
-func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
+func (jptm *jobPartTransferMgr) Log(level common.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
 	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: [P#%d-T#%d] ", common.LogLevel(level), plan.PartNum, jptm.transferIndex)+msg)
 }
 
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
-	switch e := err.(type) {
-	case azblob.StorageError:
-		return e.Response().StatusCode, e.Response().Status
-	case azfile.StorageError:
-		return e.Response().StatusCode, e.Response().Status
-	case azbfs.StorageError:
-		return e.Response().StatusCode, e.Response().Status
-	default:
-		return 0, err.Error()
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		return respErr.StatusCode, respErr.RawResponse.Status
 	}
+	return 0, err.Error()
+
 }
 
 type transferErrorCode string
@@ -870,7 +854,7 @@ const (
 	transferErrorCodeCopyFailed     transferErrorCode = "COPYFAILED"
 )
 
-func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string) {
+func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level common.LogLevel, msg string) {
 	// order of log elements here is mirrored, with some more added, in logTransferError
 	info := jptm.Info()
 	fullMsg := common.URLStringExtension(info.Source).RedactSecretQueryParamForLogging() + " " + info.entityTypeLogIndicator() +
@@ -885,7 +869,7 @@ func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, so
 	info := jptm.Info() // TODO we are getting a lot of Info calls and its (presumably) not well-optimized.  Profile that?
 	msg := fmt.Sprintf("%v: %v", errorCode, info.entityTypeLogIndicator()) + common.URLStringExtension(source).RedactSecretQueryParamForLogging() +
 		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSecretQueryParamForLogging()
-	jptm.Log(pipeline.LogError, msg)
+	jptm.Log(common.LogError, msg)
 }
 
 func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int) {
@@ -916,19 +900,19 @@ func (jptm *jobPartTransferMgr) LogSendError(source, destination, errorMsg strin
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
 	_, status, msg := ErrorEx{err}.ErrorCodeAndString()
 	MSRequestID := ErrorEx{err}.MSRequestID()
-	jptm.Log(pipeline.LogError,
+	jptm.Log(common.LogError,
 		fmt.Sprintf("%s: %d: %s-%s. X-Ms-Request-Id:%s\n", common.URLStringExtension(resource).RedactSecretQueryParamForLogging(), status, context, msg, MSRequestID))
 }
 
 func (jptm *jobPartTransferMgr) LogTransferStart(source, destination, description string) {
-	jptm.Log(pipeline.LogInfo,
+	jptm.Log(common.LogInfo,
 		fmt.Sprintf("Starting transfer: Source %q Destination %q. %s",
 			common.URLStringExtension(source).RedactSecretQueryParamForLogging(),
 			common.URLStringExtension(destination).RedactSecretQueryParamForLogging(),
 			description))
 }
 
-func (jptm *jobPartTransferMgr) LogTransferInfo(level pipeline.LogLevel, source, destination, msg string) {
+func (jptm *jobPartTransferMgr) LogTransferInfo(level common.LogLevel, source, destination, msg string) {
 	jptm.Log(level,
 		fmt.Sprintf("Transfer: Source %q Destination %q. %s",
 			common.URLStringExtension(source).RedactSecretQueryParamForLogging(),
@@ -967,16 +951,43 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }
 
-func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
-	return jptm.jobPartMgr.SourceProviderPipeline()
+func (jptm *jobPartTransferMgr) CredentialInfo() common.CredentialInfo {
+	return jptm.jobPartMgr.CredentialInfo()
 }
 
-func (jptm *jobPartTransferMgr) SecondarySourceProviderPipeline() pipeline.Pipeline {
-	return jptm.jobPartMgr.SecondarySourceProviderPipeline()
+func (jptm *jobPartTransferMgr) ClientOptions() azcore.ClientOptions {
+	return jptm.jobPartMgr.ClientOptions()
 }
 
-func (jptm *jobPartTransferMgr) SourceCredential() pipeline.Factory {
-	return jptm.jobPartMgr.SourceCredential()
+func (jptm *jobPartTransferMgr) S2SSourceCredentialInfo() common.CredentialInfo {
+	return jptm.jobPartMgr.S2SSourceCredentialInfo()
+}
+
+func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {
+	if jptm.S2SSourceCredentialInfo().CredentialType.IsAzureOAuth() {
+		tokenInfo := jptm.S2SSourceCredentialInfo().OAuthTokenInfo
+		tc, err := tokenInfo.GetTokenCredential()
+		if err != nil {
+			return nil, err
+		}
+		scope := []string{common.StorageScope}
+		if jptm.S2SSourceCredentialInfo().CredentialType == common.ECredentialType.MDOAuthToken() {
+			scope = []string{common.ManagedDiskScope}
+		}
+
+		token, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scope})
+		t := "Bearer " + token.Token
+		return &t, err
+	}
+	return nil, nil
+}
+
+func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
+	return jptm.jobPartMgr.S2SSourceClientOptions()
+}
+
+func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
+	return jptm.jobPartMgr.CredentialOpOptions()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {

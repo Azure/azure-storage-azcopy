@@ -64,10 +64,10 @@ func (processorTestSuiteHelper) getCopyJobTemplate() *common.CopyJobPartOrderReq
 
 func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
+	bsc := getBlobServiceClient()
 
 	// set up source and destination
-	containerURL, _ := getContainerURL(a, bsu)
+	cc, _ := getContainerClient(a, bsc)
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
 	defer os.RemoveAll(dstDirName)
 
@@ -81,7 +81,7 @@ func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
 		copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart,
-			newRemoteRes(containerURL.String()), newLocalRes(dstDirName), nil, nil, false, false)
+			newRemoteRes(cc.URL()), newLocalRes(dstDirName), nil, nil, false, false)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
@@ -106,14 +106,14 @@ func TestCopyTransferProcessorMultipleFiles(t *testing.T) {
 
 func TestCopyTransferProcessorSingleFile(t *testing.T) {
 	a := assert.New(t)
-	bsu := getBSU()
-	containerURL, _ := createNewContainer(a, bsu)
-	defer deleteContainer(a, containerURL)
+	bsc := getBlobServiceClient()
+	cc, _ := createNewContainer(a, bsc)
+	defer deleteContainer(a, cc)
 
 	// set up the container with a single blob
 	blobList := []string{"singlefile101"}
-	scenarioHelper{}.generateBlobsFromList(a, containerURL, blobList, blockBlobDefaultData)
-	a.NotNil(containerURL)
+	scenarioHelper{}.generateBlobsFromList(a, cc, blobList, blockBlobDefaultData)
+	a.NotNil(cc)
 
 	// set up the directory with a single file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(a)
@@ -127,12 +127,12 @@ func TestCopyTransferProcessorSingleFile(t *testing.T) {
 	mockedRPC.init()
 
 	// set up the processor
-	blobURL := containerURL.NewBlockBlobURL(blobList[0]).String()
+	blobURL := cc.NewBlobClient(blobList[0]).URL()
 	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2,
 		newRemoteRes(blobURL), newLocalRes(filepath.Join(dstDirName, dstFileName)), nil, nil, false, false)
 
 	// exercise the copy transfer processor
-	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetdata, "")
+	storedObject := newStoredObject(noPreProccessor, blobList[0], "", common.EEntityType.File(), time.Now(), 0, noContentProps, noBlobProps, noMetadata, "")
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
 	a.Nil(err)
 

@@ -25,6 +25,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/JeffreyRichter/enum/enum"
 	"math"
 	"os"
 	"reflect"
@@ -32,13 +37,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/JeffreyRichter/enum/enum"
 )
 
 const (
@@ -140,12 +138,12 @@ func (d *DeleteSnapshotsOption) Parse(s string) error {
 	return err
 }
 
-func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() azblob.DeleteSnapshotsOptionType {
+func (d DeleteSnapshotsOption) ToDeleteSnapshotsOptionType() *blob.DeleteSnapshotsOptionType {
 	if d == EDeleteSnapshotsOption.None() {
-		return azblob.DeleteSnapshotsOptionNone
+		return nil
 	}
 
-	return azblob.DeleteSnapshotsOptionType(strings.ToLower(d.String()))
+	return to.Ptr(blob.DeleteSnapshotsOptionType(strings.ToLower(d.String())))
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -153,7 +151,7 @@ var ETrailingDotOption = TrailingDotOption(0)
 
 type TrailingDotOption uint8
 
-func (TrailingDotOption) Enable() TrailingDotOption    { return TrailingDotOption(0) }
+func (TrailingDotOption) Enable() TrailingDotOption  { return TrailingDotOption(0) }
 func (TrailingDotOption) Disable() TrailingDotOption { return TrailingDotOption(1) }
 
 func (d TrailingDotOption) String() string {
@@ -204,11 +202,11 @@ func (p PermanentDeleteOption) String() string {
 	return enum.StringInt(p, reflect.TypeOf(p))
 }
 
-func (p PermanentDeleteOption) ToPermanentDeleteOptionType() azblob.BlobDeleteType {
+func (p PermanentDeleteOption) ToPermanentDeleteOptionType() *blob.DeleteType {
 	if p == EPermanentDeleteOption.None() {
-		return azblob.BlobDeleteNone
+		return nil
 	}
-	return azblob.BlobDeletePermanent
+	return to.Ptr(blob.DeleteTypePermanent)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -275,11 +273,11 @@ var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
 
-func (OverwriteOption) True() OverwriteOption          { return OverwriteOption(0) }
-func (OverwriteOption) False() OverwriteOption         { return OverwriteOption(1) }
-func (OverwriteOption) Prompt() OverwriteOption        { return OverwriteOption(2) }
-func (OverwriteOption) IfSourceNewer() OverwriteOption { return OverwriteOption(3) }
-func (OverwriteOption) PosixProperties() OverwriteOption {return OverwriteOption(4)}
+func (OverwriteOption) True() OverwriteOption            { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption           { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption          { return OverwriteOption(2) }
+func (OverwriteOption) IfSourceNewer() OverwriteOption   { return OverwriteOption(3) }
+func (OverwriteOption) PosixProperties() OverwriteOption { return OverwriteOption(4) }
 
 func (o *OverwriteOption) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(o), s, true)
@@ -332,17 +330,41 @@ func (ExitCode) Error() ExitCode   { return ExitCode(1) }
 // NoExit is used as a marker, to suppress the normal exit behaviour
 func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
 
-var ELogLevel = LogLevel(pipeline.LogNone)
+const (
+	// LogNone tells a logger not to log any entries passed to it.
+	LogNone LogLevel = iota
 
-func (LogLevel) None() LogLevel    { return LogLevel(pipeline.LogNone) }
-func (LogLevel) Fatal() LogLevel   { return LogLevel(pipeline.LogFatal) }
-func (LogLevel) Panic() LogLevel   { return LogLevel(pipeline.LogPanic) }
-func (LogLevel) Error() LogLevel   { return LogLevel(pipeline.LogError) }
-func (LogLevel) Warning() LogLevel { return LogLevel(pipeline.LogWarning) }
-func (LogLevel) Info() LogLevel    { return LogLevel(pipeline.LogInfo) }
-func (LogLevel) Debug() LogLevel   { return LogLevel(pipeline.LogDebug) }
+	// LogFatal tells a logger to log all LogFatal entries passed to it.
+	LogFatal
+
+	// LogPanic tells a logger to log all LogPanic and LogFatal entries passed to it.
+	LogPanic
+
+	// LogError tells a logger to log all LogError, LogPanic and LogFatal entries passed to it.
+	LogError
+
+	// LogWarning tells a logger to log all LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogWarning
+
+	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogInfo
+
+	// LogDebug tells a logger to log all LogDebug, LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogDebug
+)
+
+var ELogLevel = LogLevel(LogNone)
+
+func (LogLevel) None() LogLevel    { return LogLevel(LogNone) }
+func (LogLevel) Fatal() LogLevel   { return LogLevel(LogFatal) }
+func (LogLevel) Panic() LogLevel   { return LogLevel(LogPanic) }
+func (LogLevel) Error() LogLevel   { return LogLevel(LogError) }
+func (LogLevel) Warning() LogLevel { return LogLevel(LogWarning) }
+func (LogLevel) Info() LogLevel    { return LogLevel(LogInfo) }
+func (LogLevel) Debug() LogLevel   { return LogLevel(LogDebug) }
 
 func (ll *LogLevel) Parse(s string) error {
 	val, err := enum.ParseInt(reflect.TypeOf(ll), s, true, true)
@@ -373,13 +395,15 @@ func (ll LogLevel) String() string {
 	}
 }
 
-func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
-	// This assumes that pipeline's LogLevel values can fit in a byte (which they can)
-	return pipeline.LogLevel(ll)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// LogSanitizer can be implemented to clean secrets from lines logged by ForceLog
+// By default no implementation is provided here, because pipeline may be used in many different
+// contexts, so the correct implementation is context-dependent
+type LogSanitizer interface {
+	SanitizeLogMessage(raw string) string
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 var EJobPriority = JobPriority(0)
 
 // JobPriority defines the transfer priorities supported by the Storage Transfer Engine's channels
@@ -542,6 +566,10 @@ func (l Location) CanForwardOAuthTokens() bool {
 	return l == ELocation.Blob() || l == ELocation.BlobFS()
 }
 
+func (l Location) SupportsHnsACLs() bool {
+	return l == ELocation.Blob() || l == ELocation.BlobFS()
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -681,31 +709,31 @@ func (bt *BlobType) Parse(s string) error {
 	return err
 }
 
-func FromAzBlobType(bt azblob.BlobType) BlobType {
+func FromBlobType(bt blob.BlobType) BlobType {
 	switch bt {
-	case azblob.BlobBlockBlob:
+	case blob.BlobTypeBlockBlob:
 		return EBlobType.BlockBlob()
-	case azblob.BlobPageBlob:
+	case blob.BlobTypePageBlob:
 		return EBlobType.PageBlob()
-	case azblob.BlobAppendBlob:
+	case blob.BlobTypeAppendBlob:
 		return EBlobType.AppendBlob()
 	default:
 		return EBlobType.Detect()
 	}
 }
 
-// ToAzBlobType returns the equivalent azblob.BlobType for given string.
-func (bt *BlobType) ToAzBlobType() azblob.BlobType {
+// ToBlobType returns the equivalent blob.BlobType for given string.
+func (bt *BlobType) ToBlobType() blob.BlobType {
 	blobType := bt.String()
 	switch blobType {
-	case string(azblob.BlobBlockBlob):
-		return azblob.BlobBlockBlob
-	case string(azblob.BlobPageBlob):
-		return azblob.BlobPageBlob
-	case string(azblob.BlobAppendBlob):
-		return azblob.BlobAppendBlob
+	case string(blob.BlobTypeBlockBlob):
+		return blob.BlobTypeBlockBlob
+	case string(blob.BlobTypePageBlob):
+		return blob.BlobTypePageBlob
+	case string(blob.BlobTypeAppendBlob):
+		return blob.BlobTypeAppendBlob
 	default:
-		return azblob.BlobNone
+		return ""
 	}
 }
 
@@ -812,8 +840,8 @@ func (bbt *BlockBlobTier) Parse(s string) error {
 	return err
 }
 
-func (bbt BlockBlobTier) ToAccessTierType() azblob.AccessTierType {
-	return azblob.AccessTierType(bbt.String())
+func (bbt BlockBlobTier) ToAccessTierType() *blob.AccessTier {
+	return to.Ptr(blob.AccessTier(bbt.String()))
 }
 
 func (bbt BlockBlobTier) MarshalJSON() ([]byte, error) {
@@ -857,8 +885,8 @@ func (pbt *PageBlobTier) Parse(s string) error {
 	return err
 }
 
-func (pbt PageBlobTier) ToAccessTierType() azblob.AccessTierType {
-	return azblob.AccessTierType(pbt.String())
+func (pbt PageBlobTier) ToAccessTierType() *blob.AccessTier {
+	return to.Ptr(blob.AccessTier(pbt.String()))
 }
 
 func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
@@ -1054,8 +1082,8 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType      azblob.BlobType
-	BlobTier      azblob.AccessTierType
+	BlobType      blob.BlobType
+	BlobTier      blob.AccessTier
 	BlobVersionID string
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes
 	BlobTags BlobTags
@@ -1068,7 +1096,7 @@ type CopyTransfer struct {
 // Metadata used in AzCopy.
 const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and tags
 
-type Metadata map[string]string
+type Metadata map[string]*string
 
 func (m Metadata) Clone() Metadata {
 	out := make(Metadata)
@@ -1078,26 +1106,6 @@ func (m Metadata) Clone() Metadata {
 	}
 
 	return out
-}
-
-// ToAzBlobMetadata converts metadata to azblob's metadata.
-func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
-	return azblob.Metadata(m)
-}
-
-// ToAzFileMetadata converts metadata to azfile's metadata.
-func (m Metadata) ToAzFileMetadata() azfile.Metadata {
-	return azfile.Metadata(m)
-}
-
-// FromAzBlobMetadataToCommonMetadata converts azblob's metadata to common metadata.
-func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
-	return Metadata(m)
-}
-
-// FromAzFileMetadataToCommonMetadata converts azfile's metadata to common metadata.
-func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
-	return Metadata(m)
 }
 
 // Marshal marshals metadata to string.
@@ -1156,7 +1164,8 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 						return Metadata{}, errors.New("metadata names must conform to C# naming rules (https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata#metadata-names)")
 					}
 
-					metadataMap[cKey] = cVal
+					finalValue := cVal
+					metadataMap[cKey] = &finalValue
 					cKey = ""
 					cVal = ""
 					keySet = false
@@ -1172,7 +1181,8 @@ func StringToMetadata(metadataString string) (Metadata, error) {
 		}
 
 		if cKey != "" {
-			metadataMap[cKey] = cVal
+			finalValue := cVal
+			metadataMap[cKey] = &finalValue
 		}
 	}
 	return metadataMap, nil
@@ -1215,8 +1225,8 @@ func isValidMetadataKeyFirstChar(c byte) bool {
 }
 
 func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
-	retainedMetadata = make(map[string]string)
-	excludedMetadata = make(map[string]string)
+	retainedMetadata = make(map[string]*string)
+	excludedMetadata = make(map[string]*string)
 	for k, v := range m {
 		if isValidMetadataKey(k) {
 			retainedMetadata[k] = v
@@ -1231,16 +1241,6 @@ func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetada
 
 // BlobTags is a map of key-value pair
 type BlobTags map[string]string
-
-// ToAzBlobTagsMap converts BlobTagsMap to azblob's BlobTagsMap
-func (bt BlobTags) ToAzBlobTagsMap() azblob.BlobTagsMap {
-	return azblob.BlobTagsMap(bt)
-}
-
-//// FromAzBlobTagsMapToCommonBlobTags converts azblob's BlobTagsMap to common BlobTags
-// func FromAzBlobTagsMapToCommonBlobTags(azbt azblob.BlobTagsMap) BlobTags {
-//	return BlobTags(azbt)
-// }
 
 func (bt BlobTags) ToString() string {
 	lst := make([]string, 0)
@@ -1283,7 +1283,7 @@ var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 // Note: To keep first version simple, whenever collision is found during key resolving, error will be returned.
 // This can be further improved once any user feedback get.
 func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
-	resolvedMetadata = make(map[string]string)
+	resolvedMetadata = make(map[string]*string)
 
 	hasCollision := func(name string) bool {
 		_, hasCollisionToOrgNames := m[name]
@@ -1293,18 +1293,22 @@ func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
 	}
 
 	for k, v := range m {
+		value := v
+		valueString := &value
+		key := k
+		keyString := &key
 		if !isValidMetadataKey(k) {
 			validKey := metadataKeyInvalidCharRegex.ReplaceAllString(k, "_")
 			renamedKey := metadataRenamedKeyPrefix + validKey
 			keyForRenamedOriginalKey := metadataKeyForRenamedOriginalKeyPrefix + validKey
 			if hasCollision(renamedKey) || hasCollision(keyForRenamedOriginalKey) {
-				return nil, fmt.Errorf(metadataKeyRenameErrStr, k)
+				return nil, fmt.Errorf(metadataKeyRenameErrStr, *keyString)
 			}
 
-			resolvedMetadata[renamedKey] = v
-			resolvedMetadata[keyForRenamedOriginalKey] = k
+			resolvedMetadata[renamedKey] = *valueString
+			resolvedMetadata[keyForRenamedOriginalKey] = keyString
 		} else {
-			resolvedMetadata[k] = v
+			resolvedMetadata[k] = *valueString
 		}
 	}
 
@@ -1335,39 +1339,39 @@ type ResourceHTTPHeaders struct {
 	CacheControl       string
 }
 
-// ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
-func (h ResourceHTTPHeaders) ToAzBlobHTTPHeaders() azblob.BlobHTTPHeaders {
-	return azblob.BlobHTTPHeaders{
-		ContentType:        h.ContentType,
-		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+// ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's HTTPHeaders.
+func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
+	return blob.HTTPHeaders{
+		BlobContentType:        IffNotEmpty(h.ContentType),
+		BlobContentMD5:         h.ContentMD5,
+		BlobContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		BlobContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		BlobContentDisposition: IffNotEmpty(h.ContentDisposition),
+		BlobCacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
-// ToAzFileHTTPHeaders converts ResourceHTTPHeaders to azfile's FileHTTPHeaders.
-func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
-	return azfile.FileHTTPHeaders{
-		ContentType:        h.ContentType,
+// ToFileHTTPHeaders converts ResourceHTTPHeaders to sharefile's HTTPHeaders.
+func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
+	return sharefile.HTTPHeaders{
+		ContentType:        IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: IffNotEmpty(h.ContentDisposition),
+		CacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
-func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() azbfs.BlobFSHTTPHeaders {
-	return azbfs.BlobFSHTTPHeaders{
-		ContentType: h.ContentType,
-		// ContentMD5 isn't in these headers. ContentMD5 is handled separately for BlobFS
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() datalakefile.HTTPHeaders {
+	return datalakefile.HTTPHeaders{
+		ContentType:        IffNotEmpty(h.ContentType),
+		ContentMD5:         h.ContentMD5,
+		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: IffNotEmpty(h.ContentDisposition),
+		CacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
@@ -1510,9 +1514,9 @@ var EEntityType = EntityType(0)
 
 type EntityType uint8
 
-func (EntityType) File()           EntityType { return EntityType(0) }
-func (EntityType) Folder()         EntityType { return EntityType(1) }
-func (EntityType) Symlink()        EntityType { return EntityType(2) }
+func (EntityType) File() EntityType           { return EntityType(0) }
+func (EntityType) Folder() EntityType         { return EntityType(1) }
+func (EntityType) Symlink() EntityType        { return EntityType(2) }
 func (EntityType) FileProperties() EntityType { return EntityType(3) }
 
 func (e EntityType) String() string {
@@ -1581,63 +1585,6 @@ func (p PreservePermissionsOption) IsTruthy() bool {
 	}
 }
 
-////////////////////////////////////////////////////////////////
-
-// CpkScopeInfo specifies the name of the encryption scope to use to encrypt the data provided in the request.
-// If not specified, encryption is performed with the default account encryption scope.
-// For more information, see Encryption at Rest for Azure Storage Services.
-type CpkScopeInfo struct {
-	EncryptionScope *string
-}
-
-func (csi CpkScopeInfo) Marshal() (string, error) {
-	result, err := json.Marshal(csi)
-	if err != nil {
-		return "", err
-	}
-	return string(result), nil
-}
-
-type CpkInfo struct {
-	// The algorithm used to produce the encryption key hash.
-	// Currently, the only accepted value is "AES256".
-	// Must be provided if the x-ms-encryption-key header is provided.
-	EncryptionAlgorithm *string
-
-	// Optional. Specifies the encryption key to use to encrypt the data provided in the request.
-	// If not specified, encryption is performed with the root account encryption key.
-	EncryptionKey *string
-
-	// The SHA-256 hash of the provided encryption key.
-	// Must be provided if the x-ms-encryption-key header is provided.
-	EncryptionKeySha256 *string
-}
-
-func (csi CpkInfo) Empty() bool {
-	return csi.EncryptionKey == nil || csi.EncryptionKeySha256 == nil
-}
-
-func (csi CpkInfo) Marshal() (string, error) {
-	result, err := json.Marshal(csi)
-	if err != nil {
-		return "", err
-	}
-	return string(result), nil
-}
-
-func ToClientProvidedKeyOptions(cpkInfo CpkInfo, cpkScopeInfo CpkScopeInfo) azblob.ClientProvidedKeyOptions {
-	if cpkInfo.Empty() && cpkScopeInfo.EncryptionScope == nil {
-		return azblob.ClientProvidedKeyOptions{}
-	}
-
-	return azblob.ClientProvidedKeyOptions{
-		EncryptionKey:       cpkInfo.EncryptionKey,
-		EncryptionAlgorithm: azblob.EncryptionAlgorithmAES256,
-		EncryptionKeySha256: cpkInfo.EncryptionKeySha256,
-		EncryptionScope:     cpkScopeInfo.EncryptionScope,
-	}
-}
-
 type CpkOptions struct {
 	// Optional flag to encrypt user data with user provided key.
 	// Key is provide in the REST request itself
@@ -1652,10 +1599,20 @@ type CpkOptions struct {
 	IsSourceEncrypted bool
 }
 
-func GetClientProvidedKey(options CpkOptions) azblob.ClientProvidedKeyOptions {
-	_cpkInfo := GetCpkInfo(options.CpkInfo)
-	_cpkScopeInfo := GetCpkScopeInfo(options.CpkScopeInfo)
-	return ToClientProvidedKeyOptions(_cpkInfo, _cpkScopeInfo)
+func (options CpkOptions) GetCPKInfo() *blob.CPKInfo {
+	if !options.IsSourceEncrypted {
+		return nil
+	} else {
+		return GetCpkInfo(options.CpkInfo)
+	}
+}
+
+func (options CpkOptions) GetCPKScopeInfo() *blob.CPKScopeInfo {
+	if !options.IsSourceEncrypted {
+		return nil
+	} else {
+		return GetCpkScopeInfo(options.CpkScopeInfo)
+	}
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -1701,18 +1658,18 @@ func (rpt RehydratePriorityType) String() string {
 	return enum.StringInt(rpt, reflect.TypeOf(rpt))
 }
 
-func (rpt RehydratePriorityType) ToRehydratePriorityType() azblob.RehydratePriorityType {
+func (rpt RehydratePriorityType) ToRehydratePriorityType() blob.RehydratePriority {
 	switch rpt {
 	case ERehydratePriorityType.None(), ERehydratePriorityType.Standard():
-		return azblob.RehydratePriorityStandard
+		return blob.RehydratePriorityStandard
 	case ERehydratePriorityType.High():
-		return azblob.RehydratePriorityHigh
+		return blob.RehydratePriorityHigh
 	default:
-		return azblob.RehydratePriorityStandard
+		return blob.RehydratePriorityStandard
 	}
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 type SyncHashType uint8
 
 var ESyncHashType SyncHashType = 0
@@ -1737,7 +1694,7 @@ func (ht SyncHashType) String() string {
 	return enum.StringInt(ht, reflect.TypeOf(ht))
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 type SymlinkHandlingType uint8 // SymlinkHandlingType is only utilized internally to avoid having to carry around two contradictory flags. Thus, it doesn't have a parse method.
 
 // for reviewers: This is different than we usually implement enums, but it's something I've found to be more pleasant in personal projects, especially for bitflags. Should we change the pattern to match this in the future?

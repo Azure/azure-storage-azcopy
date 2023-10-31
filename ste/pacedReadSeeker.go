@@ -38,7 +38,7 @@ type pacedReadSeeker struct {
 	p    pacer
 }
 
-func newPacedRequestBody(ctx context.Context, requestBody io.ReadSeeker, p pacer) io.ReadSeeker {
+func newPacedRequestBody(ctx context.Context, requestBody io.ReadSeeker, p pacer) io.ReadSeekCloser {
 	if p == nil {
 		panic("p must not be nil")
 	}

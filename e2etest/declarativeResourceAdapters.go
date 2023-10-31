@@ -21,9 +21,11 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
 func sval(s *string) string {
@@ -43,102 +45,79 @@ type blobResourceAdapter struct {
 	obj *testObject
 }
 
-func (a blobResourceAdapter) toHeaders() azblob.BlobHTTPHeaders {
+func (a blobResourceAdapter) toHeaders() *blob.HTTPHeaders {
 	props := a.obj.creationProperties.contentHeaders
 	if props == nil {
-		return azblob.BlobHTTPHeaders{}
+		return nil
 	}
-	return azblob.BlobHTTPHeaders{
-		ContentType:        sval(props.contentType),
-		ContentMD5:         props.contentMD5,
-		ContentEncoding:    sval(props.contentEncoding),
-		ContentLanguage:    sval(props.contentLanguage),
-		ContentDisposition: sval(props.contentDisposition),
-		CacheControl:       sval(props.cacheControl),
+	return &blob.HTTPHeaders{
+		BlobContentType:        props.contentType,
+		BlobContentMD5:         props.contentMD5,
+		BlobContentEncoding:    props.contentEncoding,
+		BlobContentLanguage:    props.contentLanguage,
+		BlobContentDisposition: props.contentDisposition,
+		BlobCacheControl:       props.cacheControl,
 	}
 }
-
-func (a blobResourceAdapter) toMetadata() azblob.Metadata {
-	if a.obj.creationProperties.nameValueMetadata == nil {
-		a.obj.creationProperties.nameValueMetadata = azblob.Metadata{}
-	}
-
-	if a.obj.creationProperties.posixProperties != nil {
-		a.obj.creationProperties.posixProperties.AddToMetadata(a.obj.creationProperties.nameValueMetadata)
-	}
-
-	return a.obj.creationProperties.nameValueMetadata
-}
-
-func (a blobResourceAdapter) toBlobTags() azblob.BlobTagsMap {
-	if a.obj.creationProperties.blobTags == nil {
-		return azblob.BlobTagsMap{}
-	}
-	return azblob.BlobTagsMap(a.obj.creationProperties.blobTags)
-}
-
-////
 
 type filesResourceAdapter struct {
 	obj *testObject
 }
 
-func (a filesResourceAdapter) toHeaders(c asserter, share azfile.ShareURL) azfile.FileHTTPHeaders {
-	headers := azfile.FileHTTPHeaders{}
+func (a filesResourceAdapter) toSMBProperties(c asserter) *file.SMBProperties {
+	return &file.SMBProperties{
+		Attributes: a.toAttributes(c),
+		LastWriteTime: a.obj.creationProperties.lastWriteTime,
+	}
+}
 
+func (a filesResourceAdapter) toAttributes(c asserter) *file.NTFSFileAttributes {
+	if a.obj.creationProperties.smbAttributes != nil {
+		attr, err := ste.FileAttributesFromUint32(*a.obj.creationProperties.smbAttributes)
+		c.AssertNoErr(err)
+		return attr
+	}
+	return nil
+}
+
+func (a filesResourceAdapter) toPermissions(c asserter, shareClient *share.Client) *file.Permissions {
 	if a.obj.creationProperties.smbPermissionsSddl != nil {
+		permissions := file.Permissions{}
 		parsedSDDL, err := sddl.ParseSDDL(*a.obj.creationProperties.smbPermissionsSddl)
 		c.AssertNoErr(err, "Failed to parse SDDL")
 
 		var permKey string
 
 		if len(parsedSDDL.PortableString()) > 8000 {
-			createPermResp, err := share.CreatePermission(ctx, parsedSDDL.PortableString())
+			createPermResp, err := shareClient.CreatePermission(ctx, parsedSDDL.PortableString(), nil)
 			c.AssertNoErr(err)
 
-			permKey = createPermResp.FilePermissionKey()
+			permKey = *createPermResp.FilePermissionKey
 		}
-
-		var smbprops azfile.SMBProperties
 
 		if permKey != "" {
-			smbprops.PermissionKey = &permKey
+			permissions.PermissionKey = &permKey
 		} else {
 			perm := parsedSDDL.PortableString()
-			smbprops.PermissionString = &perm
+			permissions.Permission = &perm
 		}
-
-		headers.SMBProperties = smbprops
+		return &permissions
 	}
-
-	if a.obj.creationProperties.smbAttributes != nil {
-		attribs := azfile.FileAttributeFlags(*a.obj.creationProperties.smbAttributes)
-		headers.SMBProperties.FileAttributes = &attribs
-	}
-
-	if a.obj.creationProperties.lastWriteTime != nil {
-		lwt := *a.obj.creationProperties.lastWriteTime
-		headers.SMBProperties.FileLastWriteTime = &lwt
-	}
-
-	props := a.obj.creationProperties.contentHeaders
-	if props == nil {
-		return headers
-	}
-
-	headers.ContentType = sval(props.contentType)
-	headers.ContentMD5 = props.contentMD5
-	headers.ContentEncoding = sval(props.contentEncoding)
-	headers.ContentLanguage = sval(props.contentLanguage)
-	headers.ContentDisposition = sval(props.contentDisposition)
-	headers.CacheControl = sval(props.cacheControl)
-
-	return headers
+	return nil
 }
 
-func (a filesResourceAdapter) toMetadata() azfile.Metadata {
-	if a.obj.creationProperties.nameValueMetadata == nil {
-		return azfile.Metadata{}
+func (a filesResourceAdapter) toHeaders() *file.HTTPHeaders {
+	props := a.obj.creationProperties.contentHeaders
+	if props == nil {
+		return nil
 	}
-	return a.obj.creationProperties.nameValueMetadata
+
+	return &file.HTTPHeaders{
+		ContentType:        props.contentType,
+		ContentMD5:         props.contentMD5,
+		ContentEncoding:    props.contentEncoding,
+		ContentLanguage:    props.contentLanguage,
+		ContentDisposition: props.contentDisposition,
+		CacheControl:       props.cacheControl,
+	}
 }
