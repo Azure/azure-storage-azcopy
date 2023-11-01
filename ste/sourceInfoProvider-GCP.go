@@ -165,8 +165,11 @@ func (p *gcpSourceInfoProvider) EntityType() common.EntityType {
 func (p *gcpSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	// gcp does not support getting range md5
 	body, err := p.gcpClient.Bucket(p.gcpURLParts.BucketName).Object(p.gcpURLParts.ObjectKey).NewRangeReader(p.jptm.Context(), offset, count)
+	if err != nil {
+		return nil, err
+	}
 	// compute md5
-	defer body.Close()
+	defer body.Close() //nolint:staticcheck
 	h := md5.New()
 	if _, err = io.Copy(h, body); err != nil {
 		return nil, err
