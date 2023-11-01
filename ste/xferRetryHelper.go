@@ -53,8 +53,8 @@ func getShouldRetry() func(*http.Response, error) bool {
 }
 
 func getErrorCode(resp *http.Response) string {
-	if resp.Header["x-ms-error-code"] != nil {
-		return resp.Header["x-ms-error-code"][0]
+	if resp.Header["x-ms-error-code"] != nil { //nolint:staticcheck
+		return resp.Header["x-ms-error-code"][0] //nolint:staticcheck
 	} else if resp.Header["X-Ms-Error-Code"] != nil {
 		return resp.Header["X-Ms-Error-Code"][0]
 	}
