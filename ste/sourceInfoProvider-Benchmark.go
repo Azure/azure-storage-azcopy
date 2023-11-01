@@ -59,7 +59,7 @@ func (b benchmarkSourceInfoProvider) EntityType() common.EntityType {
 	return common.EEntityType.File() // no folders in benchmark
 }
 
-// Tell append blob it doesnt matter if the MD5 is wrong since this data doesnt matter
+// Tell append blob it doesn't matter if the MD5 is wrong since this data doesn't matter
 func (b benchmarkSourceInfoProvider) GetMD5(_, _ int64) ([]byte, error) {
 	return nil, errors.New("benchmark does not support retrieving MD5")
 }
