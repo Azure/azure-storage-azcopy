@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.21.2
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
 ## Version 10.21.1
 
 ### Bug Fixes
