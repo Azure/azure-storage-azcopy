@@ -304,7 +304,7 @@ func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 		if count <= common.MaxRangeGetSize {
 			rangeGetContentMD5 = to.Ptr(true)
 		}
-		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
 		response, err := fileClient.DownloadStream(p.ctx, &file.DownloadStreamOptions{
 			Range:              file.HTTPRange{Offset: offset, Count: count},
 			RangeGetContentMD5: rangeGetContentMD5,
