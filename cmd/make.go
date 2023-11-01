@@ -87,7 +87,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	}
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
-	options := createClientOptions(common.LogNone, to.Ptr(common.ETrailingDotOption.Disable()), &cookedArgs.resourceLocation)
+	options := createClientOptions(common.LogNone)
 
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():
@@ -116,7 +116,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.File():
-		shareClient := common.CreateShareClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		shareClient := common.CreateShareClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options, to.Ptr(common.ETrailingDotOption.Disable()), &cookedArgs.resourceLocation)
 		quota := &cookedArgs.quota
 		if quota != nil && *quota == 0 {
 			quota = nil

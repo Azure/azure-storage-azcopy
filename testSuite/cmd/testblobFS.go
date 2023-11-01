@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"io"
 	"os"
 	"path/filepath"
@@ -85,6 +88,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 		os.Exit(1)
 	}
 	var fc *file.Client
+	ctx := context.Background()
 	if datalakeURLParts.SAS.Encode() != "" {
 		fc, err = file.NewClientWithNoCredential(datalakeURLParts.String(), nil)
 	} else {
@@ -94,7 +98,9 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
-		fc, err = file.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, nil)
+		perCallPolicies := []policy.Policy{ste.NewVersionPolicy()}
+		fc, err = file.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, &file.ClientOptions{ClientOptions: azcore.ClientOptions{PerCallPolicies: perCallPolicies}})
+		ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	}
 	if err != nil {
 		fmt.Printf("error creating client. failed with error %s\n", err.Error())
@@ -102,7 +108,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	}
 
 	// create the file url and download the file Url
-	dResp, err := fc.DownloadStream(context.Background(), nil)
+	dResp, err := fc.DownloadStream(ctx, nil)
 	if err != nil {
 		fmt.Printf("error downloading the subject %s. Failed with error %s\n", datalakeURLParts.String(), err.Error())
 		os.Exit(1)
@@ -185,6 +191,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		os.Exit(1)
 	}
 	var fsc *filesystem.Client
+	ctx := context.Background()
 	if datalakeURLParts.SAS.Encode() != "" {
 		fsc, err = filesystem.NewClientWithNoCredential(datalakeURLParts.String(), nil)
 	} else {
@@ -194,7 +201,9 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
 			os.Exit(1)
 		}
-		fsc, err = filesystem.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, nil)
+		perCallPolicies := []policy.Policy{ste.NewVersionPolicy()}
+		fsc, err = filesystem.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, &filesystem.ClientOptions{ClientOptions: azcore.ClientOptions{PerCallPolicies: perCallPolicies}})
+		ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	}
 	if err != nil {
 		fmt.Printf("error creating client. failed with error %s\n", err.Error())
@@ -218,7 +227,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	// numberOfFilesinSubject keeps the count of number of files of at the destination
 	numberOfFilesinSubject := int(0)
 	for pager.More() {
-		resp, err := pager.NextPage(context.Background())
+		resp, err := pager.NextPage(ctx)
 		if err != nil {
 			fmt.Printf("error listing the directory path defined by url %s. Failed with error %s\n", datalakeURLParts.String(), err.Error())
 			os.Exit(1)
@@ -276,7 +285,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			tempUrlParts := datalakeURLParts
 			tempUrlParts.PathName = *p.Name
 			fc := fsc.NewFileClient(tempUrlParts.PathName)
-			fResp, err := fc.DownloadStream(context.Background(), nil)
+			fResp, err := fc.DownloadStream(ctx, nil)
 			if err != nil {
 				fmt.Printf("error downloading the file %s. failed with error %s\n", fc.DFSURL(), err.Error())
 				os.Exit(1)

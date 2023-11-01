@@ -256,12 +256,6 @@ func splitAuthTokenFromResource(resource string, location common.Location) (reso
 		}
 
 		resourceToken = fURLParts.SAS.Encode()
-		if resourceToken == "" {
-			// Azure Files only supports the use of SAS tokens currently
-			// Azure Files ALSO can't be a public resource
-			// Therefore, it is safe to error here if no SAS token is present, as neither a source nor a destination could safely not have a SAS token.
-			return resource, "", errors.New("azure files only supports the use of SAS token authentication")
-		}
 		fURLParts.SAS = filesas.QueryParameters{} // clear the SAS token and drop the raw, base URL
 		resourceBase = fURLParts.String()
 		return

@@ -165,7 +165,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
 // There's no measure of physical RAM in the STD library, so we guesstimate conservatively, based on  CPU count (logical, not physical CPUs)
 // Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
-// currently-unused, re-usable slices, that is not tracked by cacheLimiter.
+// currently-unused, reusable slices, that is not tracked by cacheLimiter.
 // Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
 // count 100 MB towards this limit, but actually consume 128 MB)
 func getMaxRamForChunks() int64 {
@@ -511,8 +511,8 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 */
 func (ja *jobsAdmin) ShouldLog(level common.LogLevel) bool  { return ja.logger.ShouldLog(level) }
 func (ja *jobsAdmin) Log(level common.LogLevel, msg string) { ja.logger.Log(level, msg) }
-func (ja *jobsAdmin) Panic(err error)                         { ja.logger.Panic(err) }
-func (ja *jobsAdmin) CloseLog()                               { ja.logger.CloseLog() }
+func (ja *jobsAdmin) Panic(err error)                       { ja.logger.Panic(err) }
+func (ja *jobsAdmin) CloseLog()                             { ja.logger.CloseLog() }
 
 func (ja *jobsAdmin) CurrentMainPoolSize() int {
 	return int(atomic.LoadInt32(&ja.atomicCurrentMainPoolSize))
