@@ -37,6 +37,21 @@ type testJobPartTransferManager struct {
 	fromTo common.FromTo
 }
 
+func (t testJobPartTransferManager) SourceTrailingDot() *common.TrailingDotOption {
+	if (t.fromTo.IsS2S() || t.fromTo.IsDownload()) && (t.fromTo.From() == common.ELocation.File()) {
+		return to.Ptr(common.ETrailingDotOption.Enable())
+	}
+	return nil
+}
+
+func (t testJobPartTransferManager) TrailingDot() *common.TrailingDotOption {
+	return to.Ptr(common.ETrailingDotOption.Enable())
+}
+
+func (t testJobPartTransferManager) From() *common.Location {
+	return to.Ptr(t.fromTo.From())
+}
+
 func (t testJobPartTransferManager) FromTo() common.FromTo {
 	return t.fromTo
 }
@@ -227,12 +242,7 @@ func (t testJobPartTransferManager) S2SSourceClientOptions() azcore.ClientOption
 
 	httpClient := NewAzcopyHTTPClient(4)
 
-	var sourceTrailingDot *common.TrailingDotOption
-	if (t.fromTo.IsS2S() || t.fromTo.IsDownload()) && (t.fromTo.From() == common.ELocation.File()) {
-		sourceTrailingDot = to.Ptr(common.ETrailingDotOption.Enable())
-	}
-
-	return NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, LogOptions{}, sourceTrailingDot, nil)
+	return NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, LogOptions{})
 }
 
 func (t testJobPartTransferManager) CredentialOpOptions() *common.CredentialOpOptions {
