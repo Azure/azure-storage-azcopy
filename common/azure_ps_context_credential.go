@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -113,16 +114,6 @@ func (c *PowershellContextCredential) GetToken(ctx context.Context, opts policy.
 // We ignore resource because PS does not support all Resources. Disk scope is not supported
 // and we are here only with Storage scope
 var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string, tenantID string) ([]byte, error) {
-	/*
-	match, err := regexp.MatchString("^[0-9a-zA-Z-.:/]+$", resource)
-	if err != nil {
-		return nil, err
-	}
-	if !match {
-		return nil, fmt.Errorf(`%s: unexpected scope "%s". Only alphanumeric characters and ".", ";", "-", and "/" are allowed`, credNamePSContext, resource)
-	}
-	*/
-
 	// set a default timeout for this authentication iff the application hasn't done so already
 	var cancel context.CancelFunc
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
@@ -131,11 +122,11 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 	}
 
 	const StorageResourceName = "Storage"
-	commandLine := "Get-AzAccessToken -ResourceTypeName " + StorageResourceName //+ " | ConvertTo-Json"
+	commandLine := "Get-AzAccessToken -ResourceTypeName " + StorageResourceName + " | ConvertTo-Json"
 	if tenantID != "" {
 		commandLine += " -TenantId " + tenantID
 	}
-	cliCmd := exec.CommandContext(ctx, "pwsh", commandLine)
+	cliCmd := exec.CommandContext(ctx, "powershell", commandLine)
 	cliCmd.Env = os.Environ()
 	var stderr bytes.Buffer
 	cliCmd.Stderr = &stderr
@@ -161,14 +152,27 @@ func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.Acces
 		AccessToken string `json:"token"`
 		ExpiresOn   string `json:"expiresOn"`
 	}{}
-	fmt.Println(string(tk))
+
 	err := json.Unmarshal(tk, &t)
 	if err != nil {
 		return azcore.AccessToken{}, err
 	}
+	
+	parseErr := "error parsing token expiration time %q: %v"
 	exp, err := time.Parse("2006-01-02T15:04:05Z", t.ExpiresOn)
 	if err != nil {
-		return azcore.AccessToken{}, fmt.Errorf("error parsing token expiration time %q: %v", t.ExpiresOn, err)
+		// In some environments time is a unix stamp of format 'Date(<unixtime>)'
+		rgx := regexp.MustCompile(`\((.*?)\)`)
+		if rgx.Match([]byte(t.ExpiresOn)) {
+			rs := rgx.FindStringSubmatch(t.ExpiresOn)
+			expTime, err := strconv.ParseInt(rs[1], 10, 64)
+			if err != nil {
+				return azcore.AccessToken{}, fmt.Errorf(parseErr, t.ExpiresOn, err)
+			}
+			exp = time.Unix(expTime, 0)
+		} else {
+			return azcore.AccessToken{}, fmt.Errorf(parseErr, t.ExpiresOn, err)
+		}
 	}
 	return azcore.AccessToken{
 		ExpiresOn: exp.UTC(),
