@@ -160,8 +160,15 @@ func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 }
 
 ///////////////////////////////////////////////// FILE FUNCTIONS /////////////////////////////////////////////////
+func CreateFileServiceClient(u string, cred azcore.TokenCredential, o *fileservice.ClientOptions) (*fileservice.Client, error) {
+	if cred != nil {
+		return fileservice.NewClient(u, cred, o)
+	}
 
-func CreateFileServiceClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions, trailingDot *TrailingDotOption, from *Location) *fileservice.Client {
+	return fileservice.NewClientWithNoCredential(u, o)
+}
+
+func CreateFileServiceClient2(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions, trailingDot *TrailingDotOption, from *Location) *fileservice.Client {
 	allowTrailingDot := trailingDot != nil && *trailingDot == trailingDot.Enable()
 	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
 	callbacks := newClientCallbacks[fileservice.Client, sharefile.SharedKeyCredential]{

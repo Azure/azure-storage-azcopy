@@ -92,8 +92,18 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	if !from.SupportsTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
-	options := createClientOptions(common.AzcopyCurrentJobLogger, &cca.trailingDot, &from)
-	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), targetURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options)
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	var fileClientOptions any
+	if cca.FromTo.From() == common.ELocation.File() {
+		fileClientOptions = common.FileClientOptions{AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable()}
+	}
+	targetServiceClient, err := common.GetServiceClientForLocation(
+		cca.FromTo.From(),
+		targetURL,
+		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		fileClientOptions,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -133,9 +143,8 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	sourceURL, _ := cca.Source.String()
-	from := cca.FromTo.From()
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, &from)
-	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options)
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
 	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
 
 	// return an error if the unsupported options are passed in

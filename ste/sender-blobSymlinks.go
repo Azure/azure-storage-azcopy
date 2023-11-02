@@ -38,9 +38,8 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISou
 	var destBlobTier *blob.AccessTier
 	blockBlobTierOverride, _ := jptm.BlobTiers()
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
-		destBlobTier = blockBlobTierOverride.ToAccessTierType()
-	} else {
-		destBlobTier = nil
+		t := blob.AccessTier(blockBlobTierOverride.ToAccessTierType())
+		destBlobTier = &t
 	}
 
 	var out sender

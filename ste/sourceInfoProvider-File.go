@@ -28,6 +28,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -158,6 +159,7 @@ type fileSourceInfoProvider struct {
 	cacheOnce           *sync.Once
 	cachedProperties    shareFilePropertyProvider // use interface because may be file or directory properties
 	sourceURL           string
+	srcShareClient      *share.Client
 	defaultRemoteSourceInfoProvider
 }
 
@@ -169,7 +171,7 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 	s, ok := jptm.SrcServiceClient().(*service.Client)
 	if !ok {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob service")
+		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "File service")
 	}
 
 	source := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
@@ -181,6 +183,7 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		defaultRemoteSourceInfoProvider: *base,
 		ctx: jptm.Context(),
 		cacheOnce: &sync.Once{},
+		srcShareClient: s.NewShareClient(jptm.Info().SrcContainer),
 		sourceURL: source.URL()}, nil
 }
 
@@ -242,17 +245,7 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 
 	// Call into SIPM and grab our SDDL string.
 	sipm := p.jptm.SecurityInfoPersistenceManager()
-	source, err := p.PreSignedSourceURL()
-	if err != nil {
-		return "", err
-	}
-	fURLParts, err := file.ParseURL(source)
-	if err != nil {
-		return "", err
-	}
-	fURLParts.DirectoryOrFilePath = ""
-	// files supports only SAS for now.
-	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.String(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+	sddlString, err := sipm.GetSDDLFromID(key, p.srcShareClient)
 
 	return sddlString, err
 }

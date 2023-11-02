@@ -136,19 +136,43 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		jobsAdmin.JobsAdmin.LogToJobLog(folderMessage, common.LogInfo)
 	}
 
-	from := cca.fromTo.From()
 	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
-	options := createClientOptions(common.AzcopyCurrentJobLogger, &cca.trailingDot, &from)
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	var azureFileSpecificOptions any
+	if cca.fromTo.From() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+		}
+	}
 	sourceURL, _ := cca.source.String()
-	srcServiceClient, err := common.GetServiceClientForLocation(cca.fromTo.From(), sourceURL, srcCredInfo.OAuthTokenInfo.TokenCredential, &options)
+	srcServiceClient, err := common.GetServiceClientForLocation(
+		cca.fromTo.From(),
+		sourceURL,
+		srcCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
 	if err != nil {
 		return nil, err
 	}
 
+	if cca.fromTo.To() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
+		}
+	}
 	dstURL, _ := cca.destination.String()
-	dstServiceClient, err := common.GetServiceClientForLocation(cca.fromTo.To(), dstURL, dstCredInfo.OAuthTokenInfo.TokenCredential, &options)
+	dstServiceClient, err := common.GetServiceClientForLocation(
+		cca.fromTo.To(),
+		dstURL,
+		dstCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, srcServiceClient, dstServiceClient)
 
 	// set up the comparator so that the source/destination can be compared

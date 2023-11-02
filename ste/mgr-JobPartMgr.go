@@ -447,7 +447,6 @@ func (jpm *jobPartMgr) clientInfo() {
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		jpm.credInfo = jobState.CredentialInfo
 	}
-	fromTo := jpm.planMMF.Plan().FromTo
 
 	jpm.s2sSourceToken = jpm.credInfo.S2SSourceTokenCredential
 
@@ -459,6 +458,7 @@ func (jpm *jobPartMgr) clientInfo() {
 		Cancel:   jpm.jobMgr.Cancel,
 	}
 
+	/*
 	retryOptions := policy.RetryOptions{
 		MaxRetries:    UploadMaxTries,
 		TryTimeout:    UploadTryTimeout,
@@ -482,9 +482,6 @@ func (jpm *jobPartMgr) clientInfo() {
 	networkStats := jpm.jobMgr.PipelineNetworkStats()
 	logOptions := jpm.jobMgr.PipelineLogInfo()
 
-	/* XXX This code/logic is moved to cmd where we create clients once for 
-	   lifetime for transfer.  
-
 	var sourceTrailingDot *common.TrailingDotOption
 	var trailingDot *common.TrailingDotOption
 	var from *common.Location
@@ -503,6 +500,7 @@ func (jpm *jobPartMgr) clientInfo() {
 	}
 	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions)
 	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions)
+	*/
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {

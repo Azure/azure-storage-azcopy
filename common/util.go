@@ -92,12 +92,20 @@ func VerifyIsURLResolvable(url_string string) error {
 	*/
 }
 
+
+type FileClientOptions struct {
+	AllowTrailingDot bool
+	AllowSourceTrailingDot bool
+}
 // GetServiceClientForLocation returns service client for the resourceURL. It strips the
-// container and file related details before creating the client.
+// container and file related details before creating the client. locationSpecificOptions
+// are required currently only for files.
 func GetServiceClientForLocation(loc Location,
 	resourceURL string,
 	cred azcore.TokenCredential,
-	options *azcore.ClientOptions) (any, error) {
+	policyOptions *azcore.ClientOptions,
+	locationSpecificOptions any,
+	) (any, error) {
 
 	u, err := url.Parse(resourceURL)
 	if err != nil {
@@ -109,23 +117,27 @@ func GetServiceClientForLocation(loc Location,
 	switch loc {
 	case ELocation.Blob():
 		var o *blobService.ClientOptions
-		if options != nil {
-			o = &blobService.ClientOptions{ClientOptions: *options}
+		if policyOptions != nil {
+			o = &blobService.ClientOptions{ClientOptions: *policyOptions}
 		}
 		if cred != nil {
 			return blobService.NewClient(resourceURL, cred, o)
 		}
 		return blobService.NewClientWithNoCredential(resourceURL, o)
 	case ELocation.File():
-		var o *fileService.ClientOptions
-		if options != nil {
-			o = &fileService.ClientOptions{ClientOptions: *options}
+		l := locationSpecificOptions.(*FileClientOptions)
+		o := &fileService.ClientOptions{
+			AllowTrailingDot: &l.AllowTrailingDot,
+			AllowSourceTrailingDot: &l.AllowSourceTrailingDot,
+		}
+		if policyOptions != nil {
+			o = &fileService.ClientOptions{ClientOptions: *policyOptions}
 		}
 		return fileService.NewClientWithNoCredential(resourceURL, o)
 	case ELocation.BlobFS():
 		var o *datalake.ClientOptions
-		if options != nil {
-			o = &datalake.ClientOptions{ClientOptions: *options}
+		if policyOptions != nil {
+			o = &datalake.ClientOptions{ClientOptions: *policyOptions}
 		}
 		if cred != nil {
 			return datalake.NewClient(resourceURL, cred, o)

@@ -2,11 +2,7 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"sync"
 
 	"github.com/golang/groupcache/lru"
@@ -36,13 +32,7 @@ func newSecurityInfoPersistenceManager(ctx context.Context) *securityInfoPersist
 // Being realistic though, GetSDDLFromID will only be called when downloading,
 // and PutSDDL will only be called when uploading/doing S2S.
 func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareClient *share.Client) (string, error) {
-	fileURLParts, err := file.ParseURL(shareClient.URL())
-	if err != nil {
-		return "", err
-	}
-	fileURLParts.SAS = filesas.QueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
-
-	sddlKey := fileURLParts.String() + "|SDDL|" + sddlString
+	sddlKey := shareClient.URL() + "|SDDL|" + sddlString
 
 	// Acquire a read lock.
 	sipm.sipmMu.RLock()
@@ -71,16 +61,10 @@ func (sipm *securityInfoPersistenceManager) PutSDDL(sddlString string, shareClie
 	return permKey, nil
 }
 
-func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL string, credInfo common.CredentialInfo, credOpOptions *common.CredentialOpOptions, clientOptions azcore.ClientOptions, trailingDot *common.TrailingDotOption, from *common.Location) (string, error) {
-	fileURLParts, err := filesas.ParseURL(shareURL)
-	if err != nil {
-		return "", err
-	}
-	fileURLParts.SAS = filesas.QueryParameters{} // Clear the SAS query params since it's extra unnecessary length.
+func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareClient *share.Client) (string, error) {
 	
 	//GetPermission call only works against the share root, and not against a share snapshot
-	fileURLParts.ShareSnapshot = "" // clear the snapshot value
-	sddlKey := fileURLParts.String() + "|ID|" + id
+	sddlKey := shareClient.URL() + "|ID|" + id
 
 	sipm.sipmMu.Lock()
 	// fetch from the cache
@@ -91,11 +75,8 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareURL st
 	if ok {
 		return perm.(string), nil
 	}
-
-	//nakulkarmerge resolve here
-	actionableShareURL := &share.Client{}//common.CreateShareClient(fileURLParts.String(), credInfo, credOpOptions, clientOptions)
-
-	si, err := actionableShareURL.GetPermission(sipm.ctx, id, nil)
+	
+	si, err := shareClient.GetPermission(sipm.ctx, id, nil)
 	if err != nil {
 		return "", err
 	}

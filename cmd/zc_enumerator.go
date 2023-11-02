@@ -24,16 +24,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -375,6 +377,8 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		return output, nil
 	}
 
+	options := createClientOptions(azcopyScanningLogger)
+
 	switch location {
 	case common.ELocation.Local():
 		_, err := common.OSStat(resource.ValueLocal())
@@ -472,8 +476,16 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		// Strip any non-service related things away
 		fileURLParts.ShareName = ""
 		fileURLParts.ShareSnapshot = ""
-		fileURLParts.DirectoryOrFilePath = ""//nakulkarmerge-trailingdot?
-		fsc := common.CreateFileServiceClient(fileURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(azcopyScanningLogger))
+		fileURLParts.DirectoryOrFilePath = ""
+		fileOptions := &fileservice.ClientOptions{
+				ClientOptions: options,
+				AllowTrailingDot: to.Ptr(trailingDot == common.ETrailingDotOption.Enable()),
+		}
+		fsc, _ := fileservice.NewClientWithNoCredential(fileURLParts.String(), fileOptions)
+
+		if credential != nil && credential.CredentialType.IsAzureOAuth() {
+			fsc, err = fileservice.NewClient(fileURLParts.String(), credential.OAuthTokenInfo.TokenCredential, fileOptions)
+		}
 
 		if shareName == "" || strings.Contains(shareName, "*") {
 			if !recursive {

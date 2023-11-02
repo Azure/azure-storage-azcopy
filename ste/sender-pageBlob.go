@@ -119,7 +119,8 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	destBlobTier := inferredAccessTierType
 	_, pageBlobTierOverride := jptm.BlobTiers()
 	if pageBlobTierOverride != common.EPageBlobTier.None() {
-		destBlobTier = pageBlobTierOverride.ToAccessTierType()
+		t := pageBlobTierOverride.ToAccessTierType()
+		destBlobTier = &t
 	}
 
 	s := &pageBlobSenderBase{

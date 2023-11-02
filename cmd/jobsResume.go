@@ -298,14 +298,14 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	var srcServiceClient any
 	var dstServiceClient any
 	from := fromTo.From()
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, &from)
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
 
-	srcServiceClient, err = common.GetServiceClientForLocation(from, source + rca.SourceSAS, tc, &options)
+	srcServiceClient, err = common.GetServiceClientForLocation(from, source + rca.SourceSAS, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	dstServiceClient, err = common.GetServiceClientForLocation(from, destination + rca.DestinationSAS, tc, &options)
+	dstServiceClient, err = common.GetServiceClientForLocation(from, destination + rca.DestinationSAS, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}

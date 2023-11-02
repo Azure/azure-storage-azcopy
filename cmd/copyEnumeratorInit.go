@@ -5,11 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"log"
 	"net/url"
 	"os"
@@ -18,6 +13,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -481,7 +482,10 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		fsc := common.CreateFileServiceClient(accountRoot, dstCredInfo, nil, options, &cca.trailingDot, to.Ptr(cca.FromTo.From()))
+		fsc, err := common.CreateFileServiceClient(accountRoot, dstCredInfo.OAuthTokenInfo.TokenCredential, &fileservice.ClientOptions{ClientOptions: options})
+		if err != nil {
+			return err
+		}
 		sc := fsc.NewShareClient(containerName)
 
 		_, err = sc.GetProperties(ctx, nil)

@@ -295,7 +295,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 
 	clientOptions := createClientOptions(azcopyScanningLogger)
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly, trailingDot, from).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly, &cca.trailingDot, from).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
@@ -391,7 +391,13 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			}
 			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
 
-			blobClient := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
+			var blobClient *blob.Client
+			options :=  &blob.ClientOptions{ClientOptions: b.clientOptions}
+			if b.credInfo.CredentialType.IsAzureOAuth() {
+				blobClient, err = blob.NewClient(blobURLParts.String(), b.credInfo.OAuthTokenInfo.TokenCredential, options)
+			} else {
+				blobClient, err = blob.NewClientWithNoCredential(blobURLParts.String(), options)
+			}
 			_, err = blobClient.Delete(b.ctx, nil)
 		case common.ELocation.File():
 			var fileURLParts sharefile.URLParts

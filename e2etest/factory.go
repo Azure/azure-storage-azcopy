@@ -34,7 +34,6 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
 	"os"
 	"path"
@@ -71,7 +70,9 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) *fileservi
 		panic(err)
 	}
 	fsc, err := fileservice.NewClientWithSharedKeyCredential(resourceURL, credential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
-	clientOptions := azcore.ClientOptions{
+	if err != nil {
+		panic(err)
+	}
 	return fsc
 }
 
@@ -144,15 +145,7 @@ func (TestResourceFactory) GetFileShareURLWithSAS(c asserter, accountType Accoun
 		time.Now().Add(48*time.Hour),
 		nil)
 	c.AssertNoErr(err)
-<<<<<<< HEAD
 	client, err = share.NewClientWithNoCredential(sasURL, &share.ClientOptions{AllowTrailingDot: to.Ptr(true)})
-=======
-	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(true)}
-	clientOptions := azcore.ClientOptions{
-		PerRetryPolicies: perRetryPolicies,
-	}
-	client, err = share.NewClientWithNoCredential(sasURL, &share.ClientOptions{ClientOptions: clientOptions})
->>>>>>> eb10667a (Temp)
 	c.AssertNoErr(err)
 
 	return client

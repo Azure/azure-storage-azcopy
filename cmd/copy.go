@@ -1284,7 +1284,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	//nakulkarmerge logger???
-	options := createClientOptions(azcopyScanningLogger)
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger) }
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1292,8 +1292,17 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot parse source blob URL due to error: %s", err.Error())
 	}
 
+	var blobClient *blockblob.Client
+	if credInfo.CredentialType.IsAzureOAuth() {
+		blobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
+	} else {
+		blobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
+	}
+	if err != nil {
+		return fmt.Errorf("fatal: Could not create client")
+	}
+
 	// step 3: start download
-	blobClient := common.CreateBlobClient(u.String(), credInfo, nil, options)
 
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
 		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
@@ -1523,19 +1532,43 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	from := cca.FromTo.From()
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	var azureFileSpecificOptions any
+	if cca.FromTo.From() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+		}
+	}
 
 	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
 		return err
 	}
 	sourceURL, _ := cca.Source.String()
-	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, sourceCredInfo.OAuthTokenInfo.TokenCredential, &options)
+	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
+		cca.FromTo.From(),
+		sourceURL,
+		sourceCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
 	if err != nil {
 		return err
 	}
 
+	if cca.FromTo.To() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.To() == common.ELocation.File()),
+		}
+	}
 	dstURL, _ := cca.Destination.String()
-	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(cca.FromTo.To(), dstURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options)
+	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
+		cca.FromTo.To(),
+		dstURL,
+		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
 	if err != nil {
 		return err
 	}
