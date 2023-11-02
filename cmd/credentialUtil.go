@@ -643,7 +643,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 func createClientOptions(logger common.ILoggerResetable) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
 
-	if azcopyScanningLogger != nil {
+	if logger != nil {
 		logOptions.Log = logger.Log
 	}
 	return ste.NewClientOptions(policy.RetryOptions{
