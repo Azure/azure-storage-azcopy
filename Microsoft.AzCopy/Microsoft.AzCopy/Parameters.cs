@@ -30,7 +30,7 @@ public struct Parameters
     {
         var result = new StringBuilder();
 
-        result.Append(Flags.AssociatedVerb);
+        result.Append(Flags.AssociatedVerb.ToString().ToLower());
         foreach (var target in Targets)
         {
             result.Append(" " + target);
@@ -45,6 +45,7 @@ public struct Parameters
         return result.ToString();
     } 
 }
+
 public struct Env
 {
     // Inherit the parent executable's environment?

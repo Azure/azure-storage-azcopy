@@ -28,6 +28,9 @@ public abstract class Flags
     // Any listed here are added to the default. For security, you should only put Microsoft Azure domains here.
     [Flag("trusted-microsoft-suffixes")] public IEnumerable<string>? TrustedMicrosoftSuffixes;
 
+    // leave this for FlagAttribute to pick up
+    [Flag("output-type")] internal readonly string _outputType = "json";
+
 
     // todo: should we opt to allow output-type here? My thinking was that we'd read the JSON.
     // todo: ditto to skip-version-check, NuGet is a package manager, and a dep update should do it anyway.
@@ -49,15 +52,21 @@ public class FlagAttribute : System.Attribute
 
     protected virtual string StringifyInput(object target)
     {
+        if (target == null)
+            return "";
+
         // Simple implementation
-        return target.ToString(); 
+        return target.ToString() ?? ""; 
     }
     
     internal static Dictionary<string, string> PrepareFlags(object target)
     {
         var result = new Dictionary<string, string>();
 
-        foreach (var field in target.GetType().GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.GetField))
+        if (target == null)
+            return result;
+
+        foreach (var field in target.GetType().GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.GetField))
         {
             var attrs = System.Attribute.GetCustomAttributes(field, typeof(FlagAttribute));
             switch (attrs.Length)
@@ -90,6 +99,8 @@ public class DateTimeFlagAttribute : FlagAttribute
 
     protected override string StringifyInput(object target)
     {
+        if (target == null) return "";
+
         if (target is not DateTime time)
             throw new Exception($"Stringification target must be DateTime, not {target.GetType().Name}");
         
@@ -109,6 +120,8 @@ public class ListFlagAttribute<TValue> : FlagAttribute
 
     protected override string StringifyInput(object target)
     {
+        if (target == null) return "";
+
         if (target is not IEnumerable<TValue> list)
             throw new Exception($"Stringification target must be IEnumerable<{typeof(TValue).Name}>, not {target.GetType().Name}");
         
@@ -127,7 +140,7 @@ public class ListFlagAttribute<TValue> : FlagAttribute
 }
 
 [System.AttributeUsage(System.AttributeTargets.Field)]
-public class DictionaryFlagAttribute<TKey, TValue> : FlagAttribute
+public class DictionaryFlagAttribute<TKey, TValue> : FlagAttribute where TKey : notnull
 {
     private readonly char _entrySeparator;
     private readonly char _kvSeparator;
@@ -140,6 +153,8 @@ public class DictionaryFlagAttribute<TKey, TValue> : FlagAttribute
 
     protected override string StringifyInput(object target)
     {
+        if (target == null) return "";
+
         if (target is not Dictionary<TKey, TValue> dict)
             throw new Exception($"BlobTagsFlagAttribute expects a Dictionary<{typeof(TKey).Name}, {typeof(TValue).Name}> not {target.GetType().Name}");
         
@@ -176,6 +191,8 @@ public class WindowsFileAttributeFlagAttribute : FlagAttribute
 
     protected override string StringifyInput(object target)
     {
+        if (target == null) return "";
+
         if (target is not WindowsAttributes attr)
             throw new Exception($"Stringification target must be WindowsAttributes, not {target.GetType().Name}");
 
@@ -202,10 +219,12 @@ public class PermanentDeleteFlagAttribute : FlagAttribute
 
     protected override string StringifyInput(object target)
     {
+        if (target == null) return "";
+
         if (target is not PermanentDelete pd)
             throw new Exception($"Stringification target must be PermanentDelete, not {target.GetType().Name}");
 
-        string result;
+        string? result;
         if (!FlagStrings.TryGetValue(pd, out result))
             throw new Exception($"{pd} is not a valid permanent delete strategy");
 
