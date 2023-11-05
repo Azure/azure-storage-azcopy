@@ -1,7 +1,6 @@
 package common
 
 import (
-	"context"
 	"net/url"
 	"reflect"
 	"strings"
@@ -181,7 +180,7 @@ type CredentialInfo struct {
 	OAuthTokenInfo           OAuthTokenInfo
 	S3CredentialInfo         S3CredentialInfo
 	GCPCredentialInfo        GCPCredentialInfo
-	S2SSourceTokenCredential func(ctx context.Context) (*string, error)
+	S2SSourceTokenCredential AuthTokenFunction
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {

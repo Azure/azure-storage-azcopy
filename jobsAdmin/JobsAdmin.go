@@ -78,7 +78,7 @@ var JobsAdmin interface {
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient any, dstServiceClient any) bool
+	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient any, dstServiceClient any, sourceTokenCred common.AuthTokenFunction) bool
 
 	ResurrectJobParts()
 
@@ -358,7 +358,12 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 }
 */
 
-func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient any, dstServiceClient any) bool {
+func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
+								  sourceSAS string,
+								  destinationSAS string,
+								  srcServiceClient any,
+								  dstServiceClient any,
+								  sourceTokenCred common.AuthTokenFunction) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
@@ -386,7 +391,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 		}
 		mmf := planFile.Map()
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
-		jm.AddJobPart2(partNum, planFile, mmf, srcServiceClient, dstServiceClient, false, nil)
+		jm.AddJobPart2(partNum, planFile, mmf, srcServiceClient, dstServiceClient, sourceTokenCred, false, nil)
 	}
 
 	jm, _ := ja.JobMgr(jobId)

@@ -75,7 +75,12 @@ func (sipm *securityInfoPersistenceManager) GetSDDLFromID(id string, shareClient
 	if ok {
 		return perm.(string), nil
 	}
-	
+
+	//remove snap if any
+	shareClient, err := shareClient.WithSnapshot("") 
+	if err != nil {
+		return "", err
+	}
 	si, err := shareClient.GetPermission(sipm.ctx, id, nil)
 	if err != nil {
 		return "", err

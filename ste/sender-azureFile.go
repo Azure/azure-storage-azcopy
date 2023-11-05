@@ -54,7 +54,6 @@ type azureFileSenderBase struct {
 	jptm            IJobPartTransferMgr
 	fileOrDirClient FileClientStub
 	shareClient     *share.Client
-	serviceClient   *service.Client
 	chunkSize       int64
 	numChunks       uint32
 	pacer           pacer
@@ -134,7 +133,6 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	return &azureFileSenderBase{
 		jptm:                 jptm,
-		serviceClient:        serviceClient,
 		shareClient:          shareClient,
 		fileOrDirClient:      client,
 		chunkSize:            chunkSize,
@@ -211,7 +209,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	if fileerror.HasCode(err, fileerror.ParentNotFound) {
 		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
 		jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
-		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.serviceClient, u.jptm.GetFolderCreationTracker())
+		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.shareClient, u.jptm.GetFolderCreationTracker())
 		if err != nil {
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
@@ -482,22 +480,21 @@ func (u *azureFileSenderBase) DirUrlToString() string {
 type AzureFileParentDirCreator struct{}
 
 // getParentDirectoryClient gets parent directory client of a path.
-func (AzureFileParentDirCreator) getParentDirectoryClient(uh FileClientStub, serviceClient *service.Client) (*share.Client, *directory.Client, error) {
+func (AzureFileParentDirCreator) getParentDirectoryClient(uh FileClientStub, shareClient *share.Client) (*directory.Client, error) {
 	rawURL, _ := url.Parse(uh.URL())
 	rawURL.Path = rawURL.Path[:strings.LastIndex(rawURL.Path, "/")]
 	directoryURLParts, err := filesas.ParseURL(rawURL.String())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	directoryOrFilePath := directoryURLParts.DirectoryOrFilePath
-	shareClient := serviceClient.NewShareClient(directoryURLParts.ShareName)
 	if directoryURLParts.ShareSnapshot != "" {
 		shareClient, err = shareClient.WithSnapshot(directoryURLParts.ShareSnapshot)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
-	return shareClient, shareClient.NewRootDirectoryClient().NewSubdirectoryClient(directoryOrFilePath), nil
+	return shareClient.NewRootDirectoryClient().NewSubdirectoryClient(directoryOrFilePath), nil
 }
 
 // verifyAndHandleCreateErrors handles create errors, StatusConflict is ignored, as specific level directory could be existing.
@@ -523,8 +520,8 @@ func (AzureFileParentDirCreator) splitWithoutToken(str string, token rune) []str
 }
 
 // CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileClient *file.Client, serviceClient *service.Client, t FolderCreationTracker) error {
-	shareClient, directoryClient, err := d.getParentDirectoryClient(fileClient, serviceClient)
+func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fileClient *file.Client, shareClient *share.Client, t FolderCreationTracker) error {
+	directoryClient, err := d.getParentDirectoryClient(fileClient, shareClient)
 	if err != nil {
 		return err
 	}

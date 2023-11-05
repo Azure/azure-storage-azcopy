@@ -55,8 +55,9 @@ type IJobMgr interface {
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 		destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
-	AddJobPart2(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceClient any,
-		destinationClient any, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
+	AddJobPart2(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF,
+		sourceClient any, destinationClient any, sourceToken  common.AuthTokenFunction,
+		scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
@@ -419,6 +420,7 @@ func (jm *jobMgr) AddJobPart2(partNum PartNumber,
 	existingPlanMMF *JobPartPlanMMF,
 	sourceClient any,
 	destinationClient any,
+	sourceTokenCred common.AuthTokenFunction,
 	scheduleTransfers bool,
 	completionChan chan struct{}) IJobPartMgr {
 	jpm := &jobPartMgr{
@@ -431,6 +433,7 @@ func (jm *jobMgr) AddJobPart2(partNum PartNumber,
 		cacheLimiter:      jm.cacheLimiter,
 		fileCountLimiter:  jm.fileCountLimiter,
 		closeOnCompletion: completionChan,
+		s2sSourceToken:    sourceTokenCred,
 	}
 	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
 	if existingPlanMMF == nil {

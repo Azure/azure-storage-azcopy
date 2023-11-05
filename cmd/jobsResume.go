@@ -251,8 +251,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 									fromTo common.FromTo,
 									source string,
 									destination string,
-									
-												) (any, any, error) {
+									) (any, any, error) {
 	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
 		rca.SourceSAS = "?" + rca.SourceSAS
 	}
@@ -297,15 +296,14 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	var srcServiceClient any
 	var dstServiceClient any
-	from := fromTo.From()
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 
-	srcServiceClient, err = common.GetServiceClientForLocation(from, source + rca.SourceSAS, tc, &options, nil)
+	srcServiceClient, err = common.GetServiceClientForLocation(fromTo.From(), source + rca.SourceSAS, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	dstServiceClient, err = common.GetServiceClientForLocation(from, destination + rca.DestinationSAS, tc, &options, nil)
+	dstServiceClient, err = common.GetServiceClientForLocation(fromTo.To(), destination + rca.DestinationSAS, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -374,6 +372,9 @@ func (rca resumeCmdArgs) process() error {
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
+
+	// we should stop using credentiaLInfo and use the clients instead. But before we fix
+	// that there will be repeated calls to get Credential type for correctness.
 	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         getJobFromToResponse.FromTo,
 		source:         getJobFromToResponse.Source,
@@ -382,13 +383,28 @@ func (rca resumeCmdArgs) process() error {
 		destinationSAS: rca.DestinationSAS,
 	}, common.CpkOptions{}); err != nil {
 		return err
-	} else if credentialInfo.CredentialType.IsAzureOAuth() {
+	}
+
+	srcCredType, _, err := getCredentialTypeForLocation(ctx,
+		getJobFromToResponse.FromTo.From(),
+		getJobFromToResponse.Source,
+		rca.SourceSAS,
+		true,
+		common.CpkOptions{})
+	if err != nil {
+		return err
+	}
+	
+	if (credentialInfo.CredentialType.IsAzureOAuth())  || srcCredType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
 			credentialInfo.OAuthTokenInfo = *tokenInfo
+			if rca.SourceSAS == "" {
+				credentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenInfo, []string{common.StorageScope}) 
+			}
 		}
 	}
 

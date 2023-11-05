@@ -8,6 +8,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobService "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	fileService "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
@@ -15,6 +16,8 @@ import (
 
 var AzcopyJobPlanFolder string
 var AzcopyCurrentJobLogger ILoggerResetable
+
+type AuthTokenFunction func(context.Context) (*string, error)
 
 // isIPEndpointStyle checkes if URL's host is IP, in this case the storage account endpoint will be composed as:
 // http(s)://IP(:port)/storageaccount/container/...
@@ -125,13 +128,17 @@ func GetServiceClientForLocation(loc Location,
 		}
 		return blobService.NewClientWithNoCredential(resourceURL, o)
 	case ELocation.File():
-		l := locationSpecificOptions.(*FileClientOptions)
-		o := &fileService.ClientOptions{
-			AllowTrailingDot: &l.AllowTrailingDot,
-			AllowSourceTrailingDot: &l.AllowSourceTrailingDot,
-		}
+		var o *fileService.ClientOptions
 		if policyOptions != nil {
 			o = &fileService.ClientOptions{ClientOptions: *policyOptions}
+		}
+		if locationSpecificOptions != nil {
+			o.AllowTrailingDot = &locationSpecificOptions.(*FileClientOptions).AllowTrailingDot
+			o.AllowSourceTrailingDot = &locationSpecificOptions.(*FileClientOptions).AllowSourceTrailingDot
+		}
+		if cred != nil {
+			o.FileRequestIntent = to.Ptr(fileService.ShareTokenIntentBackup)
+			return fileService.NewClient(resourceURL, cred, o)
 		}
 		return fileService.NewClientWithNoCredential(resourceURL, o)
 	case ELocation.BlobFS():

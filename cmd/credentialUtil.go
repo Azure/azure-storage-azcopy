@@ -645,6 +645,7 @@ func createClientOptions(logger common.ILoggerResetable) azcore.ClientOptions {
 
 	if logger != nil {
 		logOptions.Log = logger.Log
+		logOptions.ShouldLog = logger.ShouldLog
 	}
 	return ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,

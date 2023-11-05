@@ -668,19 +668,15 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
 	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)
-
 	if err != nil {
 		return err
 	}
 
-	var srcCredInfo common.CredentialInfo
-	/*
-	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
 	if err != nil {
 		return err
 	}
-	*/
-
+	cca.s2sSourceCredentialType = srcCredInfo.CredentialType
 	// Download is the only time our primary credential type will be based on source
 	if cca.fromTo.IsDownload() {
 		cca.credentialInfo = srcCredInfo
@@ -690,13 +686,16 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() || srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.credentialInfo.CredentialType.IsAzureOAuth() || srcCredInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
 			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			if srcCredInfo.CredentialType.IsAzureOAuth() {
+				cca.credentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenInfo, []string{common.StorageScope})
+			}
 		}
 	}
 

@@ -76,7 +76,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 	var fileClientOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
-		fileClientOptions = common.FileClientOptions{AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable()}
+		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable()}
 	}
 
 	targetServiceClient, err := common.GetServiceClientForLocation(
