@@ -265,7 +265,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 2: initialize pipeline
-		options := createClientOptions(common.LogNone, nil, nil)
+		options := createClientOptions(common.LogNone)
 
 		// step 3: start download
 		blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})

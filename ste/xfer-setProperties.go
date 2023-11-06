@@ -65,12 +65,12 @@ func setPropertiesBlob(jptm IJobPartTransferMgr) {
 
 		var err error = nil
 		if jptm.Info().SrcBlobType == blob.BlobTypeBlockBlob && blockBlobTier != common.EBlockBlobTier.None() && ValidateTier(jptm, blockBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), true) {
-			_, err = srcBlobClient.SetTier(jptm.Context(), blockBlobTier.ToAccessTierType(),
+			_, err = srcBlobClient.SetTier(jptm.Context(), *blockBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
 		// cannot return true for >1, therefore only one of these will run
 		if jptm.Info().SrcBlobType == blob.BlobTypePageBlob && pageBlobTier != common.EPageBlobTier.None() && ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), true) {
-			_, err = srcBlobClient.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(),
+			_, err = srcBlobClient.SetTier(jptm.Context(), *pageBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
 
@@ -127,7 +127,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 		_, pageBlobTier := jptm.BlobTiers()
 		var err error = nil
 		if ValidateTier(jptm, pageBlobTier.ToAccessTierType(), srcBlobClient, jptm.Context(), false) {
-			_, err = srcBlobClient.SetTier(jptm.Context(), pageBlobTier.ToAccessTierType(),
+			_, err = srcBlobClient.SetTier(jptm.Context(), *pageBlobTier.ToAccessTierType(),
 				&blob.SetTierOptions{RehydratePriority: &rehydratePriority})
 		}
 
@@ -159,7 +159,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 
 func setPropertiesFile(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
-	srcFileClient := common.CreateShareFileClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	srcFileClient := common.CreateShareFileClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.

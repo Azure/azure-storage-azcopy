@@ -37,7 +37,7 @@ type pageBlobUploader struct {
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, sip, "")
+	senderBase, err := newPageBlobSenderBase(jptm, destination, pacer, sip, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 				destContainsData = u.destPageRangeOptimizer.doesRangeContainData(
 					pageblob.PageRange{
 						Start: to.Ptr(id.OffsetInFile()),
-						End: to.Ptr(id.OffsetInFile() + reader.Length() - 1),
+						End:   to.Ptr(id.OffsetInFile() + reader.Length() - 1),
 					})
 			}
 

@@ -26,8 +26,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -262,11 +260,7 @@ func getFileServiceClient() *fileservice.Client {
 	if err != nil {
 		panic(err)
 	}
-	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(to.Ptr(common.ETrailingDotOption.Enable()), nil)}
-	clientOptions := azcore.ClientOptions{
-		PerRetryPolicies: perRetryPolicies,
-	}
-	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, &fileservice.ClientOptions{ClientOptions: clientOptions})
+	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
 	if err != nil {
 		panic(err)
 	}
@@ -472,7 +466,7 @@ func getContainerURLWithSAS(c asserter, credential *blob.SharedKeyCredential, co
 	c.AssertNoErr(err)
 
 	sasURL, err := cc.GetSASURL(blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true, Tag: true},
-		time.Now().UTC().Add(48 * time.Hour), nil)
+		time.Now().UTC().Add(48*time.Hour), nil)
 	c.AssertNoErr(err)
 
 	cc, err = container.NewClientWithNoCredential(sasURL, nil)
@@ -488,7 +482,7 @@ func getBlobServiceURLWithSAS(c asserter, credential *blob.SharedKeyCredential) 
 
 	sasURL, err := bsc.GetSASURL(blobsas.AccountResourceTypes{Service: true, Container: true, Object: true},
 		blobsas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true},
-		time.Now().UTC().Add(48 * time.Hour), nil)
+		time.Now().UTC().Add(48*time.Hour), nil)
 	c.AssertNoErr(err)
 
 	bsc, err = blobservice.NewClientWithNoCredential(sasURL, nil)
@@ -503,7 +497,7 @@ func getFileServiceURLWithSAS(c asserter, credential *sharefile.SharedKeyCredent
 	c.AssertNoErr(err)
 	sasURL, err := fsc.GetSASURL(filesas.AccountResourceTypes{Service: true, Container: true, Object: true},
 		filesas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, Create: true},
-		time.Now().UTC().Add(48 * time.Hour), nil)
+		time.Now().UTC().Add(48*time.Hour), nil)
 	c.AssertNoErr(err)
 
 	fsc, err = fileservice.NewClientWithNoCredential(sasURL, nil)
@@ -517,7 +511,7 @@ func getShareURLWithSAS(c asserter, credential *sharefile.SharedKeyCredential, s
 	sc, err := share.NewClientWithSharedKeyCredential(rawURL, credential, nil)
 	c.AssertNoErr(err)
 	sasURL, err := sc.GetSASURL(filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
-		time.Now().UTC().Add(48 * time.Hour), nil)
+		time.Now().UTC().Add(48*time.Hour), nil)
 	c.AssertNoErr(err)
 
 	sc, err = share.NewClientWithNoCredential(sasURL, nil)
@@ -531,7 +525,7 @@ func getAdlsServiceURLWithSAS(c asserter, credential *azdatalake.SharedKeyCreden
 	c.AssertNoErr(err)
 	sasURL, err := dsc.GetSASURL(datalakesas.AccountResourceTypes{Service: true, Container: true, Object: true},
 		datalakesas.AccountPermissions{Read: true, Write: true, Create: true, Delete: true, List: true, Add: true, Update: true, Process: true},
-		time.Now().UTC().Add(48 * time.Hour), nil)
+		time.Now().UTC().Add(48*time.Hour), nil)
 	c.AssertNoErr(err)
 
 	dsc, err = datalakeservice.NewClientWithNoCredential(sasURL, nil)

@@ -332,7 +332,6 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(urlParts.ContainerName)
 		objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient, fsURL)
 
-
 		resp, err := fsURL.NewDirectoryClient("/").GetAccessControl(ctx, nil)
 		if datalakeerror.HasCode(err, "FilesystemNotFound") {
 			return objects
@@ -340,7 +339,7 @@ func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectP
 		a.AssertNoErr(err)
 
 		objects[""] = &objectProperties{
-			entityType: common.EEntityType.Folder(),
+			entityType:         common.EEntityType.Folder(),
 			adlsPermissionsACL: resp.ACL,
 		}
 
@@ -557,7 +556,7 @@ func (r *resourceDummy) isContainerLike() bool {
 }
 
 func (r *resourceDummy) getAllProperties(a asserter) map[string]*objectProperties {
-	panic("not impelmented")
+	panic("not implemented")
 }
 
 func (r *resourceDummy) downloadContent(a asserter, options downloadContentOptions) []byte {
