@@ -105,7 +105,8 @@ func TestRemoveFilesUnderShare(t *testing.T) {
 		a.NotEqual(len(expectedRemovals), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -161,7 +162,8 @@ func TestRemoveFilesUnderDirectory(t *testing.T) {
 		a.NotEqual(len(expectedDeletions), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -310,7 +312,7 @@ func TestRemoveListOfFilesAndDirectories(t *testing.T) {
 
 	expectedDeletions := append(
 		scenarioHelper{}.addFoldersToList(filesUnderTopDir, false), // this is a directory in the list of files list, so it will be recursively processed. Don't include root of megadir itself
-		individualFilesList..., // these are individual files in the files list (so not recursively processed)
+		individualFilesList...,                                     // these are individual files in the files list (so not recursively processed)
 	)
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -481,7 +483,8 @@ func TestRemoveFilesUnderShareWithFromTo(t *testing.T) {
 		a.NotEqual(len(expectedRemovals), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -538,7 +541,8 @@ func TestRemoveFilesUnderDirectoryWithFromTo(t *testing.T) {
 		a.NotEqual(len(expectedDeletions), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }

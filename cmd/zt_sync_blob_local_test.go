@@ -136,7 +136,8 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -225,7 +226,7 @@ func TestSyncDownloadWithMismatchedDestination(t *testing.T) {
 			}
 		}
 
-		a.False( extraFilesFound)
+		a.False(extraFilesFound)
 	})
 }
 
@@ -632,7 +633,8 @@ func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }

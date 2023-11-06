@@ -109,7 +109,8 @@ func TestRemoveBlobsUnderContainer(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -157,7 +158,8 @@ func TestRemoveBlobsUnderVirtualDir(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -442,7 +444,8 @@ func TestRemoveBlobsWithDirectoryStubs(t *testing.T) {
 		a.Equal(20, len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -687,7 +690,8 @@ func TestRemoveBlobsUnderContainerWithFromTo(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -736,7 +740,8 @@ func TestRemoveBlobsUnderVirtualDirWithFromTo(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -756,7 +761,7 @@ func TestPermDeleteSnapshotsVersionsUnderSingleBlob(t *testing.T) {
 	a.Equal(3, len(blobList))
 
 	pager := cc.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix: to.Ptr(blobName),
+		Prefix:  to.Ptr(blobName),
 		Include: container.ListBlobsInclude{Deleted: true, Snapshots: true},
 	})
 	list, err := pager.NextPage(ctx)
