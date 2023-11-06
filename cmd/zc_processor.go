@@ -72,9 +72,16 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
-	srcRelativePath := s.MakeEscapedRelativePath(true, s.isDestDir, storedObject)
-	dstRelativePath := s.MakeEscapedRelativePath(false, s.isDestDir, storedObject)
-
+	//srcRelativePath := s.MakeEscapedRelativePath(true, s.isDestDir, storedObject)
+	//dstRelativePath := s.MakeEscapedRelativePath(false, s.isDestDir, storedObject)
+	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
+	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
+	if srcRelativePath != "" {
+		srcRelativePath = "/" + srcRelativePath
+	}
+	if dstRelativePath != "" {
+		dstRelativePath = "/" + dstRelativePath
+	}
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
