@@ -260,13 +260,7 @@ func beginDetectNewVersion() chan struct{} {
 		filePath := filepath.Join(azcopyLogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
-			if localVersion.OlderThan(*cachedVersion) {
-				executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
-				executableName := executablePathSegments[len(executablePathSegments)-1]
-
-				// output in info mode instead of stderr, as it was crashing CI jobs of some people
-				glcm.Info(executableName + " " + localVersion.original + ": A newer version " + cachedVersion.original + " is available to download\n")
-			}
+			PrintOlderVersion(*cachedVersion, *localVersion)
 			return
 		}
 
@@ -296,13 +290,7 @@ func beginDetectNewVersion() chan struct{} {
 			return
 		}
 
-		if localVersion.OlderThan(*remoteVersion) {
-			executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
-			executableName := executablePathSegments[len(executablePathSegments)-1]
-
-			// output in info mode instead of stderr, as it was crashing CI jobs of some people
-			glcm.Info(executableName + " " + common.AzcopyVersion + ": A newer version " + remoteVersion.original + " is available to download\n")
-		}
+		PrintOlderVersion(*remoteVersion, *localVersion)
 
 		// step 5: persist remote version in local
 		err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
