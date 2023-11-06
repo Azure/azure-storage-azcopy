@@ -237,18 +237,7 @@ func (s *copyTransferProcessor) MakeEscapedRelativePath(source bool, dstIsDir bo
 		if source {
 			relativePath = ""
 		} else {
-			if dstIsDir {
-				// Our source points to a specific file (and so has no relative path)
-				// but our dest does not point to a specific file, it just points to a directory,
-				// and so relativePath needs the _name_ of the source.
-				processedVID := ""
-				if len(object.blobVersionID) > 0 {
-					processedVID = strings.ReplaceAll(object.blobVersionID, ":", "-") + "-"
-				}
-				relativePath += "/" + processedVID + object.name
-			} else {
-				relativePath = ""
-			}
+			relativePath = object.relativePath
 		}
 
 		return pathEncodeRules(relativePath, s.copyJobTemplate.FromTo, false, source)
