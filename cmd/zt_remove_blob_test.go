@@ -194,7 +194,7 @@ func TestRemoveWithIncludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, blobsToInclude, mockedRPC)
 	})
 }
 
@@ -229,7 +229,7 @@ func TestRemoveWithExcludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, blobList, mockedRPC)
 	})
 }
 
@@ -270,7 +270,7 @@ func TestRemoveWithIncludeAndExcludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, blobsToInclude, mockedRPC)
 	})
 }
 
@@ -610,8 +610,8 @@ func TestDryrunRemoveBlobsUnderContainerJson(t *testing.T) {
 		errMarshal := json.Unmarshal([]byte(msg), &deleteTransfer)
 		a.Nil(errMarshal)
 		// comparing some values of deleteTransfer
-		a.Equal(deleteTransfer.Source, blobName[0])
-		a.Equal(deleteTransfer.Destination, blobName[0])
+		a.Equal(deleteTransfer.Source, "/"+blobName[0])
+		a.Equal(deleteTransfer.Destination, "/"+blobName[0])
 		a.Equal("File", deleteTransfer.EntityType.String())
 		a.Equal("BlockBlob", string(deleteTransfer.BlobType))
 	})

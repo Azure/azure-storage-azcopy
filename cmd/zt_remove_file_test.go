@@ -198,7 +198,7 @@ func TestRemoveFilesWithIncludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, filesToInclude, mockedRPC)
 	})
 }
 
@@ -232,7 +232,7 @@ func TestRemoveFilesWithExcludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, fileList, mockedRPC)
 	})
 }
 
@@ -273,7 +273,7 @@ func TestRemoveFilesWithIncludeAndExcludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, filesToInclude, mockedRPC)
 	})
 }
 
