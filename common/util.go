@@ -9,9 +9,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	blobService "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-	fileService "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
 
 var AzcopyJobPlanFolder string
@@ -108,7 +108,7 @@ func GetServiceClientForLocation(loc Location,
 	cred azcore.TokenCredential,
 	policyOptions *azcore.ClientOptions,
 	locationSpecificOptions any,
-	) (any, error) {
+	) (*ServiceClient, error) {
 
 	u, err := url.Parse(resourceURL)
 	if err != nil {
@@ -119,37 +119,68 @@ func GetServiceClientForLocation(loc Location,
 	resourceURL = u.String()
 	switch loc {
 	case ELocation.Blob():
-		var o *blobService.ClientOptions
+		var o *blobservice.ClientOptions
+		var bsc *blobservice.Client
 		if policyOptions != nil {
-			o = &blobService.ClientOptions{ClientOptions: *policyOptions}
+			o = &blobservice.ClientOptions{ClientOptions: *policyOptions}
 		}
+
 		if cred != nil {
-			return blobService.NewClient(resourceURL, cred, o)
+			bsc, err =  blobservice.NewClient(resourceURL, cred, o)
+		} else {
+			bsc, err = blobservice.NewClientWithNoCredential(resourceURL, o)
 		}
-		return blobService.NewClientWithNoCredential(resourceURL, o)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &ServiceClient{bsc: bsc}, nil
+
+
 	case ELocation.File():
-		var o *fileService.ClientOptions
+		var o *fileservice.ClientOptions
+		var fsc *fileservice.Client
 		if policyOptions != nil {
-			o = &fileService.ClientOptions{ClientOptions: *policyOptions}
+			o = &fileservice.ClientOptions{ClientOptions: *policyOptions}
 		}
 		if locationSpecificOptions != nil {
 			o.AllowTrailingDot = &locationSpecificOptions.(*FileClientOptions).AllowTrailingDot
 			o.AllowSourceTrailingDot = &locationSpecificOptions.(*FileClientOptions).AllowSourceTrailingDot
 		}
+
 		if cred != nil {
-			o.FileRequestIntent = to.Ptr(fileService.ShareTokenIntentBackup)
-			return fileService.NewClient(resourceURL, cred, o)
+			o.FileRequestIntent = to.Ptr(fileservice.ShareTokenIntentBackup)
+			fsc, err =  fileservice.NewClient(resourceURL, cred, o)
+		} else {
+			fsc, err = fileservice.NewClientWithNoCredential(resourceURL, o)
 		}
-		return fileService.NewClientWithNoCredential(resourceURL, o)
+		
+		if err != nil {
+			return nil, err
+		}
+
+		return &ServiceClient{fsc: fsc}, nil
+
 	case ELocation.BlobFS():
 		var o *datalake.ClientOptions
+		var dsc *datalake.Client
 		if policyOptions != nil {
 			o = &datalake.ClientOptions{ClientOptions: *policyOptions}
 		}
+		
 		if cred != nil {
-			return datalake.NewClient(resourceURL, cred, o)
+			dsc, err = datalake.NewClient(resourceURL, cred, o)
+		} else {
+			dsc, err =  datalake.NewClientWithNoCredential(resourceURL, o)
 		}
-		return datalake.NewClientWithNoCredential(resourceURL, o)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &ServiceClient{dsc: dsc}, nil
+
 	default:
 		return nil, nil
 	}
@@ -165,4 +196,31 @@ func ScopedCredential(cred azcore.TokenCredential, scopes []string) (func (conte
 		t := "Bearer " + token.Token
 		return &t, err
 	}
+}
+
+type ServiceClient struct {
+	fsc *fileservice.Client
+	bsc *blobservice.Client
+	dsc *datalake.Client
+}
+
+func (s *ServiceClient) BlobServiceClient() (*blobservice.Client, error) {
+	if s.bsc == nil {
+		return nil, ErrInvalidClient("Blob Service")
+	}
+	return s.bsc, nil
+}
+
+func (s *ServiceClient) FileServiceClient() (*fileservice.Client, error) {
+	if s.fsc == nil {
+		return nil, ErrInvalidClient("File Service")
+	}
+	return s.fsc, nil
+}
+
+func (s *ServiceClient) DatalakeServiceClient() (*datalake.Client, error) {
+	if s.dsc == nil {
+		return nil, ErrInvalidClient("Datalake Service")
+	}
+	return s.dsc, nil
 }

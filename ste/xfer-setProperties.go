@@ -9,8 +9,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	fileservice  "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -58,8 +56,8 @@ func setPropertiesBlob(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	bsc, ok := jptm.SrcServiceClient().(*blobservice.Client)
-	if !ok {
+	bsc, err := jptm.SrcServiceClient().BlobServiceClient()
+	if err != nil {
 		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
 		return
 	}
@@ -127,8 +125,8 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	bsc, ok := jptm.SrcServiceClient().(*blobservice.Client)
-	if !ok {
+	bsc, err := jptm.SrcServiceClient().BlobServiceClient()
+	if err != nil {
 		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
 		return
 	}
@@ -190,8 +188,8 @@ func setPropertiesFile(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	s, ok := jptm.SrcServiceClient().(*fileservice.Client)
-	if !ok {
+	s, err := jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
 		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
 		return
 	}

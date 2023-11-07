@@ -251,7 +251,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 									fromTo common.FromTo,
 									source string,
 									destination string,
-									) (any, any, error) {
+									) (*common.ServiceClient, *common.ServiceClient, error) {
 	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
 		rca.SourceSAS = "?" + rca.SourceSAS
 	}
@@ -294,16 +294,14 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		}
 	}
 
-	var srcServiceClient any
-	var dstServiceClient any
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 
-	srcServiceClient, err = common.GetServiceClientForLocation(fromTo.From(), source + rca.SourceSAS, tc, &options, nil)
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source + rca.SourceSAS, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	dstServiceClient, err = common.GetServiceClientForLocation(fromTo.To(), destination + rca.DestinationSAS, tc, &options, nil)
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination + rca.DestinationSAS, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}

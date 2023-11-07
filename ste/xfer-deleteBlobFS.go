@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 
 	"net/http"
@@ -66,8 +65,8 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 	}
 
 	//fsClient := common.CreateFilesystemClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-	s, ok := jptm.SrcServiceClient().(*service.Client)
-	if !ok {
+	s, err := jptm.SrcServiceClient().DatalakeServiceClient()
+	if err != nil {
 		transferDone(common.NewAzError(common.EAzError.InvalidContainerClient(), "Datalake Service"))
 		return
 	}

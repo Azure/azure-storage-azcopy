@@ -45,8 +45,8 @@ import (
 func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
 							  numOfTransfersPerPart int,
 							  fpo common.FolderPropertyOption,
-							  srcServiceClient any,
-							  dstServiceClient any) *copyTransferProcessor {
+							  srcServiceClient *common.ServiceClient,
+							  dstServiceClient *common.ServiceClient) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,

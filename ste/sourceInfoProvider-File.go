@@ -27,7 +27,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -169,8 +168,8 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	s, ok := jptm.SrcServiceClient().(*service.Client)
-	if !ok {
+	s, err := jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
 		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "File service")
 	}
 
@@ -196,11 +195,11 @@ func (p *fileSourceInfoProvider) RawSource() string {
 }
 
 func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
-	fsc, ok := p.jptm.SrcServiceClient().(*service.Client)
-	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
-	if !ok {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Azure Fileshare")
+	fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
+		return nil, err
 	}
+	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	switch p.EntityType() {
 		//nakulkarmerge
 	case common.EEntityType.File():

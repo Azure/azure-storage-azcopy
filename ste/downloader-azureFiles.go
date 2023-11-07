@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -38,9 +37,9 @@ type azureFilesDownloader struct {
 }
 
 func newAzureFilesDownloader(jptm IJobPartTransferMgr) (downloader, error) {
-	fsc, ok := jptm.SrcServiceClient().(*service.Client)
-	if !ok {
-		return &azureFilesDownloader{}, common.NewAzError(common.EAzError.InvalidContainerClient(), "File Service")
+	fsc, err := jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
+		return nil, err
 	}
 
 	return &azureFilesDownloader{

@@ -26,7 +26,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -62,9 +61,9 @@ func (bd *blobDownloader) CreateSymlink(jptm IJobPartTransferMgr) error {
 }
 
 func newBlobDownloader(jptm IJobPartTransferMgr) (downloader, error) {
-	s, ok := jptm.SrcServiceClient().(*service.Client)
-	if !ok {
-		return &blobDownloader{}, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Service")
+	s, err := jptm.SrcServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, err
 	}
 
 	return &blobDownloader{
@@ -84,7 +83,8 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr) {
 
 		// This is safe. We've already asserted that SrcServiceClient() is
 		// a blob service client.
-		c := jptm.SrcServiceClient().(*service.Client).NewContainerClient(jptm.Info().SrcContainer)
+		s, _ := jptm.SrcServiceClient().BlobServiceClient()
+		c := s.NewContainerClient(jptm.Info().SrcContainer)
 		bd.pageRangeOptimizer = newPageRangeOptimizer(c.NewPageBlobClient(bd.txInfo.SrcFilePath), jptm.Context())
 		bd.pageRangeOptimizer.fetchPages()
 	}

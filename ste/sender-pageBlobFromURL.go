@@ -29,7 +29,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -57,7 +56,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 			// capture the necessary info so that we can perform optimizations later
 			// This is strictly an optimization, and not a necessity. We ignore
 			// any errors here.
-			if s, ok := jptm.SrcServiceClient().(*service.Client); ok {
+			if s, err := jptm.SrcServiceClient().BlobServiceClient(); err != nil {
 				pageRangeOptimizer = newPageRangeOptimizer(
 					s.NewContainerClient(jptm.Info().SrcContainer).NewPageBlobClient(
 					jptm.Info().SrcFilePath), jptm.Context())

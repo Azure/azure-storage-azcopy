@@ -27,7 +27,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -102,8 +101,8 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	s, ok := jptm.SrcServiceClient().(*service.Client)
-	if !ok {
+	s, err := jptm.SrcServiceClient().BlobServiceClient()
+	if err != nil {
 		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob service")
 	}
 

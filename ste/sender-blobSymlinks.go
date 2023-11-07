@@ -9,7 +9,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -24,9 +23,9 @@ type blobSymlinkSender struct {
 }
 
 func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
-	s, ok := jptm.DstServiceClient().(*service.Client)
-	if !ok {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
+	s, err := jptm.DstServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, nil
 	}
 	destinationClient := s.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 

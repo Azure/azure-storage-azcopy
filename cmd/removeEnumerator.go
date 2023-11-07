@@ -144,7 +144,12 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	sourceURL, _ := cca.Source.String()
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	
 	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
+	if err != nil {
+		return err
+	}
+
 	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
 
 	// return an error if the unsupported options are passed in

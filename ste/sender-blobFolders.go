@@ -12,7 +12,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -27,9 +26,9 @@ type blobFolderSender struct {
 }
 
 func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
-	s, ok := jptm.DstServiceClient().(*service.Client)
-	if !ok {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
+	s, err := jptm.DstServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, err 
 	}
 	destinationClient := s.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 

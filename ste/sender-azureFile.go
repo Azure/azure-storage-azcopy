@@ -29,7 +29,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"net/http"
 	"net/url"
@@ -107,9 +106,9 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	fileURLParts.ShareName = ""
 	fileURLParts.ShareSnapshot = ""
 	fileURLParts.DirectoryOrFilePath = ""
-	serviceClient, ok := jptm.DstServiceClient().(*service.Client)
-	if !ok {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "File Service")
+	serviceClient, err := jptm.DstServiceClient().FileServiceClient()
+	if err != nil {
+		return nil, err
 	}
 
 	shareClient := serviceClient.NewShareClient(shareName)

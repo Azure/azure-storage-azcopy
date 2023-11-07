@@ -24,7 +24,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, targetServiceClient any) *copyTransferProcessor {
+func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, targetServiceClient *common.ServiceClient) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,

@@ -181,14 +181,15 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
-	jm.AddJobPart2(order.PartNum,
-				   jppfn,
-				   nil,
-				   order.SrcServiceClient,
-				   order.DstServiceClient,
-				   order.CredentialInfo.S2SSourceTokenCredential,
-				   true,
-				   nil)
+	args := &ste.AddJobPartArgs {
+		PartNum: order.PartNum,
+		PlanFile: jppfn,
+		ExistingPlanMMF: nil,
+		SrcClient: order.SrcServiceClient,
+		DstClient: order.DstServiceClient,
+		SourceTokenCred: order.CredentialInfo.S2SSourceTokenCredential,
+	}
+	jm.AddJobPart2(args)
 
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),

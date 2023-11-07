@@ -32,10 +32,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -446,7 +444,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		if err != nil {
 			return nil, err
 		}
-		bsc := c.(*blobservice.Client)
+		bsc, err := c.BlobServiceClient()
+		if err != nil {
+			return nil, err
+		}
 
 		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
@@ -488,7 +489,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		if err != nil {
 			return nil, err
 		}
-		fsc :=  c.(*fileservice.Client)
+		fsc, err :=  c.FileServiceClient()
+		if err != nil {
+			return nil, err
+		}
 
 		if shareName == "" || strings.Contains(shareName, "*") {
 			if !recursive {
@@ -521,8 +525,16 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
+		
 		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.OAuthTokenInfo.TokenCredential, &options, nil)
-		bsc := c.(*blobservice.Client)
+		if err != nil {
+			return nil, err
+		}
+		bsc, err := c.BlobServiceClient()
+		if err != nil {
+			return nil, err
+		}
+
 
 		includeDirectoryStubs = true // DFS is supposed to feed folders in
 		if containerName == "" || strings.Contains(containerName, "*") {

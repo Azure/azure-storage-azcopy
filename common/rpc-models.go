@@ -145,8 +145,8 @@ type CopyJobPartOrderRequest struct {
 
 	SourceRoot       ResourceString
 	DestinationRoot  ResourceString
-	SrcServiceClient any
-	DstServiceClient any
+	SrcServiceClient *ServiceClient
+	DstServiceClient *ServiceClient
 
 	Transfers      Transfers
 	LogLevel       LogLevel
@@ -336,8 +336,8 @@ type ResumeJobRequest struct {
 	JobID           JobID
 	SourceSAS       string
 	DestinationSAS  string
-	SrcServiceClient any
-	DstServiceClient any
+	SrcServiceClient *ServiceClient
+	DstServiceClient *ServiceClient
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
 	CredentialInfo  CredentialInfo

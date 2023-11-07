@@ -31,7 +31,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -95,8 +94,8 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	bsc, ok := jptm.DstServiceClient().(*service.Client)
-	if !ok {
+	bsc, err := jptm.DstServiceClient().BlobServiceClient()
+	if err != nil {
 		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
 	}
 

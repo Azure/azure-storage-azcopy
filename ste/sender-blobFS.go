@@ -36,7 +36,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -71,9 +70,9 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	}
 	headers := props.SrcHTTPHeaders.ToBlobFSHTTPHeaders()
 
-	s, ok := jptm.DstServiceClient().(*service.Client)
-	if !ok {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Datalake service")
+	s, err := jptm.DstServiceClient().DatalakeServiceClient()
+	if err != nil {
+		return nil, err
 	}
 
 	datalakeURLParts, err := azdatalake.ParseURL(destination)

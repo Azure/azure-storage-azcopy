@@ -65,8 +65,8 @@ type IJobPartTransferMgr interface {
 	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
-	SrcServiceClient() any
-	DstServiceClient() any
+	SrcServiceClient() *common.ServiceClient
+	DstServiceClient() *common.ServiceClient
 
 	SourceTrailingDot() *common.TrailingDotOption
 	TrailingDot() *common.TrailingDotOption
@@ -994,11 +994,11 @@ func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context)
 	return jptm.jobPartMgr.S2SSourceTokenCredential(ctx)
 }
 
-func (jptm *jobPartTransferMgr) SrcServiceClient() any {
+func (jptm *jobPartTransferMgr) SrcServiceClient() *common.ServiceClient {
 	return jptm.jobPartMgr.SrcServiceClient()
 }
 
-func (jptm *jobPartTransferMgr) DstServiceClient() any {
+func (jptm *jobPartTransferMgr) DstServiceClient() *common.ServiceClient {
 	return jptm.jobPartMgr.DstServiceClient()
 }
 func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {

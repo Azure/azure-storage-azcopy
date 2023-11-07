@@ -66,8 +66,8 @@ type IJobPartMgr interface {
 	// These functions return Container/fileshare clients.
 	// They must be type asserted before use. In cases where they dont
 	// make sense (say SrcServiceClient for upload) they are il
-	SrcServiceClient() any
-	DstServiceClient() any
+	SrcServiceClient() *common.ServiceClient
+	DstServiceClient() *common.ServiceClient
 
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -183,9 +183,11 @@ type jobPartMgr struct {
 	destinationSAS string
 
 	// These fields hold the container/fileshare client of this jobPart,
-	// whatever is appropriate for this scenario
-	srcServiceClient any
-	dstServiceClient any
+	// whatever is appropriate for this scenario. Ex. For BlobFile, we
+	// will have BlobService client in srcServiceClient and Fileservice in
+	// dstServiceClient. For upload, srcService is nil, and likewise.
+	srcServiceClient *common.ServiceClient
+	dstServiceClient *common.ServiceClient
 
 	credInfo               common.CredentialInfo
 	clientOptions          azcore.ClientOptions
@@ -727,11 +729,11 @@ func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
 	return jpm.credInfo
 }
 
-func (jpm *jobPartMgr) SrcServiceClient() any {
+func (jpm *jobPartMgr) SrcServiceClient() *common.ServiceClient {
 	return jpm.srcServiceClient
 }
 
-func (jpm *jobPartMgr) DstServiceClient() any {
+func (jpm *jobPartMgr) DstServiceClient() *common.ServiceClient {
 	return jpm.dstServiceClient
 }
 
