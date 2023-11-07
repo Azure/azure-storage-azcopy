@@ -18,6 +18,7 @@ import (
 
 type blobFolderSender struct {
 	destinationClient *blockblob.Client // We'll treat all folders as block blobs
+	dstDatalakeClient *file.Client // valid if destination is HNS
 	jptm              IJobPartTransferMgr
 	sip               ISourceInfoProvider
 	metadataToApply   common.Metadata
@@ -32,6 +33,10 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 	}
 	destinationClient := s.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 
+	var dstDatalakeClient *file.Client
+	if dsc := jptm.DstDatalakeClient(); dsc != nil {
+		dstDatalakeClient = dsc.NewFileSystemClient(jptm.Info().DstContainer).NewFileClient(jptm.Info().DstFilePath)
+	}
 	props, err := sip.Properties()
 	if err != nil {
 		return nil, err
@@ -42,6 +47,7 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
+		dstDatalakeClient: dstDatalakeClient,
 		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
 		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:   props.SrcBlobTags,
@@ -57,20 +63,12 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 }
 
 func (b *blobFolderSender) setDatalakeACLs() {
-	blobURLParts, err := blob.ParseURL(b.destinationClient.URL())
-	if err != nil {
-		b.jptm.FailActiveSend("Parsing blob URL", err)
-	}
-	blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
-	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
-	fileClient := common.CreateDatalakeFileClient(blobURLParts.String(), b.jptm.CredentialInfo(), b.jptm.CredentialOpOptions(), b.jptm.ClientOptions())
-
 	// We know for a fact our source is a "blob".
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
 	if err != nil {
 		b.jptm.FailActiveSend("Grabbing source ACLs", err)
 	}
-	_, err = fileClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+	_, err = b.dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 	if err != nil {
 		b.jptm.FailActiveSend("Putting ACLs", err)
 	}

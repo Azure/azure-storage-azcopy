@@ -31,10 +31,18 @@ import (
 type blobFSDownloader struct {
 	jptm IJobPartTransferMgr
 	txInfo *TransferInfo
+	srcFileClient   *file.Client
 }
 
 func newBlobFSDownloader(jptm IJobPartTransferMgr) (downloader, error) {
-	return &blobFSDownloader{}, nil
+	s, err := jptm.SrcServiceClient().DatalakeServiceClient()
+	if err != nil {
+		return nil, err
+	}
+
+	srcFileClient := s.NewFileSystemClient(jptm.Info().SrcContainer).NewFileClient(jptm.Info().SrcFilePath)
+
+	return &blobFSDownloader{srcFileClient: srcFileClient}, nil
 }
 
 func (bd *blobFSDownloader) Prologue(jptm IJobPartTransferMgr) {
@@ -70,10 +78,7 @@ func (bd *blobFSDownloader) Epilogue() {
 func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
-		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
-		info := jptm.Info()
-		source := info.Source
-		srcFileClient := common.CreateDatalakeFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		srcFileClient := bd.srcFileClient
 
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.
@@ -97,7 +102,7 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, destW
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.NewRetryReader(jptm.Context(), &file.RetryReaderOptions{
 			MaxRetries: MaxRetryPerDownloadBody,
-			OnFailedRead: common.NewDatalakeReadLogFunc(jptm, source),
+			OnFailedRead: common.NewDatalakeReadLogFunc(jptm, srcFileClient.DFSURL()),
 		})
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)

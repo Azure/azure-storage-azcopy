@@ -1530,7 +1530,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	from := cca.FromTo.From()
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
@@ -1544,8 +1543,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return err
 	}
 	sourceURL, _ := cca.Source.String()
+	// If this is a S2S transfer, and from == BlobFS, we'll get a blob client instead.
+	// This is because S2S tranfsers always happen on blob endpoint.
+	srcClientType := cca.FromTo.From()
+	if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.BlobFS() {
+		srcClientType = common.ELocation.Blob()
+	}
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
-		cca.FromTo.From(),
+		srcClientType,
 		sourceURL,
 		sourceCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -1562,8 +1567,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 	dstURL, _ := cca.Destination.String()
+	// Like we did for source, if this is a S2S transfer with to == BlobFS,
+	// we write to Blob endpoint instead.
+	dstClientType := cca.FromTo.To()
+	if cca.FromTo.IsS2S() && cca.FromTo.To() == common.ELocation.BlobFS() {
+		dstClientType = common.ELocation.Blob()
+	} 
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
-		cca.FromTo.To(),
+		dstClientType,
 		dstURL,
 		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -1573,10 +1584,40 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return err
 	}
 
+	// On S2S transfer involving BlobFS, additionally get Datalake clients
+	// We need them to SET/GET access control.
+	if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.BlobFS() {
+		dsc, err := common.GetServiceClientForLocation(
+			cca.FromTo.From(),
+			sourceURL,
+			cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+			&options,
+			azureFileSpecificOptions,
+		)
+		if err != nil {
+			return err
+		}
+		jobPartOrder.SrcDatalakeClient, _ = dsc.DatalakeServiceClient()
+	}
+
+	if cca.FromTo.IsS2S() && cca.FromTo.To() == common.ELocation.BlobFS() {
+		dsc, err := common.GetServiceClientForLocation(
+			cca.FromTo.To(),
+			dstURL,
+			cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+			&options,
+			azureFileSpecificOptions,
+		)
+		if err != nil {
+			return err
+		}
+		jobPartOrder.DstDatalakeClient, _ = dsc.DatalakeServiceClient()
+	}
+
 	jobPartOrder.DestinationRoot = cca.Destination
 
 	jobPartOrder.SourceRoot = cca.Source
-	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, from)
+	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, cca.FromTo.From())
 	if err != nil {
 		return err
 	}

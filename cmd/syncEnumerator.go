@@ -139,17 +139,62 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
+	
+	copyJobTemplate := &common.CopyJobPartOrderRequest{
+		JobID:               cca.jobID,
+		CommandString:       cca.commandString,
+		FromTo:              cca.fromTo,
+		Fpo:                 fpo,
+		SymlinkHandlingType: cca.symlinkHandling,
+		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
+		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
+		CredentialInfo:      cca.credentialInfo,
+
+		// flags
+		BlobAttributes: common.BlobTransferAttributes{
+			PreserveLastModifiedTime: cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
+			PutMd5:                   cca.putMd5,
+			MD5ValidationOption:      cca.md5ValidationOption,
+			BlockSizeInBytes:         cca.blockSize},
+		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
+		ForceIfReadOnly:                cca.forceIfReadOnly,
+		LogLevel:                       azcopyLogVerbosity,
+		PreserveSMBPermissions:         cca.preservePermissions,
+		PreserveSMBInfo:                cca.preserveSMBInfo,
+		PreservePOSIXProperties:        cca.preservePOSIXProperties,
+		S2SSourceChangeValidation:      true,
+		DestLengthValidation:           true,
+		S2SGetPropertiesInBackend:      true,
+		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
+		CpkOptions:                     cca.cpkOptions,
+		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+
+		S2SSourceCredentialType: cca.s2sSourceCredentialType,
+		FileAttributes: common.FileTransferAttributes{
+			TrailingDot: cca.trailingDot,
+		},
+	}
+
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	
+	// Create Source Client. 
 	var azureFileSpecificOptions any
 	if cca.fromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions {
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
 	}
+
+	// If this is a S2S transfer, and from == BlobFS, we'll get a blob client instead.
+	// This is because S2S tranfsers always happen on blob endpoint.
+	srcClientType := cca.fromTo.From()
+	if cca.fromTo.IsS2S() && srcClientType == common.ELocation.BlobFS() {
+		srcClientType = common.ELocation.Blob()
+	}
 	sourceURL, _ := cca.source.String()
-	srcServiceClient, err := common.GetServiceClientForLocation(
-		cca.fromTo.From(),
+	copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
+		srcClientType,
 		sourceURL,
 		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -159,6 +204,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		return nil, err
 	}
 
+	// Create Destination client
 	if cca.fromTo.To() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions {
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
@@ -166,14 +212,49 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	}
 	dstURL, _ := cca.destination.String()
-	dstServiceClient, err := common.GetServiceClientForLocation(
-		cca.fromTo.To(),
+	dstClientType := cca.fromTo.To()
+	if cca.fromTo.IsS2S() && cca.fromTo.To() == common.ELocation.BlobFS() {
+		dstClientType = common.ELocation.Blob()
+	}
+	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
+		dstClientType,
 		dstURL,
 		dstCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, srcServiceClient, dstServiceClient)
+
+	// On S2S transfer involving BlobFS, additionally get Datalake clients
+	// We need them to SET/GET access control.
+	if cca.fromTo.IsS2S() && cca.fromTo.From() == common.ELocation.BlobFS() {
+		dsc, err := common.GetServiceClientForLocation(
+			cca.fromTo.From(),
+			sourceURL,
+			srcCredInfo.OAuthTokenInfo.TokenCredential,
+			&options,
+			azureFileSpecificOptions,
+		)
+		if err != nil {
+			return nil, err
+		}
+		copyJobTemplate.SrcDatalakeClient, _ = dsc.DatalakeServiceClient()
+	}
+
+	if cca.fromTo.IsS2S() && cca.fromTo.To() == common.ELocation.BlobFS() {
+		dsc, err := common.GetServiceClientForLocation(
+			cca.fromTo.To(),
+			dstURL,
+			dstCredInfo.OAuthTokenInfo.TokenCredential,
+			&options,
+			azureFileSpecificOptions,
+		)
+		if err != nil {
+			return nil, err
+		}
+		copyJobTemplate.DstDatalakeClient, _ = dsc.DatalakeServiceClient()
+	}
+
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()

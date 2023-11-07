@@ -11,6 +11,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"net/url"
 
@@ -65,8 +66,12 @@ type IJobPartTransferMgr interface {
 	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
+	
 	SrcServiceClient() *common.ServiceClient
 	DstServiceClient() *common.ServiceClient
+	SrcDatalakeClient() *datalake.Client
+	DstDatalakeClient() *datalake.Client
+
 
 	SourceTrailingDot() *common.TrailingDotOption
 	TrailingDot() *common.TrailingDotOption
@@ -131,10 +136,6 @@ type TransferInfo struct {
 	DstContainer string
 	SrcFilePath  string
 	DstFilePath  string
-
-	// Depending on FromTo, clients are blob/file clients appropriately
-	SrcServiceClient any
-	DstServiceClient any
 
 	// Transfer info for S2S copy
 	SrcProperties
@@ -1001,6 +1002,15 @@ func (jptm *jobPartTransferMgr) SrcServiceClient() *common.ServiceClient {
 func (jptm *jobPartTransferMgr) DstServiceClient() *common.ServiceClient {
 	return jptm.jobPartMgr.DstServiceClient()
 }
+
+func (jptm *jobPartTransferMgr) SrcDatalakeClient() *datalake.Client {
+	return jptm.jobPartMgr.DstDatalakeClient()
+}
+
+func (jptm *jobPartTransferMgr) DstDatalakeClient() *datalake.Client {
+	return jptm.jobPartMgr.DstDatalakeClient()
+}
+
 func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
 	return jptm.jobPartMgr.S2SSourceClientOptions()
 }

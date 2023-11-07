@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -147,6 +148,10 @@ type CopyJobPartOrderRequest struct {
 	DestinationRoot  ResourceString
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
+
+	//These clients are required only in S2S transfers from/to datalake
+	SrcDatalakeClient *datalake.Client
+	DstDatalakeClient *datalake.Client
 
 	Transfers      Transfers
 	LogLevel       LogLevel

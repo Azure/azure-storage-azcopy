@@ -17,6 +17,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sync/semaphore"
@@ -68,6 +69,8 @@ type IJobPartMgr interface {
 	// make sense (say SrcServiceClient for upload) they are il
 	SrcServiceClient() *common.ServiceClient
 	DstServiceClient() *common.ServiceClient
+	SrcDatalakeClient() *datalake.Client
+	DstDatalakeClient() *datalake.Client
 
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -188,6 +191,8 @@ type jobPartMgr struct {
 	// dstServiceClient. For upload, srcService is nil, and likewise.
 	srcServiceClient *common.ServiceClient
 	dstServiceClient *common.ServiceClient
+	srcDatalakeClient *datalake.Client
+	dstDatalakeClient *datalake.Client
 
 	credInfo               common.CredentialInfo
 	clientOptions          azcore.ClientOptions
@@ -735,6 +740,14 @@ func (jpm *jobPartMgr) SrcServiceClient() *common.ServiceClient {
 
 func (jpm *jobPartMgr) DstServiceClient() *common.ServiceClient {
 	return jpm.dstServiceClient
+}
+
+func (jpm *jobPartMgr) SrcDatalakeClient() *datalake.Client {
+	return jpm.srcDatalakeClient
+}
+
+func (jpm *jobPartMgr) DstDatalakeClient() *datalake.Client {
+	return jpm.dstDatalakeClient
 }
 
 func (jpm *jobPartMgr) S2SSourceTokenCredential(ctx context.Context) (*string, error) {

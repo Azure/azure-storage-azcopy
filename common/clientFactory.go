@@ -30,7 +30,6 @@ import (
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
-	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
@@ -283,25 +282,6 @@ func CreateFilesystemClient(u string, credInfo CredentialInfo, credOpOptions *Cr
 		},
 		SharedKeyCredential: func(u string, sharedKey *azdatalake.SharedKeyCredential, options azcore.ClientOptions) (*filesystem.Client, error) {
 			return filesystem.NewClientWithSharedKeyCredential(u, sharedKey, &filesystem.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*azdatalake.SharedKeyCredential, error) {
-			return azdatalake.NewSharedKeyCredential(accountName, accountKey)
-		},
-	}
-
-	return createClient(callbacks, u, credInfo, credOpOptions, options)
-}
-
-func CreateDatalakeFileClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *datalakefile.Client {
-	callbacks := newClientCallbacks[datalakefile.Client, azdatalake.SharedKeyCredential]{
-		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*datalakefile.Client, error) {
-			return datalakefile.NewClient(u, tc, &datalakefile.ClientOptions{ClientOptions: options})
-		},
-		NoCredential: func(u string, options azcore.ClientOptions) (*datalakefile.Client, error) {
-			return datalakefile.NewClientWithNoCredential(u, &datalakefile.ClientOptions{ClientOptions: options})
-		},
-		SharedKeyCredential: func(u string, sharedKey *azdatalake.SharedKeyCredential, options azcore.ClientOptions) (*datalakefile.Client, error) {
-			return datalakefile.NewClientWithSharedKeyCredential(u, sharedKey, &datalakefile.ClientOptions{ClientOptions: options})
 		},
 		NewSharedKeyCredential: func(accountName string, accountKey string) (*azdatalake.SharedKeyCredential, error) {
 			return azdatalake.NewSharedKeyCredential(accountName, accountKey)

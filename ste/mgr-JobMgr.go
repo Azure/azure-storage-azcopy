@@ -446,6 +446,8 @@ func (jm *jobMgr) AddJobPart2(args *AddJobPartArgs) IJobPartMgr{
 		filename:          args.PlanFile,
 		srcServiceClient:  args.SrcClient,
 		dstServiceClient:  args.DstClient,
+		srcDatalakeClient: args.SrcDatalakeClient,
+		dstDatalakeClient: args.DstDatalakeClient,
 		pacer:             jm.pacer,
 		slicePool:         jm.slicePool,
 		cacheLimiter:      jm.cacheLimiter,

@@ -45,6 +45,7 @@ type blockBlobSenderBase struct {
 	jptm                IJobPartTransferMgr
 	sip                 ISourceInfoProvider
 	destBlockBlobClient *blockblob.Client
+	dstDatalakeClient   *file.Client
 	chunkSize           int64
 	numChunks           uint32
 	pacer               pacer
@@ -136,6 +137,11 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	}
 	destBlockBlobClient := c.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 
+	var dstDatalakeClient *file.Client
+	if dsc := jptm.DstDatalakeClient(); dsc != nil {
+		dstDatalakeClient = dsc.NewFileSystemClient(jptm.Info().DstContainer).NewFileClient(jptm.Info().DstFilePath)
+	}
+
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
@@ -161,6 +167,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		jptm:                jptm,
 		sip:                 srcInfoProvider,
 		destBlockBlobClient: destBlockBlobClient,
+		dstDatalakeClient:   dstDatalakeClient,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
 		pacer:               pacer,
@@ -259,20 +266,12 @@ func (s *blockBlobSenderBase) Epilogue() {
 	// Upload ADLS Gen 2 ACLs
 	fromTo := jptm.FromTo()
 	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
-		blobURLParts, err := blob.ParseURL(s.destBlockBlobClient.URL())
-		if err != nil {
-			jptm.FailActiveSend("Parsing blob URL", err)
-		}
-		blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
-		blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
-
-		fileClient := common.CreateDatalakeFileClient(blobURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 		// We know for a fact our source is a "blob".
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
 		if err != nil {
 			jptm.FailActiveSend("Grabbing source ACLs", err)
 		}
-		_, err = fileClient.SetAccessControl(jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+		_, err = s.dstDatalakeClient.SetAccessControl(jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 		if err != nil {
 			jptm.FailActiveSend("Putting ACLs", err)
 		}

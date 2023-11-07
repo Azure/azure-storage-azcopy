@@ -22,11 +22,11 @@ package ste
 
 import (
 	"io"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -34,6 +34,7 @@ import (
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
 	source *blob.Client
+	sourceDatalakeClient *file.Client
 }
 
 func (p *blobSourceInfoProvider) IsDFSSource() bool {
@@ -101,35 +102,25 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	s, err := jptm.SrcServiceClient().BlobServiceClient()
+	var ret =  &blobSourceInfoProvider{
+		defaultRemoteSourceInfoProvider: *base,
+	}
+
+	bsc, err := jptm.SrcServiceClient().BlobServiceClient()
 	if err != nil {
 		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob service")
 	}
+	ret.source = bsc.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
 
-	return &blobSourceInfoProvider{
-		defaultRemoteSourceInfoProvider: *base,
-		source: s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath),
-	}, nil
+	if dsc := jptm.SrcDatalakeClient(); dsc != nil {
+		ret.sourceDatalakeClient = dsc.NewFileSystemClient(jptm.Info().SrcContainer).NewFileClient(jptm.Info().SrcFilePath)
+	}
+
+	return ret, nil
 }
 
 func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
-	// We can only get access control via HNS, so we MUST switch here.
-	presignedURL, err := p.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-	parsedURL, err := blob.ParseURL(presignedURL)
-	if err != nil {
-		return nil, err
-	}
-	parsedURL.Host = strings.ReplaceAll(parsedURL.Host, ".blob", ".dfs")
-	if parsedURL.BlobName != "" {
-		parsedURL.BlobName = strings.TrimSuffix(parsedURL.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
-	} else {
-		parsedURL.BlobName = "/" // container level perms MUST have a /
-	}
-	fileClient := common.CreateDatalakeFileClient(parsedURL.String(), p.jptm.CredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.ClientOptions())
-	resp, err := fileClient.GetAccessControl(p.jptm.Context(), nil)
+	resp, err := p.sourceDatalakeClient.GetAccessControl(p.jptm.Context(), nil)
 	if err != nil {
 		return nil, err
 	}
