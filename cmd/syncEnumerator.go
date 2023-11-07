@@ -136,7 +136,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		jobsAdmin.JobsAdmin.LogToJobLog(folderMessage, common.LogInfo)
 	}
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, destIsDir)
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()

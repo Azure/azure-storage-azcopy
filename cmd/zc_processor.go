@@ -47,12 +47,9 @@ type copyTransferProcessor struct {
 	folderPropertiesOption common.FolderPropertyOption
 	symlinkHandlingType    common.SymlinkHandlingType
 	dryrunMode             bool
-	isDestDir              bool
 }
 
-func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source, destination common.ResourceString,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrunMode bool, isDestDir bool) *copyTransferProcessor {
+func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -64,7 +61,6 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 		folderPropertiesOption:    copyJobTemplate.Fpo,
 		symlinkHandlingType:       copyJobTemplate.SymlinkHandlingType,
 		dryrunMode:                dryrunMode,
-		isDestDir:                 isDestDir,
 	}
 }
 
@@ -72,8 +68,6 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
-	//srcRelativePath := s.MakeEscapedRelativePath(true, s.isDestDir, storedObject)
-	//dstRelativePath := s.MakeEscapedRelativePath(false, s.isDestDir, storedObject)
 	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
 	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
 	if srcRelativePath != "" {
@@ -229,33 +223,4 @@ func (s *copyTransferProcessor) sendPartToSte() common.CopyJobPartOrderResponse 
 	}
 
 	return resp
-}
-
-func (s *copyTransferProcessor) MakeEscapedRelativePath(source bool, dstIsDir bool, object StoredObject) (relativePath string) {
-	// write straight to /dev/null, do not determine a indirect path
-	if !source && s.destination.Value == common.Dev_Null {
-		return "" // ignore path encode rules
-	}
-
-	// source is a EXACT path to the file
-	if object.isSingleSourceFile() {
-		// If we're finding an object from the source, it returns "" if it's already got it.
-		// If we're finding an object on the destination and we get "", we need to hand it the object name (if it's pointing to a folder)
-		if source {
-			relativePath = ""
-		} else {
-			relativePath = object.relativePath
-		}
-
-		return pathEncodeRules(relativePath, s.copyJobTemplate.FromTo, false, source)
-	}
-
-	// If it's out here, the object is contained in a folder, or was found via a wildcard, or object.isSourceRootFolder == true
-	if object.isSourceRootFolder() {
-		relativePath = "" // otherwise we get "/" from the line below, and that breaks some clients, e.g. blobFS
-	} else {
-		relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-	}
-
-	return pathEncodeRules(relativePath, s.copyJobTemplate.FromTo, false, source)
 }

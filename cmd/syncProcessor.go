@@ -42,7 +42,7 @@ import (
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, isDestDir bool) *copyTransferProcessor {
+func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,
@@ -83,8 +83,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
-		reportFirstPart, reportFinalPart, cca.preserveAccessTier, cca.dryrunMode, isDestDir)
+	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination, reportFirstPart, reportFinalPart, cca.preserveAccessTier, cca.dryrunMode)
 }
 
 // base for delete processors targeting different resources
