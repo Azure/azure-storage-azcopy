@@ -119,6 +119,12 @@ func GetServiceClientForLocation(loc Location,
 	resourceURL = u.String()
 	switch loc {
 	case ELocation.Blob():
+		// In some cases, we create a blob client for a datalake EP.
+		// Use correct url in such cases
+		if strings.Contains(u.Host, ".dfs") {
+			u.Host = strings.Replace(u.Host, ".dfs", ".blob", 1)
+			resourceURL = u.String()
+		}
 		var o *blobservice.ClientOptions
 		var bsc *blobservice.Client
 		if policyOptions != nil {

@@ -24,6 +24,9 @@ Copies source data to a destination location. The supported directions are:
   - local <-> Azure Files (Share/directory SAS authentication)
   - local <-> ADLS Gen 2 (SAS, OAuth, or SharedKey authentication)
   - Azure Blob (SAS or public) -> Azure Blob (SAS or OAuth authentication)
+  - ADLS Gen 2 (SAS or public) -> ADLS Gen 2 (SAS or OAuth authentication)
+  - ADLS Gen2 (SAS or OAuth authentication) <-> ADLS Gen2 (SAS or OAuth authentication)
+  - ADLS Gen2 (SAS or OAuth authentication) <-> Azure Blob (SAS or OAuth authentication)
   - Azure Blob (SAS or public) -> Azure Files (SAS)
   - Azure Files (SAS) -> Azure Files (SAS)
   - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
@@ -386,7 +389,8 @@ const syncCmdLongDescription = `
 The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. Alternatively, you can use the --compare-hash flag to transfer only files which differ in their MD5 hash. The supported pairs are:
   
   - Local <-> Azure Blob / Azure File (either SAS or OAuth authentication can be used)
-  - Azure Blob <-> Azure Blob (Source must include a SAS or is publicly accessible; either SAS or OAuth authentication can be used for destination)
+  - Azure Blob <-> Azure Blob (either SAS or OAuth authentication can be used)
+  - ADLS Gen2 <-> ADLS Gen2 (either SAS or OAuth authentication can be used)
   - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authentication should be used for destination)
   - Azure Blob <-> Azure File
 

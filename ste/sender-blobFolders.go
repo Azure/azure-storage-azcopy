@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -35,7 +34,7 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 
 	var dstDatalakeClient *file.Client
 	if dsc := jptm.DstDatalakeClient(); dsc != nil {
-		dstDatalakeClient = dsc.NewFileSystemClient(jptm.Info().DstContainer).NewFileClient(jptm.Info().DstFilePath)
+		dstDatalakeClient = dsc.NewFileSystemClient(jptm.Info().DstContainer + "/").NewFileClient(jptm.Info().DstFilePath)
 	}
 	props, err := sip.Properties()
 	if err != nil {
@@ -116,21 +115,13 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 }
 
 func (b *blobFolderSender) SetContainerACL() error {
-	blobURLParts, err := blob.ParseURL(b.destinationClient.URL())
-	if err != nil {
-		b.jptm.FailActiveSend("Parsing blob URL", err)
-	}
-	blobURLParts.ContainerName += "/" // container level perms MUST have a /
-	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
-	rootClient := common.CreateFilesystemClient(blobURLParts.String(), b.jptm.CredentialInfo(), b.jptm.CredentialOpOptions(), b.jptm.ClientOptions()).NewDirectoryClient("")
-
 	// We know for a fact our source is a "blob".
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
 	if err != nil {
 		b.jptm.FailActiveSend("Grabbing source ACLs", err)
 		return folderPropertiesSetInCreation{} // standard completion will detect failure
 	}
-	_, err = rootClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+	_, err = b.dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 	if err != nil {
 		b.jptm.FailActiveSend("Putting ACLs", err)
 		return folderPropertiesSetInCreation{} // standard completion will detect failure

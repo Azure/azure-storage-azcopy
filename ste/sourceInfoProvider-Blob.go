@@ -22,6 +22,7 @@ package ste
 
 import (
 	"io"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -113,7 +114,12 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	ret.source = bsc.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
 
 	if dsc := jptm.SrcDatalakeClient(); dsc != nil {
-		ret.sourceDatalakeClient = dsc.NewFileSystemClient(jptm.Info().SrcContainer).NewFileClient(jptm.Info().SrcFilePath)
+		if jptm.Info().SrcFilePath == "" {// this is a container, container needs  additional '/' at end
+			ret.sourceDatalakeClient = dsc.NewFileSystemClient(jptm.Info().SrcContainer).NewFileClient("///")
+		} else {
+			srcPath := strings.TrimSuffix(jptm.Info().SrcFilePath, "/") //DFS cannot handle these
+			ret.sourceDatalakeClient = dsc.NewFileSystemClient(jptm.Info().SrcContainer).NewFileClient(srcPath)
+		}
 	}
 
 	return ret, nil

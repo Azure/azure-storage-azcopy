@@ -190,6 +190,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		SrcDatalakeClient: order.SrcDatalakeClient,
 		DstDatalakeClient: order.DstDatalakeClient,
 		SourceTokenCred: order.CredentialInfo.S2SSourceTokenCredential,
+		ScheduleTransfers: true,
 	}
 	jm.AddJobPart2(args)
 

@@ -24,18 +24,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
-	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-	sharedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 )
 
 var glcm = GetLifecycleMgr()
@@ -100,26 +93,6 @@ func createClient[T, U any](callbacks newClientCallbacks[T, U], u string, credIn
 
 ///////////////////////////////////////////////// BLOB FUNCTIONS /////////////////////////////////////////////////
 
-// CreateBlobServiceClient creates a blob service client with credentials specified by credInfo
-func CreateBlobServiceClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *blobservice.Client {
-	callbacks := newClientCallbacks[blobservice.Client, blob.SharedKeyCredential]{
-		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blobservice.Client, error) {
-			return blobservice.NewClient(u, tc, &blobservice.ClientOptions{ClientOptions: options})
-		},
-		NoCredential: func(u string, options azcore.ClientOptions) (*blobservice.Client, error) {
-			return blobservice.NewClientWithNoCredential(u, &blobservice.ClientOptions{ClientOptions: options})
-		},
-		SharedKeyCredential: func(u string, sharedKey *blob.SharedKeyCredential, options azcore.ClientOptions) (*blobservice.Client, error) {
-			return blobservice.NewClientWithSharedKeyCredential(u, sharedKey, &blobservice.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*blob.SharedKeyCredential, error) {
-			return blob.NewSharedKeyCredential(accountName, accountKey)
-		},
-	}
-
-	return createClient(callbacks, u, credInfo, credOpOptions, options)
-}
-
 func CreateBlobClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *blob.Client {
 	callbacks := newClientCallbacks[blob.Client, blob.SharedKeyCredential]{
 		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*blob.Client, error) {
@@ -158,119 +131,7 @@ func CreateBlockBlobClient(u string, credInfo CredentialInfo, credOpOptions *Cre
 	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
 
-///////////////////////////////////////////////// FILE FUNCTIONS /////////////////////////////////////////////////
-func CreateFileServiceClient(u string, cred azcore.TokenCredential, o *fileservice.ClientOptions) (*fileservice.Client, error) {
-	if cred != nil {
-		return fileservice.NewClient(u, cred, o)
-	}
-
-	return fileservice.NewClientWithNoCredential(u, o)
-}
-
-func CreateFileServiceClient2(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions, trailingDot *TrailingDotOption, from *Location) *fileservice.Client {
-	allowTrailingDot := trailingDot != nil && *trailingDot == trailingDot.Enable()
-	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
-	callbacks := newClientCallbacks[fileservice.Client, sharefile.SharedKeyCredential]{
-		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*fileservice.Client, error) {
-			return fileservice.NewClient(u, tc, &fileservice.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot), FileRequestIntent: to.Ptr(fileservice.ShareTokenIntentBackup)})
-		},
-		NoCredential: func(u string, options azcore.ClientOptions) (*fileservice.Client, error) {
-			return fileservice.NewClientWithNoCredential(u, &fileservice.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot)})
-		},
-		SharedKeyCredential: func(u string, sharedKey *fileservice.SharedKeyCredential, options azcore.ClientOptions) (*fileservice.Client, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*fileservice.SharedKeyCredential, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-		},
-	}
-
-	return createClient(callbacks, u, credInfo, credOpOptions, options)
-}
-
-func CreateShareClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions, trailingDot *TrailingDotOption, from *Location) *share.Client {
-	allowTrailingDot := trailingDot != nil && *trailingDot == trailingDot.Enable()
-	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
-	callbacks := newClientCallbacks[share.Client, sharefile.SharedKeyCredential]{
-		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*share.Client, error) {
-			return share.NewClient(u, tc, &share.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot), FileRequestIntent: to.Ptr(share.TokenIntentBackup)})
-		},
-		NoCredential: func(u string, options azcore.ClientOptions) (*share.Client, error) {
-			return share.NewClientWithNoCredential(u, &share.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot)})
-		},
-		SharedKeyCredential: func(u string, sharedKey *share.SharedKeyCredential, options azcore.ClientOptions) (*share.Client, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*share.SharedKeyCredential, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-		},
-	}
-
-	return createClient(callbacks, u, credInfo, credOpOptions, options)
-}
-
-func CreateShareFileClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions, trailingDot *TrailingDotOption, from *Location) *sharefile.Client {
-	allowTrailingDot := trailingDot != nil && *trailingDot == trailingDot.Enable()
-	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
-	callbacks := newClientCallbacks[sharefile.Client, sharefile.SharedKeyCredential]{
-		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*sharefile.Client, error) {
-			return sharefile.NewClient(u, tc, &sharefile.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot), FileRequestIntent: to.Ptr(sharefile.ShareTokenIntentBackup)})
-		},
-		NoCredential: func(u string, options azcore.ClientOptions) (*sharefile.Client, error) {
-			return sharefile.NewClientWithNoCredential(u, &sharefile.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot)})
-		},
-		SharedKeyCredential: func(u string, sharedKey *sharefile.SharedKeyCredential, options azcore.ClientOptions) (*sharefile.Client, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*sharefile.SharedKeyCredential, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-		},
-	}
-
-	return createClient(callbacks, u, credInfo, credOpOptions, options)
-}
-
-func CreateShareDirectoryClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions, trailingDot *TrailingDotOption, from *Location) *sharedirectory.Client {
-	allowTrailingDot := trailingDot != nil && *trailingDot == trailingDot.Enable()
-	allowSourceTrailingDot := allowTrailingDot && from != nil && *from == ELocation.File()
-	callbacks := newClientCallbacks[sharedirectory.Client, sharedirectory.SharedKeyCredential]{
-		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*sharedirectory.Client, error) {
-			return sharedirectory.NewClient(u, tc, &sharedirectory.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot), FileRequestIntent: to.Ptr(sharedirectory.ShareTokenIntentBackup)})
-		},
-		NoCredential: func(u string, options azcore.ClientOptions) (*sharedirectory.Client, error) {
-			return sharedirectory.NewClientWithNoCredential(u, &sharedirectory.ClientOptions{ClientOptions: options, AllowTrailingDot: to.Ptr(allowTrailingDot), AllowSourceTrailingDot: to.Ptr(allowSourceTrailingDot)})
-		},
-		SharedKeyCredential: func(u string, sharedKey *sharedirectory.SharedKeyCredential, options azcore.ClientOptions) (*sharedirectory.Client, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*sharedirectory.SharedKeyCredential, error) {
-			return nil, fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType)
-		},
-	}
-
-	return createClient(callbacks, u, credInfo, credOpOptions, options)
-}
-
 ///////////////////////////////////////////////// DATALAKE FUNCTIONS /////////////////////////////////////////////////
-
-func CreateDatalakeServiceClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *datalakeservice.Client {
-	callbacks := newClientCallbacks[datalakeservice.Client, azdatalake.SharedKeyCredential]{
-		TokenCredential: func(u string, tc azcore.TokenCredential, options azcore.ClientOptions) (*datalakeservice.Client, error) {
-			return datalakeservice.NewClient(u, tc, &datalakeservice.ClientOptions{ClientOptions: options})
-		},
-		NoCredential: func(u string, options azcore.ClientOptions) (*datalakeservice.Client, error) {
-			return datalakeservice.NewClientWithNoCredential(u, &datalakeservice.ClientOptions{ClientOptions: options})
-		},
-		SharedKeyCredential: func(u string, sharedKey *azdatalake.SharedKeyCredential, options azcore.ClientOptions) (*datalakeservice.Client, error) {
-			return datalakeservice.NewClientWithSharedKeyCredential(u, sharedKey, &datalakeservice.ClientOptions{ClientOptions: options})
-		},
-		NewSharedKeyCredential: func(accountName string, accountKey string) (*azdatalake.SharedKeyCredential, error) {
-			return azdatalake.NewSharedKeyCredential(accountName, accountKey)
-		},
-	}
-
-	return createClient(callbacks, u, credInfo, credOpOptions, options)
-}
 
 func CreateFilesystemClient(u string, credInfo CredentialInfo, credOpOptions *CredentialOpOptions, options azcore.ClientOptions) *filesystem.Client {
 	callbacks := newClientCallbacks[filesystem.Client, azdatalake.SharedKeyCredential]{
