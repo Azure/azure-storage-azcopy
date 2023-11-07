@@ -284,16 +284,23 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	srcURI, dstURI, _ := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcContainer, srcPath, err := common.SplitContainerNameFromPath(srcURI)
-	if err != nil {
-		panic(err)
+	var err error
+	var srcContainer, srcPath string
+	if plan.FromTo.From().IsRemote() {
+		srcContainer, srcPath, err = common.SplitContainerNameFromPath(srcURI)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	dstContainer, dstPath, err := common.SplitContainerNameFromPath(dstURI)
-	if err != nil {
-		panic(err)
+	var dstContainer, dstPath string
+	if plan.FromTo.To().IsRemote() {
+		dstContainer, dstPath, err = common.SplitContainerNameFromPath(dstURI)
+		if err != nil {
+			panic(err)
+		}
 	}
-
+	
 	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, DestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption, entityType, versionID, snapshotID, blobTags :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
