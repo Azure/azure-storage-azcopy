@@ -498,9 +498,13 @@ func (s *scenario) validateProperties() {
 			destProps = s.state.dest.getAllProperties(s.a)
 		}
 
-		destName := f.name
-		if addedDirAtDest != "" {
-			destName = addedDirAtDest + "/" + destName
+		var destName string
+		if addedDirAtDest == "" {
+			destName = f.name
+		} else if f.name == "" {
+			destName = addedDirAtDest
+		} else {
+			destName = addedDirAtDest + "/" + f.name
 		}
 		destName = fixSlashes(destName, s.fromTo.To())
 		actual, ok := destProps[destName]
@@ -559,9 +563,13 @@ func (s *scenario) validateContent() {
 		}
 		if f.hasContentToValidate() {
 			expectedContentMD5 := f.creationProperties.contentHeaders.contentMD5
-			destName := f.name
-			if addedDirAtDest != "" {
-				destName = addedDirAtDest + "/" + destName
+			var destName string
+			if addedDirAtDest == "" {
+				destName = f.name
+			} else if f.name == "" {
+				destName = addedDirAtDest
+			} else {
+				destName = addedDirAtDest + "/" + f.name
 			}
 			destName = fixSlashes(destName, s.fromTo.To())
 			actualContent := s.state.dest.downloadContent(s.a, downloadContentOptions{
