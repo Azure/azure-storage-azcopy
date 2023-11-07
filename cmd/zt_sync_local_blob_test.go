@@ -450,7 +450,7 @@ func TestDryrunSyncLocaltoBlob(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", []string{}, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		sort.Strings(msg)

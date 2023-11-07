@@ -72,7 +72,7 @@ func TestFileSyncS2SWithSingleFile(t *testing.T) {
 
 		runSyncAndVerify(a, raw, func(err error) {
 			a.Nil(err)
-			validateS2SSyncTransfersAreScheduled(a, "", "", []string{""}, mockedRPC)
+			validateS2SSyncTransfersAreScheduled(a, []string{""}, mockedRPC)
 		})
 	}
 }
@@ -109,7 +109,7 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 		a.Equal(len(expectedList), len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
-		validateS2SSyncTransfersAreScheduled(a, "", "", expectedList, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top files should be transferred
@@ -165,7 +165,7 @@ func TestFileSyncS2SWithIdenticalDestination(t *testing.T) {
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 	})
 }
 
@@ -211,7 +211,7 @@ func TestFileSyncS2SWithMismatchedDestination(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", expectedOutput, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, expectedOutput, mockedRPC)
 
 		// make sure the extra files were deleted
 		extraFilesFound := false
@@ -264,7 +264,7 @@ func TestFileSyncS2SWithIncludeFlag(t *testing.T) {
 	// verify that only the files specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, filesToInclude, mockedRPC)
 	})
 }
 
@@ -300,7 +300,7 @@ func TestFileSyncS2SWithExcludeFlag(t *testing.T) {
 	// make sure the list doesn't include the files specified by the exclude flag
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 	})
 }
 
@@ -343,7 +343,7 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 	// verify that only the files specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, filesToInclude, mockedRPC)
 	})
 }
 
@@ -465,7 +465,7 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 		a.Equal(len(expectedList), len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
-		validateS2SSyncTransfersAreScheduled(a, "", "", expectedList, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top files should be transferred
@@ -526,7 +526,7 @@ func TestFileSyncS2SBetweenDirs(t *testing.T) {
 	expectedList := scenarioHelper{}.shaveOffPrefix(fileList, dirName+common.AZCOPY_PATH_SEPARATOR_STRING)
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", expectedList, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, expectedList, mockedRPC)
 	})
 }
 
@@ -562,7 +562,7 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", []string{}, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		sort.Strings(msg)
@@ -612,7 +612,7 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", []string{}, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
 		sort.Strings(msg)
@@ -673,7 +673,7 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	newTime := currentTime.Add(-time.Hour).UTC() // give extra hour
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateS2SSyncTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateS2SSyncTransfersAreScheduled(a, fileList, mockedRPC)
 
 		for _, transfer := range mockedRPC.transfers {
 			if !(transfer.LastModifiedTime.Before(currentTime) && transfer.LastModifiedTime.After(newTime)) {

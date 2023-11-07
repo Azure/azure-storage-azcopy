@@ -846,8 +846,8 @@ func validateDownloadTransfersAreScheduled(a *assert.Assertions, sourcePrefix st
 	validateCopyTransfersAreScheduled(a, true, false, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
-func validateS2SSyncTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
-	validateCopyTransfersAreScheduled(a, true, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
+func validateS2SSyncTransfersAreScheduled(a *assert.Assertions, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(a, true, true, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
 }
 
 func validateCopyTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool, isDstEncoded bool, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
