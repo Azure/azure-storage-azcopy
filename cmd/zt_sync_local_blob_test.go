@@ -80,7 +80,7 @@ func TestSyncUploadWithSingleFile(t *testing.T) {
 			a.Nil(err)
 
 			// if source and destination already point to files, the relative path is an empty string ""
-			validateUploadTransfersAreScheduled(a, "", "", []string{""}, mockedRPC)
+			validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, []string{""}, mockedRPC)
 		})
 	}
 }
@@ -117,7 +117,7 @@ func TestSyncUploadWithEmptyDestination(t *testing.T) {
 		a.Equal(len(fileList), len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
-		validateUploadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
@@ -175,7 +175,7 @@ func TestSyncUploadWithIdenticalDestination(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateUploadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 	})
 }
 
@@ -209,7 +209,7 @@ func TestSyncUploadWithMismatchedDestination(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateUploadTransfersAreScheduled(a, "", "", expectedOutput, mockedRPC)
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, expectedOutput, mockedRPC)
 
 		// make sure the extra blobs were deleted
 		for _, blobName := range extraBlobs {
@@ -250,7 +250,7 @@ func TestSyncUploadWithIncludePatternFlag(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateUploadTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, filesToInclude, mockedRPC)
 	})
 }
 
@@ -285,7 +285,7 @@ func TestSyncUploadWithExcludePatternFlag(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateUploadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 	})
 }
 
@@ -327,7 +327,7 @@ func TestSyncUploadWithIncludeAndExcludePatternFlag(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateUploadTransfersAreScheduled(a, "", "", filesToInclude, mockedRPC)
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, filesToInclude, mockedRPC)
 	})
 }
 
@@ -362,7 +362,7 @@ func TestSyncUploadWithExcludePathFlag(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateUploadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 	})
 
 	// now set up the destination with the blobs to be excluded, and make sure they are not touched
@@ -374,7 +374,7 @@ func TestSyncUploadWithExcludePathFlag(t *testing.T) {
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateUploadTransfersAreScheduled(a, "", "", fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
 
 		// make sure the extra blobs were not touched
 		for _, blobName := range filesToExclude {
