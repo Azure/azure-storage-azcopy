@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestEmptyDir_CopySyncS2S(t *testing.T) {
+func TestEmptyDir_CopySyncS2SBlob(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
@@ -19,8 +19,18 @@ func TestEmptyDir_CopySyncS2S(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-func TestEmptyDir_RemoveS2S(t *testing.T) {
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+func TestEmptyDir_RemoveBlob(t *testing.T) {
+	blobRemove := TestFromTo{
+		desc:      "BlobRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
