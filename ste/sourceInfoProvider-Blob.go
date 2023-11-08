@@ -22,20 +22,17 @@ package ste
 
 import (
 	"io"
-	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
-	source *blob.Client
-	sourceDatalakeClient *file.Client
+	source               *blob.Client
 }
 
 func (p *blobSourceInfoProvider) IsDFSSource() bool {
@@ -103,7 +100,7 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	var ret =  &blobSourceInfoProvider{
+	var ret = &blobSourceInfoProvider{
 		defaultRemoteSourceInfoProvider: *base,
 	}
 
@@ -113,20 +110,18 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	}
 	ret.source = bsc.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
 
-	if dsc := jptm.SrcDatalakeClient(); dsc != nil {
-		if jptm.Info().SrcFilePath == "" {// this is a container, container needs  additional '/' at end
-			ret.sourceDatalakeClient = dsc.NewFileSystemClient(jptm.Info().SrcContainer).NewFileClient("///")
-		} else {
-			srcPath := strings.TrimSuffix(jptm.Info().SrcFilePath, "/") //DFS cannot handle these
-			ret.sourceDatalakeClient = dsc.NewFileSystemClient(jptm.Info().SrcContainer).NewFileClient(srcPath)
-		}
-	}
-
 	return ret, nil
 }
 
 func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
-	resp, err := p.sourceDatalakeClient.GetAccessControl(p.jptm.Context(), nil)
+	dsc, err := p.jptm.SrcServiceClient().DatalakeServiceClient()
+	if err != nil {
+		return nil, err
+	}
+
+	sourceDatalakeClient := dsc.NewFileSystemClient(p.jptm.Info().SrcContainer).NewFileClient(p.jptm.Info().SrcFilePath)
+
+	resp, err := sourceDatalakeClient.GetAccessControl(p.jptm.Context(), nil)
 	if err != nil {
 		return nil, err
 	}

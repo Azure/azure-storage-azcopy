@@ -45,7 +45,6 @@ type blockBlobSenderBase struct {
 	jptm                IJobPartTransferMgr
 	sip                 ISourceInfoProvider
 	destBlockBlobClient *blockblob.Client
-	dstDatalakeClient   *file.Client
 	chunkSize           int64
 	numChunks           uint32
 	pacer               pacer
@@ -137,11 +136,6 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	}
 	destBlockBlobClient := c.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 
-	var dstDatalakeClient *file.Client
-	if dsc := jptm.DstDatalakeClient(); dsc != nil {
-		dstDatalakeClient = dsc.NewFileSystemClient(jptm.Info().DstContainer).NewFileClient(jptm.Info().DstFilePath)
-	}
-
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
@@ -167,7 +161,6 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		jptm:                jptm,
 		sip:                 srcInfoProvider,
 		destBlockBlobClient: destBlockBlobClient,
-		dstDatalakeClient:   dstDatalakeClient,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
 		pacer:               pacer,
@@ -270,10 +263,21 @@ func (s *blockBlobSenderBase) Epilogue() {
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
 		if err != nil {
 			jptm.FailActiveSend("Grabbing source ACLs", err)
+			return
 		}
-		_, err = s.dstDatalakeClient.SetAccessControl(jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+
+		dsc, err := jptm.DstServiceClient().DatalakeServiceClient()
+		if err != nil {
+			jptm.FailActiveSend("Getting source client", err)
+			return 
+		}
+		dstDatalakeClient := dsc.NewFileSystemClient(jptm.Info().DstContainer).NewFileClient(jptm.Info().DstFilePath)
+	
+		
+		_, err = dstDatalakeClient.SetAccessControl(jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 		if err != nil {
 			jptm.FailActiveSend("Putting ACLs", err)
+			return
 		}
 	}
 }

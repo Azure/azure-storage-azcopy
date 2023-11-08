@@ -17,7 +17,6 @@ import (
 
 type blobFolderSender struct {
 	destinationClient *blockblob.Client // We'll treat all folders as block blobs
-	dstDatalakeClient *file.Client // valid if destination is HNS
 	jptm              IJobPartTransferMgr
 	sip               ISourceInfoProvider
 	metadataToApply   common.Metadata
@@ -28,14 +27,10 @@ type blobFolderSender struct {
 func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
 	s, err := jptm.DstServiceClient().BlobServiceClient()
 	if err != nil {
-		return nil, err 
+		return nil, err
 	}
 	destinationClient := s.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 
-	var dstDatalakeClient *file.Client
-	if dsc := jptm.DstDatalakeClient(); dsc != nil {
-		dstDatalakeClient = dsc.NewFileSystemClient(jptm.Info().DstContainer + "/").NewFileClient(jptm.Info().DstFilePath)
-	}
 	props, err := sip.Properties()
 	if err != nil {
 		return nil, err
@@ -46,7 +41,6 @@ func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISour
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
-		dstDatalakeClient: dstDatalakeClient,
 		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
 		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:   props.SrcBlobTags,
@@ -66,10 +60,19 @@ func (b *blobFolderSender) setDatalakeACLs() {
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
 	if err != nil {
 		b.jptm.FailActiveSend("Grabbing source ACLs", err)
+		return
 	}
-	_, err = b.dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+
+	dsc, err := b.jptm.DstServiceClient().DatalakeServiceClient()
+	if err != nil {
+		b.jptm.FailActiveSend("Getting source client", err)
+		return
+	}
+	dstDatalakeClient := dsc.NewFileSystemClient(b.jptm.Info().DstContainer).NewFileClient(b.jptm.Info().DstFilePath)
+	_, err = dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 	if err != nil {
 		b.jptm.FailActiveSend("Putting ACLs", err)
+		return
 	}
 }
 
@@ -121,7 +124,15 @@ func (b *blobFolderSender) SetContainerACL() error {
 		b.jptm.FailActiveSend("Grabbing source ACLs", err)
 		return folderPropertiesSetInCreation{} // standard completion will detect failure
 	}
-	_, err = b.dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+
+	dsc, err := b.jptm.DstServiceClient().DatalakeServiceClient()
+	if err != nil {
+		b.jptm.FailActiveSend("Getting source client", err)
+		return folderPropertiesSetInCreation{} // standard completion will detect failure
+	}
+	dstDatalakeClient := dsc.NewFileSystemClient(b.jptm.Info().DstContainer).NewFileClient(b.jptm.Info().DstFilePath)
+
+	_, err = dstDatalakeClient.SetAccessControl(b.jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 	if err != nil {
 		b.jptm.FailActiveSend("Putting ACLs", err)
 		return folderPropertiesSetInCreation{} // standard completion will detect failure

@@ -187,8 +187,6 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		ExistingPlanMMF: nil,
 		SrcClient: order.SrcServiceClient,
 		DstClient: order.DstServiceClient,
-		SrcDatalakeClient: order.SrcDatalakeClient,
-		DstDatalakeClient: order.DstDatalakeClient,
 		SourceTokenCred: order.CredentialInfo.S2SSourceTokenCredential,
 		ScheduleTransfers: true,
 	}

@@ -186,15 +186,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	}
 
-	// If this is a S2S transfer, and from == BlobFS, we'll get a blob client instead.
-	// This is because S2S tranfsers always happen on blob endpoint.
-	srcClientType := cca.fromTo.From()
-	if cca.fromTo.IsS2S() && srcClientType == common.ELocation.BlobFS() {
-		srcClientType = common.ELocation.Blob()
-	}
 	sourceURL, _ := cca.source.String()
 	copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
-		srcClientType,
+		cca.fromTo.From(),
 		sourceURL,
 		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -211,48 +205,15 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
 		}
 	}
+	
 	dstURL, _ := cca.destination.String()
-	dstClientType := cca.fromTo.To()
-	if cca.fromTo.IsS2S() && cca.fromTo.To() == common.ELocation.BlobFS() {
-		dstClientType = common.ELocation.Blob()
-	}
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
-		dstClientType,
+		cca.fromTo.To(),
 		dstURL,
 		dstCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
-
-	// On S2S transfer involving BlobFS, additionally get Datalake clients
-	// We need them to SET/GET access control.
-	if cca.fromTo.IsS2S() && cca.fromTo.From() == common.ELocation.BlobFS() {
-		dsc, err := common.GetServiceClientForLocation(
-			cca.fromTo.From(),
-			sourceURL,
-			srcCredInfo.OAuthTokenInfo.TokenCredential,
-			&options,
-			azureFileSpecificOptions,
-		)
-		if err != nil {
-			return nil, err
-		}
-		copyJobTemplate.SrcDatalakeClient, _ = dsc.DatalakeServiceClient()
-	}
-
-	if cca.fromTo.IsS2S() && cca.fromTo.To() == common.ELocation.BlobFS() {
-		dsc, err := common.GetServiceClientForLocation(
-			cca.fromTo.To(),
-			dstURL,
-			dstCredInfo.OAuthTokenInfo.TokenCredential,
-			&options,
-			azureFileSpecificOptions,
-		)
-		if err != nil {
-			return nil, err
-		}
-		copyJobTemplate.DstDatalakeClient, _ = dsc.DatalakeServiceClient()
-	}
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
 

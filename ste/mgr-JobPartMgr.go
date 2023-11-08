@@ -17,7 +17,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sync/semaphore"
@@ -69,8 +68,6 @@ type IJobPartMgr interface {
 	// make sense (say SrcServiceClient for upload) they are il
 	SrcServiceClient() *common.ServiceClient
 	DstServiceClient() *common.ServiceClient
-	SrcDatalakeClient() *datalake.Client
-	DstDatalakeClient() *datalake.Client
 
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -191,12 +188,10 @@ type jobPartMgr struct {
 	// dstServiceClient. For upload, srcService is nil, and likewise.
 	srcServiceClient *common.ServiceClient
 	dstServiceClient *common.ServiceClient
-	srcDatalakeClient *datalake.Client
-	dstDatalakeClient *datalake.Client
 
 	credInfo               common.CredentialInfo
 	clientOptions          azcore.ClientOptions
-	s2sSourceToken         func (context.Context) (*string, error)
+	s2sSourceToken         func(context.Context) (*string, error)
 	s2sSourceClientOptions azcore.ClientOptions
 	credOption             *common.CredentialOpOptions
 
@@ -466,47 +461,47 @@ func (jpm *jobPartMgr) clientInfo() {
 	}
 
 	/*
-	retryOptions := policy.RetryOptions{
-		MaxRetries:    UploadMaxTries,
-		TryTimeout:    UploadTryTimeout,
-		RetryDelay:    UploadRetryDelay,
-		MaxRetryDelay: UploadMaxRetryDelay,
-	}
-
-	var userAgent string
-	if fromTo.From() == common.ELocation.S3() {
-		userAgent = common.S3ImportUserAgent
-	} else if fromTo.From() == common.ELocation.GCP() {
-		userAgent = common.GCPImportUserAgent
-	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
-		userAgent = common.BenchmarkUserAgent
-	} else {
-		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
-	}
-	telemetryOptions := policy.TelemetryOptions{ApplicationID: userAgent}
-
-	httpClient := jpm.jobMgr.HttpClient()
-	networkStats := jpm.jobMgr.PipelineNetworkStats()
-	logOptions := jpm.jobMgr.PipelineLogInfo()
-
-	var sourceTrailingDot *common.TrailingDotOption
-	var trailingDot *common.TrailingDotOption
-	var from *common.Location
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
-		jpm.sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-	}
-	if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
-		fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
-		fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
-		fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
-		fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
-		jpm.trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-		if fromTo.IsS2S() {
-			jpm.from = to.Ptr(fromTo.From())
+		retryOptions := policy.RetryOptions{
+			MaxRetries:    UploadMaxTries,
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay,
 		}
-	}
-	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions)
+
+		var userAgent string
+		if fromTo.From() == common.ELocation.S3() {
+			userAgent = common.S3ImportUserAgent
+		} else if fromTo.From() == common.ELocation.GCP() {
+			userAgent = common.GCPImportUserAgent
+		} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+			userAgent = common.BenchmarkUserAgent
+		} else {
+			userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
+		}
+		telemetryOptions := policy.TelemetryOptions{ApplicationID: userAgent}
+
+		httpClient := jpm.jobMgr.HttpClient()
+		networkStats := jpm.jobMgr.PipelineNetworkStats()
+		logOptions := jpm.jobMgr.PipelineLogInfo()
+
+		var sourceTrailingDot *common.TrailingDotOption
+		var trailingDot *common.TrailingDotOption
+		var from *common.Location
+		if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
+			jpm.sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+		}
+		if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
+			fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
+			fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
+			fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
+			fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
+			jpm.trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
+			if fromTo.IsS2S() {
+				jpm.from = to.Ptr(fromTo.From())
+			}
+		}
+		jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions)
+		jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions)
 	*/
 }
 
@@ -740,14 +735,6 @@ func (jpm *jobPartMgr) SrcServiceClient() *common.ServiceClient {
 
 func (jpm *jobPartMgr) DstServiceClient() *common.ServiceClient {
 	return jpm.dstServiceClient
-}
-
-func (jpm *jobPartMgr) SrcDatalakeClient() *datalake.Client {
-	return jpm.srcDatalakeClient
-}
-
-func (jpm *jobPartMgr) DstDatalakeClient() *datalake.Client {
-	return jpm.dstDatalakeClient
 }
 
 func (jpm *jobPartMgr) S2SSourceTokenCredential(ctx context.Context) (*string, error) {

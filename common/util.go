@@ -116,15 +116,34 @@ func GetServiceClientForLocation(loc Location,
 	}
 	u.Path = ""
 
+	ret := &ServiceClient{}
+
 	resourceURL = u.String()
 	switch loc {
+	case ELocation.BlobFS():
+		var o *datalake.ClientOptions
+		var dsc *datalake.Client
+		if policyOptions != nil {
+			o = &datalake.ClientOptions{ClientOptions: *policyOptions}
+		}
+		
+		if cred != nil {
+			dsc, err = datalake.NewClient(resourceURL, cred, o)
+		} else {
+			dsc, err =  datalake.NewClientWithNoCredential(resourceURL, o)
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		ret.dsc = dsc
+
+		// For BlobFS, we additionally create a blob client as well. We interact with both endpoints.
+		fallthrough
 	case ELocation.Blob():
 		// In some cases, we create a blob client for a datalake EP.
 		// Use correct url in such cases
-		if strings.Contains(u.Host, ".dfs") {
-			u.Host = strings.Replace(u.Host, ".dfs", ".blob", 1)
-			resourceURL = u.String()
-		}
 		var o *blobservice.ClientOptions
 		var bsc *blobservice.Client
 		if policyOptions != nil {
@@ -141,8 +160,8 @@ func GetServiceClientForLocation(loc Location,
 			return nil, err
 		}
 
-		return &ServiceClient{bsc: bsc}, nil
-
+		ret.bsc = bsc
+		return ret, nil
 
 	case ELocation.File():
 		var o *fileservice.ClientOptions
@@ -166,26 +185,8 @@ func GetServiceClientForLocation(loc Location,
 			return nil, err
 		}
 
-		return &ServiceClient{fsc: fsc}, nil
-
-	case ELocation.BlobFS():
-		var o *datalake.ClientOptions
-		var dsc *datalake.Client
-		if policyOptions != nil {
-			o = &datalake.ClientOptions{ClientOptions: *policyOptions}
-		}
-		
-		if cred != nil {
-			dsc, err = datalake.NewClient(resourceURL, cred, o)
-		} else {
-			dsc, err =  datalake.NewClientWithNoCredential(resourceURL, o)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		return &ServiceClient{dsc: dsc}, nil
+		ret.fsc = fsc
+		return ret, nil
 
 	default:
 		return nil, nil
