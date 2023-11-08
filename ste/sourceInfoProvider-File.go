@@ -170,7 +170,7 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 	s, err := jptm.SrcServiceClient().FileServiceClient()
 	if err != nil {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "File service")
+		return nil, err
 	}
 
 	source := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)

@@ -133,7 +133,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	c, err:= jptm.DstServiceClient().BlobServiceClient()
 	if err != nil {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
+		return nil, err
 	}
 	destBlockBlobClient := c.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 

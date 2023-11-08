@@ -96,7 +96,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 
 	bsc, err := jptm.DstServiceClient().BlobServiceClient()
 	if err != nil {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container")
+		return nil, err
 	}
 
 	destPageBlobClient := bsc.NewContainerClient(jptm.Info().DstContainer).NewPageBlobClient(jptm.Info().DstFilePath)

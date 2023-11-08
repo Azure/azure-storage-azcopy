@@ -67,7 +67,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 	//fsClient := common.CreateFilesystemClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	s, err := jptm.SrcServiceClient().DatalakeServiceClient()
 	if err != nil {
-		transferDone(common.NewAzError(common.EAzError.InvalidContainerClient(), "Datalake Service"))
+		transferDone(err)
 		return
 	}
 	

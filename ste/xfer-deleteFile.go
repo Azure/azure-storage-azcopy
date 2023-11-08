@@ -100,7 +100,7 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 
 	s, err := jptm.SrcServiceClient().FileServiceClient()
 	if err != nil {
-		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Container"))
+		transferDone(common.ETransferStatus.Failed(), err)
 		return
 	}
 	srcFileClient := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)

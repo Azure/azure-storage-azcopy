@@ -57,7 +57,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr) {
 
 	s, err := jptm.SrcServiceClient().BlobServiceClient()
 	if err != nil {
-		transferDone(common.ETransferStatus.Failed(), common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob Service"))
+		transferDone(common.ETransferStatus.Failed(), err)
 		return
 	}
 	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob

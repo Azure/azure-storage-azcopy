@@ -81,7 +81,10 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	}
 	fsc := s.NewFileSystemClient(datalakeURLParts.FileSystemName)
 	directoryOrFilePath := datalakeURLParts.PathName
-	parentPath := directoryOrFilePath[:strings.LastIndex(directoryOrFilePath, "/")]
+	parentPath := ""
+	if strings.LastIndex(directoryOrFilePath, "/") != -1 {
+		parentPath = directoryOrFilePath[:strings.LastIndex(directoryOrFilePath, "/")]
+	}
 
 	var destClient DatalakeClientStub
 	if info.IsFolderPropertiesTransfer() {

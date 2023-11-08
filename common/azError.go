@@ -58,13 +58,13 @@ func (err AzError) InvalidBlobName() AzError {
 }
 
 func (err AzError) InvalidBlobOrWindowsName() AzError {
-	return AzError{uint64(2), "Invalid Blob or Windows Name.", ""}
+	return AzError{uint64(3), "Invalid Blob or Windows Name. ", ""}
 }
 
-func (err AzError) InvalidContainerClient() AzError {
-	return AzError{uint64(2), "Invalid type. Expecting a ", ""}
+func (err AzError) InvalidServiceClient() AzError {
+	return AzError{uint64(4), "Invalid Service Client. ", ""}
 }
 
 func ErrInvalidClient(msg string) AzError {
-	return AzError{uint64(2), fmt.Sprintf("Invalid type. Expecting %s client", msg), ""}
+	return NewAzError(EAzError.InvalidServiceClient(), fmt.Sprintf("Expecting %s client", msg))
 }

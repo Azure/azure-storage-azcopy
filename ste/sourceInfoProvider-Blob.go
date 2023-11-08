@@ -109,7 +109,7 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 	bsc, err := jptm.SrcServiceClient().BlobServiceClient()
 	if err != nil {
-		return nil, common.NewAzError(common.EAzError.InvalidContainerClient(), "Blob service")
+		return nil, err
 	}
 	ret.source = bsc.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
 
