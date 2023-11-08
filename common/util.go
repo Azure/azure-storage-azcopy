@@ -142,8 +142,11 @@ func GetServiceClientForLocation(loc Location,
 		// For BlobFS, we additionally create a blob client as well. We interact with both endpoints.
 		fallthrough
 	case ELocation.Blob():
-		// In some cases, we create a blob client for a datalake EP.
-		// Use correct url in such cases
+		// If create a blob client for a datalake target, correct endpoint
+		if strings.Contains(u.Host, ".dfs") {
+			u.Host = strings.Replace(u.Host, ".dfs", ".blob", 1)
+			resourceURL = u.String()
+		}
 		var o *blobservice.ClientOptions
 		var bsc *blobservice.Client
 		if policyOptions != nil {

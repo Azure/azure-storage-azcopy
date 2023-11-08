@@ -178,7 +178,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 			SyslogDisabled: common.IsForceLoggingDisabled(),
 		},
 	})
-	blobClient, err := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
+	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
 	if isSASExisted := sasKey.Signature() != ""; isSASExisted {
 		if isMDAccount {
 			// Ping the account anyway, and discern if we need OAuth.
@@ -211,7 +211,6 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		if !canBePublic { // Cannot possibly be public - like say a destination EP
 			return false
 		}
-		isPublicResource = false
 
 		// Scenario 1: When resourceURL points to a container or a virtual directory
 		// Scenario 2: When resourceURL points to a blob
@@ -234,7 +233,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 
 		// Scenario 2: When resourceURL points to a blob
 		if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
-				return true
+			return true
 		}
 
 		return false

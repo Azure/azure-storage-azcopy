@@ -338,7 +338,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		}
 	}
 	
-	if *b.from == common.ELocation.BlobFS() && object.entityType == common.EEntityType.Folder() { 
+	if b.targetLocation == common.ELocation.BlobFS() && object.entityType == common.EEntityType.Folder() { 
 		b.clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, b.clientOptions.PerCallPolicies...)
 	}
 
