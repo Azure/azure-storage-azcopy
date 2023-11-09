@@ -53,6 +53,8 @@ type ILoggerResetable interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+const maxLogSize = 500 * 1024 * 1024
+
 type jobLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
@@ -80,7 +82,7 @@ func (jl *jobLogger) OpenLog() {
 		return
 	}
 
-	file, err := NewRotatingWiter(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix))
+	file, err := NewRotatingWiter(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix), maxLogSize)
 	PanicIfErr(err)
 
 	jl.file = file
