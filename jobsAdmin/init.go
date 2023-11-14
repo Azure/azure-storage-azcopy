@@ -171,7 +171,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		 * immediately after it is scheduled, and wind down
 		 * the transfer
 		 */
-		jm.Log(common.LogError, "No transfers were scheduled.")
+		jm.Log(common.LogWarning, "No transfers were scheduled.")
 	}
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jm.SetInMemoryTransitJobState(
@@ -493,7 +493,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
 	} else {
-		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+		js.PercentComplete = 100 * (float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected))
 	}
 
 	// This is added to let FE to continue fetching the Job Progress Summary
