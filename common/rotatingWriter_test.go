@@ -50,7 +50,7 @@ func TestRotatingWriter(t *testing.T) {
 	logFile := path.Join(tmpDir, logFileName)
 	
 	// 1. Create a rotating writer of size 100B
-	w, err := NewRotatingWiter(logFile, 100)
+	w, err := NewRotatingWriter(logFile, 100)
 	a.Nil(err)
 
 	// write 10 bytes and verify there is only one file in tmpDir
