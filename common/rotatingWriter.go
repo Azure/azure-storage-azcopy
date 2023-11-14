@@ -17,7 +17,7 @@ type rotatingWriter struct {
 	maxLogSize    uint64
 }
 
-func NewRotatingWiter(filePath string, size uint64) (io.WriteCloser, error) {
+func NewRotatingWriter(filePath string, size uint64) (io.WriteCloser, error) {
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, DEFAULT_FILE_PERM)
 	if err != nil {
 		return nil, err
@@ -76,6 +76,8 @@ func (w *rotatingWriter) Write(p []byte) (n int, err error) {
 	w.l.RLock()
 	defer w.l.RUnlock()
 
+	// We have to save curSuffix here so that if we rotate() the
+	// same log file we checked here.
 	currSuffix := atomic.LoadInt32(&w.currentSuffix)
 	if atomic.AddUint64(&w.currentSize, uint64(len(p))) <= w.maxLogSize {
 		// we've enough size
