@@ -1283,7 +1283,6 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	//nakulkarmerge logger???
 	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger) }
 
 	// step 2: parse source url

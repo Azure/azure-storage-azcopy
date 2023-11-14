@@ -139,7 +139,6 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		}
 	case common.ELocation.File():
 		var shareClient *share.Client
-		//nakulkarmerge - create a trailingdot client
 		shareClient, err = share.NewClientWithNoCredential(resourceURL, &share.ClientOptions{ClientOptions: options})
 		if err != nil {
 			return err

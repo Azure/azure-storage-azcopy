@@ -201,7 +201,6 @@ func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider
 	}
 	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	switch p.EntityType() {
-		//nakulkarmerge
 	case common.EEntityType.File():
 		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
