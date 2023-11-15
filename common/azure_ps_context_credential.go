@@ -58,9 +58,6 @@ type PowershellContextCredentialOptions struct {
 	// which is the tenant of the selected Azure subscription.
 	TenantID string
 
-	// inDefaultChain is true when the credential is part of DefaultAzureCredential
-	inDefaultChain bool
-	// tokenProvider is used by tests to fake invoking azd
 	tokenProvider PSTokenProvider
 }
 
