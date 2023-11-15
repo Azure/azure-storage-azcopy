@@ -46,7 +46,8 @@ func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
 	// this file
 
 	headers, metadata, blobTags, _ := f.jptm.ResourceDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of thefile
-
+	metadata = f.transferInfo.SrcMetadata
+	
 	return &SrcProperties{
 		SrcHTTPHeaders: common.ResourceHTTPHeaders{
 			ContentType:        headers.ContentType,
