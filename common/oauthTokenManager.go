@@ -623,7 +623,7 @@ func (credInfo *OAuthTokenInfo) GetAzCliCredential() (azcore.TokenCredential, er
 	if err != nil {
 		return nil, err
 	}
-	credInfo.TokenCredential = NewCredWrapper(tc)
+	credInfo.TokenCredential = tc
 	return tc, nil
 }
 
@@ -632,7 +632,7 @@ func (credInfo *OAuthTokenInfo) GetPSContextCredential() (azcore.TokenCredential
 	if err != nil {
 		return nil, err
 	}
-	credInfo.TokenCredential = NewCredWrapper(tc)
+	credInfo.TokenCredential = tc
 	return tc, nil
 }
 

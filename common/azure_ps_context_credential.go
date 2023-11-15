@@ -121,8 +121,8 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 		defer cancel()
 	}
 
-	const StorageResourceName = "Storage"
-	commandLine := "Get-AzAccessToken -ResourceTypeName " + StorageResourceName + " | ConvertTo-Json"
+	const StorageResourceName = "https://storage.azure.com"
+	commandLine := "Get-AzAccessToken -ResourceUrl " + StorageResourceName + " | ConvertTo-Json"
 	if tenantID != "" {
 		commandLine += " -TenantId " + tenantID
 	}

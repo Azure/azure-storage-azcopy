@@ -120,6 +120,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			lca.servicePrincipal = false
 			lca.psCred = false
 			lca.azCliCred = true
+
 		case "PSCRED":
 			lca.identity = false
 			lca.servicePrincipal = false
