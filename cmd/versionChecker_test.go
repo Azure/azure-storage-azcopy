@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
