@@ -162,13 +162,13 @@ type CopyJobPartOrderRequest struct {
 	S2SPreserveBlobTags            bool
 	CpkOptions                     CpkOptions
 	SetPropertiesFlags             SetPropertiesFlags
-	BlobFSRecursiveDelete 		   bool
+	BlobFSRecursiveDelete          bool
 
 	// S2SSourceCredentialType will override CredentialInfo.CredentialType for use on the source.
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
-	FileAttributes FileTransferAttributes
+	FileAttributes          FileTransferAttributes
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -236,6 +236,7 @@ type BlobTransferAttributes struct {
 	BlobTagsString           string                // when user explicitly provides blob tags
 	PermanentDeleteOption    PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
 	RehydratePriority        RehydratePriorityType // rehydrate priority of blob
+	DeleteUncommittedBlocks  bool                  // when destination blob has uncommitted blocks, we should delete the dst blob if indicated
 }
 
 // This struct represents the optional attribute for file request header

@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"hash"
 	"net/http"
 	"net/url"
@@ -48,6 +49,7 @@ type IBlobClient interface {
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var tierNotAllowedFailure sync.Once
 var checkLengthFailureOnReadOnlyDst sync.Once
+var deleteDstBlobWithUncommitedBlocks sync.Once
 
 // This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
 // Premium block blob doesn't support tiering, and page blobs only support P1-80.
@@ -159,6 +161,22 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier *blob.AccessTier, client IB
 	} else {
 		return false
 	}
+}
+
+func DeleteDstBlob(c *urlToBlockBlobCopier) {
+	// Delete destination blob with uncommitted blocks if indicated by flag once only
+	deleteDstBlobWithUncommitedBlocks.Do(func() {
+		resp, err := c.destBlockBlobClient.GetBlockList(c.jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
+		if err != nil {
+			c.jptm.LogError(c.destBlockBlobClient.URL(), "GetBlockList with Uncommitted BlockListType failed ", err)
+		}
+		if len(resp.UncommittedBlocks) > 0 {
+			_, err := c.destBlockBlobClient.Delete(c.jptm.Context(), nil)
+			if err != nil {
+				c.jptm.LogError(c.destBlockBlobClient.URL(), "Deleting destination blob with uncommitted blocks failed ", err)
+			}
+		}
+	})
 }
 
 // xfer.go requires just a single xfer function for the whole job.
@@ -526,8 +544,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
 	}
 	if jptm.IsLive() {
-		if _, isS2SCopier := s.(s2sCopier);
-			sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
+		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {
