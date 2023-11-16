@@ -181,6 +181,7 @@ type rawCopyCmdArgs struct {
 	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
 	trailingDot string
 
+	// when specified, the dst blob with uncommitted blocks is deleted
 	deleteUncommittedBlocks bool
 }
 

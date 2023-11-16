@@ -84,7 +84,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
 
 	if c.jptm.DeleteUncommittedBlocks() {
-		DeleteDstBlob(c)
+		DeleteDstBlob(c.jptm, c.destBlockBlobClient)
 	}
 
 	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)

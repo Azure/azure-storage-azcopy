@@ -163,17 +163,17 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier *blob.AccessTier, client IB
 	}
 }
 
-func DeleteDstBlob(c *urlToBlockBlobCopier) {
+func DeleteDstBlob(jptm IJobPartTransferMgr, client *blockblob.Client) {
 	// Delete destination blob with uncommitted blocks if indicated by flag once only
 	deleteDstBlobWithUncommitedBlocks.Do(func() {
-		resp, err := c.destBlockBlobClient.GetBlockList(c.jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
+		resp, err := client.GetBlockList(jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
 		if err != nil {
-			c.jptm.LogError(c.destBlockBlobClient.URL(), "GetBlockList with Uncommitted BlockListType failed ", err)
+			jptm.LogError(client.URL(), "GetBlockList with Uncommitted BlockListType failed ", err)
 		}
 		if len(resp.UncommittedBlocks) > 0 {
-			_, err := c.destBlockBlobClient.Delete(c.jptm.Context(), nil)
+			_, err := client.Delete(jptm.Context(), nil)
 			if err != nil {
-				c.jptm.LogError(c.destBlockBlobClient.URL(), "Deleting destination blob with uncommitted blocks failed ", err)
+				jptm.LogError(client.URL(), "Deleting destination blob with uncommitted blocks failed ", err)
 			}
 		}
 	})
