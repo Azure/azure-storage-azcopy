@@ -33,4 +33,55 @@ func Test_BlobTierAllowed_TierNotPossible(t *testing.T) {
 
 	allowed := BlobTierAllowed(to.Ptr(blob.AccessTierHot))
 	a.True(allowed)
+
+}
+
+func Test_BlobTierAllowed_Premium(t *testing.T) {
+	a := assert.New(t)
+	tierSetPossibleFail = false
+	destAccountSKU = "Premium_LRS"
+	destAccountKind = "StorageV2"
+
+	allowed := BlobTierAllowed(to.Ptr(blob.AccessTierP4))
+	a.True(allowed)
+
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierP40))
+	a.True(allowed)
+
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierCool))
+	a.False(allowed)
+
+	destAccountKind = "Storage"
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierHot))
+	a.False(allowed)
+
+	destAccountKind = "BlockBlobStorage"
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierHot))
+	a.True(allowed)
+}
+
+func Test_BlobTierAllowed(t *testing.T) {
+	a := assert.New(t)
+	tierSetPossibleFail = false
+	destAccountSKU = "Standard"
+	destAccountKind = "StorageV2"
+
+	allowed := BlobTierAllowed(to.Ptr(blob.AccessTierArchive))
+	a.True(allowed)
+
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierCool))
+	a.True(allowed)
+
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierCold))
+	a.True(allowed)
+
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierHot))
+	a.True(allowed)
+
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierP4))
+	a.False(allowed)
+
+	destAccountKind = "Storage"
+	allowed = BlobTierAllowed(to.Ptr(blob.AccessTierHot))
+	a.False(allowed)
 }
