@@ -4,12 +4,12 @@ require (
 	cloud.google.com/go/storage v1.29.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.0.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.1.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.1.1
 	github.com/Azure/go-autorest/autorest/adal v0.9.18
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.1.2
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.3.1
 	github.com/hillu/go-ntdll v0.0.0-20220217145204-be7b5318100d
 	github.com/mattn/go-ieproxy v0.0.11
 	github.com/minio/minio-go v6.0.14+incompatible
@@ -27,11 +27,11 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
 
-require github.com/stretchr/testify v1.8.1
+require github.com/stretchr/testify v1.8.4
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.7.2
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.3.1
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.4.0
 	github.com/Azure/go-autorest/autorest/date v0.3.0
 )
 
@@ -40,7 +40,7 @@ require (
 	cloud.google.com/go/compute v1.19.1 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	cloud.google.com/go/iam v0.13.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.0 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
