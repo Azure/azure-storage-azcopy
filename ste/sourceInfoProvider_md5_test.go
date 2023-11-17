@@ -378,7 +378,8 @@ func TestGCP(t *testing.T) {
 	dataReader, data := getDataAndReader(t.Name(), size)
 	written, err := io.Copy(wc, dataReader)
 	a.Nil(err)
-	a.Equal(size, written)
+	a.Equal(int64(size), written)
+	_ = wc.Close()
 
 	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s/%s", bName, oName)
 
