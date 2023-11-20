@@ -426,7 +426,7 @@ func (s *blockBlobSenderBase) GetDestinationLength() (int64, error) {
 	return *prop.ContentLength, nil
 }
 
-func (s blockBlobSenderBase) DeleteDstBlob() {
+func (s *blockBlobSenderBase) DeleteDstBlob() {
 	// Delete destination blob with uncommitted blocks if indicated by flag once only
 	s.deleteDstBlobWithUncommittedBlocks.Do(func() {
 		resp, err := s.destBlockBlobClient.GetBlockList(s.jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
