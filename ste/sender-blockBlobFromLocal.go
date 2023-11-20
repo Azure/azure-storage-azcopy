@@ -78,9 +78,6 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 		return u.generatePutWholeBlob(id, blockIndex, reader)
 	} else {
 		setPutListNeed(&u.atomicPutListIndicator, putListNeeded)
-		if u.jptm.DeleteUncommittedBlocks() {
-			DeleteDstBlob(u.jptm, u.destBlockBlobClient)
-		}
 		return u.generatePutBlock(id, blockIndex, reader)
 	}
 }

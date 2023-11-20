@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"hash"
 	"net/http"
 	"net/url"
@@ -49,7 +48,6 @@ type IBlobClient interface {
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
 var tierNotAllowedFailure sync.Once
 var checkLengthFailureOnReadOnlyDst sync.Once
-var deleteDstBlobWithUncommitedBlocks sync.Once
 
 // This sync.Once and string pair ensures that we only get a user's destination account kind once when handling set-tier
 // Premium block blob doesn't support tiering, and page blobs only support P1-80.
@@ -161,22 +159,6 @@ func ValidateTier(jptm IJobPartTransferMgr, blobTier *blob.AccessTier, client IB
 	} else {
 		return false
 	}
-}
-
-func DeleteDstBlob(jptm IJobPartTransferMgr, client *blockblob.Client) {
-	// Delete destination blob with uncommitted blocks if indicated by flag once only
-	deleteDstBlobWithUncommitedBlocks.Do(func() {
-		resp, err := client.GetBlockList(jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
-		if err != nil {
-			jptm.LogError(client.URL(), "GetBlockList with Uncommitted BlockListType failed ", err)
-		}
-		if len(resp.UncommittedBlocks) > 0 {
-			_, err := client.Delete(jptm.Context(), nil)
-			if err != nil {
-				jptm.LogError(client.URL(), "Deleting destination blob with uncommitted blocks failed ", err)
-			}
-		}
-	})
 }
 
 // xfer.go requires just a single xfer function for the whole job.
