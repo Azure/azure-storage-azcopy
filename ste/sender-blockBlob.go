@@ -63,7 +63,7 @@ type blockBlobSenderBase struct {
 	blockNamePrefix        string
 	completedBlockList     map[int]string
 
-	deleteDstBlobWithUncommittedBlocks sync.Once
+	deleteDstBlobWithUncommittedBlocks *sync.Once
 }
 
 func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
