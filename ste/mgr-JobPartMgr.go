@@ -3,11 +3,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
 	"net/http"
@@ -17,6 +12,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sync/semaphore"
@@ -56,13 +56,18 @@ type IJobPartMgr interface {
 
 	CredentialInfo() common.CredentialInfo
 	ClientOptions() azcore.ClientOptions
-	S2SSourceCredentialInfo() common.CredentialInfo
+	S2SSourceTokenCredential(context.Context) (*string, error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
 
 	SourceTrailingDot() *common.TrailingDotOption
 	TrailingDot() *common.TrailingDotOption
 	From() *common.Location
+	// These functions return Container/fileshare clients.
+	// They must be type asserted before use. In cases where they dont
+	// make sense (say SrcServiceClient for upload) they are il
+	SrcServiceClient() *common.ServiceClient
+	DstServiceClient() *common.ServiceClient
 
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -178,9 +183,16 @@ type jobPartMgr struct {
 	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
+	// These fields hold the container/fileshare client of this jobPart,
+	// whatever is appropriate for this scenario. Ex. For BlobFile, we
+	// will have BlobService client in srcServiceClient and Fileservice in
+	// dstServiceClient. For upload, srcService is nil, and likewise.
+	srcServiceClient *common.ServiceClient
+	dstServiceClient *common.ServiceClient
+
 	credInfo               common.CredentialInfo
 	clientOptions          azcore.ClientOptions
-	s2sSourceCredInfo      common.CredentialInfo
+	s2sSourceToken         func(context.Context) (*string, error)
 	s2sSourceClientOptions azcore.ClientOptions
 	credOption             *common.CredentialOpOptions
 
@@ -371,6 +383,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}
+
+		//build transferInfo after we've set transferIndex
+		jptm.transferInfo = jptm.Info()
 		jpm.Log(common.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 
 		// ===== TEST KNOB
@@ -435,22 +450,8 @@ func (jpm *jobPartMgr) clientInfo() {
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		jpm.credInfo = jobState.CredentialInfo
 	}
-	fromTo := jpm.planMMF.Plan().FromTo
 
-	// S2S source credential
-	// Default credential type assumed to be SAS
-	s2sSourceCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	// For Blob and BlobFS, there are other options for the source credential
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS() || fromTo.From() == common.ELocation.File()) {
-		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
-				s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
-			}
-		} else if fromTo.IsDownload() && (jobState.CredentialInfo.CredentialType.IsAzureOAuth() || jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
-			s2sSourceCredInfo = jobState.CredentialInfo
-		}
-	}
-	jpm.s2sSourceCredInfo = s2sSourceCredInfo
+	jpm.s2sSourceToken = jpm.credInfo.S2SSourceTokenCredential
 
 	jpm.credOption = &common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
@@ -460,44 +461,6 @@ func (jpm *jobPartMgr) clientInfo() {
 		Cancel:   jpm.jobMgr.Cancel,
 	}
 
-	retryOptions := policy.RetryOptions{
-		MaxRetries:    UploadMaxTries,
-		TryTimeout:    UploadTryTimeout,
-		RetryDelay:    UploadRetryDelay,
-		MaxRetryDelay: UploadMaxRetryDelay,
-	}
-
-	var userAgent string
-	if fromTo.From() == common.ELocation.S3() {
-		userAgent = common.S3ImportUserAgent
-	} else if fromTo.From() == common.ELocation.GCP() {
-		userAgent = common.GCPImportUserAgent
-	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
-		userAgent = common.BenchmarkUserAgent
-	} else {
-		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
-	}
-	telemetryOptions := policy.TelemetryOptions{ApplicationID: userAgent}
-
-	httpClient := jpm.jobMgr.HttpClient()
-	networkStats := jpm.jobMgr.PipelineNetworkStats()
-	logOptions := jpm.jobMgr.PipelineLogInfo()
-
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
-		jpm.sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-	}
-	if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
-		fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
-		fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
-		fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
-		fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
-		jpm.trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-		if fromTo.IsS2S() {
-			jpm.from = to.Ptr(fromTo.From())
-		}
-	}
-	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions)
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
@@ -724,8 +687,19 @@ func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
 	return jpm.credInfo
 }
 
-func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {
-	return jpm.s2sSourceCredInfo
+func (jpm *jobPartMgr) SrcServiceClient() *common.ServiceClient {
+	return jpm.srcServiceClient
+}
+
+func (jpm *jobPartMgr) DstServiceClient() *common.ServiceClient {
+	return jpm.dstServiceClient
+}
+
+func (jpm *jobPartMgr) S2SSourceTokenCredential(ctx context.Context) (*string, error) {
+	if jpm.s2sSourceToken != nil {
+		return jpm.s2sSourceToken(ctx)
+	}
+	return nil, nil
 }
 
 func (jpm *jobPartMgr) ClientOptions() azcore.ClientOptions {

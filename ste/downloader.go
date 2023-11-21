@@ -70,12 +70,12 @@ type symlinkDownloader interface {
 // smbPropertyAwareDownloader is a windows-triggered interface.
 // Code outside of windows-specific files shouldn't implement this ever.
 type smbPropertyAwareDownloader interface {
-	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
+	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 
-	PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error
+	PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }
 
-type downloaderFactory func() downloader
+type downloaderFactory func(jptm IJobPartTransferMgr) (downloader, error)
 
 func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
 	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.

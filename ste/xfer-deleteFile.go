@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -71,8 +72,6 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 	source := info.Source
 	srcURL, _ := url.Parse(source)
 
-	srcFileClient := common.CreateShareFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
-
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
@@ -99,9 +98,16 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
+	s, err := jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
+		transferDone(common.ETransferStatus.Failed(), err)
+		return
+	}
+	srcFileClient := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
+
 	// Delete the source file
 	helper := &azureFileSenderBase{}
-	err := helper.DoWithOverrideReadOnly(jptm.Context(),
+	err = helper.DoWithOverrideReadOnly(jptm.Context(),
 		func() (interface{}, error) { return srcFileClient.Delete(jptm.Context(), nil) },
 		srcFileClient,
 		jptm.GetForceIfReadOnly())
@@ -133,11 +139,15 @@ func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr
 		return false
 	}
 
+	s, err := jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
+		return false
+	}
+	
+	srcDirClient := s.NewShareClient(jptm.Info().SrcContainer).NewDirectoryClient(jptm.Info().SrcFilePath)
 	loggableName := fileURLParts.DirectoryOrFilePath
-
 	logger.Log(common.LogDebug, "About to attempt to delete folder "+loggableName)
 
-	srcDirClient := common.CreateShareDirectoryClient(folder, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions(), jptm.TrailingDot(), jptm.From())
 	helper := &azureFileSenderBase{}
 	err = helper.DoWithOverrideReadOnly(ctx,
 		func() (interface{}, error) { return srcDirClient.Delete(ctx, nil) },

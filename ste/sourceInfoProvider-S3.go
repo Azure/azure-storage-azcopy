@@ -33,7 +33,7 @@ import (
 // Source info provider for S3
 type s3SourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 
 	rawSourceURL *url.URL
 

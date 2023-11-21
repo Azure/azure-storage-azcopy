@@ -116,7 +116,7 @@ func validateSetPropertiesTransfersAreScheduled(a *assert.Assertions, isSrcEncod
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
 		srcRelativeFilePath := transfer.Source
-		a.Equal(*transferParams.blockBlobTier.ToAccessTierType(), transfer.BlobTier)
+		a.Equal(transferParams.blockBlobTier.ToAccessTierType(), transfer.BlobTier)
 		checkMetadataEqual(a, transfer.Metadata, transferParams.getMetadata())
 		checkTagsEqual(a, transfer.BlobTags, transferParams.blobTags)
 

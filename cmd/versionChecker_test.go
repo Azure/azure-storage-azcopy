@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
@@ -216,7 +215,7 @@ func TestCheckReleaseMetadata(t *testing.T) {
 	a := assert.New(t)
 
 	// sanity test for checking if the release metadata exists and can be downloaded
-	options := createClientOptions(common.LogNone)
+	options := createClientOptions(nil)
 	versionMetadataUrl := "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
 
 	blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})

@@ -87,7 +87,27 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 	}
 
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
+	targetURL, _ := cca.Source.String()
+	from := cca.FromTo.From()
+	if !from.SupportsTrailingDot() {
+		cca.trailingDot = common.ETrailingDotOption.Disable()
+	}
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	var fileClientOptions any
+	if cca.FromTo.From() == common.ELocation.File() {
+		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable()}
+	}
+	targetServiceClient, err := common.GetServiceClientForLocation(
+		cca.FromTo.From(),
+		targetURL,
+		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		fileClientOptions,
+	)
+	if err != nil {
+		return nil, err
+	}
+	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, targetServiceClient)
 
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
@@ -122,7 +142,15 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 // Ultimately, this code can be merged into the newRemoveEnumerator
 func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders())
+	sourceURL, _ := cca.Source.String()
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	
+	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
+	if err != nil {
+		return err
+	}
+
+	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
 
 	// return an error if the unsupported options are passed in
 	if len(cca.InitModularFilters()) > 0 {
@@ -133,13 +161,6 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	// patterns are not supported
 	if strings.Contains(cca.Source.Value, "*") {
 		return errors.New("pattern matches are not supported in this command")
-	}
-
-	options := createClientOptions(azcopyLogVerbosity)
-	// attempt to parse the source url
-	sourceURL, err := cca.Source.String()
-	if err != nil {
-		return errors.New("cannot parse source URL")
 	}
 
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path

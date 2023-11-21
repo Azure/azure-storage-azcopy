@@ -26,16 +26,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
-	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -158,7 +161,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 	if err != nil {
 		return common.ECredentialType.Unknown(), false, errors.New("provided blob resource string was not able to be parsed")
 	}
-	sas := blobURLParts.SAS
+	sasKey := blobURLParts.SAS
 	isMDAccount := strings.HasPrefix(resourceURL.Host, "md-")
 	canBePublic = canBePublic && !isMDAccount // MD accounts cannot be public.
 
@@ -175,11 +178,10 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 			SyslogDisabled: common.IsForceLoggingDisabled(),
 		},
 	})
-	credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	if isSASExisted := sas.Signature() != ""; isSASExisted {
+	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
+	if isSASExisted := sasKey.Signature() != ""; isSASExisted {
 		if isMDAccount {
 			// Ping the account anyway, and discern if we need OAuth.
-			blobClient := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
 			_, err = blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
 
 			if err != nil {
@@ -205,51 +207,42 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		return common.ECredentialType.Anonymous(), false, nil
 	}
 
-	checkPublic := func() (isPublicResource bool) {
+	checkPublic := func(bURLParts sas.URLParts) (isPublicResource bool) {
 		if !canBePublic { // Cannot possibly be public - like say a destination EP
 			return false
 		}
-		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(blobResourceURL)
-		isPublicResource = false
 
-		// Scenario 1: When resourceURL points to a container
-		// Scenario 2: When resourceURL points to a virtual directory.
+		// Scenario 1: When resourceURL points to a container or a virtual directory
+		// Scenario 2: When resourceURL points to a blob
 		// Check if the virtual directory is accessible by doing GetProperties on container.
-		// Virtual directory can be accessed/scanned only when its parent container is public.
-		bURLParts, err := blob.ParseURL(blobResourceURL)
-		if err != nil {
-			return false
-		}
+		// Virtual directory can be public only when its parent container is public.
 		bURLParts.BlobName = ""
 		bURLParts.Snapshot = ""
 		bURLParts.VersionID = ""
-		containerClient := common.CreateContainerClient(bURLParts.String(), credInfo, nil, clientOptions)
 
 		if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
 			// Service level searches can't possibly be public.
 			return false
 		}
 
+		// scenario 1
+		containerClient, _ := container.NewClientWithNoCredential(bURLParts.String(), &container.ClientOptions{ClientOptions: clientOptions})
 		if _, err := containerClient.GetProperties(ctx, nil); err == nil {
 			return true
 		}
 
-		if !isContainer {
-			// Scenario 3: When resourceURL points to a blob
-			blobClient := common.CreateBlobClient(blobResourceURL, credInfo, nil, clientOptions)
-
-			if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
-				return true
-			}
+		// Scenario 2: When resourceURL points to a blob
+		if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
+			return true
 		}
 
-		return
+		return false
 	}
 
 	// If SAS token doesn't exist, it could be using OAuth token or the resource is public.
 	if !oAuthTokenExists() { // no oauth token found, then directly return anonymous credential
 		// MD accounts will auto-fail without a request due to the update of the "canBePublic" flag earlier
-		isPublicResource := checkPublic()
+		isPublicResource := checkPublic(blobURLParts)
 
 		// No forms of auth are present.no SAS token or OAuth token is present and the resource is not public
 		if !isPublicResource {
@@ -262,7 +255,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		return common.ECredentialType.OAuthToken(), false, nil
 	} else { // check if it's public resource, and return credential type correspondingly
 		// If has cached token, and no SAS token provided, it could be a public blob resource.
-		isPublicResource := checkPublic()
+		isPublicResource := checkPublic(blobURLParts)
 
 		if isPublicResource {
 			return common.ECredentialType.Anonymous(), true, nil
@@ -646,12 +639,12 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logLevel common.LogLevel) azcore.ClientOptions {
+func createClientOptions(logger common.ILoggerResetable) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
-	logOptions.ShouldLog = func(level common.LogLevel) bool { return level <= logLevel }
 
-	if azcopyScanningLogger != nil {
-		logOptions.Log = azcopyScanningLogger.Log
+	if logger != nil {
+		logOptions.Log = logger.Log
+		logOptions.ShouldLog = logger.ShouldLog
 	}
 	return ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,

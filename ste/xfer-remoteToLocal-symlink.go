@@ -59,7 +59,15 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderF
 		}
 	}
 
-	dl, ok := df().(symlinkDownloader)
+	d, err := df(jptm)
+	if err != nil {
+		jptm.LogDownloadError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	dl, ok := d.(symlinkDownloader)
 	if !ok {
 		jptm.LogDownloadError(info.Source, info.Destination, "downloader implementation does not support symlinks", 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -67,7 +75,7 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderF
 		return
 	}
 
-	err := dl.CreateSymlink(jptm)
+	err = dl.CreateSymlink(jptm)
 	if err != nil {
 		jptm.FailActiveSend("creating destination symlink", err)
 	}
