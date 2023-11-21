@@ -21,7 +21,12 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/stretchr/testify/assert"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -52,4 +57,45 @@ func TestGetVerifiedChunkParams(t *testing.T) {
 	expectedErr = "Block size 2048 for source of size 2147483648 is not correct. Number of blocks will exceed the limit"
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
 	a.Equal(expectedErr, err.Error())
+}
+
+func TestDeleteDstBlob(t *testing.T) {
+	a := assert.New(t)
+	bsc := getBlobServiceClient()
+	dstContainerClient, _ := createNewContainer(t, a, bsc)
+	defer deleteContainer(a, dstContainerClient)
+
+	// set up the destination container with a single blob with uncommitted block
+	dstBlobClient := dstContainerClient.NewBlockBlobClient("foo")
+	blockIDs := generateBlockIDsList(1)
+	_, err := dstBlobClient.StageBlock(ctx, blockIDs[0], streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+	a.NoError(err)
+	_, err = dstBlobClient.CommitBlockList(ctx, blockIDs, nil)
+	a.NoError(err)
+	_, err = dstBlobClient.StageBlock(ctx, "0001", streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+	a.NoError(err)
+
+	// check if dst blob was set up with one uncommitted block
+	resp, err := dstBlobClient.GetBlockList(ctx, blockblob.BlockListTypeUncommitted, nil)
+	a.NoError(err)
+	a.Equal(len(resp.UncommittedBlocks), 1)
+
+	// set up job part manager
+	jptm := jobPartTransferMgr{
+		jobPartMgr: &jobPartMgr{},
+		ctx:        ctx,
+	}
+
+	bbSender := &blockBlobSenderBase{
+		jptm:                               &jptm,
+		destBlockBlobClient:                dstBlobClient,
+		deleteDstBlobWithUncommittedBlocks: &sync.Once{},
+	}
+
+	bbSender.DeleteDstBlob()
+
+	// check if dst blob was deleted
+	_, err = dstBlobClient.GetProperties(ctx, nil)
+	a.Error(err)
+	a.True(bloberror.HasCode(err, bloberror.BlobNotFound))
 }
