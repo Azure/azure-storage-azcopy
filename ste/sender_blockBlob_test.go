@@ -61,29 +61,29 @@ func TestGetVerifiedChunkParams(t *testing.T) {
 
 func TestDeleteDstBlob(t *testing.T) {
 	a := assert.New(t)
-	bsc := getBlobServiceClient()
-	dstContainerClient, _ := createNewContainer(t, a, bsc)
-	defer deleteContainer(a, dstContainerClient)
+	bsc := GetBlobServiceClient()
+	dstContainerClient, _ := CreateNewContainer(t, a, bsc)
+	defer DeleteContainer(a, dstContainerClient)
 
 	// set up the destination container with a single blob with uncommitted block
 	dstBlobClient := dstContainerClient.NewBlockBlobClient("foo")
-	blockIDs := generateBlockIDsList(1)
-	_, err := dstBlobClient.StageBlock(ctx, blockIDs[0], streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+	blockIDs := GenerateBlockIDsList(1)
+	_, err := dstBlobClient.StageBlock(ctxSender, blockIDs[0], streaming.NopCloser(strings.NewReader(BlockBlobDefaultData)), nil)
 	a.NoError(err)
-	_, err = dstBlobClient.CommitBlockList(ctx, blockIDs, nil)
+	_, err = dstBlobClient.CommitBlockList(ctxSender, blockIDs, nil)
 	a.NoError(err)
-	_, err = dstBlobClient.StageBlock(ctx, "0001", streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+	_, err = dstBlobClient.StageBlock(ctxSender, "0001", streaming.NopCloser(strings.NewReader(BlockBlobDefaultData)), nil)
 	a.NoError(err)
 
 	// check if dst blob was set up with one uncommitted block
-	resp, err := dstBlobClient.GetBlockList(ctx, blockblob.BlockListTypeUncommitted, nil)
+	resp, err := dstBlobClient.GetBlockList(ctxSender, blockblob.BlockListTypeUncommitted, nil)
 	a.NoError(err)
 	a.Equal(len(resp.UncommittedBlocks), 1)
 
 	// set up job part manager
 	jptm := jobPartTransferMgr{
 		jobPartMgr: &jobPartMgr{},
-		ctx:        ctx,
+		ctx:        ctxSender,
 	}
 
 	bbSender := &blockBlobSenderBase{
@@ -95,7 +95,7 @@ func TestDeleteDstBlob(t *testing.T) {
 	bbSender.DeleteDstBlob()
 
 	// check if dst blob was deleted
-	_, err = dstBlobClient.GetProperties(ctx, nil)
+	_, err = dstBlobClient.GetProperties(ctxSender, nil)
 	a.Error(err)
 	a.True(bloberror.HasCode(err, bloberror.BlobNotFound))
 }

@@ -34,15 +34,15 @@ import (
 	"testing"
 )
 
-var ctx = context.Background()
+var ctxSender = context.Background()
 
 const (
-	blockBlobDefaultData = "AzCopy Random Test Data"
+	BlockBlobDefaultData = "AzCopy Random Test Data"
 )
 
 // get blob account service client
-func getBlobServiceClient() *blobservice.Client {
-	accountName, accountKey := getAccountAndKey()
+func GetBlobServiceClient() *blobservice.Client {
+	accountName, accountKey := GetAccountAndKey()
 	u := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
@@ -56,7 +56,7 @@ func getBlobServiceClient() *blobservice.Client {
 	return client
 }
 
-func getAccountAndKey() (string, string) {
+func GetAccountAndKey() (string, string) {
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
 	if name == "" || key == "" {
@@ -66,26 +66,26 @@ func getAccountAndKey() (string, string) {
 	return name, key
 }
 
-func createNewContainer(t *testing.T, a *assert.Assertions, bsc *blobservice.Client) (cc *container.Client, name string) {
-	cc, name = getContainerClient(t, bsc)
+func CreateNewContainer(t *testing.T, a *assert.Assertions, bsc *blobservice.Client) (cc *container.Client, name string) {
+	cc, name = GetContainerClient(t, bsc)
 
-	_, err := cc.Create(ctx, nil)
+	_, err := cc.Create(ctxSender, nil)
 	a.Nil(err)
 	return cc, name
 }
 
-func getContainerClient(t *testing.T, bsc *blobservice.Client) (container *container.Client, name string) {
+func GetContainerClient(t *testing.T, bsc *blobservice.Client) (container *container.Client, name string) {
 	name = strings.ToLower(t.Name())
 	container = bsc.NewContainerClient(name)
 	return
 }
 
-func deleteContainer(a *assert.Assertions, cc *container.Client) {
-	_, err := cc.Delete(ctx, nil)
+func DeleteContainer(a *assert.Assertions, cc *container.Client) {
+	_, err := cc.Delete(ctxSender, nil)
 	a.Nil(err)
 }
 
-func generateBlockIDsList(count int) []string {
+func GenerateBlockIDsList(count int) []string {
 	blockIDs := make([]string, count)
 	for i := 0; i < count; i++ {
 		blockIDs[i] = BlockIDIntToBase64(i)
