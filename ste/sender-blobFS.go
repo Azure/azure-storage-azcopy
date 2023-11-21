@@ -23,6 +23,10 @@ package ste
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -32,10 +36,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-	"net/url"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -49,7 +49,7 @@ type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
 	sip             ISourceInfoProvider
 	fileOrDirClient DatalakeClientStub
-	serviceClient *service.Client
+	parentDirClient *directory.Client
 	chunkSize       int64
 	numChunks           uint32
 	pacer               pacer
@@ -70,29 +70,33 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	}
 	headers := props.SrcHTTPHeaders.ToBlobFSHTTPHeaders()
 
+	s, err := jptm.DstServiceClient().DatalakeServiceClient()
+	if err != nil {
+		return nil, err
+	}
+
 	datalakeURLParts, err := azdatalake.ParseURL(destination)
 	if err != nil {
 		return nil, err
 	}
-	filesystemName := datalakeURLParts.FileSystemName
+	fsc := s.NewFileSystemClient(datalakeURLParts.FileSystemName)
 	directoryOrFilePath := datalakeURLParts.PathName
-	// Strip any non-service related things away
-	datalakeURLParts.FileSystemName = ""
-	datalakeURLParts.PathName = ""
-	serviceClient := common.CreateDatalakeServiceClient(datalakeURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-	filesystemClient := serviceClient.NewFileSystemClient(filesystemName)
+	parentPath := ""
+	if strings.LastIndex(directoryOrFilePath, "/") != -1 {
+		parentPath = directoryOrFilePath[:strings.LastIndex(directoryOrFilePath, "/")]
+	}
 
 	var destClient DatalakeClientStub
 	if info.IsFolderPropertiesTransfer() {
-		destClient = filesystemClient.NewDirectoryClient(directoryOrFilePath)
+		destClient = fsc.NewDirectoryClient(directoryOrFilePath)
 	} else {
-		destClient = filesystemClient.NewFileClient(directoryOrFilePath)
+		destClient = fsc.NewFileClient(directoryOrFilePath)
 	}
 	return &blobFSSenderBase{
 		jptm:                jptm,
 		sip:                 sip,
-		fileOrDirClient:        destClient,
-		serviceClient: serviceClient,
+		fileOrDirClient:     destClient,
+		parentDirClient:     fsc.NewDirectoryClient(parentPath),
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
 		pacer:               pacer,
@@ -125,19 +129,6 @@ func (u *blobFSSenderBase) NumChunks() uint32 {
 	return u.numChunks
 }
 
-// getParentDirectoryClient gets parent directory client of a path.
-func getParentDirectoryClient(uh DatalakeClientStub, serviceClient *service.Client) (*directory.Client, error) {
-	rawURL, _ := url.Parse(uh.DFSURL())
-	rawURL.Path = rawURL.Path[:strings.LastIndex(rawURL.Path, "/")]
-	directoryURLParts, err := azdatalake.ParseURL(rawURL.String())
-	if err != nil {
-		return nil, err
-	}
-	directoryOrFilePath := directoryURLParts.PathName
-	shareClient := serviceClient.NewFileSystemClient(directoryURLParts.FileSystemName)
-	return shareClient.NewDirectoryClient(directoryOrFilePath), nil
-}
-
 func (u *blobFSSenderBase) RemoteFileExists() (bool, time.Time, error) {
 	props, err := u.getFileClient().GetProperties(u.jptm.Context(), nil)
 	return remoteObjectExists(datalakePropertiesResponseAdapter{props}, err)
@@ -153,12 +144,7 @@ func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModi
 	// (Even tho there's not much in the way of properties to set in ADLS Gen 2 on folders, at least, not
 	// that we support right now, we still run the same folder logic here to be consistent with our other
 	// folder-aware sources).
-	parentDir, err := getParentDirectoryClient(u.fileOrDirClient, u.serviceClient)
-	if err != nil {
-		u.jptm.FailActiveUpload("Getting parent directory URL", err)
-		return
-	}
-	err = u.doEnsureDirExists(parentDir)
+	err := u.doEnsureDirExists(u.parentDirClient)
 	if err != nil {
 		u.jptm.FailActiveUpload("Ensuring parent directory exists", err)
 		return

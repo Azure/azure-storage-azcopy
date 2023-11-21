@@ -24,13 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -93,7 +94,12 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	destPageBlobClient := common.CreatePageBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	bsc, err := jptm.DstServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, err
+	}
+
+	destPageBlobClient := bsc.NewContainerClient(jptm.Info().DstContainer).NewPageBlobClient(jptm.Info().DstFilePath)
 
 	// This is only necessary if our destination is a managed disk impexp account.
 	// Read the in struct explanation if necessary.
@@ -112,7 +118,8 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	destBlobTier := inferredAccessTierType
 	_, pageBlobTierOverride := jptm.BlobTiers()
 	if pageBlobTierOverride != common.EPageBlobTier.None() {
-		destBlobTier = pageBlobTierOverride.ToAccessTierType()
+		t := pageBlobTierOverride.ToAccessTierType()
+		destBlobTier = &t
 	}
 
 	s := &pageBlobSenderBase{
