@@ -597,17 +597,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 			case common.ETransferStatus.Failed(),
 				common.ETransferStatus.TierAvailabilityCheckFailure(),
 				common.ETransferStatus.BlobTierFailure():
-				js.TransfersFailed++
-				// getting the source and destination for failed transfer at position - index
-				src, dst, isFolder := jpp.TransferSrcDstStrings(t)
-				// appending to list of failed transfer
-				js.FailedTransfers = append(js.FailedTransfers,
-					common.TransferDetail{
-						Src:                src,
-						Dst:                dst,
-						IsFolderProperties: isFolder,
-						TransferStatus:     common.ETransferStatus.Failed(),
-						ErrorCode:          jppt.ErrorCode()}) // TODO: Optimize
+				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.SkippedEntityAlreadyExists(),
 				common.ETransferStatus.SkippedBlobHasSnapshots():
 				js.TransfersSkipped++
