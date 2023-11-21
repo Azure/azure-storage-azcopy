@@ -1,7 +1,9 @@
 package e2etest
 
 import (
+	"bytes"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
@@ -9,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"io"
 	"runtime"
 )
 
@@ -39,9 +42,16 @@ func dfsStripSAS(uri string) string {
 }
 
 type BlobFSServiceResourceManager struct {
-	Account AccountResourceManager
+	internalAccount AccountResourceManager
+	internalClient  *service.Client
+}
 
-	internalClient *service.Client
+func (b *BlobFSServiceResourceManager) Parent() ResourceManager {
+	return nil
+}
+
+func (b *BlobFSServiceResourceManager) Account() AccountResourceManager {
+	return b.internalAccount
 }
 
 func (b *BlobFSServiceResourceManager) Location() common.Location {
@@ -86,10 +96,10 @@ func (b *BlobFSServiceResourceManager) ListContainers(a Asserter) []string {
 
 func (b *BlobFSServiceResourceManager) GetContainer(containerName string) ContainerResourceManager {
 	return &BlobFSFileSystemResourceManager{
-		Account:        b.Account,
-		Service:        b,
-		containerName:  containerName,
-		internalClient: b.internalClient.NewFileSystemClient(containerName),
+		internalAccount: b.internalAccount,
+		Service:         b,
+		containerName:   containerName,
+		internalClient:  b.internalClient.NewFileSystemClient(containerName),
 	}
 }
 
@@ -98,11 +108,19 @@ func (b *BlobFSServiceResourceManager) IsHierarchical() bool {
 }
 
 type BlobFSFileSystemResourceManager struct {
-	Account AccountResourceManager
-	Service *BlobFSServiceResourceManager
+	internalAccount AccountResourceManager
+	Service         *BlobFSServiceResourceManager
 
 	containerName  string
 	internalClient *filesystem.Client
+}
+
+func (b *BlobFSFileSystemResourceManager) Parent() ResourceManager {
+	return b.Service
+}
+
+func (b *BlobFSFileSystemResourceManager) Account() AccountResourceManager {
+	return b.internalAccount
 }
 
 func (b *BlobFSFileSystemResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -129,13 +147,32 @@ func (b *BlobFSFileSystemResourceManager) ContainerName() string {
 	return b.containerName
 }
 
-func (b *BlobFSFileSystemResourceManager) Create(a Asserter) {
-	b.CreateWithOptions(a, nil)
+func (b *BlobFSFileSystemResourceManager) Create(a Asserter, props ContainerProperties) {
+	b.CreateWithOptions(a, &filesystem.CreateOptions{
+		Access:       props.BlobContainerProperties.Access,
+		Metadata:     props.Metadata,
+		CPKScopeInfo: props.BlobContainerProperties.CPKScopeInfo,
+	})
+}
+
+func (b *BlobFSFileSystemResourceManager) GetProperties(a Asserter) ContainerProperties {
+	// Same resource, same code. BlobFS SDK can't seem to return these props anyway.
+	return b.Account().GetService(a, common.ELocation.Blob()).GetContainer(b.containerName).GetProperties(a)
 }
 
 func (b *BlobFSFileSystemResourceManager) CreateWithOptions(a Asserter, opts *filesystem.CreateOptions) {
 	_, err := b.internalClient.Create(ctx, opts)
+
+	created := true
+	if datalakeerror.HasCode(err, datalakeerror.FileSystemAlreadyExists) {
+		created = false
+		err = nil
+	}
+
 	a.NoError("Create filesystem", err)
+	if rt, ok := a.(ResourceTracker); ok && created {
+		rt.TrackCreatedResource(b)
+	}
 }
 
 func (b *BlobFSFileSystemResourceManager) Delete(a Asserter) {
@@ -173,17 +210,31 @@ func (b *BlobFSFileSystemResourceManager) ListObjects(a Asserter, prefixOrDirect
 }
 
 func (b *BlobFSFileSystemResourceManager) GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager {
-	//TODO implement me
-	panic("implement me")
+	return &BlobFSPathResourceProvider{
+		internalAccount: b.internalAccount,
+		Service:         b.Service,
+		Container:       b,
+
+		entityType: eType,
+		objectPath: path,
+	}
 }
 
 type BlobFSPathResourceProvider struct {
-	Account   AccountResourceManager
-	Service   *BlobFSServiceResourceManager
-	Container *BlobFSFileSystemResourceManager
+	internalAccount AccountResourceManager
+	Service         *BlobFSServiceResourceManager
+	Container       *BlobFSFileSystemResourceManager
 
 	entityType common.EntityType
 	objectPath string
+}
+
+func (b *BlobFSPathResourceProvider) Parent() ResourceManager {
+	return b.Container
+}
+
+func (b *BlobFSPathResourceProvider) Account() AccountResourceManager {
+	return b.internalAccount
 }
 
 func (b *BlobFSPathResourceProvider) ValidAuthTypes() ExplicitCredentialTypes {
@@ -238,12 +289,14 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 		})
 		a.NoError("Upload stream", err)
 
-		_, err = b.getFileClient().SetAccessControl(ctx, &file.SetAccessControlOptions{ // Set access control after we write to prevent locking ourselves out
-			Permissions: properties.BlobFSProperties.Permissions,
-			Owner:       properties.BlobFSProperties.Owner,
-			Group:       properties.BlobFSProperties.Group,
-			ACL:         properties.BlobFSProperties.ACL,
-		})
+		if properties.BlobFSProperties.Owner != nil || properties.BlobFSProperties.Group != nil || properties.BlobFSProperties.Permissions != nil || properties.BlobFSProperties.ACL != nil {
+			_, err = b.getFileClient().SetAccessControl(ctx, &file.SetAccessControlOptions{ // Set access control after we write to prevent locking ourselves out
+				Permissions: properties.BlobFSProperties.Permissions,
+				Owner:       properties.BlobFSProperties.Owner,
+				Group:       properties.BlobFSProperties.Group,
+				ACL:         properties.BlobFSProperties.ACL,
+			})
+		}
 		a.NoError("Set access control", err)
 	}
 
@@ -269,6 +322,26 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 		_, err := blobClient.SetTier(ctx, *properties.BlobProperties.BlockBlobAccessTier, nil)
 		a.NoError("Set tier", err)
 	}
+
+	if rt, ok := a.(ResourceTracker); ok {
+		rt.TrackCreatedResource(b)
+	}
+}
+
+func (b *BlobFSPathResourceProvider) Delete(a Asserter) {
+	var err error
+	switch b.entityType {
+	case common.EEntityType.File():
+		_, err = b.getFileClient().Delete(ctx, nil)
+	case common.EEntityType.Folder():
+		_, err = b.getDirClient().Delete(ctx, nil)
+	}
+
+	if datalakeerror.HasCode(err, datalakeerror.PathNotFound, datalakeerror.ResourceNotFound, datalakeerror.FileSystemNotFound) {
+		err = nil
+	}
+
+	a.NoError("delete path", err)
 }
 
 func (b *BlobFSPathResourceProvider) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
@@ -296,7 +369,7 @@ func (b *BlobFSPathResourceProvider) GetPropertiesWithOptions(a Asserter, option
 	a.NoError("Get properties", err)
 
 	permResp, err := b.getFileClient().GetAccessControl(ctx, &file.GetAccessControlOptions{
-		UPN:              options.UPN,
+		UPN:              opts.UPN,
 		AccessConditions: opts.AccessConditions,
 	})
 
@@ -363,7 +436,20 @@ func (b *BlobFSPathResourceProvider) getFileClient() *file.Client {
 }
 
 func (b *BlobFSPathResourceProvider) getBlobClient(a Asserter) *blob.Client {
-	blobService := b.Account.GetService(a, common.ELocation.Blob()).(*BlobServiceResourceManager) // Blob and BlobFS are synonymous, so simply getting the same path is fine.
+	blobService := b.internalAccount.GetService(a, common.ELocation.Blob()).(*BlobServiceResourceManager) // Blob and BlobFS are synonymous, so simply getting the same path is fine.
 	container := blobService.internalClient.NewContainerClient(b.Container.containerName)
 	return container.NewBlobClient(b.objectPath) // Generic blob client for now, we can specialize if we want in the future.
+}
+
+func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
+	a.Assert("Object type must be file", Equal{}, common.EEntityType.File(), b.entityType)
+
+	resp, err := b.getFileClient().DownloadStream(ctx, nil)
+	a.NoError("Download stream", err)
+
+	buf := &bytes.Buffer{}
+	_, err = io.Copy(buf, resp.Body)
+	a.NoError("Read body", err)
+
+	return bytes.NewReader(buf.Bytes())
 }

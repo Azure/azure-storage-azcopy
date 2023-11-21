@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"reflect"
 	"runtime/debug"
 	"strings"
 )
@@ -12,6 +13,8 @@ import (
 type NoError struct {
 	// set stackTrace to true to get the panic stack trace
 	stackTrace bool
+
+	// todo: traced error decorations
 }
 
 func (n NoError) Name() string {
@@ -28,7 +31,7 @@ func (n NoError) MinArgs() int {
 
 func (n NoError) Assert(items ...any) bool {
 	for _, v := range items {
-		if _, ok := v.(error); ok {
+		if v != nil {
 			return false
 		}
 	}
@@ -109,7 +112,9 @@ func (n Not) Assert(items ...any) bool {
 // ====== Equal =======
 
 // Equal checks that all parameters are equal.
-type Equal struct{}
+type Equal struct {
+	Deep bool
+}
 
 func (e Equal) Name() string {
 	return "Equal"
@@ -130,8 +135,14 @@ func (e Equal) Assert(items ...any) bool {
 
 	left := items[0]
 	for _, right := range items[1:] {
-		if left != right {
-			return false
+		if !e.Deep {
+			if left != right {
+				return false
+			}
+		} else {
+			if !reflect.DeepEqual(left, right) {
+				return false
+			}
 		}
 	}
 

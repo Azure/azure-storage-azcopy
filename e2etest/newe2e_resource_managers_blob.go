@@ -1,8 +1,10 @@
 package e2etest
 
 import (
+	"bytes"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
@@ -53,8 +55,16 @@ func blobStripSAS(uri string) string {
 // ==================== SERVICE ====================
 
 type BlobServiceResourceManager struct {
-	Account        AccountResourceManager // todo AzureAccountResourceManager
-	internalClient *service.Client
+	internalAccount AccountResourceManager // todo AzureAccountResourceManager
+	internalClient  *service.Client
+}
+
+func (b *BlobServiceResourceManager) Account() AccountResourceManager {
+	return b.internalAccount
+}
+
+func (b *BlobServiceResourceManager) Parent() ResourceManager {
+	return nil // Services don't really have parent ResourceManagers-- At least not in the defined interface.
 }
 
 func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
@@ -98,24 +108,32 @@ func (b *BlobServiceResourceManager) ResourceClient() any {
 func (b *BlobServiceResourceManager) GetContainer(name string) ContainerResourceManager {
 	containerClient := b.internalClient.NewContainerClient(name)
 	return &BlobContainerResourceManager{
-		Account:        b.Account,
-		Service:        b,
-		containerName:  name,
-		internalClient: containerClient,
+		internalAccount: b.internalAccount,
+		Service:         b,
+		containerName:   name,
+		internalClient:  containerClient,
 	}
 }
 
 func (b *BlobServiceResourceManager) IsHierarchical() bool {
-	return b.Account.AccountType() == EAccountType.HierarchicalNamespaceEnabled()
+	return b.internalAccount.AccountType() == EAccountType.HierarchicalNamespaceEnabled()
 }
 
 // ==================== CONTAINER ====================
 
 type BlobContainerResourceManager struct {
-	Account        AccountResourceManager // todo AzureAccountResourceManager
-	Service        *BlobServiceResourceManager
-	containerName  string
-	internalClient *container.Client
+	internalAccount AccountResourceManager // todo AzureAccountResourceManager
+	Service         *BlobServiceResourceManager
+	containerName   string
+	internalClient  *container.Client
+}
+
+func (b *BlobContainerResourceManager) Account() AccountResourceManager {
+	return b.internalAccount
+}
+
+func (b *BlobContainerResourceManager) Parent() ResourceManager {
+	return b.Service
 }
 
 var premiumRegex = regexp.MustCompile("P\\d{2}")
@@ -194,25 +212,51 @@ func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, re
 	return out
 }
 
-func (b *BlobContainerResourceManager) Create(a Asserter) {
-	b.CreateWithOptions(a, nil)
+func (b *BlobContainerResourceManager) Create(a Asserter, props ContainerProperties) {
+	b.CreateWithOptions(a, &BlobContainerCreateOptions{
+		Access:       props.BlobContainerProperties.Access,
+		Metadata:     props.Metadata,
+		CPKScopeInfo: props.BlobContainerProperties.CPKScopeInfo,
+	})
+}
+
+func (b *BlobContainerResourceManager) GetProperties(a Asserter) ContainerProperties {
+	props, err := b.internalClient.GetProperties(ctx, nil)
+	a.NoError("Get container properties", err)
+
+	return ContainerProperties{
+		Metadata: props.Metadata,
+		BlobContainerProperties: BlobContainerProperties{
+			Access: props.BlobPublicAccess,
+		},
+	}
 }
 
 type BlobContainerCreateOptions = container.CreateOptions
 
 func (b *BlobContainerResourceManager) CreateWithOptions(a Asserter, options *BlobContainerCreateOptions) {
 	_, err := b.internalClient.Create(ctx, options)
+
+	created := true
+	if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
+		created = false
+		err = nil
+	}
+
 	a.NoError("create container", err)
+	if rt, ok := a.(ResourceTracker); ok && created {
+		rt.TrackCreatedResource(b)
+	}
 }
 
 func (b *BlobContainerResourceManager) GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager {
 	return &BlobObjectResourceManager{
-		Account:        b.Account,
-		Service:        b.Service,
-		Container:      b,
-		Path:           path,
-		entityType:     eType,
-		internalClient: b.internalClient.NewBlobClient(path),
+		internalAccount: b.internalAccount,
+		Service:         b.Service,
+		Container:       b,
+		Path:            path,
+		entityType:      eType,
+		internalClient:  b.internalClient.NewBlobClient(path),
 	}
 }
 
@@ -264,13 +308,21 @@ func (b *BlobContainerResourceManager) ContainerName() string {
 // ==================== OBJECT ====================
 
 type BlobObjectResourceManager struct {
-	Account    AccountResourceManager // todo AzureAccountResourceManager
-	Service    *BlobServiceResourceManager
-	Container  *BlobContainerResourceManager
-	Path       string
-	entityType common.EntityType
+	internalAccount AccountResourceManager // todo AzureAccountResourceManager
+	Service         *BlobServiceResourceManager
+	Container       *BlobContainerResourceManager
+	Path            string
+	entityType      common.EntityType
 
 	internalClient *blob.Client
+}
+
+func (b *BlobObjectResourceManager) Account() AccountResourceManager {
+	return b.internalAccount
+}
+
+func (b *BlobObjectResourceManager) Parent() ResourceManager {
+	return b.Container
 }
 
 func (b *BlobObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -288,6 +340,16 @@ func (b *BlobObjectResourceManager) EntityType() common.EntityType {
 // Create defaults to Block Blob. For implementation-specific options, GetTypeOrZero[T] / GetTypeOrAssert[T] to BlobObjectResourceManager and call CreateWithOptions
 func (b *BlobObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	b.CreateWithOptions(a, body, properties, nil)
+}
+
+func (b *BlobObjectResourceManager) Delete(a Asserter) {
+	_, err := b.internalClient.Delete(ctx, nil)
+
+	if bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ResourceNotFound, bloberror.ContainerNotFound) {
+		err = nil
+	}
+
+	a.NoError("delete blob", err)
 }
 
 type BlobObjectCreateOptions struct {
@@ -435,6 +497,10 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 
 		a.NoError("Upload append blob", msu.UploadContents(body))
 	}
+
+	if rt, ok := a.(ResourceTracker); ok {
+		rt.TrackCreatedResource(b)
+	}
 }
 
 func (b *BlobObjectResourceManager) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
@@ -521,4 +587,15 @@ func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
 
 func (b *BlobObjectResourceManager) URI() string {
 	return blobStripSAS(b.internalClient.URL())
+}
+
+func (b *BlobObjectResourceManager) Download(a Asserter) io.ReadSeeker {
+	resp, err := b.internalClient.DownloadStream(ctx, nil)
+	a.NoError("Download stream", err)
+
+	buf := &bytes.Buffer{}
+	_, err = io.Copy(buf, resp.Body)
+	a.NoError("Read body", err)
+
+	return bytes.NewReader(buf.Bytes())
 }

@@ -108,11 +108,16 @@ var EAccountType = AccountType(0)
 type AccountType uint8
 
 func (AccountType) Standard() AccountType                     { return AccountType(0) }
-func (AccountType) Premium() AccountType                      { return AccountType(1) }
+func (AccountType) PremiumBlockBlobs() AccountType            { return AccountType(1) }
+func (AccountType) PremiumPageBlobs() AccountType             { return AccountType(8) }
+func (AccountType) PremiumFileShares() AccountType            { return AccountType(9) }
+func (AccountType) PremiumHNSEnabled() AccountType            { return AccountType(10) }
 func (AccountType) HierarchicalNamespaceEnabled() AccountType { return AccountType(2) }
 func (AccountType) Classic() AccountType                      { return AccountType(3) }
 func (AccountType) StdManagedDisk() AccountType               { return AccountType(4) }
 func (AccountType) OAuthManagedDisk() AccountType             { return AccountType(5) }
+func (AccountType) S3() AccountType                           { return AccountType(6) } // Stub, for future testing use
+func (AccountType) GCP() AccountType                          { return AccountType(7) } // Stub, for future testing use
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))

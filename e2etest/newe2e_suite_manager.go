@@ -3,7 +3,6 @@ package e2etest
 import (
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -22,16 +21,10 @@ func (sm *SuiteManager) RegisterSuite(Suite any) {
 	sm.ScenarioManagers[suiteName] = nil // todo SuiteManager
 }
 
-func (sm *SuiteManager) IsTestingFunc(method reflect.Type) {
-
-}
-
 func (sm *SuiteManager) RunSuites(t *testing.T) {
 	defer func() {
-		NewTestingAsserter(t).AssertNow("Suite runner panicked (fatal)", IsNil{}, recover())
+		NewFrameworkAsserter(t).AssertNow("Suite runner panicked (fatal)", IsNil{}, recover())
 	}()
-
-	t.Parallel()
 
 	sm.testingT = t
 
@@ -53,7 +46,7 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 			}
 			// check that the first input is actually an asserter
 			inName := method.Type.In(1).String()
-			if inName != "e2etest.Asserter" && inName != "*e2etest.ScenarioVariationManager" {
+			if inName != "*e2etest.ScenarioVariationManager" {
 				continue
 			}
 
@@ -75,52 +68,43 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 				// todo: call setup with suite manager
 				t.Run("Setup", func(t *testing.T) {
 					defer func() {
-						NewTestingAsserter(t).AssertNow("Scenario setup panicked (recovered)", NoError{stackTrace: true}, recover())
+						NewFrameworkAsserter(t).AssertNow("Scenario setup panicked (recovered)", NoError{stackTrace: true}, recover())
 					}()
 
-					sVal.Method(setupIdx).Call([]reflect.Value{reflect.ValueOf(NewTestingAsserter(t))})
+					sVal.Method(setupIdx).Call([]reflect.Value{reflect.ValueOf(&ScenarioVariationManager{t: t})})
 				})
 			}
 
 			if !t.Failed() {
-				wg := &sync.WaitGroup{}
-
 				for scenarioName, scenarioIdx := range testIdxs {
-					wg.Add(1)
-
 					scenarioName := scenarioName // create intermediate values.
 					scenarioIdx := scenarioIdx   // This bug is technically fixed in newer versions of Go, but the fix must be manually applied.
 
-					// t.Parallel is not useful here-- It delays the remainder of this until the test finishes running (which it never will).
-					// This is a deadlock, but Golang somehow doesn't detect it.
-					// TODO: Centralize
-					go func() {
-						t.Run(scenarioName, func(t *testing.T) {
-							defer wg.Done()
-							defer func() {
-								NewTestingAsserter(t).AssertNow("Scenario runner panicked (recovered)", NoError{stackTrace: true}, recover())
-							}()
+					t.Run(scenarioName, func(t *testing.T) {
+						defer func() {
+							NewFrameworkAsserter(t).AssertNow("Scenario runner panicked (recovered)", NoError{stackTrace: true}, recover())
+						}()
 
-							NewScenarioManager(t, sVal.Method(scenarioIdx)).RunScenario()
+						t.Parallel()
 
-							_ = scenarioIdx
-						})
-					}()
+						NewScenarioManager(t, sVal.Method(scenarioIdx)).RunScenario()
+
+						_ = scenarioIdx
+					})
 				}
-
-				wg.Wait()
 			} else {
-				(&TestingAsserter{t: t, SuiteName: sName}).Log("Skipping tests, failed suite setup...")
+				(&FrameworkAsserter{t: t, SuiteName: sName}).Log("Skipping tests, failed suite setup...")
 			}
 
 			if teardownIdx != -1 {
-				// todo: call teardown with suite manager
-				t.Run("Teardown", func(t *testing.T) {
-					defer func() {
-						NewTestingAsserter(t).AssertNow("Scenario teardown panicked (recovered; you probably need to manually clean up resources)", NoError{stackTrace: true}, recover())
-					}()
+				t.Cleanup(func() {
+					t.Run("Teardown", func(t *testing.T) {
+						defer func() {
+							NewFrameworkAsserter(t).AssertNow("Scenario teardown panicked (recovered; you probably need to manually clean up resources)", NoError{stackTrace: true}, recover())
+						}()
 
-					sVal.Method(teardownIdx).Call([]reflect.Value{reflect.ValueOf(&TestingAsserter{t: t, SuiteName: sName, ScenarioName: "Teardown"})})
+						sVal.Method(teardownIdx).Call([]reflect.Value{reflect.ValueOf(&FrameworkAsserter{t: t, SuiteName: sName, ScenarioName: "Teardown"})})
+					})
 				})
 			}
 		})

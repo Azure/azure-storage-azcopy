@@ -53,10 +53,10 @@ func (sa *ARMStorageAccount) GetResourceManager() (*AzureAccountResourceManager,
 		acctType = EAccountType.HierarchicalNamespaceEnabled()
 	case strings.EqualFold(props.Sku.Tier, "Standard"):
 		acctType = EAccountType.Standard()
-	case strings.EqualFold(props.Sku.Tier, "Premium"):
-		acctType = EAccountType.Premium()
-		// Classic comes from Microsoft.ClassicStorage/storageAccounts, so, not possible here.
-		// Managed Disks also won't appear here.
+	//case strings.EqualFold(props.Sku.Tier, "Premium"):
+	//	acctType = EAccountType()
+	//	// Classic comes from Microsoft.ClassicStorage/storageAccounts, so, not possible here.
+	//	// Managed Disks also won't appear here.
 	default:
 		return nil, fmt.Errorf("failed to assign an appropriate account type")
 	}

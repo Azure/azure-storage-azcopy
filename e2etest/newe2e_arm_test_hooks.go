@@ -1,51 +1,43 @@
 package e2etest
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	"net/http"
+	"strings"
 )
 
 var CommonARMClient *ARMClient
 var CommonARMResourceGroup *ARMResourceGroup // separated in case needed.
 
-func SetupArmClient() TieredError {
+func SetupArmClient(a Asserter) {
 	if GlobalConfig.StaticResources() {
-		return nil // no setup
+		return // no setup
 	}
 
 	spt, err := PrimaryOAuthCache.GetAccessToken(AzureManagementResource)
-	if err != nil {
-		return TieredErrorWrapper{
-			error:     fmt.Errorf("getting OAuth token: %w", err),
-			ErrorTier: ErrorTierFatal,
-		}
-	}
+	a.NoError("get management access token", err)
 
 	CommonARMClient = &ARMClient{
 		OAuth:      spt,
 		HttpClient: http.DefaultClient, // todo if we want something more special
 	}
 
+	uuidSegments := strings.Split(uuid.NewString(), "-")
+
 	CommonARMResourceGroup = &ARMResourceGroup{
 		ARMSubscription: &ARMSubscription{
 			ARMClient:      CommonARMClient,
 			SubscriptionID: GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID,
 		},
-		ResourceGroupName: "azcopy-newe2e-" + uuid.NewString(),
+		ResourceGroupName: "azcopy-newe2e-" + uuidSegments[len(uuidSegments)-1],
 	}
 
-	return nil
+	_, err = CommonARMResourceGroup.CreateOrUpdate(ARMResourceGroupCreateParams{
+		Location: "West US", // todo configurable
+	})
+	a.NoError("create resource group", err)
 }
 
-func TeardownArmClient() TieredError {
-	err := CommonARMResourceGroup.Delete(nil)
-	if err != nil {
-		return TieredErrorWrapper{
-			error:     fmt.Errorf("deleting resource group %s: %w", CommonARMResourceGroup.ResourceGroupName, err),
-			ErrorTier: ErrorTierFatal,
-		}
-	}
-
-	return nil
+func TeardownArmClient(a Asserter) {
+	a.NoError("delete resource group", CommonARMResourceGroup.Delete(nil))
 }

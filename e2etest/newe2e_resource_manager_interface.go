@@ -2,15 +2,25 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"io"
 	"time"
 )
 
 type ResourceManager interface {
 	Location() common.Location
 	Level() cmd.LocationLevel
+
+	// Parent specifies the parent resource manager, for the purposes of building a tree.
+	// Can return nil, indicating this is the root of the tree.
+	Parent() ResourceManager
+	// Account specifies the parent account.
+	// Can return nil, indicating there is no associated account
+	Account() AccountResourceManager
 }
 
 type RemoteResourceManager interface {
@@ -81,7 +91,11 @@ type ContainerResourceManager interface {
 	ResourceManager
 
 	ContainerName() string
-	Create(a Asserter)
+	// Create should ignore errors of existing containers. It is expected to attempt to track container creation.
+	Create(a Asserter, props ContainerProperties)
+	// GetProperties polls container properties.
+	GetProperties(a Asserter) ContainerProperties
+	// Delete should ignore errors of nonexistent containers
 	Delete(a Asserter)
 	// ListObjects treats prefixOrDirectory as a prefix when in a non-hierarchical service, and as a directory in a hierarchical service.
 	// The map will be the real path, relative to container root, not to prefix/directory.
@@ -89,11 +103,37 @@ type ContainerResourceManager interface {
 	GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager
 }
 
+type ContainerProperties struct {
+	// Used by multiple services, makes sense to have as a general option.
+	// When specified by user: Nil = unspecified/unverified
+	// When returned by manager: Nil = unsupported
+	Metadata common.Metadata
+
+	// BlobContainerProperties is shared with BlobFS, because they're the same resource and share parameters
+	BlobContainerProperties BlobContainerProperties
+	FileContainerProperties FileContainerProperties
+}
+
+type BlobContainerProperties struct {
+	Access       *container.PublicAccessType
+	CPKScopeInfo *container.CPKScopeInfo
+}
+
+type FileContainerProperties struct {
+	AccessTier       *share.AccessTier
+	EnabledProtocols *string
+	Quota            *int32
+	RootSquash       *share.RootSquash
+}
+
 type ObjectResourceManager interface {
 	ResourceManager
 
 	EntityType() common.EntityType
+	// Create attempts to create an object. Should overwrite objects if they already exist. It is expected to attempt to track object creation.
 	Create(a Asserter, body ObjectContentContainer, properties ObjectProperties)
+	// Delete attempts to delete an object. NotFound type errors are ignored.
+	Delete(a Asserter)
 
 	// ListChildren will fail if EntityType is not a folder and the service is hierarchical.
 	// The map will be relative to the object.
@@ -104,6 +144,8 @@ type ObjectResourceManager interface {
 	SetHTTPHeaders(a Asserter, h contentHeaders)
 	SetMetadata(a Asserter, metadata common.Metadata)
 	SetObjectProperties(a Asserter, props ObjectProperties)
+
+	Download(a Asserter) io.ReadSeeker
 }
 
 type ObjectProperties struct {
@@ -118,7 +160,7 @@ type ObjectProperties struct {
 
 type BlobProperties struct {
 	Type                *blob.BlobType
-	Tags                map[string]string // "Tags"
+	Tags                map[string]string
 	BlockBlobAccessTier *blob.AccessTier
 	PageBlobAccessTier  *pageblob.PremiumPageBlobAccessTier
 }

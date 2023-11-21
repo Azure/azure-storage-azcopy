@@ -25,6 +25,20 @@ type Asserter interface {
 	Failed() bool
 }
 
+type DryrunAsserter interface {
+	Asserter
+
+	Dryrun() bool
+	Invalid() bool
+	InvalidateScenario()
+}
+
+type CleanupAsserter interface {
+	Asserter
+
+	Cleanup(func())
+}
+
 // ====== Assertion ======
 
 type Assertion interface {
@@ -43,16 +57,15 @@ type FormattedAssertion interface {
 	Format(items ...any) string
 }
 
-// ====== Implementation ======
-
-type TestingAsserter struct {
+// FrameworkAsserter should only be used for the very roots of the testing framework. It should never be used inside a real test itself.
+type FrameworkAsserter struct {
 	t             *testing.T
-	SuiteName     string
+	SuiteName     string // todo new naming scheme
 	ScenarioName  string
 	VariationName string // todo: do we just go through and use fmt.Sprint on all the objects in the variation in order?
 }
 
-func NewTestingAsserter(t *testing.T) Asserter {
+func NewFrameworkAsserter(t *testing.T) Asserter {
 	nameSplits := strings.Split(t.Name(), "/")
 	nameSplits = nameSplits[1:]
 
@@ -64,7 +77,7 @@ func NewTestingAsserter(t *testing.T) Asserter {
 		return ""
 	}
 
-	return &TestingAsserter{
+	return &FrameworkAsserter{
 		t:             t,
 		SuiteName:     tryIndex(0),
 		ScenarioName:  tryIndex(1),
@@ -72,7 +85,7 @@ func NewTestingAsserter(t *testing.T) Asserter {
 	}
 }
 
-func (ta *TestingAsserter) GetTestName() string {
+func (ta *FrameworkAsserter) GetTestName() string {
 	out := ""
 
 	if ta.SuiteName != "" { // Follow the logical progression to produce "Suite/Scenario (Variation)" where available.
@@ -86,7 +99,7 @@ func (ta *TestingAsserter) GetTestName() string {
 			}
 		}
 	} else {
-		// Have a fallback for if a TestingAsserter exists without an associated Suite/Scenario/Variation
+		// Have a fallback for if a FrameworkAsserter exists without an associated Suite/Scenario/Variation
 		// if the SuiteManager has something to say, it should still be able to, and it should still be clear from whence it came.
 		out = "<FRAMEWORK>"
 	}
@@ -94,23 +107,23 @@ func (ta *TestingAsserter) GetTestName() string {
 	return out
 }
 
-func (ta *TestingAsserter) PrintFinalizingMessage(reasonFormat string, a ...any) {
+func (ta *FrameworkAsserter) PrintFinalizingMessage(reasonFormat string, a ...any) {
 	ta.t.Helper()
 	ta.Log("========== %s ===========", ta.GetTestName())
 	ta.Log(reasonFormat, a...)
 }
 
-func (ta *TestingAsserter) Log(format string, a ...any) {
+func (ta *FrameworkAsserter) Log(format string, a ...any) {
 	ta.t.Helper()
 	ta.t.Log(fmt.Sprintf(format, a...))
 }
 
-func (ta *TestingAsserter) NoError(comment string, err error) {
+func (ta *FrameworkAsserter) NoError(comment string, err error) {
 	ta.t.Helper()
 	ta.AssertNow(comment, IsNil{}, err)
 }
 
-func (ta *TestingAsserter) AssertNow(comment string, assertion Assertion, items ...any) {
+func (ta *FrameworkAsserter) AssertNow(comment string, assertion Assertion, items ...any) {
 	ta.t.Helper()
 	ta.Assert(comment, assertion, items...)
 	if ta.Failed() {
@@ -118,7 +131,7 @@ func (ta *TestingAsserter) AssertNow(comment string, assertion Assertion, items 
 	}
 }
 
-func (ta *TestingAsserter) Assert(comment string, assertion Assertion, items ...any) {
+func (ta *FrameworkAsserter) Assert(comment string, assertion Assertion, items ...any) {
 	ta.t.Helper()
 	if (assertion.MinArgs() > 0 && len(items) < assertion.MinArgs()) || (assertion.MaxArgs() > 0 && len(items) > assertion.MaxArgs()) {
 		ta.PrintFinalizingMessage("Failed to assert: Assertion %s supports argument counts between %d and %d, but received %d args.", assertion.Name(), assertion.MinArgs(), assertion.MaxArgs(), len(items))
@@ -136,19 +149,19 @@ func (ta *TestingAsserter) Assert(comment string, assertion Assertion, items ...
 	}
 }
 
-func (ta *TestingAsserter) Error(reason string) {
+func (ta *FrameworkAsserter) Error(reason string) {
 	ta.t.Helper()
 	ta.PrintFinalizingMessage("Test failed: %s", reason)
 	ta.t.FailNow()
 }
 
-func (ta *TestingAsserter) Skip(reason string) {
+func (ta *FrameworkAsserter) Skip(reason string) {
 	ta.t.Helper()
 	ta.PrintFinalizingMessage("Test skipped: %s", reason)
 	ta.t.SkipNow()
 }
 
-func (ta *TestingAsserter) Failed() bool {
+func (ta *FrameworkAsserter) Failed() bool {
 	ta.t.Helper()
 	return ta.t.Failed()
 }

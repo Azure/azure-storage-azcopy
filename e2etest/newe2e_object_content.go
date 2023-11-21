@@ -2,6 +2,8 @@ package e2etest
 
 import (
 	"bytes"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"math/rand"
 )
@@ -14,7 +16,10 @@ type ObjectContentContainer interface {
 }
 
 func SizeFromString(objectSize string) int64 {
-	return 0 // todo stub
+	longSize, err := cmd.ParseSizeString(objectSize, "object size")
+	common.PanicIfErr(err)
+
+	return longSize
 }
 
 func NewRandomObjectContentContainer(a Asserter, size int64) ObjectContentContainer {

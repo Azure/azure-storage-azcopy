@@ -17,10 +17,11 @@ const (
 
 var PrimaryOAuthCache *OAuthCache
 
-func SetupOAuthCache() TieredError {
+func SetupOAuthCache(a Asserter) {
 	if GlobalConfig.StaticResources() {
-		return nil // no-op, because there's no OAuth configured
+		return // no-op, because there's no OAuth configured
 	}
+
 	loginInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
 
 	cred, err := azidentity.NewClientSecretCredential(
@@ -29,16 +30,9 @@ func SetupOAuthCache() TieredError {
 		loginInfo.ClientSecret,
 		nil, // Hopefully the defaults should be OK?
 	)
-	if err != nil {
-		return TieredErrorWrapper{
-			error:     err,
-			ErrorTier: ErrorTierFatal,
-		}
-	}
+	a.NoError("create credentials", err)
 
 	PrimaryOAuthCache = NewOAuthCache(cred, GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.TenantID)
-
-	return nil
 }
 
 /*

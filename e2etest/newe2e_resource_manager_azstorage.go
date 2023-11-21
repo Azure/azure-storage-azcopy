@@ -14,14 +14,14 @@ type AzureAccountResourceManager struct {
 	accountKey  string
 	accountType AccountType
 
-	armClient ARMSubject
+	armClient *ARMStorageAccount
 }
 
 // ManagementClient returns the parent management client for this storage account.
 // If this was created raw from key+name, this will return nil.
 // If the account is a "modern" ARM storage account, ARMStorageAccount will be returned.
 // If the account is a "classic" storage account, ARMClassicStorageAccount (not yet implemented) will be returned.
-func (acct *AzureAccountResourceManager) ManagementClient() ARMSubject {
+func (acct *AzureAccountResourceManager) ManagementClient() *ARMStorageAccount {
 	return acct.armClient
 }
 
@@ -66,8 +66,8 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 		a.NoError("Create Blob client", err)
 
 		return &BlobServiceResourceManager{
-			Account:        acct,
-			internalClient: client,
+			internalAccount: acct,
+			internalClient:  client,
 		}
 	case common.ELocation.File():
 		sharedKey, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
@@ -76,8 +76,8 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 		a.NoError("Create File client", err)
 
 		return &FileServiceResourceManager{
-			Account:        acct,
-			internalClient: client,
+			internalAccount: acct,
+			internalClient:  client,
 		}
 	case common.ELocation.BlobFS():
 		sharedKey, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
@@ -85,8 +85,8 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 		a.NoError("Create BlobFS client", err)
 
 		return &BlobFSServiceResourceManager{
-			Account:        acct,
-			internalClient: client,
+			internalAccount: acct,
+			internalClient:  client,
 		}
 	default:
 		return nil // GetServiceURL already covered the error

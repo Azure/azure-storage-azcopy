@@ -1,14 +1,18 @@
 package e2etest
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"io"
 	"path"
 	"runtime"
 )
@@ -33,8 +37,16 @@ func init() {
 // ==================== SERVICE ====================
 
 type FileServiceResourceManager struct {
-	Account        AccountResourceManager
-	internalClient *service.Client
+	internalAccount AccountResourceManager
+	internalClient  *service.Client
+}
+
+func (s *FileServiceResourceManager) Account() AccountResourceManager {
+	return s.internalAccount
+}
+
+func (s *FileServiceResourceManager) Parent() ResourceManager {
+	return nil
 }
 
 func (s *FileServiceResourceManager) Location() common.Location {
@@ -42,7 +54,7 @@ func (s *FileServiceResourceManager) Location() common.Location {
 }
 
 func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
-	return cmd.ELocationLevel.Object()
+	return cmd.ELocationLevel.Service()
 }
 
 func (s *FileServiceResourceManager) URI() string {
@@ -79,10 +91,10 @@ func (s *FileServiceResourceManager) ListContainers(a Asserter) []string {
 
 func (s *FileServiceResourceManager) GetContainer(container string) ContainerResourceManager {
 	return &FileShareResourceManager{
-		Account:        s.Account,
-		Service:        s,
-		containerName:  container,
-		internalClient: s.internalClient.NewShareClient(container),
+		internalAccount: s.internalAccount,
+		Service:         s,
+		containerName:   container,
+		internalClient:  s.internalClient.NewShareClient(container),
 	}
 }
 
@@ -93,11 +105,19 @@ func (s *FileServiceResourceManager) IsHierarchical() bool {
 // ==================== CONTAINER ====================
 
 type FileShareResourceManager struct {
-	Account AccountResourceManager
-	Service *FileServiceResourceManager
+	internalAccount AccountResourceManager
+	Service         *FileServiceResourceManager
 
 	containerName  string
 	internalClient *share.Client
+}
+
+func (s *FileShareResourceManager) Parent() ResourceManager {
+	return s.Service
+}
+
+func (s *FileShareResourceManager) Account() AccountResourceManager {
+	return s.internalAccount
 }
 
 func (s *FileShareResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -124,16 +144,46 @@ func (s *FileShareResourceManager) ContainerName() string {
 	return s.containerName
 }
 
-func (s *FileShareResourceManager) Create(a Asserter) {
-	s.CreateWithOptions(a, nil)
+func (s *FileShareResourceManager) GetProperties(a Asserter) ContainerProperties {
+	resp, err := s.internalClient.GetProperties(ctx, nil)
+	a.NoError("get share properties", err)
+
+	return ContainerProperties{
+		Metadata: resp.Metadata,
+		FileContainerProperties: FileContainerProperties{
+			AccessTier:       (*share.AccessTier)(resp.AccessTier),
+			EnabledProtocols: resp.EnabledProtocols,
+			Quota:            resp.Quota,
+			RootSquash:       resp.RootSquash,
+		},
+	}
+}
+
+func (s *FileShareResourceManager) Create(a Asserter, props ContainerProperties) {
+	s.CreateWithOptions(a, &FileShareCreateOptions{
+		AccessTier:       props.FileContainerProperties.AccessTier,
+		EnabledProtocols: props.FileContainerProperties.EnabledProtocols,
+		Metadata:         props.Metadata,
+		Quota:            props.FileContainerProperties.Quota,
+		RootSquash:       props.FileContainerProperties.RootSquash,
+	})
 }
 
 type FileShareCreateOptions = share.CreateOptions
 
 func (s *FileShareResourceManager) CreateWithOptions(a Asserter, options *FileShareCreateOptions) {
 	_, err := s.internalClient.Create(ctx, options)
-	a.NoError("Create container", err)
 
+	created := true
+	if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
+		created = false
+		err = nil
+	}
+
+	a.NoError("Create container", err)
+	if rt, ok := a.(ResourceTracker); ok && created {
+		rt.TrackCreatedResource(s)
+	}
 }
 
 func (s *FileShareResourceManager) Delete(a Asserter) {
@@ -240,23 +290,31 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 
 func (s *FileShareResourceManager) GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager {
 	return &FileObjectResourceManager{
-		Account:    s.Account,
-		Service:    s.Service,
-		Share:      s,
-		path:       path,
-		entityType: eType,
+		internalAccount: s.internalAccount,
+		Service:         s.Service,
+		Share:           s,
+		path:            path,
+		entityType:      eType,
 	}
 }
 
 // ==================== FILE ====================
 
 type FileObjectResourceManager struct {
-	Account AccountResourceManager
-	Service *FileServiceResourceManager
-	Share   *FileShareResourceManager
+	internalAccount AccountResourceManager
+	Service         *FileServiceResourceManager
+	Share           *FileShareResourceManager
 
 	path       string
 	entityType common.EntityType
+}
+
+func (f *FileObjectResourceManager) Parent() ResourceManager {
+	return f.Share
+}
+
+func (f *FileObjectResourceManager) Account() AccountResourceManager {
+	return f.internalAccount
 }
 
 func (f *FileObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -352,6 +410,28 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	default:
 		a.Error("File Objects only support Files and Folders")
 	}
+
+	if rt, ok := a.(ResourceTracker); ok {
+		rt.TrackCreatedResource(f)
+	}
+}
+
+func (f *FileObjectResourceManager) Delete(a Asserter) {
+	var err error
+	switch f.entityType {
+	case common.EEntityType.File():
+		_, err = f.getFileClient().Delete(ctx, nil)
+	case common.EEntityType.Folder():
+		_, err = f.getDirClient().Delete(ctx, nil)
+	default:
+		a.Error(fmt.Sprintf("entity type %s is not currently supported", f.entityType))
+	}
+
+	if fileerror.HasCode(err, fileerror.ResourceNotFound, fileerror.ShareNotFound, fileerror.ParentNotFound) {
+		err = nil
+	}
+
+	a.NoError("delete path", err)
 }
 
 func (f *FileObjectResourceManager) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
@@ -375,7 +455,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 		}
 
 		out = ObjectProperties{
-			EntityType: f.entityType,
+			EntityType: f.entityType, // It should be OK to just return entity type, getproperties should fail with the wrong restype
 			Metadata:   resp.Metadata,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
@@ -502,4 +582,17 @@ func (f *FileObjectResourceManager) getFileClient() *file.Client {
 
 func (f *FileObjectResourceManager) getDirClient() *directory.Client {
 	return f.Share.internalClient.NewDirectoryClient(f.path)
+}
+
+func (f *FileObjectResourceManager) Download(a Asserter) io.ReadSeeker {
+	a.Assert("Entity type must be file", Equal{}, f.entityType, common.EEntityType.File())
+
+	resp, err := f.getFileClient().DownloadStream(ctx, nil)
+	a.NoError("Download stream", err)
+
+	buf := &bytes.Buffer{}
+	_, err = io.Copy(buf, resp.Body)
+	a.NoError("Read body", err)
+
+	return bytes.NewReader(buf.Bytes())
 }

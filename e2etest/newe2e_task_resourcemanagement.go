@@ -1,5 +1,156 @@
 package e2etest
 
-func CreateResource(sm *ScenarioVariationManager, base ResourceManager, definition ResourceDefinition) ResourceManager {
-	return nil
+import (
+	"crypto/md5"
+	"encoding/hex"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"io"
+)
+
+// ResourceTracker tracks resources
+type ResourceTracker interface {
+	TrackCreatedResource(manager ResourceManager)
+	TrackCreatedAccount(account AccountResourceManager)
+}
+
+func CreateResource(a Asserter, base ResourceManager, definition ResourceDefinition) ResourceManager {
+	a.AssertNow("Base resource and definition must not be null", Not{IsNil{}}, base, definition)
+	a.AssertNow("Base resource must be at a equal or lower level than the resource definition", Equal{}, base.Level() <= definition.DefinitionTarget(), true)
+
+	// Remember where we started so we can step up to there
+	originalDefinition := definition
+	_ = originalDefinition // use it so Go stops screaming
+
+	// Get to the target level.
+	for base.Level() < definition.DefinitionTarget() {
+		/*
+			Instead of scaling up to the definition, we'll scale the definition to the base.
+			This means we don't have to keep tabs on the fact we'll need to create the container later,
+			because the container creation is now an inherent part of the resource definition.
+		*/
+		definition = definition.GenerateAdoptiveParent(a)
+	}
+
+	// Create the resource(s)
+	definition.ApplyDefinition(a, base, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
+		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+			manager.(ContainerResourceManager).Create(a, definition.(ResourceDefinitionContainer).Properties)
+		},
+
+		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+			objDef := definition.(ResourceDefinitionObject)
+
+			manager.(ObjectResourceManager).Create(a, objDef.Body, objDef.ObjectProperties)
+		},
+	})
+
+	// Step up to where we need to be and return it
+	matchingDef := definition
+	matchingRes := base
+	for matchingRes.Level() < originalDefinition.DefinitionTarget() {
+		matchingRes, matchingDef = matchingDef.MatchAdoptiveChild(a, matchingRes)
+	}
+
+	return matchingRes
+}
+
+func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
+	if expected == nil {
+		return
+	}
+
+	a.Assert(name+" must match", Equal{Deep: true}, expected, real)
+}
+
+func ValidateMetadata(a Asserter, expected, real common.Metadata) {
+	if expected == nil {
+		return
+	}
+
+	a.Assert("Metadata must match", Equal{Deep: true}, expected, real)
+}
+
+func ValidateTags(a Asserter, expected, real map[string]string) {
+	if expected == nil {
+		return
+	}
+
+	a.Assert("Tags must match", Equal{Deep: true}, expected, real)
+}
+
+func ValidateResource(a Asserter, target ResourceManager, definition ResourceDefinition, validateObjectContent bool) {
+	a.AssertNow("Target resource and definition must not be null", Not{IsNil{}}, a, target, definition)
+	a.AssertNow("Target resource must be at a equal level to the resource definition", Equal{}, target.Level(), definition.DefinitionTarget())
+
+	definition.ApplyDefinition(a, target, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
+		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+			cProps := manager.(ContainerResourceManager).GetProperties(a)
+			vProps := definition.(ResourceDefinitionContainer).Properties
+
+			ValidateMetadata(a, vProps.Metadata, cProps.Metadata)
+
+			if manager.Location() == common.ELocation.Blob() || manager.Location() == common.ELocation.BlobFS() {
+				ValidatePropertyPtr(a, "Public access", vProps.BlobContainerProperties.Access, cProps.BlobContainerProperties.Access)
+			}
+
+			if manager.Location() == common.ELocation.File() {
+				ValidatePropertyPtr(a, "Enabled protocols", vProps.FileContainerProperties.EnabledProtocols, cProps.FileContainerProperties.EnabledProtocols)
+				ValidatePropertyPtr(a, "RootSquash", vProps.FileContainerProperties.RootSquash, cProps.FileContainerProperties.RootSquash)
+				ValidatePropertyPtr(a, "AccessTier", vProps.FileContainerProperties.AccessTier, cProps.FileContainerProperties.AccessTier)
+				ValidatePropertyPtr(a, "Quota", vProps.FileContainerProperties.Quota, cProps.FileContainerProperties.Quota)
+			}
+		},
+		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+			objMan := manager.(ObjectResourceManager)
+			objDef := definition.(ResourceDefinitionObject)
+
+			oProps := objMan.GetProperties(a)
+			vProps := objDef.ObjectProperties
+
+			if validateObjectContent && objMan.EntityType() == common.EEntityType.File() && objDef.Body != nil {
+				objBody := objMan.Download(a)
+				validationBody := objDef.Body.Reader()
+
+				objHash := md5.New()
+				valHash := md5.New()
+
+				_, err := io.Copy(objHash, objBody)
+				a.NoError("hash object body", err)
+				_, err = io.Copy(valHash, validationBody)
+				a.NoError("hash validation body", err)
+
+				a.Assert("bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
+			}
+
+			// Properties
+			ValidateMetadata(a, vProps.Metadata, oProps.Metadata)
+
+			// HTTP headers
+			ValidatePropertyPtr(a, "Cache control", vProps.HTTPHeaders.cacheControl, oProps.HTTPHeaders.cacheControl)
+			ValidatePropertyPtr(a, "Content disposition", vProps.HTTPHeaders.contentDisposition, oProps.HTTPHeaders.contentDisposition)
+			ValidatePropertyPtr(a, "Content encoding", vProps.HTTPHeaders.contentEncoding, oProps.HTTPHeaders.contentEncoding)
+			ValidatePropertyPtr(a, "Content language", vProps.HTTPHeaders.contentLanguage, oProps.HTTPHeaders.contentLanguage)
+			ValidatePropertyPtr(a, "Content type", vProps.HTTPHeaders.contentType, oProps.HTTPHeaders.contentType)
+
+			switch manager.Location() {
+			case common.ELocation.Blob():
+				ValidatePropertyPtr(a, "Blob type", vProps.BlobProperties.Type, oProps.BlobProperties.Type)
+				ValidateTags(a, vProps.BlobProperties.Tags, oProps.BlobProperties.Tags)
+				ValidatePropertyPtr(a, "Block blob access tier", vProps.BlobProperties.BlockBlobAccessTier, oProps.BlobProperties.BlockBlobAccessTier)
+				ValidatePropertyPtr(a, "Page blob access tier", vProps.BlobProperties.PageBlobAccessTier, oProps.BlobProperties.PageBlobAccessTier)
+			case common.ELocation.File():
+				ValidatePropertyPtr(a, "Attributes", vProps.FileProperties.FileAttributes, oProps.FileProperties.FileAttributes)
+				ValidatePropertyPtr(a, "Change time", vProps.FileProperties.FileChangeTime, oProps.FileProperties.FileChangeTime)
+				ValidatePropertyPtr(a, "Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
+				ValidatePropertyPtr(a, "Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
+				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
+			case common.ELocation.BlobFS():
+				ValidatePropertyPtr(a, "Permissions", vProps.BlobFSProperties.Permissions, oProps.BlobFSProperties.Permissions)
+				ValidatePropertyPtr(a, "Owner", vProps.BlobFSProperties.Owner, oProps.BlobFSProperties.Owner)
+				ValidatePropertyPtr(a, "Group", vProps.BlobFSProperties.Group, oProps.BlobFSProperties.Group)
+				ValidatePropertyPtr(a, "ACL", vProps.BlobFSProperties.ACL, oProps.BlobFSProperties.ACL)
+			}
+		},
+	})
 }

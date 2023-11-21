@@ -14,9 +14,9 @@ type ScenarioManager struct {
 	suite    string
 	scenario string
 
-	runLock                   *sync.Mutex
-	waitGroup                 *sync.WaitGroup
-	finalizedVariationChannel chan<- *ScenarioVariationManager
+	runLock *sync.Mutex
+
+	varStack []*ScenarioVariationManager
 }
 
 func NewScenarioManager(t *testing.T, targetFunc reflect.Value) *ScenarioManager {
@@ -26,106 +26,72 @@ func NewScenarioManager(t *testing.T, targetFunc reflect.Value) *ScenarioManager
 	Scenario := nameSplits[1]
 
 	return &ScenarioManager{
-		testingT:  t,
-		Func:      targetFunc,
-		suite:     Suite,
-		scenario:  Scenario,
-		waitGroup: &sync.WaitGroup{},
-		runLock:   &sync.Mutex{},
+		testingT: t,
+		Func:     targetFunc,
+		suite:    Suite,
+		scenario: Scenario,
+		runLock:  &sync.Mutex{},
 	}
 }
 
 func (sm *ScenarioManager) NewVariation(origin *ScenarioVariationManager, id string, setting []any) {
-	if origin.Invalid {
-		return // Invalid variations shouldn't spawn new variations
+	if origin.isInvalid {
+		return // isInvalid variations shouldn't spawn new variations
 	}
 
-	for _, v := range setting {
+	for i := len(setting) - 1; i >= 0; i-- { // Because the stack is FIFO, insert the first terms last to match expected variation ordering.
+		v := setting[i]
 		clone := &ScenarioVariationManager{
-			Asserter:      origin.Asserter,
-			Invalid:       false,
 			VariationData: origin.VariationData.Insert(id, v),
 			Parent:        sm,
+			callcounts:    make(map[string]uint),
 		}
 
-		sm.RunVariation(clone, true)
-	}
-}
-
-func (sm *ScenarioManager) RunVariation(svm *ScenarioVariationManager, dryrun bool) {
-	sm.waitGroup.Add(1)
-	svm.Dryrun = dryrun
-	svm.Callcounts = make(map[string]uint) // Clear the callcount map to prevent generating new variations that don't make sense
-
-	if dryrun {
-		// Dry run in parallel. Dry runs run very quickly, because they're not realizing anything, just mapping.
-		go func() {
-			defer sm.waitGroup.Done()
-			defer func() {
-				// Catch panics, we can't have one bad test killing the entire framework.
-				svm.AssertNow("Scenario dry run panicked (recovered)", NoError{stackTrace: true}, recover())
-			}()
-
-			sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
-
-			if svm.Invalid {
-				return // Don't finalize this svm if it's not valid
-			}
-
-			svm.Dryrun = false                  // realize it
-			sm.finalizedVariationChannel <- svm // submit it for running
-		}()
-	} else {
-		// sanity check
-		if svm.Invalid {
-			sm.waitGroup.Done() // Clean up the waitgroup addition
-			return
-		}
-
-		// Do the run for real.
-		sm.testingT.Run(svm.VariationName(), func(t *testing.T) {
-			defer sm.waitGroup.Done()
-			defer func() {
-				// Catch panics, we can't have one bad test killing the entire framework.
-				svm.AssertNow("Scenario wet run panicked (recovered)", NoError{stackTrace: true}, recover())
-			}()
-
-			svm.Asserter = NewTestingAsserter(t)
-			sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
-		})
+		sm.varStack = append(sm.varStack, clone)
 	}
 }
 
 func (sm *ScenarioManager) RunScenario() {
 	sm.runLock.Lock()
-	defer sm.runLock.Unlock()
+	sm.testingT.Cleanup(func() { sm.runLock.Unlock() })
 
-	ta := NewTestingAsserter(sm.testingT)
-
-	ta.Log("Discovering variations...")
-	//var finalizedVariations []*ScenarioVariationManager
-	var finalizedVariationChannel = make(chan *ScenarioVariationManager) // todo processing message struct
-
-	// set up the processor
-	sm.finalizedVariationChannel = finalizedVariationChannel
-	go func() {
-		for {
-			variation, ok := <-finalizedVariationChannel
-			if !ok {
-				return
-			}
-
-			sm.RunVariation(variation, false)
-		}
-	}()
-
-	rootSvm := &ScenarioVariationManager{
-		Asserter: ta,
-		Dryrun:   true,
-		Parent:   sm,
+	/*
+		When appending to the stack, the newest item is always from the closest ancestor of the tree.
+		Thus, we can retain good (read: brain happy) test ordering by doing FIFO. Engineering at its finest.
+	*/
+	sm.varStack = []*ScenarioVariationManager{
+		{Parent: sm, callcounts: make(map[string]uint)}, // Root svm, no variations, no nothing.
 	}
 
-	sm.RunVariation(rootSvm, true)
-	sm.waitGroup.Wait()
-	close(finalizedVariationChannel)
+	for len(sm.varStack) > 0 {
+		svm := sm.varStack[len(sm.varStack)-1] // *pop*!
+		sm.varStack = sm.varStack[:len(sm.varStack)-1]
+
+		func() {
+			defer func() {
+				if err := recover(); err != nil {
+					sm.testingT.Logf("Variation %s dryrun panicked: %v", svm.VariationName(), err)
+					svm.InvalidateScenario()
+				}
+			}()
+
+			sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)}) // Test will push onto the stack a bunch
+		}()
+
+		if !svm.isInvalid { // If we made a real test
+			sm.testingT.Run(svm.VariationName(), func(t *testing.T) {
+				svm.t = t
+				svm.callcounts = make(map[string]uint)
+
+				t.Parallel()
+				t.Cleanup(func() {
+					svm.DeleteCreatedResources() // clean up after ourselves!
+				})
+
+				sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
+
+				t.Log(svm.VariationName())
+			})
+		}
+	}
 }

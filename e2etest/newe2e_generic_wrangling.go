@@ -71,3 +71,13 @@ func CloneMap[K comparable, V any](in map[K]V) map[K]V {
 
 	return out
 }
+
+func ListContains[I comparable](item I, in []I) bool {
+	for _, v := range in {
+		if item == v {
+			return true
+		}
+	}
+
+	return false
+}

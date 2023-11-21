@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"log"
 	"testing"
 )
 
@@ -16,64 +15,41 @@ import (
 //}
 
 var FrameworkHooks = []TestFrameworkHook{
-	//{HookName: "Config", SetupHook: LoadConfigHook},
-	//{HookName: "OAuth Cache", SetupHook: SetupOAuthCache},
-	//{HookName: "ARM Client", SetupHook: SetupArmClient, TeardownHook: TeardownArmClient},
-	//{HookName: "Default accts", SetupHook: AccountRegistryInitHook, TeardownHook: AccountRegistryCleanupHook},
+	{HookName: "Config", SetupHook: LoadConfigHook},
+	{HookName: "OAuth Cache", SetupHook: SetupOAuthCache},
+	{HookName: "ARM Client", SetupHook: SetupArmClient, TeardownHook: TeardownArmClient},
+	{HookName: "Default accts", SetupHook: AccountRegistryInitHook, TeardownHook: AccountRegistryCleanupHook},
 }
 
 type TestFrameworkHook struct {
 	HookName     string
-	SetupHook    func() TieredError
-	TeardownHook func() TieredError
+	SetupHook    func(a Asserter) // todo: Early hooks are a bit boilerplate heavy! Let's fix this.
+	TeardownHook func(a Asserter)
 	Ran          bool
 }
 
 func Test(t *testing.T) {
-	suiteManager.RunSuites(t)
-}
+	a := &FrameworkAsserter{t: t}
 
-func TestMain(m *testing.M) {
-	setupSuccessful := true
-	for i := 0; i < len(FrameworkHooks) && setupSuccessful; i++ {
+	t.Cleanup(func() {
+		for i := len(FrameworkHooks) - 1; i >= 0; i-- {
+			hook := FrameworkHooks[i]
+			if hook.Ran && hook.TeardownHook != nil {
+				hook.TeardownHook(a)
+			}
+		}
+	})
+
+	for i := 0; i < len(FrameworkHooks); i++ {
 		hook := FrameworkHooks[i]
 		hookName := hook.HookName
 
-		log.Println("Setting up hook", hookName)
-		err := hook.SetupHook()
-
-		if err != nil {
-			switch err.Tier() {
-			case ErrorTierInconsequential:
-				log.Println("WARNING: failed to run initialization hook \"" + hookName + "\":\n" + err.Error())
-			case ErrorTierFatal:
-				log.Println("failed to run initialization hook \"" + hookName + "\":\n" + err.Error())
-				setupSuccessful = false // Skip running if we can't
-				break                   // don't finish setting up either
-			}
-		} else {
-			hook.Ran = true // There's maybe no teardown if it didn't successfully run
-		}
+		t.Logf("Setup hook %s running", hookName)
+		hook.SetupHook(a)
+		hook.Ran = true
 	}
 
-	if setupSuccessful {
-		m.Run()
-	}
-
-	for i := len(FrameworkHooks) - 1; i >= 0; i-- {
-		hook := FrameworkHooks[i]
-		if hook.Ran && hook.TeardownHook != nil {
-			err := hook.TeardownHook()
-			hookName := hook.HookName
-
-			if err != nil {
-				switch err.Tier() {
-				case ErrorTierInconsequential:
-					log.Println("WARNING: failed to run teardown hook \"" + hookName + "\":\n" + err.Error())
-				case ErrorTierFatal: // Continue running closure hooks, despite being fatal, because other hooks could still clean up properly.
-					log.Println("FATAL: failed to run teardown hook \"" + hookName + "\":\n" + err.Error())
-				}
-			}
-		}
+	if !t.Failed() {
+		suiteManager.RunSuites(t)
 	}
 }

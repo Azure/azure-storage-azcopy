@@ -21,6 +21,7 @@ The first argument will always be the environment variable name.
 The following options can be as follows:
 - required: The requirements of this must be fulfilled. Expected by default on the base NewE2EConfig struct.
 - mutually_exclusive: Only one field under this must be completely fulfilled. Multiple is unacceptable. Ignored on values and json structs.
+- minimum_required: How many required fields under this field must match, separated by an equal. Only numbers are accepted.
 - default: must be the final argument, separated with an equal. Everything that follows will be used, including commas.
 
 All immediate fields of a mutually exclusive struct will be treated as required, and all but one field will be expected to fail.
@@ -36,6 +37,8 @@ type NewE2EConfig struct {
 			ClientSecret   string `env:"NEW_E2E_CLIENT_SECRET,required"`
 		} `env:",required"`
 		StaticStgAcctInfo struct {
+			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
+			// double todo: we should allow these to be missing.
 			Standard struct {
 				AccountName string `env:"NEW_E2E_STANDARD_ACCOUNT_NAME,required"`
 				AccountKey  string `env:"NEW_E2E_STANDARD_ACCOUNT_KEY,required"`
@@ -44,7 +47,7 @@ type NewE2EConfig struct {
 				AccountName string `env:"NEW_E2E_HNS_ACCOUNT_NAME,required"`
 				AccountKey  string `env:"NEW_E2E_HNS_ACCOUNT_KEY,required"`
 			} `env:",required"`
-		} `env:",required"`
+		} `env:",required,minimum_required=1"`
 	} `env:",required,mutually_exclusive"`
 }
 
@@ -58,6 +61,7 @@ type EnvTag struct {
 	EnvName                     string
 	DefaultValue                string
 	Required, MutuallyExclusive bool
+	MinimumRequired             uint
 }
 
 func ParseEnvTag(tag string) EnvTag {
@@ -79,6 +83,12 @@ func ParseEnvTag(tag string) EnvTag {
 			out.MutuallyExclusive = true
 		case strings.HasPrefix(v, "default="):
 			out.DefaultValue = strings.TrimPrefix(v+strings.Join(parts[i+1:], ","), "default=")
+		case strings.HasPrefix(v, "minimum_required="):
+			min, err := strconv.ParseUint(strings.TrimPrefix(v, "minimum_required="), 10, 64)
+			if err != nil {
+				panic("could not parse flag minimum_required: " + err.Error())
+			}
+			out.MinimumRequired = uint(min)
 		}
 	}
 
@@ -92,6 +102,23 @@ type ConfigReaderError struct {
 	EnvErrors       map[string]EnvError          // Mapped by env var name
 	StructureErrors map[string]ConfigReaderError // Mapped by struct name (e.g. E2EAuthConfig)
 	CoreError       error
+}
+
+func (c *ConfigReaderError) WrangleAsError() error {
+	// Go does some weird stuff with types here.
+	/*
+		Error is an interface, and a pointer to ConfigReaderError satisfies that interface.
+		So, when passing nil ConfigReaderError, it becomes *ConfigReaderError(<nil>),
+		and is not actually nil (because the error interface interprets this as a fulfilled interface)
+
+		Thus, we have WrangleAsError, in which we return a "real" nil that Go will understand as nil.
+	*/
+
+	if c == nil {
+		return nil
+	}
+
+	return c
 }
 
 type EnvError struct {
@@ -287,6 +314,13 @@ func ReadConfig(config reflect.Value, fieldName string, tag EnvTag) *ConfigReade
 				}
 
 				baseError = NewConfigReaderError(fieldName) // No error if only one got set
+			} else if tag.MinimumRequired != 0 {
+				if successfulSetCount < int(tag.MinimumRequired) {
+					baseError.CoreError = fmt.Errorf("required struct fails to fulfill at least %d conditions", tag.MinimumRequired)
+					return baseError.Finalize()
+				}
+
+				baseError = NewConfigReaderError(fieldName) // No error if the required amount got set
 			} else if !baseError.Empty() {
 				baseError.CoreError = errors.New("required struct fails to fulfill one or more conditions")
 				return baseError.Finalize()
@@ -323,16 +357,8 @@ func ReadConfig(config reflect.Value, fieldName string, tag EnvTag) *ConfigReade
 
 // ========== Hook ==========
 
-func LoadConfigHook() TieredError {
-	err := ReadConfig(reflect.ValueOf(&GlobalConfig).Elem(), "NewE2EConfig", EnvTag{Required: true})
-	if err != nil {
-		return TieredErrorWrapper{
-			error:     err,
-			ErrorTier: ErrorTierFatal,
-		}
-	}
-
-	return nil
+func LoadConfigHook(a Asserter) {
+	a.NoError("read config", ReadConfig(reflect.ValueOf(&GlobalConfig).Elem(), "NewE2EConfig", EnvTag{Required: true}).WrangleAsError())
 }
 
 //type ConfigMissingParameters struct {
