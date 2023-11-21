@@ -2,14 +2,15 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var logBlobFSDeleteWarnOnce = &sync.Once{}
@@ -63,18 +64,24 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
+	//fsClient := common.CreateFilesystemClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	s, err := jptm.SrcServiceClient().DatalakeServiceClient()
+	if err != nil {
+		transferDone(err)
+		return
+	}
+	
+	c := s.NewFileSystemClient(jptm.Info().SrcContainer)
+
 	// Deleting a filesystem
 	if datalakeURLParts.PathName == "" {
-		fsClient := common.CreateFilesystemClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-		_, err := fsClient.Delete(ctx, nil)
+		_, err := c.Delete(ctx, nil)
 		transferDone(err)
 		return
 	}
 
 	// Check if the source is a file or directory
-	clientOptions := jptm.ClientOptions()
-	clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, clientOptions.PerCallPolicies...)
-	directoryClient := common.CreateDatalakeDirectoryClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), clientOptions)
+	directoryClient := c.NewDirectoryClient(info.SrcFilePath)
 	var respFromCtx *http.Response
 	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
 	_, err = directoryClient.GetProperties(ctxWithResp, nil)
@@ -85,7 +92,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 
 	resourceType := respFromCtx.Header.Get("x-ms-resource-type")
 	if strings.EqualFold(resourceType, "file") {
-		fileClient := common.CreateDatalakeFileClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		fileClient := c.NewFileClient(info.SrcFilePath)
 
 		_, err := fileClient.Delete(ctx, nil)
 		transferDone(err)

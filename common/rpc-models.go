@@ -1,12 +1,13 @@
 package common
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -143,8 +144,14 @@ type CopyJobPartOrderRequest struct {
 	// list of blobTypes to exclude.
 	ExcludeBlobType []blob.BlobType
 
-	SourceRoot      ResourceString
-	DestinationRoot ResourceString
+	SourceRoot       ResourceString
+	DestinationRoot  ResourceString
+	SrcServiceClient *ServiceClient
+	DstServiceClient *ServiceClient
+
+	//These clients are required only in S2S transfers from/to datalake
+	SrcDatalakeClient *datalake.Client
+	DstDatalakeClient *datalake.Client
 
 	Transfers      Transfers
 	LogLevel       LogLevel
@@ -162,13 +169,13 @@ type CopyJobPartOrderRequest struct {
 	S2SPreserveBlobTags            bool
 	CpkOptions                     CpkOptions
 	SetPropertiesFlags             SetPropertiesFlags
-	BlobFSRecursiveDelete 		   bool
+	BlobFSRecursiveDelete          bool
 
 	// S2SSourceCredentialType will override CredentialInfo.CredentialType for use on the source.
 	// As a result, CredentialInfo.OAuthTokenInfo may end up being fulfilled even _if_ CredentialInfo.CredentialType is _not_ OAuth.
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
-	FileAttributes FileTransferAttributes
+	FileAttributes          FileTransferAttributes
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -178,7 +185,7 @@ type CredentialInfo struct {
 	OAuthTokenInfo           OAuthTokenInfo
 	S3CredentialInfo         S3CredentialInfo
 	GCPCredentialInfo        GCPCredentialInfo
-	S2SSourceTokenCredential azcore.TokenCredential
+	S2SSourceTokenCredential AuthTokenFunction
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
@@ -334,6 +341,8 @@ type ResumeJobRequest struct {
 	JobID           JobID
 	SourceSAS       string
 	DestinationSAS  string
+	SrcServiceClient *ServiceClient
+	DstServiceClient *ServiceClient
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
 	CredentialInfo  CredentialInfo
