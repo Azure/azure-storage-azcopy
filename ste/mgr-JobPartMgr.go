@@ -461,49 +461,6 @@ func (jpm *jobPartMgr) clientInfo() {
 		Cancel:   jpm.jobMgr.Cancel,
 	}
 
-	/*
-		retryOptions := policy.RetryOptions{
-			MaxRetries:    UploadMaxTries,
-			TryTimeout:    UploadTryTimeout,
-			RetryDelay:    UploadRetryDelay,
-			MaxRetryDelay: UploadMaxRetryDelay,
-		}
-
-		var userAgent string
-		if fromTo.From() == common.ELocation.S3() {
-			userAgent = common.S3ImportUserAgent
-		} else if fromTo.From() == common.ELocation.GCP() {
-			userAgent = common.GCPImportUserAgent
-		} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
-			userAgent = common.BenchmarkUserAgent
-		} else {
-			userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
-		}
-		telemetryOptions := policy.TelemetryOptions{ApplicationID: userAgent}
-
-		httpClient := jpm.jobMgr.HttpClient()
-		networkStats := jpm.jobMgr.PipelineNetworkStats()
-		logOptions := jpm.jobMgr.PipelineLogInfo()
-
-		var sourceTrailingDot *common.TrailingDotOption
-		var trailingDot *common.TrailingDotOption
-		var from *common.Location
-		if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
-			jpm.sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-		}
-		if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
-			fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
-			fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
-			fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
-			fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
-			jpm.trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-			if fromTo.IsS2S() {
-				jpm.from = to.Ptr(fromTo.From())
-			}
-		}
-		jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions)
-		jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions)
-	*/
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
