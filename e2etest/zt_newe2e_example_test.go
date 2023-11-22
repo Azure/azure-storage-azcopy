@@ -28,11 +28,11 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
 	// Scale up from service to object
-	srcObj := CreateResource(svm, srcService, ResourceDefinitionObject{
+	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
 		Body: body,
-	}).(ObjectResourceManager) // todo: generic CreateResource is something to pursue in another branch, but it's an interesting thought.
+	}) // todo: generic CreateResource is something to pursue in another branch, but it's an interesting thought.
 	// Scale up from service to container
-	dstObj := CreateResource(svm, dstService, ResourceDefinitionContainer{}).(ContainerResourceManager).GetObject(svm, "foobar", common.EEntityType.File())
+	dstObj := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{}).GetObject(svm, "foobar", common.EEntityType.File())
 
 	_, _ = srcObj, dstObj
 	RunAzCopy(
@@ -42,7 +42,7 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 			Targets: []string{srcObj.URI(svm, true), dstObj.URI(svm, true)},
 		})
 
-	ValidateResource(svm, dstObj, ResourceDefinitionObject{
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 	}, true)
 }

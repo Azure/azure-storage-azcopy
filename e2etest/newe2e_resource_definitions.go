@@ -17,6 +17,12 @@ type ResourceDefinition interface {
 	ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition))
 }
 
+type MatchedResourceDefinition[T ResourceManager] interface {
+	ResourceDefinition
+
+	resourceDefinition() T
+}
+
 type ResourceDefinitionService struct {
 	//Location   common.Location // todo do we want/need this? does it make sense? CreateResource currently takes a ResourceManager, which can't target an AccountResourceManager because definitions differ
 	Containers map[string]ResourceDefinitionContainer
@@ -59,6 +65,10 @@ func (r ResourceDefinitionService) ApplyDefinition(a Asserter, target ResourceMa
 
 func (r ResourceDefinitionService) DefinitionTarget() cmd.LocationLevel {
 	return cmd.ELocationLevel.Service()
+}
+
+func (r ResourceDefinitionService) resourceDefinition() ServiceResourceManager {
+	panic("marker method")
 }
 
 type ResourceDefinitionContainer struct {
@@ -112,6 +122,10 @@ func (r ResourceDefinitionContainer) ApplyDefinition(a Asserter, target Resource
 	}
 }
 
+func (r ResourceDefinitionContainer) resourceDefinition() ContainerResourceManager {
+	panic("marker method")
+}
+
 func (r ResourceDefinitionContainer) DefinitionTarget() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
@@ -150,4 +164,8 @@ func (r ResourceDefinitionObject) ApplyDefinition(a Asserter, target ResourceMan
 
 func (r ResourceDefinitionObject) DefinitionTarget() cmd.LocationLevel {
 	return cmd.ELocationLevel.Object()
+}
+
+func (r ResourceDefinitionObject) resourceDefinition() ObjectResourceManager {
+	panic("marker method")
 }

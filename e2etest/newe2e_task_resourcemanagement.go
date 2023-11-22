@@ -14,7 +14,9 @@ type ResourceTracker interface {
 	TrackCreatedAccount(account AccountResourceManager)
 }
 
-func CreateResource(a Asserter, base ResourceManager, definition ResourceDefinition) ResourceManager {
+func CreateResource[T ResourceManager](a Asserter, base ResourceManager, def MatchedResourceDefinition[T]) T {
+	definition := ResourceDefinition(def)
+
 	a.AssertNow("Base resource and definition must not be null", Not{IsNil{}}, base, definition)
 	a.AssertNow("Base resource must be at a equal or lower level than the resource definition", Equal{}, base.Level() <= definition.DefinitionTarget(), true)
 
@@ -52,7 +54,7 @@ func CreateResource(a Asserter, base ResourceManager, definition ResourceDefinit
 		matchingRes, matchingDef = matchingDef.MatchAdoptiveChild(a, matchingRes)
 	}
 
-	return matchingRes
+	return matchingRes.(T)
 }
 
 func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
@@ -79,7 +81,7 @@ func ValidateTags(a Asserter, expected, real map[string]string) {
 	a.Assert("Tags must match", Equal{Deep: true}, expected, real)
 }
 
-func ValidateResource(a Asserter, target ResourceManager, definition ResourceDefinition, validateObjectContent bool) {
+func ValidateResource[T ResourceManager](a Asserter, target T, definition MatchedResourceDefinition[T], validateObjectContent bool) {
 	a.AssertNow("Target resource and definition must not be null", Not{IsNil{}}, a, target, definition)
 	a.AssertNow("Target resource must be at a equal level to the resource definition", Equal{}, target.Level(), definition.DefinitionTarget())
 
