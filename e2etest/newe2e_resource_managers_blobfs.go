@@ -42,7 +42,7 @@ func dfsStripSAS(uri string) string {
 }
 
 type BlobFSServiceResourceManager struct {
-	internalAccount AccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	internalClient  *service.Client
 }
 
@@ -62,8 +62,14 @@ func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Service()
 }
 
-func (b *BlobFSServiceResourceManager) URI() string {
-	return dfsStripSAS(b.internalClient.DFSURL())
+func (b *BlobFSServiceResourceManager) URI(a Asserter, withSas bool) string {
+	base := dfsStripSAS(b.internalClient.DFSURL())
+
+	if withSas {
+		base = b.internalAccount.ApplySAS(a, base, b.Location())
+	}
+
+	return base
 }
 
 func (b *BlobFSServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -108,7 +114,7 @@ func (b *BlobFSServiceResourceManager) IsHierarchical() bool {
 }
 
 type BlobFSFileSystemResourceManager struct {
-	internalAccount AccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	Service         *BlobFSServiceResourceManager
 
 	containerName  string
@@ -139,8 +145,14 @@ func (b *BlobFSFileSystemResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
 
-func (b *BlobFSFileSystemResourceManager) URI() string {
-	return dfsStripSAS(b.internalClient.DFSURL())
+func (b *BlobFSFileSystemResourceManager) URI(a Asserter, withSas bool) string {
+	base := dfsStripSAS(b.internalClient.DFSURL())
+
+	if withSas {
+		base = b.internalAccount.ApplySAS(a, base, b.Location())
+	}
+
+	return base
 }
 
 func (b *BlobFSFileSystemResourceManager) ContainerName() string {
@@ -221,7 +233,7 @@ func (b *BlobFSFileSystemResourceManager) GetObject(a Asserter, path string, eTy
 }
 
 type BlobFSPathResourceProvider struct {
-	internalAccount AccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	Service         *BlobFSServiceResourceManager
 	Container       *BlobFSFileSystemResourceManager
 
@@ -258,8 +270,14 @@ func (b *BlobFSPathResourceProvider) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Object()
 }
 
-func (b *BlobFSPathResourceProvider) URI() string {
-	return b.getFileClient().DFSURL()
+func (b *BlobFSPathResourceProvider) URI(a Asserter, withSas bool) string {
+	base := dfsStripSAS(b.getFileClient().DFSURL()) // obj type doesn't matter here, URL is the same under the hood
+
+	if withSas {
+		base = b.internalAccount.ApplySAS(a, base, b.Location())
+	}
+
+	return base
 }
 
 func (b *BlobFSPathResourceProvider) EntityType() common.EntityType {

@@ -69,6 +69,10 @@ type MockServiceResourceManager struct {
 	serviceType common.Location
 }
 
+func (m *MockServiceResourceManager) URI(a Asserter, withSas bool) string {
+	return ""
+}
+
 func (m *MockServiceResourceManager) Account() AccountResourceManager {
 	return m.parent
 }
@@ -97,6 +101,10 @@ func (m *MockServiceResourceManager) ResourceClient() any {
 	panic("Test code should only perform \"real\" actions during wet runs. Does not create an emulated resource client.")
 }
 
+func (m *MockServiceResourceManager) GetResourceTarget(a Asserter) string {
+	return ""
+}
+
 func (m *MockServiceResourceManager) ListContainers(a Asserter) []string {
 	// No-op it
 	return []string{}
@@ -115,6 +123,10 @@ type MockContainerResourceManager struct {
 	account          *MockAccountResourceManager
 	parent           *MockServiceResourceManager
 	containerName    string
+}
+
+func (m *MockContainerResourceManager) URI(a Asserter, withSas bool) string {
+	return ""
 }
 
 func (m *MockContainerResourceManager) Parent() ResourceManager {
@@ -166,11 +178,19 @@ func (m *MockContainerResourceManager) GetObject(a Asserter, path string, eType 
 	return &MockObjectResourceManager{parent: m, account: m.account, entityType: eType, path: path}
 }
 
+func (m *MockContainerResourceManager) GetResourceTarget(a Asserter) string {
+	return ""
+}
+
 type MockObjectResourceManager struct {
 	parent     *MockContainerResourceManager
 	account    *MockAccountResourceManager
 	entityType common.EntityType
 	path       string
+}
+
+func (m *MockObjectResourceManager) URI(a Asserter, withSas bool) string {
+	return ""
 }
 
 func (m *MockObjectResourceManager) Parent() ResourceManager {
@@ -230,4 +250,8 @@ func (m *MockObjectResourceManager) SetObjectProperties(a Asserter, props Object
 
 func (m *MockObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	return bytes.NewReader([]byte{})
+}
+
+func (m *MockObjectResourceManager) GetResourceTarget(a Asserter) string {
+	return ""
 }

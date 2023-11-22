@@ -2,11 +2,16 @@ package e2etest
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	blobfscommon "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	datalakeSAS "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	blobfsservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"time"
 )
 
 type AzureAccountResourceManager struct {
@@ -15,6 +20,112 @@ type AzureAccountResourceManager struct {
 	accountType AccountType
 
 	armClient *ARMStorageAccount
+}
+
+func (acct *AzureAccountResourceManager) ApplySAS(a Asserter, URI string, loc common.Location) string {
+	a.AssertNow("account must not be nil", Not{IsNil{}}, acct)
+	switch loc {
+	case common.ELocation.Blob():
+		skc, err := blob.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+		a.NoError("Create shared key", err)
+
+		p, err := blobsas.AccountSignatureValues{ // todo: currently this generates a "god SAS", granting all permissions. This is bad! Let's not do this in prod.
+			Protocol:   blobsas.ProtocolHTTPS,
+			StartTime:  time.Now().Add(-time.Hour),
+			ExpiryTime: time.Now().Add(time.Hour * 24),
+			Permissions: (&blobsas.AccountPermissions{
+				Read:                  true,
+				Write:                 true,
+				Delete:                true,
+				DeletePreviousVersion: true,
+				PermanentDelete:       true,
+				List:                  true,
+				Add:                   true,
+				Create:                true,
+				Update:                true,
+				Process:               true,
+				FilterByTags:          true,
+				Tag:                   true,
+				SetImmutabilityPolicy: true,
+			}).String(),
+			ResourceTypes: (&blobsas.AccountResourceTypes{
+				Service:   true,
+				Container: true,
+				Object:    true,
+			}).String(),
+		}.SignWithSharedKey(skc)
+		a.NoError("Generate SAS token", err)
+
+		parts, err := blobsas.ParseURL(URI)
+		a.NoError("Parse URI", err)
+		parts.SAS = p
+		return parts.String()
+	case common.ELocation.File():
+		skc, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+		a.NoError("Create shared key", err)
+
+		p, err := filesas.AccountSignatureValues{ // todo: currently this generates a "god SAS", granting all permissions. This is bad! Let's not do this in prod.
+			Protocol:   filesas.ProtocolHTTPS,
+			StartTime:  time.Now().Add(-time.Hour),
+			ExpiryTime: time.Now().Add(time.Hour * 24),
+			Permissions: (&filesas.AccountPermissions{
+				Read:   true,
+				Write:  true,
+				Delete: true,
+				List:   true,
+				Create: true,
+			}).String(),
+			ResourceTypes: (&filesas.AccountResourceTypes{
+				Service:   true,
+				Container: true,
+				Object:    true,
+			}).String(),
+		}.SignWithSharedKey(skc)
+		a.NoError("Generate SAS token", err)
+
+		parts, err := filesas.ParseURL(URI)
+		a.NoError("Parse URI", err)
+		parts.SAS = p
+		return parts.String()
+	case common.ELocation.BlobFS():
+		skc, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+		a.NoError("Create shared key", err)
+
+		p, err := datalakeSAS.AccountSignatureValues{ // todo: currently this generates a "god SAS", granting all permissions. This is bad! Let's not do this in prod.
+			Protocol:   datalakeSAS.ProtocolHTTPS,
+			StartTime:  time.Now().Add(-time.Hour),
+			ExpiryTime: time.Now().Add(time.Hour * 24),
+			Permissions: (&datalakeSAS.AccountPermissions{
+				Read:                  true,
+				Write:                 true,
+				Delete:                true,
+				DeletePreviousVersion: true,
+				PermanentDelete:       true,
+				List:                  true,
+				Add:                   true,
+				Create:                true,
+				Update:                true,
+				Process:               true,
+				FilterByTags:          true,
+				Tag:                   true,
+				SetImmutabilityPolicy: true,
+			}).String(),
+			ResourceTypes: (&datalakeSAS.AccountResourceTypes{
+				Service:   true,
+				Container: true,
+				Object:    true,
+			}).String(),
+		}.SignWithSharedKey(skc)
+		a.NoError("Generate SAS token", err)
+
+		parts, err := datalakeSAS.ParseURL(URI)
+		a.NoError("Parse URI", err)
+		parts.SAS = p
+		return parts.String()
+	default:
+		a.Error(fmt.Sprintf("location %s unsupported", loc))
+		return "" // won't reach
+	}
 }
 
 // ManagementClient returns the parent management client for this storage account.

@@ -55,7 +55,7 @@ func blobStripSAS(uri string) string {
 // ==================== SERVICE ====================
 
 type BlobServiceResourceManager struct {
-	internalAccount AccountResourceManager // todo AzureAccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	internalClient  *service.Client
 }
 
@@ -83,8 +83,14 @@ func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
 	return out
 }
 
-func (b *BlobServiceResourceManager) URI() string {
-	return blobStripSAS(b.internalClient.URL())
+func (b *BlobServiceResourceManager) URI(a Asserter, withSas bool) string {
+	base := blobStripSAS(b.internalClient.URL())
+
+	if withSas {
+		base = b.internalAccount.ApplySAS(a, base, b.Location())
+	}
+
+	return base
 }
 
 func (b *BlobServiceResourceManager) Location() common.Location {
@@ -122,7 +128,7 @@ func (b *BlobServiceResourceManager) IsHierarchical() bool {
 // ==================== CONTAINER ====================
 
 type BlobContainerResourceManager struct {
-	internalAccount AccountResourceManager // todo AzureAccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	Service         *BlobServiceResourceManager
 	containerName   string
 	internalClient  *container.Client
@@ -276,8 +282,14 @@ func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
 
-func (b *BlobContainerResourceManager) URI() string {
-	return blobStripSAS(b.internalClient.URL())
+func (b *BlobContainerResourceManager) URI(a Asserter, withSas bool) string {
+	base := blobStripSAS(b.internalClient.URL())
+
+	if withSas {
+		base = b.internalAccount.ApplySAS(a, base, b.Location())
+	}
+
+	return base
 }
 
 func (b *BlobContainerResourceManager) HasMetadata() PropertiesAvailability {
@@ -308,7 +320,7 @@ func (b *BlobContainerResourceManager) ContainerName() string {
 // ==================== OBJECT ====================
 
 type BlobObjectResourceManager struct {
-	internalAccount AccountResourceManager // todo AzureAccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	Service         *BlobServiceResourceManager
 	Container       *BlobContainerResourceManager
 	Path            string
@@ -585,8 +597,14 @@ func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Object()
 }
 
-func (b *BlobObjectResourceManager) URI() string {
-	return blobStripSAS(b.internalClient.URL())
+func (b *BlobObjectResourceManager) URI(a Asserter, withSas bool) string {
+	base := blobStripSAS(b.internalClient.URL())
+
+	if withSas {
+		base = b.internalAccount.ApplySAS(a, base, b.Location())
+	}
+
+	return base
 }
 
 func (b *BlobObjectResourceManager) Download(a Asserter) io.ReadSeeker {

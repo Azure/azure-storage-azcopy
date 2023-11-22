@@ -15,6 +15,12 @@ type ResourceManager interface {
 	Location() common.Location
 	Level() cmd.LocationLevel
 
+	// URI gets the resource "URI", either a local path or a remote URL.
+	// withSas is a debatably included flag, but can either be ignored or asserted against.
+	// for our primary Azure resources, it's always applicable. Doesn't make sense for GCP/S3/Local though.
+	// SAS tokens will automagically be generated for the next 24 hours, I (Adele) don't think the test suite should be running for longer.
+	URI(a Asserter, withSas bool) string
+
 	// Parent specifies the parent resource manager, for the purposes of building a tree.
 	// Can return nil, indicating this is the root of the tree.
 	Parent() ResourceManager

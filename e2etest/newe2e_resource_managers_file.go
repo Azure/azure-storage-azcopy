@@ -6,6 +6,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
@@ -34,10 +35,19 @@ func init() {
 	void(rrm, sm, cm, om)
 }
 
+func fileStripSAS(uri string) string {
+	parts, err := filesas.ParseURL(uri)
+	common.PanicIfErr(err)
+
+	parts.SAS = filesas.QueryParameters{} // remove SAS
+
+	return parts.String()
+}
+
 // ==================== SERVICE ====================
 
 type FileServiceResourceManager struct {
-	internalAccount AccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	internalClient  *service.Client
 }
 
@@ -57,8 +67,14 @@ func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Service()
 }
 
-func (s *FileServiceResourceManager) URI() string {
-	return s.internalClient.URL()
+func (s *FileServiceResourceManager) URI(a Asserter, withSas bool) string {
+	base := fileStripSAS(s.internalClient.URL())
+
+	if withSas {
+		base = s.internalAccount.ApplySAS(a, base, s.Location())
+	}
+
+	return base
 }
 
 func (s *FileServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -105,7 +121,7 @@ func (s *FileServiceResourceManager) IsHierarchical() bool {
 // ==================== CONTAINER ====================
 
 type FileShareResourceManager struct {
-	internalAccount AccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	Service         *FileServiceResourceManager
 
 	containerName  string
@@ -136,8 +152,14 @@ func (s *FileShareResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
 
-func (s *FileShareResourceManager) URI() string {
-	return s.internalClient.URL()
+func (s *FileShareResourceManager) URI(a Asserter, withSas bool) string {
+	base := fileStripSAS(s.internalClient.URL())
+
+	if withSas {
+		base = s.internalAccount.ApplySAS(a, base, s.Location())
+	}
+
+	return base
 }
 
 func (s *FileShareResourceManager) ContainerName() string {
@@ -301,7 +323,7 @@ func (s *FileShareResourceManager) GetObject(a Asserter, path string, eType comm
 // ==================== FILE ====================
 
 type FileObjectResourceManager struct {
-	internalAccount AccountResourceManager
+	internalAccount *AzureAccountResourceManager
 	Service         *FileServiceResourceManager
 	Share           *FileShareResourceManager
 
@@ -338,8 +360,14 @@ func (f *FileObjectResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Object()
 }
 
-func (f *FileObjectResourceManager) URI() string {
-	return f.getFileClient().URL()
+func (f *FileObjectResourceManager) URI(a Asserter, withSas bool) string {
+	base := fileStripSAS(f.getFileClient().URL()) // restype doesn't matter here, same URL under the hood
+
+	if withSas {
+		base = f.internalAccount.ApplySAS(a, base, f.Location())
+	}
+
+	return base
 }
 
 func (f *FileObjectResourceManager) EntityType() common.EntityType {
