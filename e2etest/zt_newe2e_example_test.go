@@ -38,8 +38,10 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 	RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:    ResolveVariation(svm, []AzCopyVerb{AzCopyVerbRemove}),
-			Targets: []string{srcObj.URI(svm, true)},
+			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbRemove}),
+			Targets: []ResourceManager{
+				srcObj,
+			},
 		})
 
 	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{

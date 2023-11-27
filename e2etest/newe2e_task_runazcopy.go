@@ -20,13 +20,20 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbRemove AzCopyVerb = "remove"
 )
 
+type AzCopyTarget struct {
+	ResourceManager
+	AuthType ExplicitCredentialTypes // Expects *one* credential type that the Resource supports. Assumes SAS (or GCP/S3) if not present.
+
+	// todo: SAS permissions
+	// todo: specific OAuth types (e.g. MSI, etc.)
+}
+
 type AzCopyCommand struct {
 	Verb AzCopyVerb
-	// Instead of directly taking resource managers or any extensions thereof, we'll take strings.
-	// This is theoretically the most versatile option, allowing us to specify SAS and otherwise.
-	// It is less convenient than magically wrangling auth type, but after some debate I (Adele)
-	// came to the conclusion that there was no "good" solution to that problem.
-	Targets     []string
+	// Passing a ResourceManager assumes SAS (or GCP/S3) auth is intended.
+	// Passing an AzCopyTarget will allow you to specify an exact credential type.
+	// When OAuth, S3, GCP, AcctKey, etc. the appropriate env flags should auto-populate.
+	Targets     []ResourceManager
 	Flags       any // check SampleFlags
 	Environment AzCopyEnvironment
 
@@ -44,6 +51,35 @@ type AzCopyEnvironment struct {
 	InheritEnvironment bool
 }
 
+func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) string {
+	intendedAuthType := EExplicitCredentialType.SASToken()
+	if tgt, ok := target.(AzCopyTarget); ok {
+		count := tgt.AuthType.Count()
+		a.AssertNow("target auth type must be single", Equal{}, count <= 1, true)
+		if count == 1 {
+			intendedAuthType = tgt.AuthType
+		}
+	} else if target.Location() == common.ELocation.S3() {
+		intendedAuthType = EExplicitCredentialType.S3()
+	} else if target.Location() == common.ELocation.GCP() {
+		intendedAuthType = EExplicitCredentialType.GCP()
+	}
+
+	switch intendedAuthType {
+	case EExplicitCredentialType.PublicAuth(), EExplicitCredentialType.None():
+		return target.URI(a, false)
+	case EExplicitCredentialType.SASToken():
+		return target.URI(a, true)
+	case EExplicitCredentialType.OAuth():
+		c.Environment.ServicePrincipalAppID = &GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.ApplicationID
+		c.Environment.ServicePrincipalClientSecret = &GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.ClientSecret
+		return target.URI(a, false)
+	default:
+		a.Error("unsupported credential type")
+		return target.URI(a, true)
+	}
+}
+
 // RunAzCopy todo define more cleanly, implement
 func RunAzCopy(a Asserter, commandSpec AzCopyCommand) *AzCopyJobPlan {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
@@ -59,7 +95,7 @@ func RunAzCopy(a Asserter, commandSpec AzCopyCommand) *AzCopyJobPlan {
 			out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(commandSpec.Verb)}
 
 			for _, v := range commandSpec.Targets {
-				out = append(out, v) // todo
+				out = append(out, commandSpec.applyTargetAuth(a, v))
 			}
 
 			if commandSpec.Flags != nil {

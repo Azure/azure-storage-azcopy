@@ -48,6 +48,30 @@ func (ExplicitCredentialTypes) AcctKey() ExplicitCredentialTypes    { return 1 <
 func (ExplicitCredentialTypes) GCP() ExplicitCredentialTypes        { return 1 << 4 }
 func (ExplicitCredentialTypes) S3() ExplicitCredentialTypes         { return 1 << 5 }
 
+func (e ExplicitCredentialTypes) Count() int {
+	if e == 0 {
+		return 0
+	}
+
+	out := 0
+	validTypes := []ExplicitCredentialTypes{ // todo: automate with reflection
+		EExplicitCredentialType.PublicAuth(),
+		EExplicitCredentialType.SASToken(),
+		EExplicitCredentialType.OAuth(),
+		EExplicitCredentialType.AcctKey(),
+		EExplicitCredentialType.GCP(),
+		EExplicitCredentialType.S3(),
+	}
+
+	for _, v := range validTypes {
+		if e&v == v {
+			out++
+		}
+	}
+
+	return out
+}
+
 func (e ExplicitCredentialTypes) Includes(x ExplicitCredentialTypes) bool {
 	return e&x == x
 }
