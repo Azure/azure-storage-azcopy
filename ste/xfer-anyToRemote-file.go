@@ -112,8 +112,9 @@ func BlobTierAllowed(destTier *blob.AccessTier) bool {
 		}
 
 		if strings.Contains(destAccountKind, "Block") {
-			// No tier setting is allowed.
-			return false
+			// Setting tier on Premium Block Blob accounts is allowable in certain regions on whitelisted subscriptions.
+			// If setting tier fails, we allow service to throw error instead of taking preventative measures in AzCopy.
+			return true
 		}
 
 		// Any other storage type would have to be file storage, and we can't set tier there.
@@ -125,7 +126,7 @@ func BlobTierAllowed(destTier *blob.AccessTier) bool {
 		// Standard storage account. If it's Hot, Cool, or Archive, we're A-OK.
 		// Page blobs, however, don't have an access tier on Standard accounts.
 		// However, this is also OK, because the pageblob sender code prevents us from using a standard access tier type.
-		return *destTier == blob.AccessTierArchive || *destTier == blob.AccessTierCool || destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || *destTier == blob.AccessTierHot
+		return *destTier == blob.AccessTierArchive || *destTier == blob.AccessTierCool || *destTier == common.EBlockBlobTier.Cold().ToAccessTierType() || *destTier == blob.AccessTierHot
 	}
 }
 
@@ -208,7 +209,7 @@ func anyToRemote(jptm IJobPartTransferMgr, pacer pacer, senderFactory senderFact
 }
 
 // anyToRemote_file handles all kinds of sender operations for files - both uploads from local files, and S2S copies
-func anyToRemote_file(jptm IJobPartTransferMgr, info TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 	jptm.LogChunkStatus(pseudoId, common.EWaitReason.XferStart())
@@ -585,7 +586,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 }
 
 // commonSenderCompletion is used for both files and folders
-func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info TransferInfo) {
+func commonSenderCompletion(jptm IJobPartTransferMgr, s sender, info *TransferInfo) {
 
 	jptm.EnsureDestinationUnlocked()
 

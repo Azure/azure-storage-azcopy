@@ -2,13 +2,14 @@ package ste
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
-	"time"
 )
 
 type blobSymlinkSender struct {
@@ -22,7 +23,11 @@ type blobSymlinkSender struct {
 }
 
 func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
-	destinationClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	s, err := jptm.DstServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, nil
+	}
+	destinationClient := s.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -32,9 +37,8 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISou
 	var destBlobTier *blob.AccessTier
 	blockBlobTierOverride, _ := jptm.BlobTiers()
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
-		destBlobTier = blockBlobTierOverride.ToAccessTierType()
-	} else {
-		destBlobTier = nil
+		t := blob.AccessTier(blockBlobTierOverride.ToAccessTierType())
+		destBlobTier = &t
 	}
 
 	var out sender

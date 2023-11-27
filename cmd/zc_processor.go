@@ -79,7 +79,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
-		copyTransfer.BlobTier = *s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
+		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
 
 		metadataString := s.copyJobTemplate.BlobAttributes.Metadata
 		metadataMap := common.Metadata{}

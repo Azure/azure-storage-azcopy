@@ -496,12 +496,12 @@ func (scenarioHelper) generateCommonRemoteScenarioForGCP(a *assert.Assertions, c
 	return objectList
 }
 
-func (scenarioHelper) generateShareFilesFromList(a *assert.Assertions, shareClient *share.Client, serviceClient *fileservice.Client, fileList []string) {
+func (scenarioHelper) generateShareFilesFromList(a *assert.Assertions, shareClient *share.Client, _ *fileservice.Client, fileList []string) {
 	for _, filePath := range fileList {
 		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(filePath)
 
 		// create parents first
-		generateParentsForShareFile(a, fileClient, serviceClient)
+		generateParentsForShareFile(a, fileClient, shareClient)
 
 		// create the file itself
 		_, err := fileClient.Create(ctx, defaultAzureFileSizeInBytes, nil)

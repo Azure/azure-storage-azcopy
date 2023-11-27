@@ -3,12 +3,13 @@ package ste
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -33,9 +34,6 @@ func DeleteBlob(jptm IJobPartTransferMgr, pacer pacer) {
 func doDeleteBlob(jptm IJobPartTransferMgr) {
 
 	info := jptm.Info()
-	// Get the source blob url of blob to delete
-	blobClient := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
@@ -57,9 +55,14 @@ func doDeleteBlob(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
+	s, err := jptm.SrcServiceClient().BlobServiceClient()
+	if err != nil {
+		transferDone(common.ETransferStatus.Failed(), err)
+		return
+	}
 	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob
 	// we still count this delete operation as successful since we accomplished the desired outcome
-	_, err := blobClient.Delete(jptm.Context(), &blob.DeleteOptions{
+	_, err = s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).Delete(jptm.Context(), &blob.DeleteOptions{
 		DeleteSnapshots: jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(),
 		BlobDeleteType:  jptm.PermanentDeleteOption().ToPermanentDeleteOptionType(),
 	})

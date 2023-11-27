@@ -5,11 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"log"
 	"net/url"
 	"os"
@@ -18,6 +13,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -436,6 +436,10 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	existingContainers[containerName] = true
 
 	var dstCredInfo common.CredentialInfo
+	dstURL, err := dstWithSAS.String()
+	if err != nil {
+		return err
+	}
 
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
 	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
@@ -444,7 +448,19 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	options := createClientOptions(logLevel)
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+
+	sc, err := common.GetServiceClientForLocation(
+		cca.FromTo.To(),
+		dstURL,
+		dstCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		nil, // trailingDot is not required when creating a share
+	)
+
+	if err != nil {
+		return err
+	}
 
 	// Because the only use-cases for createDstContainer will be on service-level S2S and service-level download
 	// We only need to create "containers" on local and blob.
@@ -453,13 +469,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	case common.ELocation.Local():
 		err = os.MkdirAll(common.GenerateFullPath(cca.Destination.ValueLocal(), containerName), os.ModeDir|os.ModePerm)
 	case common.ELocation.Blob():
-		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())
-
-		if err != nil {
-			return err
-		}
-
-		bsc := common.CreateBlobServiceClient(accountRoot, dstCredInfo, nil, options)
+		bsc, _ := sc.BlobServiceClient()
 		bcc := bsc.NewContainerClient(containerName)
 
 		_, err = bcc.GetProperties(ctx, nil)
@@ -474,14 +484,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		}
 		return err
 	case common.ELocation.File():
-		// Grab the account root and parse it as a URL
-		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())
-
-		if err != nil {
-			return err
-		}
-
-		fsc := common.CreateFileServiceClient(accountRoot, dstCredInfo, nil, options, &cca.trailingDot, to.Ptr(cca.FromTo.From()))
+		fsc, _:= sc.FileServiceClient()
 		sc := fsc.NewShareClient(containerName)
 
 		_, err = sc.GetProperties(ctx, nil)
@@ -497,13 +500,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		}
 		return err
 	case common.ELocation.BlobFS():
-		// TODO: Implement blobfs container creation
-		accountRoot, err := GetAccountRoot(dstWithSAS, cca.FromTo.To())
-		if err != nil {
-			return err
-		}
-
-		dsc := common.CreateDatalakeServiceClient(accountRoot, dstCredInfo, nil, options)
+		dsc, _ := sc.DatalakeServiceClient()
 		fsc := dsc.NewFileSystemClient(containerName)
 		_, err = fsc.GetProperties(ctx, nil)
 		if err == nil {

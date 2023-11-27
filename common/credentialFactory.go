@@ -23,9 +23,7 @@ package common
 import (
 	gcpUtils "cloud.google.com/go/storage"
 	"context"
-	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"sync"
 
@@ -61,21 +59,6 @@ func (o CredentialOpOptions) panicError(err error) {
 	} else {
 		o.Panic(newErr)
 	}
-}
-
-// GetSourceBlobCredential gets the TokenCredential based on the cred info
-func GetSourceBlobCredential(credInfo CredentialInfo, options CredentialOpOptions) (azcore.TokenCredential, error) {
-	if credInfo.CredentialType.IsAzureOAuth() {
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
-		}
-		if credInfo.S2SSourceTokenCredential != nil {
-			return credInfo.S2SSourceTokenCredential, nil
-		} else {
-			return credInfo.OAuthTokenInfo.GetTokenCredential()
-		}
-	}
-	return nil, nil
 }
 
 // CreateS3Credential creates AWS S3 credential according to credential info.
@@ -119,21 +102,21 @@ func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option Credent
 }
 
 type S3ClientFactory struct {
-	s3Clients map[CredentialInfo]*minio.Client
+	s3Clients map[S3CredentialInfo]*minio.Client
 	lock      sync.RWMutex
 }
 
 // NewS3ClientFactory creates new S3 client factory.
 func NewS3ClientFactory() S3ClientFactory {
 	return S3ClientFactory{
-		s3Clients: make(map[CredentialInfo]*minio.Client),
+		s3Clients: make(map[S3CredentialInfo]*minio.Client),
 	}
 }
 
 // GetS3Client gets S3 client from pool, or create a new S3 client if no client created for specific credInfo.
 func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions, logger ILogger) (*minio.Client, error) {
 	f.lock.RLock()
-	s3Client, ok := f.s3Clients[credInfo]
+	s3Client, ok := f.s3Clients[credInfo.S3CredentialInfo]
 	f.lock.RUnlock()
 
 	if ok {
@@ -142,13 +125,13 @@ func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialIn
 
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	if s3Client, ok := f.s3Clients[credInfo]; !ok {
+	if s3Client, ok := f.s3Clients[credInfo.S3CredentialInfo]; !ok {
 		newS3Client, err := CreateS3Client(ctx, credInfo, option, logger)
 		if err != nil {
 			return nil, err
 		}
 
-		f.s3Clients[credInfo] = newS3Client
+		f.s3Clients[credInfo.S3CredentialInfo] = newS3Client
 		return newS3Client, nil
 	} else {
 		return s3Client, nil
@@ -164,19 +147,19 @@ func CreateGCPClient(ctx context.Context) (*gcpUtils.Client, error) {
 }
 
 type GCPClientFactory struct {
-	gcpClients map[CredentialInfo]*gcpUtils.Client
+	gcpClients map[GCPCredentialInfo]*gcpUtils.Client
 	lock       sync.RWMutex
 }
 
 func NewGCPClientFactory() GCPClientFactory {
 	return GCPClientFactory{
-		gcpClients: make(map[CredentialInfo]*gcpUtils.Client),
+		gcpClients: make(map[GCPCredentialInfo]*gcpUtils.Client),
 	}
 }
 
 func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*gcpUtils.Client, error) {
 	f.lock.RLock()
-	gcpClient, ok := f.gcpClients[credInfo]
+	gcpClient, ok := f.gcpClients[credInfo.GCPCredentialInfo]
 	f.lock.RUnlock()
 
 	if ok {
@@ -184,12 +167,12 @@ func (f *GCPClientFactory) GetGCPClient(ctx context.Context, credInfo Credential
 	}
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	if gcpClient, ok := f.gcpClients[credInfo]; !ok {
+	if gcpClient, ok := f.gcpClients[credInfo.GCPCredentialInfo]; !ok {
 		newGCPClient, err := CreateGCPClient(ctx)
 		if err != nil {
 			return nil, err
 		}
-		f.gcpClients[credInfo] = newGCPClient
+		f.gcpClients[credInfo.GCPCredentialInfo] = newGCPClient
 		return newGCPClient, nil
 	} else {
 		return gcpClient, nil

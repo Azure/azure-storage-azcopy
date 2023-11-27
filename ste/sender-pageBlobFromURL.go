@@ -22,12 +22,13 @@ package ste
 
 import (
 	"context"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
-	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -44,7 +45,6 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 	if err != nil {
 		return nil, err
 	}
-	srcPageBlobClient := common.CreatePageBlobClient(srcURL, jptm.S2SSourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	var destBlobTier *blob.AccessTier
 	var pageRangeOptimizer *pageRangeOptimizer
@@ -54,7 +54,15 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 
 			// capture the necessary info so that we can perform optimizations later
-			pageRangeOptimizer = newPageRangeOptimizer(srcPageBlobClient, jptm.Context())
+			// This is strictly an optimization, and not a necessity. We ignore
+			// any errors here.
+			if s, err := jptm.SrcServiceClient().BlobServiceClient(); err != nil {
+				pageRangeOptimizer = newPageRangeOptimizer(
+					s.NewContainerClient(jptm.Info().SrcContainer).NewPageBlobClient(
+					jptm.Info().SrcFilePath), jptm.Context())
+
+			}
+
 		}
 	}
 
@@ -142,7 +150,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 
 // isolate the logic to fetch page ranges for a page blob, and check whether a given range has data
 // for two purposes:
-//	1. capture the necessary info to do so, so that fetchPages can be invoked anywhere
+//  1. capture the necessary info to do so, so that fetchPages can be invoked anywhere
 //  2. open to extending the logic, which could be re-used for both download and s2s scenarios
 type pageRangeOptimizer struct {
 	srcPageBlobClient *pageblob.Client

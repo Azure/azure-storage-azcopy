@@ -42,42 +42,10 @@ import (
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
-	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:               cca.jobID,
-		CommandString:       cca.commandString,
-		FromTo:              cca.fromTo,
-		Fpo:                 fpo,
-		SymlinkHandlingType: cca.symlinkHandling,
-		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
-		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
-		CredentialInfo:      cca.credentialInfo,
-
-		// flags
-		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime: cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
-			PutMd5:                   cca.putMd5,
-			MD5ValidationOption:      cca.md5ValidationOption,
-			BlockSizeInBytes:         cca.blockSize},
-		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
-		ForceIfReadOnly:                cca.forceIfReadOnly,
-		LogLevel:                       azcopyLogVerbosity,
-		PreserveSMBPermissions:         cca.preservePermissions,
-		PreserveSMBInfo:                cca.preserveSMBInfo,
-		PreservePOSIXProperties:        cca.preservePOSIXProperties,
-		S2SSourceChangeValidation:      true,
-		DestLengthValidation:           true,
-		S2SGetPropertiesInBackend:      true,
-		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
-		CpkOptions:                     cca.cpkOptions,
-		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
-
-		S2SSourceCredentialType: cca.s2sSourceCredentialType,
-		FileAttributes: common.FileTransferAttributes{
-			TrailingDot: cca.trailingDot,
-		},
-	}
-
+func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
+							  numOfTransfersPerPart int,
+							  fpo common.FolderPropertyOption,
+							  copyJobTemplate *common.CopyJobPartOrderRequest) *copyTransferProcessor {
 	reportFirstPart := func(jobStarted bool) { cca.setFirstPartOrdered() } // for compatibility with the way sync has always worked, we don't check jobStarted here
 	reportFinalPart := func() { cca.isEnumerationComplete = true }
 
@@ -281,16 +249,15 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	var trailingDot *common.TrailingDotOption
 	var from *common.Location
-	if cca.fromTo.To() == common.ELocation.File() {
-		trailingDot = &cca.trailingDot
+	if cca.fromTo.To() != common.ELocation.File() {
+		cca.trailingDot = common.ETrailingDotOption.Disable()
 		from = to.Ptr(cca.fromTo.From())
 	}
 
-	clientOptions := createClientOptions(azcopyLogVerbosity)
+	clientOptions := createClientOptions(azcopyScanningLogger)
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly, trailingDot, from).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly, &cca.trailingDot, from).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
@@ -364,6 +331,34 @@ func (b *remoteResourceDeleter) getObjectURL(object StoredObject) (url url.URL) 
 }
 
 func (b *remoteResourceDeleter) delete(object StoredObject) error {
+	var fileSpecificOptions *common.FileClientOptions
+	if b. targetLocation == common.ELocation.File(){
+		fileSpecificOptions = &common.FileClientOptions {
+			AllowSourceTrailingDot: *b.trailingDot == common.ETrailingDotOption.Enable(),
+		}
+	}
+	
+	if b.targetLocation == common.ELocation.BlobFS() && object.entityType == common.EEntityType.Folder() { 
+		b.clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, b.clientOptions.PerCallPolicies...)
+	}
+
+	sc, err := common.GetServiceClientForLocation(
+		b.targetLocation,
+		b.rootURL.String(),
+		b.credInfo.OAuthTokenInfo.TokenCredential,
+		&b.clientOptions,
+		fileSpecificOptions,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	containerName, fileName, err := common.SplitContainerNameFromPath(b.rootURL.String())
+	if err != nil {
+		return err
+	}
+	
 	if object.entityType == common.EEntityType.File() {
 		// TODO: use b.targetLocation.String() in the next line, instead of "object", if we can make it come out as string
 		msg := "Deleting extra object: " + object.relativePath
@@ -379,24 +374,12 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		var err error
 		switch b.targetLocation {
 		case common.ELocation.Blob():
-			var blobURLParts blob.URLParts
-			blobURLParts, err = blob.ParseURL(b.rootURL.String())
-			if err != nil {
-				return err
-			}
-			blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
-
-			blobClient := common.CreateBlobClient(blobURLParts.String(), b.credInfo, nil, b.clientOptions)
+			bsc, _ := sc.BlobServiceClient()
+			var blobClient *blob.Client = bsc.NewContainerClient(containerName).NewBlobClient(path.Join(fileName + object.relativePath))
 			_, err = blobClient.Delete(b.ctx, nil)
 		case common.ELocation.File():
-			var fileURLParts sharefile.URLParts
-			fileURLParts, err = sharefile.ParseURL(b.rootURL.String())
-			if err != nil {
-				return err
-			}
-			fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
-
-			fileClient := common.CreateShareFileClient(fileURLParts.String(), b.credInfo, nil, b.clientOptions, b.trailingDot, b.from)
+			fsc, _ := sc.FileServiceClient()
+			fileClient := fsc.NewShareClient(containerName).NewRootDirectoryClient().NewFileClient(path.Join(fileName + object.relativePath))
 
 			_, err = fileClient.Delete(b.ctx, nil)
 			if err != nil && b.forceIfReadOnly && fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
@@ -419,13 +402,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				}
 			}
 		case common.ELocation.BlobFS():
-			var datalakeURLParts azdatalake.URLParts
-			datalakeURLParts, err = azdatalake.ParseURL(b.rootURL.String())
-			if err != nil {
-				return err
-			}
-			datalakeURLParts.PathName = path.Join(datalakeURLParts.PathName, object.relativePath)
-			fileClient := common.CreateDatalakeFileClient(datalakeURLParts.String(), b.credInfo, nil, b.clientOptions)
+			dsc, _ := sc.DatalakeServiceClient()
+			fileClient := dsc.NewFileSystemClient(containerName).NewFileClient(path.Join(fileName + object.relativePath))
 			_, err = fileClient.Delete(b.ctx, nil)
 		default:
 			panic("not implemented, check your code")
@@ -452,12 +430,14 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			var err error
 			switch b.targetLocation {
 			case common.ELocation.Blob():
-				blobClient := common.CreateBlobClient(objectURL.String(), b.credInfo, nil, b.clientOptions)
+				bsc, _ := sc.BlobServiceClient()
+				blobClient := bsc.NewContainerClient(containerName).NewBlobClient(path.Join(fileName + object.relativePath))
 				// HNS endpoint doesn't like delete snapshots on a directory
 				_, err = blobClient.Delete(b.ctx, nil)
 			case common.ELocation.File():
-				directoryClient := common.CreateShareDirectoryClient(objectURL.String(), b.credInfo, nil, b.clientOptions, b.trailingDot, b.from)
-				_, err = directoryClient.Delete(ctx, nil)
+				fsc, _ := sc.FileServiceClient()
+				dirClient := fsc.NewShareClient(containerName).NewDirectoryClient(path.Join(fileName + object.relativePath))
+				_, err = dirClient.Delete(ctx, nil)
 
 				if err != nil && b.forceIfReadOnly && fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
 					msg := fmt.Sprintf("read-only attribute detected, removing it before deleting the file %s", object.relativePath)
@@ -467,9 +447,9 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 
 					// if the file is read-only, we need to remove the read-only attribute before we can delete it
 					noAttrib := sharefile.NTFSFileAttributes{None: true}
-					_, err = directoryClient.SetProperties(b.ctx, &sharedirectory.SetPropertiesOptions{FileSMBProperties: &sharefile.SMBProperties{Attributes: &noAttrib}})
+					_, err = dirClient.SetProperties(b.ctx, &sharedirectory.SetPropertiesOptions{FileSMBProperties: &sharefile.SMBProperties{Attributes: &noAttrib}})
 					if err == nil {
-						_, err = directoryClient.Delete(b.ctx, nil)
+						_, err = dirClient.Delete(b.ctx, nil)
 					} else {
 						msg := fmt.Sprintf("error %s removing the read-only attribute from the file %s", err.Error(), object.relativePath)
 						glcm.Info(msg + "; check the scanning log file for more details")
@@ -479,9 +459,8 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 					}
 				}
 			case common.ELocation.BlobFS():
-				clientOptions := b.clientOptions
-				clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, clientOptions.PerCallPolicies...)
-				directoryClient := common.CreateDatalakeDirectoryClient(objectURL.String(), b.credInfo, nil, clientOptions)
+				dsc, _ := sc.DatalakeServiceClient()
+				directoryClient := dsc.NewFileSystemClient(containerName).NewDirectoryClient(path.Join(fileName + object.relativePath))
 				recursiveContext := common.WithRecursive(ctx, false)
 				_, err = directoryClient.Delete(recursiveContext, nil)
 			default:

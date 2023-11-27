@@ -55,6 +55,8 @@ type IJobMgr interface {
 	// If existingPlanMMF is nil, a new MMF is opened.
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 		destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr
+	AddJobPart2(args *AddJobPartArgs) IJobPartMgr
+
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
@@ -411,6 +413,77 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 	jm.Log(common.LogInfo, msg)
 }
 
+type AddJobPartArgs struct {
+	PartNum         PartNumber
+	PlanFile        JobPartPlanFileName
+	ExistingPlanMMF *JobPartPlanMMF
+
+	// this is required in S2S transfers authenticating to src
+	// via oAuth
+	SourceTokenCred common.AuthTokenFunction
+
+	// These clients are valid if this fits the FromTo. i.e if
+	// we're uploading
+	SrcClient *common.ServiceClient
+	DstClient *common.ServiceClient
+
+	ScheduleTransfers bool
+
+	// This channel will be closed once all transfers in this part are done
+	CompletionChan chan struct{}
+}
+
+// initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
+func (jm *jobMgr) AddJobPart2(args *AddJobPartArgs) IJobPartMgr {
+	jpm := &jobPartMgr{
+		jobMgr:            jm,
+		filename:          args.PlanFile,
+		srcServiceClient:  args.SrcClient,
+		dstServiceClient:  args.DstClient,
+		pacer:             jm.pacer,
+		slicePool:         jm.slicePool,
+		cacheLimiter:      jm.cacheLimiter,
+		fileCountLimiter:  jm.fileCountLimiter,
+		closeOnCompletion: args.CompletionChan,
+		s2sSourceToken:    args.SourceTokenCred,
+	}
+	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
+	if args.ExistingPlanMMF == nil {
+		jpm.planMMF = jpm.filename.Map()
+	} else {
+		jpm.planMMF = args.ExistingPlanMMF
+	}
+
+	jm.jobPartMgrs.Set(args.PartNum, jpm)
+	jm.setFinalPartOrdered(args.PartNum, jpm.planMMF.Plan().IsFinalPart)
+	jm.setDirection(jpm.Plan().FromTo)
+
+	jm.initMu.Lock()
+	defer jm.initMu.Unlock()
+	if jm.initState == nil {
+		var logger common.ILogger = jm
+		jm.initState = &jobMgrInitState{
+			securityInfoPersistenceManager: newSecurityInfoPersistenceManager(jm.ctx),
+			folderCreationTracker:          NewFolderCreationTracker(jpm.Plan().Fpo, jpm.Plan()),
+			folderDeletionManager:          common.NewFolderDeletionManager(jm.ctx, jpm.Plan().Fpo, logger),
+			exclusiveDestinationMapHolder:  &atomic.Value{},
+		}
+		jm.initState.exclusiveDestinationMapHolder.Store(common.NewExclusiveStringMap(jpm.Plan().FromTo, runtime.GOOS))
+	}
+	jpm.jobMgrInitState = jm.initState // so jpm can use it as much as desired without locking (since the only mutation is the init in jobManager. As far as jobPartManager is concerned, the init state is read-only
+	jpm.exclusiveDestinationMap = jm.getExclusiveDestinationMap(args.PartNum, jpm.Plan().FromTo)
+
+	if args.ScheduleTransfers {
+		// If the schedule transfer is set to true
+		// Instead of the scheduling the Transfer for given JobPart
+		// JobPart is put into the partChannel
+		// from where it is picked up and scheduled
+		// jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
+		jm.QueueJobParts(jpm)
+	}
+	return jpm
+}
+
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, existingPlanMMF *JobPartPlanMMF, sourceSAS string,
 	destinationSAS string, scheduleTransfers bool, completionChan chan struct{}) IJobPartMgr {
@@ -463,21 +536,18 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jppfn.Create(order) // Convert the order to a plan file
 
 	s2sSourceCredInfo := order.CredentialInfo.WithType(order.S2SSourceCredentialType)
-	if order.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
-		s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
-	}
 
 	jpm := &jobPartMgr{
-		jobMgr:            jm,
-		filename:          jppfn,
-		sourceSAS:         order.SourceRoot.SAS,
-		destinationSAS:    order.DestinationRoot.SAS,
-		pacer:             jm.pacer,
-		slicePool:         jm.slicePool,
-		cacheLimiter:      jm.cacheLimiter,
-		fileCountLimiter:  jm.fileCountLimiter,
-		credInfo:          order.CredentialInfo,
-		s2sSourceCredInfo: s2sSourceCredInfo,
+		jobMgr:           jm,
+		filename:         jppfn,
+		sourceSAS:        order.SourceRoot.SAS,
+		destinationSAS:   order.DestinationRoot.SAS,
+		pacer:            jm.pacer,
+		slicePool:        jm.slicePool,
+		cacheLimiter:     jm.cacheLimiter,
+		fileCountLimiter: jm.fileCountLimiter,
+		credInfo:         order.CredentialInfo,
+		s2sSourceToken:   s2sSourceCredInfo.S2SSourceTokenCredential,
 	}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(order.PartNum, jpm)

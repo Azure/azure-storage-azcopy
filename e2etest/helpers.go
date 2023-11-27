@@ -240,7 +240,7 @@ func createNewAzureFile(c asserter, sc *share.Client, prefix string) (fc *sharef
 	fc, name = getAzureFileURL(c, sc, prefix)
 
 	// generate parents first
-	generateParentsForAzureFile(c, fc)
+	generateParentsForAzureFile(c, fc, sc)
 
 	_, err := fc.Create(ctx, defaultAzureFileSizeInBytes, nil)
 	c.AssertNoErr(err)
@@ -252,23 +252,22 @@ func newNullFolderCreationTracker() ste.FolderCreationTracker {
 	return ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
 }
 
-func getFileServiceClient() *fileservice.Client {
+func getFileShareClient(c asserter) *share.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
-	u := fmt.Sprintf("https://%s.file.core.windows.net/", accountName)
+	u := fmt.Sprintf("https://%s.file.core.windows.net/%s", accountName, generateShareName(c))
 
-	credential, err := fileservice.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := share.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
 		panic(err)
 	}
-	client, err := fileservice.NewClientWithSharedKeyCredential(u, credential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
+	client, err := share.NewClientWithSharedKeyCredential(u, credential, &share.ClientOptions{AllowTrailingDot: to.Ptr(true)})
 	if err != nil {
 		panic(err)
 	}
 	return client
 }
 
-func generateParentsForAzureFile(c asserter, fc *sharefile.Client) {
-	fsc := getFileServiceClient()
+func generateParentsForAzureFile(c asserter, fc *sharefile.Client, fsc *share.Client) {
 	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fc, fsc, newNullFolderCreationTracker())
 	c.AssertNoErr(err)
 }

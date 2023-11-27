@@ -382,7 +382,7 @@ func createNewShareFile(a *assert.Assertions, sc *share.Client, fsc *fileservice
 	fc, name = getAzureFileClient(a, sc, prefix)
 
 	// generate parents first
-	generateParentsForShareFile(a, fc, fsc)
+	generateParentsForShareFile(a, fc, sc)
 
 	_, err := fc.Create(ctx, defaultAzureFileSizeInBytes, nil)
 	a.Nil(err)
@@ -399,9 +399,9 @@ func createNewShare(a *assert.Assertions, fsc *fileservice.Client) (sc *share.Cl
 	return sc, name
 }
 
-func generateParentsForShareFile(a *assert.Assertions, fileClient *sharefile.Client, serviceClient *fileservice.Client) {
+func generateParentsForShareFile(a *assert.Assertions, fileClient *sharefile.Client, shareClient *share.Client) {
 	t := ste.NewFolderCreationTracker(common.EFolderPropertiesOption.NoFolders(), nil)
-	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileClient, serviceClient, t)
+	err := ste.AzureFileParentDirCreator{}.CreateParentDirToRoot(ctx, fileClient, shareClient, t)
 	a.Nil(err)
 }
 

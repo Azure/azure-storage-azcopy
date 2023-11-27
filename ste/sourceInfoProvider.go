@@ -115,15 +115,11 @@ type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvid
 // return FRESH (up to date) data.
 type defaultRemoteSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 }
 
 func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (*defaultRemoteSourceInfoProvider, error) {
 	return &defaultRemoteSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
-}
-
-func (p *defaultRemoteSourceInfoProvider) PreSignedSourceURL() (string, error) {
-	return p.transferInfo.Source, nil
 }
 
 func (p *defaultRemoteSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -140,10 +136,6 @@ func (p *defaultRemoteSourceInfoProvider) IsLocal() bool {
 
 func (p *defaultRemoteSourceInfoProvider) SourceSize() int64 {
 	return p.transferInfo.SourceSize
-}
-
-func (p *defaultRemoteSourceInfoProvider) RawSource() string {
-	return p.transferInfo.Source
 }
 
 func (p *defaultRemoteSourceInfoProvider) EntityType() common.EntityType {
