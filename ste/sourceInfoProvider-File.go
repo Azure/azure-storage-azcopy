@@ -31,6 +31,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -159,6 +161,8 @@ type fileSourceInfoProvider struct {
 	cachedPermissionKey string
 	cacheOnce           *sync.Once
 	cachedProperties    shareFilePropertyProvider // use interface because may be file or directory properties
+	sourceURL           string
+	srcShareClient      *share.Client
 	defaultRemoteSourceInfoProvider
 }
 
@@ -168,25 +172,45 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
-	// so we must use the latest SDK version to stay safe
-	//TODO: Should we do that?
-	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: jptm.Context(), cacheOnce: &sync.Once{}}, nil
-}
-
-func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
-	source, err := p.PreSignedSourceURL()
+	s, err := jptm.SrcServiceClient().FileServiceClient()
 	if err != nil {
 		return nil, err
 	}
 
+	source := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
+
+	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
+	// so we must use the latest SDK version to stay safe
+	//TODO: Should we do that?
+	return &fileSourceInfoProvider{
+		defaultRemoteSourceInfoProvider: *base,
+		ctx:                             jptm.Context(),
+		cacheOnce:                       &sync.Once{},
+		srcShareClient:                  s.NewShareClient(jptm.Info().SrcContainer),
+		sourceURL:                       source.URL()}, nil
+}
+
+func (p *fileSourceInfoProvider) PreSignedSourceURL() (string, error) {
+	return p.sourceURL, nil
+}
+
+func (p *fileSourceInfoProvider) RawSource() string {
+	return p.sourceURL
+}
+
+func (p *fileSourceInfoProvider) getFreshProperties() (shareFilePropertyProvider, error) {
+	fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
+	if err != nil {
+		return nil, err
+	}
+	share := fsc.NewShareClient(p.transferInfo.SrcContainer)
 	switch p.EntityType() {
 	case common.EEntityType.File():
-		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
+		fileClient := share.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		props, err := fileClient.GetProperties(p.ctx, nil)
 		return &fileGetPropertiesAdapter{props}, err
 	case common.EEntityType.Folder():
-		directoryClient := common.CreateShareDirectoryClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
+		directoryClient := share.NewDirectoryClient(p.transferInfo.SrcFilePath)
 		props, err := directoryClient.GetProperties(p.ctx, nil)
 		return &directoryGetPropertiesAdapter{props}, err
 	default:
@@ -223,16 +247,7 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 
 	// Call into SIPM and grab our SDDL string.
 	sipm := p.jptm.SecurityInfoPersistenceManager()
-	source, err := p.PreSignedSourceURL()
-	if err != nil {
-		return "", err
-	}
-	fURLParts, err := file.ParseURL(source)
-	if err != nil {
-		return "", err
-	}
-	fURLParts.DirectoryOrFilePath = ""
-	sddlString, err := sipm.GetSDDLFromID(key, fURLParts.String(), p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
+	sddlString, err := sipm.GetSDDLFromID(key, p.srcShareClient)
 
 	return sddlString, err
 }
@@ -296,15 +311,16 @@ func (p *fileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	switch p.EntityType() {
 	case common.EEntityType.File():
-		source, err := p.PreSignedSourceURL()
-		if err != nil {
-			return nil, err
-		}
 		var rangeGetContentMD5 *bool
 		if count <= common.MaxRangeGetSize {
 			rangeGetContentMD5 = to.Ptr(true)
 		}
-		fileClient := common.CreateShareFileClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions(), p.jptm.SourceTrailingDot(), nil)
+		fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
+		if err != nil {
+			return nil, err
+		}
+		shareClient := fsc.NewShareClient(p.transferInfo.SrcContainer)
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
 		response, err := fileClient.DownloadStream(p.ctx, &file.DownloadStreamOptions{
 			Range:              file.HTTPRange{Offset: offset, Count: count},
 			RangeGetContentMD5: rangeGetContentMD5,

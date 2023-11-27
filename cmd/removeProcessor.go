@@ -25,7 +25,7 @@ import (
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption) *copyTransferProcessor {
+func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, targetServiceClient *common.ServiceClient) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,
@@ -36,6 +36,7 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		CredentialInfo:      cca.credentialInfo,
 		ForceIfReadOnly:     cca.ForceIfReadOnly,
 		BlobFSRecursiveDelete: cca.Recursive,
+		SrcServiceClient:    targetServiceClient,
 
 		// flags
 		LogLevel:       azcopyLogVerbosity,

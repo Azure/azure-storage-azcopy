@@ -816,7 +816,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 		if f.isFolder() {
 			// make sure the dir exists
 			file := options.shareClient.NewRootDirectoryClient().NewFileClient(path.Join(f.name, "dummyChild"))
-			generateParentsForAzureFile(c, file)
+			generateParentsForAzureFile(c, file, options.shareClient)
 
 			dir := options.shareClient.NewRootDirectoryClient().NewSubdirectoryClient(f.name)
 
@@ -860,7 +860,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			fileClient := options.shareClient.NewRootDirectoryClient().NewFileClient(f.name)
 
 			// create parents first
-			generateParentsForAzureFile(c, fileClient)
+			generateParentsForAzureFile(c, fileClient, options.shareClient)
 
 			// create the file itself
 			fileSize := int64(f.creationProperties.sizeBytes(c, options.defaultSize))

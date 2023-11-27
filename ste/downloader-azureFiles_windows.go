@@ -22,7 +22,7 @@ import (
 // This file implements the windows-triggered smbPropertyAwareDownloader interface.
 
 // works for both folders and files
-func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
 	if txInfo.Destination == common.Dev_Null {
 		return nil // Do nothing.
 	}
@@ -109,7 +109,7 @@ func (bd *azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceIn
 var globalSetAclMu = &sync.Mutex{}
 
 // works for both folders and files
-func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
 	if txInfo.Destination == common.Dev_Null {
 		return nil // Do nothing.
 	}

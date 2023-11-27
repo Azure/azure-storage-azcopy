@@ -136,7 +136,86 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		jobsAdmin.JobsAdmin.LogToJobLog(folderMessage, common.LogInfo)
 	}
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo)
+	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
+		cca.trailingDot = common.ETrailingDotOption.Disable()
+	}
+	
+	copyJobTemplate := &common.CopyJobPartOrderRequest{
+		JobID:               cca.jobID,
+		CommandString:       cca.commandString,
+		FromTo:              cca.fromTo,
+		Fpo:                 fpo,
+		SymlinkHandlingType: cca.symlinkHandling,
+		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
+		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
+		CredentialInfo:      cca.credentialInfo,
+
+		// flags
+		BlobAttributes: common.BlobTransferAttributes{
+			PreserveLastModifiedTime: cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
+			PutMd5:                   cca.putMd5,
+			MD5ValidationOption:      cca.md5ValidationOption,
+			BlockSizeInBytes:         cca.blockSize},
+		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
+		ForceIfReadOnly:                cca.forceIfReadOnly,
+		LogLevel:                       azcopyLogVerbosity,
+		PreserveSMBPermissions:         cca.preservePermissions,
+		PreserveSMBInfo:                cca.preserveSMBInfo,
+		PreservePOSIXProperties:        cca.preservePOSIXProperties,
+		S2SSourceChangeValidation:      true,
+		DestLengthValidation:           true,
+		S2SGetPropertiesInBackend:      true,
+		S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
+		CpkOptions:                     cca.cpkOptions,
+		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+
+		S2SSourceCredentialType: cca.s2sSourceCredentialType,
+		FileAttributes: common.FileTransferAttributes{
+			TrailingDot: cca.trailingDot,
+		},
+	}
+
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	
+	// Create Source Client. 
+	var azureFileSpecificOptions any
+	if cca.fromTo.From() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+		}
+	}
+
+	sourceURL, _ := cca.source.String()
+	copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
+		cca.fromTo.From(),
+		sourceURL,
+		srcCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create Destination client
+	if cca.fromTo.To() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
+		}
+	}
+	
+	dstURL, _ := cca.destination.String()
+	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
+		cca.fromTo.To(),
+		dstURL,
+		dstCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()

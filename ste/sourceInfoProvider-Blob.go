@@ -26,60 +26,31 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
-	"strings"
 	"time"
 )
 
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
+	source *blob.Client
 }
 
 func (p *blobSourceInfoProvider) IsDFSSource() bool {
 	return p.jptm.FromTo().From() == common.ELocation.BlobFS()
 }
 
-func (p *blobSourceInfoProvider) internalPresignedURL(useHNS bool) (string, error) {
-	uri, err := p.defaultRemoteSourceInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return "", err
-	}
-
-	// This will have no real effect on non-standard endpoints (e.g. emulator, stack), and *may* work, but probably won't.
-	// However, Stack/Emulator don't support HNS, so, this won't get use.
-	bURLParts, err := blob.ParseURL(uri)
-	if err != nil {
-		return "", err
-	}
-	if useHNS {
-		bURLParts.Host = strings.Replace(bURLParts.Host, ".blob", ".dfs", 1)
-
-		if bURLParts.BlobName != "" {
-			bURLParts.BlobName = strings.TrimSuffix(bURLParts.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
-		} else {
-			bURLParts.ContainerName += "/" // container level perms MUST have a /
-		}
-	} else {
-		bURLParts.Host = strings.Replace(bURLParts.Host, ".dfs", ".blob", 1)
-	}
-
-	return bURLParts.String(), nil
+func (p *blobSourceInfoProvider) PreSignedSourceURL() (string, error) {
+	return p.source.URL(), nil // prefer to return the blob URL; data can be read from either endpoint.
 }
 
-func (p *blobSourceInfoProvider) PreSignedSourceURL() (string, error) {
-	return p.internalPresignedURL(false) // prefer to return the blob URL; data can be read from either endpoint.
+func (p *blobSourceInfoProvider) RawSource() string {
+	return p.source.URL()
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
-	source, err := p.internalPresignedURL(false)
-	if err != nil {
-		return "", err
-	}
-	blobClient := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
-
 	ctx := p.jptm.Context()
 
-	resp, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
+	resp, err := p.source.DownloadStream(ctx, &blob.DownloadStreamOptions{
 		CPKInfo:      p.jptm.CpkInfo(),
 		CPKScopeInfo: p.jptm.CpkScopeInfo(),
 	})
@@ -89,7 +60,7 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 
 	symlinkBuf, err := io.ReadAll(resp.NewRetryReader(ctx, &blob.RetryReaderOptions{
 		MaxRetries:   5,
-		OnFailedRead: common.NewBlobReadLogFunc(p.jptm, source),
+		OnFailedRead: common.NewBlobReadLogFunc(p.jptm, p.jptm.Info().Source),
 	}))
 	if err != nil {
 		return "", err
@@ -129,27 +100,28 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
+	var ret = &blobSourceInfoProvider{
+		defaultRemoteSourceInfoProvider: *base,
+	}
+
+	bsc, err := jptm.SrcServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, err
+	}
+	ret.source = bsc.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
+
+	return ret, nil
 }
 
 func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
-	// We can only get access control via HNS, so we MUST switch here.
-	presignedURL, err := p.internalPresignedURL(true)
+	dsc, err := p.jptm.SrcServiceClient().DatalakeServiceClient()
 	if err != nil {
 		return nil, err
 	}
-	parsedURL, err := blob.ParseURL(presignedURL)
-	if err != nil {
-		return nil, err
-	}
-	parsedURL.Host = strings.ReplaceAll(parsedURL.Host, ".blob", ".dfs")
-	if parsedURL.BlobName != "" {
-		parsedURL.BlobName = strings.TrimSuffix(parsedURL.BlobName, "/") // BlobFS doesn't handle folders correctly like this.
-	} else {
-		parsedURL.BlobName = "/" // container level perms MUST have a /
-	}
-	fileClient := common.CreateDatalakeFileClient(parsedURL.String(), p.jptm.CredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.ClientOptions())
-	resp, err := fileClient.GetAccessControl(p.jptm.Context(), nil)
+
+	sourceDatalakeClient := dsc.NewFileSystemClient(p.jptm.Info().SrcContainer).NewFileClient(p.jptm.Info().SrcFilePath)
+
+	resp, err := sourceDatalakeClient.GetAccessControl(p.jptm.Context(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -169,14 +141,7 @@ func (p *blobSourceInfoProvider) BlobType() blob.BlobType {
 
 func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	// We can't set a custom LMT on HNS, so it doesn't make sense to swap here.
-	source, err := p.internalPresignedURL(false)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	blobClient := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
-
-	properties, err := blobClient.GetProperties(p.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: p.jptm.CpkInfo()})
+	properties, err := p.source.GetProperties(p.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: p.jptm.CpkInfo()})
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -184,17 +149,11 @@ func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 }
 
 func (p *blobSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
-	source, err := p.internalPresignedURL(false)
-	if err != nil {
-		return nil, err
-	}
-
-	blobClient := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 	var rangeGetContentMD5 *bool
 	if count <= common.MaxRangeGetSize {
 		rangeGetContentMD5 = to.Ptr(true)
 	}
-	response, err := blobClient.DownloadStream(p.jptm.Context(),
+	response, err := p.source.DownloadStream(p.jptm.Context(),
 		&blob.DownloadStreamOptions{
 			Range:              blob.HTTPRange{Offset: offset, Count: count},
 			RangeGetContentMD5: rangeGetContentMD5,

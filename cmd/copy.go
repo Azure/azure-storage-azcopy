@@ -26,9 +26,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"io"
 	"math"
 	"net/url"
@@ -37,6 +34,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -1282,7 +1283,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := createClientOptions(common.LogNone)
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger) }
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1290,8 +1291,17 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		return fmt.Errorf("fatal: cannot parse source blob URL due to error: %s", err.Error())
 	}
 
+	var blobClient *blockblob.Client
+	if credInfo.CredentialType.IsAzureOAuth() {
+		blobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
+	} else {
+		blobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
+	}
+	if err != nil {
+		return fmt.Errorf("fatal: Could not create client: " + err.Error())
+	}
+
 	// step 3: start download
-	blobClient := common.CreateBlobClient(u.String(), credInfo, nil, options)
 
 	blobStream, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{
 		CPKInfo:      cca.CpkOptions.GetCPKInfo(),
@@ -1329,7 +1339,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := createClientOptions(common.LogNone)
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1338,7 +1348,15 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
-	blockBlobClient := common.CreateBlockBlobClient(u.String(), credInfo, nil, options)
+	var blockBlobClient *blockblob.Client
+	if credInfo.CredentialType.IsAzureOAuth() {
+		blockBlobClient, err = blockblob.NewClient(u.String(), credInfo.OAuthTokenInfo.TokenCredential, options)
+	} else {
+		blockBlobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
+	}
+	if err != nil {
+		return fmt.Errorf("fatal: Could not construct blob client: %s", err.Error())
+	}
 
 	metadataString := cca.metadata
 	metadataMap := common.Metadata{}
@@ -1375,6 +1393,17 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 // get source credential - if there is a token it will be used to get passed along our pipeline
 func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialInfo, error) {
+	switch cca.FromTo.From() {
+	case common.ELocation.Local(), common.ELocation.Benchmark():
+		return common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}, nil
+	case common.ELocation.S3():
+		return common.CredentialInfo{CredentialType: common.ECredentialType.S3AccessKey()}, nil
+	case common.ELocation.GCP():
+		return common.CredentialInfo{CredentialType: common.ECredentialType.GoogleAppCredentials()}, nil
+	case common.ELocation.Pipe():
+		panic("Invalid Source")
+	}
+
 	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions)
 	if err != nil {
 		return srcCredInfo, err
@@ -1399,13 +1428,15 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 			// get token from env var or cache
 			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 				return srcCredInfo, err
-			} else {
-				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-				jpo.CredentialInfo.OAuthTokenInfo = *tokenInfo
-			}
-			jpo.CredentialInfo.S2SSourceTokenCredential, err = common.GetSourceBlobCredential(srcCredInfo, common.CredentialOpOptions{LogError: glcm.Info})
-			if err != nil {
+			} else if tokenCred, err := tokenInfo.GetTokenCredential(); err != nil {
 				return srcCredInfo, err
+			} else {
+				scopes := []string{common.StorageScope}
+				if jpo.S2SSourceCredentialType == common.ECredentialType.MDOAuthToken() {
+					scopes = []string{common.ManagedDiskScope}
+				}
+				srcCredInfo.OAuthTokenInfo = *tokenInfo
+				jpo.CredentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenCred, scopes)
 			}
 			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
 			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
@@ -1498,12 +1529,51 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	from := cca.FromTo.From()
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	var azureFileSpecificOptions any
+	if cca.FromTo.From() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+		}
+	}
+
+	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+	if err != nil {
+		return err
+	}
+	sourceURL, _ := cca.Source.String()
+	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
+		cca.FromTo.From(),
+		sourceURL,
+		sourceCredInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+	if err != nil {
+		return err
+	}
+
+	if cca.FromTo.To() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File()),
+		}
+	}
+	dstURL, _ := cca.Destination.String()
+	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
+		cca.FromTo.To(),
+		dstURL,
+		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+	if err != nil {
+		return err
+	}
 
 	jobPartOrder.DestinationRoot = cca.Destination
-
 	jobPartOrder.SourceRoot = cca.Source
-	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, from)
+	jobPartOrder.SourceRoot.Value, err = GetResourceRoot(cca.Source.Value, cca.FromTo.From())
 	if err != nil {
 		return err
 	}
@@ -2049,5 +2119,5 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 }

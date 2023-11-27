@@ -24,16 +24,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -375,6 +375,8 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		return output, nil
 	}
 
+	options := createClientOptions(azcopyScanningLogger)
+
 	switch location {
 	case common.ELocation.Local():
 		_, err := common.OSStat(resource.ValueLocal())
@@ -438,7 +440,14 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		if err != nil {
+			return nil, err
+		}
+		bsc, err := c.BlobServiceClient()
+		if err != nil {
+			return nil, err
+		}
 
 		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
@@ -473,7 +482,17 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		fileURLParts.ShareName = ""
 		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
-		fsc := common.CreateFileServiceClient(fileURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel), to.Ptr(trailingDot), destination)
+		fileOptions := &common.FileClientOptions{
+				AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
+		}
+		c, err := common.GetServiceClientForLocation(common.ELocation.File(), fileURLParts.String(), credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		if err != nil {
+			return nil, err
+		}
+		fsc, err :=  c.FileServiceClient()
+		if err != nil {
+			return nil, err
+		}
 
 		if shareName == "" || strings.Contains(shareName, "*") {
 			if !recursive {
@@ -506,7 +525,16 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel))
+		
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		if err != nil {
+			return nil, err
+		}
+		bsc, err := c.BlobServiceClient()
+		if err != nil {
+			return nil, err
+		}
+
 
 		includeDirectoryStubs = true // DFS is supposed to feed folders in
 		if containerName == "" || strings.Contains(containerName, "*") {
