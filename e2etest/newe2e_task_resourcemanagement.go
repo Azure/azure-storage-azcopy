@@ -91,7 +91,14 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 	definition.ApplyDefinition(a, target, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
 		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
-			cProps := manager.(ContainerResourceManager).GetProperties(a)
+			cRes := manager.(ContainerResourceManager)
+
+			if !definition.ShouldExist() {
+				a.AssertNow("container must not exist", Equal{}, cRes.Exists(), false)
+				return
+			}
+
+			cProps := cRes.GetProperties(a)
 			vProps := definition.(ResourceDefinitionContainer).Properties
 
 			ValidateMetadata(a, vProps.Metadata, cProps.Metadata)
@@ -110,6 +117,11 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objMan := manager.(ObjectResourceManager)
 			objDef := definition.(ResourceDefinitionObject)
+
+			if !objDef.ShouldExist() {
+				a.AssertNow("object must not exist", Equal{}, objMan.Exists(), false)
+				return
+			}
 
 			oProps := objMan.GetProperties(a)
 			vProps := objDef.ObjectProperties

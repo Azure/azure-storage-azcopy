@@ -134,6 +134,12 @@ type BlobContainerResourceManager struct {
 	internalClient  *container.Client
 }
 
+func (b *BlobContainerResourceManager) Exists() bool {
+	_, err := b.internalClient.GetProperties(ctx, nil)
+
+	return err == nil || !bloberror.HasCode(err, bloberror.ContainerNotFound, bloberror.ContainerBeingDeleted, bloberror.ResourceNotFound)
+}
+
 func (b *BlobContainerResourceManager) Account() AccountResourceManager {
 	return b.internalAccount
 }
@@ -616,4 +622,10 @@ func (b *BlobObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	a.NoError("Read body", err)
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (b *BlobObjectResourceManager) Exists() bool {
+	_, err := b.internalClient.GetProperties(ctx, nil)
+
+	return err == nil || !bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ContainerNotFound, bloberror.ContainerBeingDeleted, bloberror.ResourceNotFound)
 }

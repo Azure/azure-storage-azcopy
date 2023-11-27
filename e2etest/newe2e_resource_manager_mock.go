@@ -125,6 +125,10 @@ type MockContainerResourceManager struct {
 	containerName    string
 }
 
+func (m *MockContainerResourceManager) Exists() bool {
+	return true
+}
+
 func (m *MockContainerResourceManager) URI(a Asserter, withSas bool) string {
 	return ""
 }
@@ -252,6 +256,6 @@ func (m *MockObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	return bytes.NewReader([]byte{})
 }
 
-func (m *MockObjectResourceManager) GetResourceTarget(a Asserter) string {
-	return ""
+func (m *MockObjectResourceManager) Exists() bool {
+	return true
 }

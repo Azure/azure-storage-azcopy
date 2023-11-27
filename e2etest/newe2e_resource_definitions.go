@@ -15,6 +15,9 @@ type ResourceDefinition interface {
 	MatchAdoptiveChild(a Asserter, target ResourceManager) (ResourceManager, ResourceDefinition)
 	// ApplyDefinition manages tree traversal by itself. applicationFunctions should realistically be creation of the underlying resource or validation.
 	ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition))
+	// ShouldExist determines whether the resource should exist.
+	// This should be checked in functions called by ApplyDefinition, as it is intended to alter creation and validation behavior.
+	ShouldExist() bool
 }
 
 type MatchedResourceDefinition[T ResourceManager] interface {
@@ -67,6 +70,10 @@ func (r ResourceDefinitionService) DefinitionTarget() cmd.LocationLevel {
 	return cmd.ELocationLevel.Service()
 }
 
+func (r ResourceDefinitionService) ShouldExist() bool {
+	return true // Account can't not exist, won't be used in validation, etc.
+}
+
 func (r ResourceDefinitionService) resourceDefinition() ServiceResourceManager {
 	panic("marker method")
 }
@@ -77,6 +84,8 @@ type ResourceDefinitionContainer struct {
 	Properties    ContainerProperties
 
 	Objects ObjectResourceMapping
+	// ContainerShouldExist is true unless set to false. Useful in negative validation (e.g. remove)
+	ContainerShouldExist *bool
 }
 
 func (r ResourceDefinitionContainer) GenerateAdoptiveParent(a Asserter) ResourceDefinition {
@@ -130,12 +139,18 @@ func (r ResourceDefinitionContainer) DefinitionTarget() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
 
+func (r ResourceDefinitionContainer) ShouldExist() bool {
+	return r.ContainerShouldExist == nil || *r.ContainerShouldExist
+}
+
 type ResourceDefinitionObject struct {
 	// ObjectName is overwritten if used as a part of a parent definition
 	ObjectName *string
 
 	ObjectProperties
 	Body ObjectContentContainer
+	// ObjectShouldExist is true unless set to false. Useful in negative validation (e.g. remove)
+	ObjectShouldExist *bool
 }
 
 func (r ResourceDefinitionObject) GenerateAdoptiveParent(a Asserter) ResourceDefinition {
@@ -168,4 +183,8 @@ func (r ResourceDefinitionObject) DefinitionTarget() cmd.LocationLevel {
 
 func (r ResourceDefinitionObject) resourceDefinition() ObjectResourceManager {
 	panic("marker method")
+}
+
+func (r ResourceDefinitionObject) ShouldExist() bool {
+	return r.ObjectShouldExist == nil || *r.ObjectShouldExist
 }

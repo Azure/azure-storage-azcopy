@@ -121,6 +121,12 @@ type BlobFSFileSystemResourceManager struct {
 	internalClient *filesystem.Client
 }
 
+func (b *BlobFSFileSystemResourceManager) Exists() bool {
+	_, err := b.internalClient.GetProperties(ctx, nil)
+
+	return err == nil || !datalakeerror.HasCode(err, datalakeerror.FileSystemNotFound, datalakeerror.FileSystemBeingDeleted, datalakeerror.ResourceNotFound)
+}
+
 func (b *BlobFSFileSystemResourceManager) Parent() ResourceManager {
 	return b.Service
 }
@@ -470,4 +476,10 @@ func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	a.NoError("Read body", err)
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (b *BlobFSPathResourceProvider) Exists() bool {
+	_, err := b.getFileClient().GetProperties(ctx, nil) // under the hood it's just a path, no special restype flag.
+
+	return err == nil || !datalakeerror.HasCode(err, datalakeerror.PathNotFound, datalakeerror.FileSystemNotFound, datalakeerror.FileSystemBeingDeleted, datalakeerror.ResourceNotFound)
 }

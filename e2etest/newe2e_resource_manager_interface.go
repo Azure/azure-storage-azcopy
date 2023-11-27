@@ -106,7 +106,10 @@ type ContainerResourceManager interface {
 	// ListObjects treats prefixOrDirectory as a prefix when in a non-hierarchical service, and as a directory in a hierarchical service.
 	// The map will be the real path, relative to container root, not to prefix/directory.
 	ListObjects(a Asserter, prefixOrDirectory string, recursive bool) map[string]ObjectProperties
+	// GetObject scales up to a target ObjectResourceManager
 	GetObject(a Asserter, path string, eType common.EntityType) ObjectResourceManager
+	// Exists determines if the container in question exists
+	Exists() bool
 }
 
 type ContainerProperties struct {
@@ -152,6 +155,9 @@ type ObjectResourceManager interface {
 	SetObjectProperties(a Asserter, props ObjectProperties)
 
 	Download(a Asserter) io.ReadSeeker
+
+	// Exists determines if the object in question exists
+	Exists() bool
 }
 
 type ObjectProperties struct {

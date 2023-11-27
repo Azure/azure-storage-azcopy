@@ -128,6 +128,12 @@ type FileShareResourceManager struct {
 	internalClient *share.Client
 }
 
+func (s *FileShareResourceManager) Exists() bool {
+	_, err := s.internalClient.GetProperties(ctx, nil)
+
+	return err == nil || !fileerror.HasCode(err, fileerror.ShareNotFound, fileerror.ShareBeingDeleted, fileerror.ResourceNotFound)
+}
+
 func (s *FileShareResourceManager) Parent() ResourceManager {
 	return s.Service
 }
@@ -623,4 +629,15 @@ func (f *FileObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	a.NoError("Read body", err)
 
 	return bytes.NewReader(buf.Bytes())
+}
+
+func (f *FileObjectResourceManager) Exists() bool {
+	var err error
+	if f.entityType != common.EEntityType.Folder() {
+		_, err = f.getFileClient().GetProperties(ctx, nil)
+	} else {
+		_, err = f.getDirClient().GetProperties(ctx, nil)
+	}
+
+	return err == nil || !fileerror.HasCode(err, fileerror.ParentNotFound, fileerror.ShareNotFound, fileerror.ShareBeingDeleted, fileerror.ResourceNotFound)
 }
