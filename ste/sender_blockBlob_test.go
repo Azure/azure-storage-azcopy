@@ -26,7 +26,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/stretchr/testify/assert"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -87,9 +86,8 @@ func TestDeleteDstBlob(t *testing.T) {
 	}
 
 	bbSender := &blockBlobSenderBase{
-		jptm:                               &jptm,
-		destBlockBlobClient:                dstBlobClient,
-		deleteDstBlobWithUncommittedBlocks: &sync.Once{},
+		jptm:                &jptm,
+		destBlockBlobClient: dstBlobClient,
 	}
 
 	bbSender.DeleteDstBlob()

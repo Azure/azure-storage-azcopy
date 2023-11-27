@@ -62,8 +62,6 @@ type blockBlobSenderBase struct {
 	muBlockIDs             *sync.Mutex
 	blockNamePrefix        string
 	completedBlockList     map[int]string
-
-	deleteDstBlobWithUncommittedBlocks *sync.Once
 }
 
 func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
@@ -427,17 +425,15 @@ func (s *blockBlobSenderBase) GetDestinationLength() (int64, error) {
 }
 
 func (s *blockBlobSenderBase) DeleteDstBlob() {
-	// Delete destination blob with uncommitted blocks if indicated by flag once only
-	s.deleteDstBlobWithUncommittedBlocks.Do(func() {
-		resp, err := s.destBlockBlobClient.GetBlockList(s.jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
+	// Delete destination blob with uncommitted blocks, called in Prologue
+	resp, err := s.destBlockBlobClient.GetBlockList(s.jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
+	if err != nil {
+		s.jptm.LogError(s.destBlockBlobClient.URL(), "GetBlockList with Uncommitted BlockListType failed ", err)
+	}
+	if len(resp.UncommittedBlocks) > 0 {
+		_, err := s.destBlockBlobClient.Delete(s.jptm.Context(), nil)
 		if err != nil {
-			s.jptm.LogError(s.destBlockBlobClient.URL(), "GetBlockList with Uncommitted BlockListType failed ", err)
+			s.jptm.LogError(s.destBlockBlobClient.URL(), "Deleting destination blob with uncommitted blocks failed ", err)
 		}
-		if len(resp.UncommittedBlocks) > 0 {
-			_, err := s.destBlockBlobClient.Delete(s.jptm.Context(), nil)
-			if err != nil {
-				s.jptm.LogError(s.destBlockBlobClient.URL(), "Deleting destination blob with uncommitted blocks failed ", err)
-			}
-		}
-	})
+	}
 }
