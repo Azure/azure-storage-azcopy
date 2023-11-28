@@ -498,7 +498,15 @@ func (s *scenario) validateProperties() {
 			destProps = s.state.dest.getAllProperties(s.a)
 		}
 
-		destName := fixSlashes(path.Join(addedDirAtDest, f.name), s.fromTo.To())
+		var destName string
+		if addedDirAtDest == "" {
+			destName = f.name
+		} else if f.name == "" {
+			destName = addedDirAtDest
+		} else {
+			destName = addedDirAtDest + "/" + f.name
+		}
+		destName = fixSlashes(destName, s.fromTo.To())
 		actual, ok := destProps[destName]
 		if !ok {
 			// this shouldn't happen, because we only run if validateTransferStates passed, but check anyway
@@ -555,9 +563,17 @@ func (s *scenario) validateContent() {
 		}
 		if f.hasContentToValidate() {
 			expectedContentMD5 := f.creationProperties.contentHeaders.contentMD5
-			resourceRelPath := fixSlashes(path.Join(addedDirAtDest, f.name), s.fromTo.To())
+			var destName string
+			if addedDirAtDest == "" {
+				destName = f.name
+			} else if f.name == "" {
+				destName = addedDirAtDest
+			} else {
+				destName = addedDirAtDest + "/" + f.name
+			}
+			destName = fixSlashes(destName, s.fromTo.To())
 			actualContent := s.state.dest.downloadContent(s.a, downloadContentOptions{
-				resourceRelPath: resourceRelPath,
+				resourceRelPath: destName,
 				downloadBlobContentOptions: downloadBlobContentOptions{
 					cpkInfo:      common.GetCpkInfo(s.p.cpkByValue),
 					cpkScopeInfo: common.GetCpkScopeInfo(s.p.cpkByName),
