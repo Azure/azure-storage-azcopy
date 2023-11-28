@@ -75,7 +75,9 @@ func Test500FollowedBy412Logic(t *testing.T) {
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
-			Source: sasURL,
+			Source:       sasURL,
+			SrcContainer: cName,
+			SrcFilePath:  sourceName,
 		}),
 		fromTo: common.EFromTo.BlobBlob(),
 	}

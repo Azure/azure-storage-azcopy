@@ -214,7 +214,9 @@ func TestBlockBlob(t *testing.T) {
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
-			Source: sasURL,
+			Source:       sasURL,
+			SrcContainer: cName,
+			SrcFilePath:  bName,
 		}),
 		fromTo: common.EFromTo.BlobBlob(),
 	}
@@ -280,7 +282,9 @@ func TestShareFile(t *testing.T) {
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
-			Source: sasURL,
+			Source:       sasURL,
+			SrcContainer: sName,
+			SrcFilePath:  fName,
 		}),
 		fromTo: common.EFromTo.FileBlob(),
 	}
@@ -347,7 +351,9 @@ func TestShareDirectory(t *testing.T) {
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
-			Source: sasURL,
+			Source:       sasURL,
+			SrcContainer: sName,
+			SrcFilePath:  dName,
 		}),
 		fromTo: common.EFromTo.FileBlob(),
 	}
@@ -386,7 +392,9 @@ func TestGCP(t *testing.T) {
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
-			Source: rawURL,
+			Source:       rawURL,
+			SrcContainer: bName,
+			SrcFilePath:  oName,
 		}),
 		fromTo: common.EFromTo.GCPBlob(),
 	}
@@ -435,7 +443,8 @@ func TestLocal(t *testing.T) {
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
-			Source: f.Name(),
+			Source:      f.Name(),
+			SrcFilePath: fName,
 		}),
 		fromTo: common.EFromTo.LocalBlob(),
 	}
@@ -489,7 +498,9 @@ func TestS3(t *testing.T) {
 
 	jptm := testJobPartTransferManager{
 		info: to.Ptr(TransferInfo{
-			Source: rawURL,
+			Source:       rawURL,
+			SrcContainer: bName,
+			SrcFilePath:  oName,
 		}),
 		fromTo: common.EFromTo.S3Blob(),
 	}
