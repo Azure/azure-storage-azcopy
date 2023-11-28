@@ -22,16 +22,16 @@ package common
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"io"
 	"log"
-	"os"
 	"path"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 )
 
 type ILogger interface {
@@ -53,12 +53,14 @@ type ILoggerResetable interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+const maxLogSize = 500 * 1024 * 1024
+
 type jobLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	jobID             JobID
 	minimumLevelToLog LogLevel // The maximum customer-desired log level for this job
-	file              *os.File          // The job's log file
+	file              io.WriteCloser          // The job's log file
 	logFileFolder     string            // The log file's parent folder, needed for opening the file at the right place
 	logger            *log.Logger       // The Job's logger
 	sanitizer         LogSanitizer
@@ -80,8 +82,7 @@ func (jl *jobLogger) OpenLog() {
 		return
 	}
 
-	file, err := os.OpenFile(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log"),
-		os.O_RDWR|os.O_CREATE|os.O_APPEND, DEFAULT_FILE_PERM)
+	file, err := NewRotatingWriter(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix), maxLogSize)
 	PanicIfErr(err)
 
 	jl.file = file
