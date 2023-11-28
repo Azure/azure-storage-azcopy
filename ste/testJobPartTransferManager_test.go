@@ -60,8 +60,22 @@ func (t testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 }
 
 func (t testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
-	//TODO implement me
-	panic("implement me")
+	options := t.ClientOptions()
+	var azureFileSpecificOptions any
+	if t.fromTo.To() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot:       true,
+			AllowSourceTrailingDot: true,
+		}
+	}
+	client, _ := common.GetServiceClientForLocation(
+		t.fromTo.To(),
+		t.info.Destination,
+		t.CredentialInfo().OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+	return client
 }
 
 func (t testJobPartTransferManager) SourceTrailingDot() *common.TrailingDotOption {
