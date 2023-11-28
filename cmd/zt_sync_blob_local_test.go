@@ -87,7 +87,7 @@ func TestSyncDownloadWithSingleFile(t *testing.T) {
 		runSyncAndVerify(a, raw, func(err error) {
 			a.Nil(err)
 
-			validateDownloadTransfersAreScheduled(a, "", "", []string{""}, mockedRPC)
+			validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, []string{""}, mockedRPC)
 		})
 	}
 }
@@ -124,7 +124,7 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 		a.Equal(len(blobList), len(mockedRPC.transfers))
 
 		// validate that the right transfers were sent
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
@@ -136,7 +136,8 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -180,7 +181,7 @@ func TestSyncDownloadWithIdenticalDestination(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
 }
 
@@ -214,7 +215,7 @@ func TestSyncDownloadWithMismatchedDestination(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", expectedOutput, mockedRPC)
+		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, expectedOutput, mockedRPC)
 
 		// make sure the extra files were deleted
 		currentDstFileList, err := os.ReadDir(dstDirName)
@@ -225,7 +226,7 @@ func TestSyncDownloadWithMismatchedDestination(t *testing.T) {
 			}
 		}
 
-		a.False( extraFilesFound)
+		a.False(extraFilesFound)
 	})
 }
 
@@ -263,7 +264,7 @@ func TestSyncDownloadWithIncludePatternFlag(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobsToInclude, mockedRPC)
 	})
 }
 
@@ -300,7 +301,7 @@ func TestSyncDownloadWithExcludePatternFlag(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
 }
 
@@ -344,7 +345,7 @@ func TestSyncDownloadWithIncludeAndExcludePatternFlag(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobsToInclude, mockedRPC)
 	})
 }
 
@@ -382,7 +383,7 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 	})
 
 	// now set up the destination with the files to be excluded, and make sure they are not touched
@@ -394,7 +395,7 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(a, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, blobList, mockedRPC)
 
 		// make sure the extra files were not touched
 		for _, blobName := range blobsToExclude {
@@ -632,7 +633,8 @@ func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }

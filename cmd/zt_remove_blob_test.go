@@ -109,7 +109,8 @@ func TestRemoveBlobsUnderContainer(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -157,7 +158,8 @@ func TestRemoveBlobsUnderVirtualDir(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -192,7 +194,7 @@ func TestRemoveWithIncludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, blobsToInclude, mockedRPC)
 	})
 }
 
@@ -227,7 +229,7 @@ func TestRemoveWithExcludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, blobList, mockedRPC)
 	})
 }
 
@@ -268,7 +270,7 @@ func TestRemoveWithIncludeAndExcludeFlag(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
+		validateRemoveTransfersAreScheduled(a, true, blobsToInclude, mockedRPC)
 	})
 }
 
@@ -442,7 +444,8 @@ func TestRemoveBlobsWithDirectoryStubs(t *testing.T) {
 		a.Equal(20, len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -607,8 +610,8 @@ func TestDryrunRemoveBlobsUnderContainerJson(t *testing.T) {
 		errMarshal := json.Unmarshal([]byte(msg), &deleteTransfer)
 		a.Nil(errMarshal)
 		// comparing some values of deleteTransfer
-		a.Equal(deleteTransfer.Source, blobName[0])
-		a.Equal(deleteTransfer.Destination, blobName[0])
+		a.Equal(deleteTransfer.Source, "/"+blobName[0])
+		a.Equal(deleteTransfer.Destination, "/"+blobName[0])
 		a.Equal("File", deleteTransfer.EntityType.String())
 		a.Equal("BlockBlob", string(deleteTransfer.BlobType))
 	})
@@ -687,7 +690,8 @@ func TestRemoveBlobsUnderContainerWithFromTo(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -736,7 +740,8 @@ func TestRemoveBlobsUnderVirtualDirWithFromTo(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -756,7 +761,7 @@ func TestPermDeleteSnapshotsVersionsUnderSingleBlob(t *testing.T) {
 	a.Equal(3, len(blobList))
 
 	pager := cc.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix: to.Ptr(blobName),
+		Prefix:  to.Ptr(blobName),
 		Include: container.ListBlobsInclude{Deleted: true, Snapshots: true},
 	})
 	list, err := pager.NextPage(ctx)

@@ -353,7 +353,7 @@ func (scenarioHelper) generatePageBlobsFromList(a *assert.Assertions, containerC
 			int64(len(data)),
 			&pageblob.CreateOptions{
 				SequenceNumber: to.Ptr(int64(0)),
-				HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
+				HTTPHeaders:    &blob.HTTPHeaders{BlobContentType: to.Ptr("text/random")},
 			})
 		a.Nil(err)
 
@@ -846,8 +846,8 @@ func validateDownloadTransfersAreScheduled(a *assert.Assertions, sourcePrefix st
 	validateCopyTransfersAreScheduled(a, true, false, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
-func validateS2SSyncTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
-	validateCopyTransfersAreScheduled(a, true, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
+func validateS2SSyncTransfersAreScheduled(a *assert.Assertions, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(a, true, true, common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
 }
 
 func validateCopyTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool, isDstEncoded bool, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
@@ -899,7 +899,7 @@ func validateRemoveTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
-		srcRelativeFilePath := transfer.Source
+		srcRelativeFilePath := strings.TrimPrefix(transfer.Source, "/")
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
@@ -920,12 +920,12 @@ func getDefaultSyncRawInput(sra, dst string) rawSyncCmdArgs {
 	deleteDestination := common.EDeleteDestination.True()
 
 	return rawSyncCmdArgs{
-		src:                 sra,
-		dst:                 dst,
-		recursive:           true,
-		deleteDestination:   deleteDestination.String(),
-		md5ValidationOption: common.DefaultHashValidationOption.String(),
-		compareHash:         common.ESyncHashType.None().String(),
+		src:                  sra,
+		dst:                  dst,
+		recursive:            true,
+		deleteDestination:    deleteDestination.String(),
+		md5ValidationOption:  common.DefaultHashValidationOption.String(),
+		compareHash:          common.ESyncHashType.None().String(),
 		localHashStorageMode: common.EHashStorageMode.Default().String(),
 	}
 }
