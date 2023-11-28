@@ -6,6 +6,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
@@ -73,9 +74,9 @@ func Test500FollowedBy412Logic(t *testing.T) {
 	a.Nil(err)
 
 	jptm := testJobPartTransferManager{
-		info: TransferInfo{
+		info: to.Ptr(TransferInfo{
 			Source: sasURL,
-		},
+		}),
 		fromTo: common.EFromTo.BlobBlob(),
 	}
 	blobSIP, err := newBlobSourceInfoProvider(jptm)
