@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -170,7 +171,7 @@ func TestBenchmark(t *testing.T) {
 	a := assert.New(t)
 
 	jptm := testJobPartTransferManager{
-		info:   TransferInfo{},
+		info:   nil,
 		fromTo: common.EFromTo.BenchmarkBlob(),
 	}
 	benchSIP, err := newBenchmarkSourceInfoProvider(jptm)
@@ -212,9 +213,9 @@ func TestBlockBlob(t *testing.T) {
 	a.Nil(err)
 
 	jptm := testJobPartTransferManager{
-		info: TransferInfo{
+		info: to.Ptr(TransferInfo{
 			Source: sasURL,
-		},
+		}),
 		fromTo: common.EFromTo.BlobBlob(),
 	}
 	blobSIP, err := newBlobSourceInfoProvider(jptm)
@@ -278,9 +279,9 @@ func TestShareFile(t *testing.T) {
 	a.Nil(err)
 
 	jptm := testJobPartTransferManager{
-		info: TransferInfo{
+		info: to.Ptr(TransferInfo{
 			Source: sasURL,
-		},
+		}),
 		fromTo: common.EFromTo.FileBlob(),
 	}
 	fileSIP, err := newFileSourceInfoProvider(jptm)
@@ -345,9 +346,9 @@ func TestShareDirectory(t *testing.T) {
 	sasURL = fileURLParts.String()
 
 	jptm := testJobPartTransferManager{
-		info: TransferInfo{
+		info: to.Ptr(TransferInfo{
 			Source: sasURL,
-		},
+		}),
 		fromTo: common.EFromTo.FileBlob(),
 	}
 	fileSIP, err := newFileSourceInfoProvider(jptm)
@@ -384,9 +385,9 @@ func TestGCP(t *testing.T) {
 	rawURL := fmt.Sprintf("https://storage.cloud.google.com/%s/%s", bName, oName)
 
 	jptm := testJobPartTransferManager{
-		info: TransferInfo{
+		info: to.Ptr(TransferInfo{
 			Source: rawURL,
-		},
+		}),
 		fromTo: common.EFromTo.GCPBlob(),
 	}
 	gcpSIP, err := newGCPSourceInfoProvider(jptm)
@@ -433,9 +434,9 @@ func TestLocal(t *testing.T) {
 	f.Close()
 
 	jptm := testJobPartTransferManager{
-		info: TransferInfo{
+		info: to.Ptr(TransferInfo{
 			Source: f.Name(),
-		},
+		}),
 		fromTo: common.EFromTo.LocalBlob(),
 	}
 	localSIP, err := newLocalSourceInfoProvider(jptm)
@@ -487,9 +488,9 @@ func TestS3(t *testing.T) {
 	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", "", bName, oName)
 
 	jptm := testJobPartTransferManager{
-		info: TransferInfo{
+		info: to.Ptr(TransferInfo{
 			Source: rawURL,
-		},
+		}),
 		fromTo: common.EFromTo.S3Blob(),
 	}
 	s3SIP, err := newS3SourceInfoProvider(jptm)

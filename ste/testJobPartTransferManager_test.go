@@ -33,8 +33,35 @@ import (
 var _ IJobPartTransferMgr = testJobPartTransferManager{}
 
 type testJobPartTransferManager struct {
-	info   TransferInfo
+	info   *TransferInfo
 	fromTo common.FromTo
+}
+
+func (t testJobPartTransferManager) Info() *TransferInfo {
+	return t.info
+}
+
+func (t testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
+	options := t.S2SSourceClientOptions()
+	var azureFileSpecificOptions any
+	if t.fromTo.From() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot: true,
+		}
+	}
+	client, _ := common.GetServiceClientForLocation(
+		t.fromTo.From(),
+		t.info.Source,
+		t.S2SSourceCredentialInfo().OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+	return client
+}
+
+func (t testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (t testJobPartTransferManager) SourceTrailingDot() *common.TrailingDotOption {
@@ -54,10 +81,6 @@ func (t testJobPartTransferManager) From() *common.Location {
 
 func (t testJobPartTransferManager) FromTo() common.FromTo {
 	return t.fromTo
-}
-
-func (t testJobPartTransferManager) Info() TransferInfo {
-	return t.info
 }
 
 func (t testJobPartTransferManager) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions) {
