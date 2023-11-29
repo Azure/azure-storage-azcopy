@@ -1069,6 +1069,7 @@ const (
 	MaxAppendBlobBlockSize         = 4 * 1024 * 1024
 	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
+	MaxRangeGetSize                = 4 * 1024 * 1024
 	MaxNumberOfBlocksPerBlob       = 50000
 	BlockSizeThreshold             = 256 * 1024 * 1024
 	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */

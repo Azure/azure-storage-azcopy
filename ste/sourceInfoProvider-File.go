@@ -22,11 +22,15 @@ package ste
 
 import (
 	"context"
+	"crypto/md5"
+	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"io"
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -180,10 +184,10 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	//TODO: Should we do that?
 	return &fileSourceInfoProvider{
 		defaultRemoteSourceInfoProvider: *base,
-		ctx: jptm.Context(),
-		cacheOnce: &sync.Once{},
-		srcShareClient: s.NewShareClient(jptm.Info().SrcContainer),
-		sourceURL: source.URL()}, nil
+		ctx:                             jptm.Context(),
+		cacheOnce:                       &sync.Once{},
+		srcShareClient:                  s.NewShareClient(jptm.Info().SrcContainer),
+		sourceURL:                       source.URL()}, nil
 }
 
 func (p *fileSourceInfoProvider) PreSignedSourceURL() (string, error) {
@@ -302,4 +306,43 @@ func (p *fileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 
 	// We ignore smblastwrite because otherwise the tx will fail s2s
 	return properties.LastModified(), nil
+}
+
+func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	switch p.EntityType() {
+	case common.EEntityType.File():
+		var rangeGetContentMD5 *bool
+		if count <= common.MaxRangeGetSize {
+			rangeGetContentMD5 = to.Ptr(true)
+		}
+		fsc, err := p.jptm.SrcServiceClient().FileServiceClient()
+		if err != nil {
+			return nil, err
+		}
+		shareClient := fsc.NewShareClient(p.transferInfo.SrcContainer)
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient(p.transferInfo.SrcFilePath)
+		response, err := fileClient.DownloadStream(p.ctx, &file.DownloadStreamOptions{
+			Range:              file.HTTPRange{Offset: offset, Count: count},
+			RangeGetContentMD5: rangeGetContentMD5,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
+			return response.ContentMD5, nil
+		} else {
+			// compute md5
+			body := response.NewRetryReader(p.jptm.Context(), &file.RetryReaderOptions{MaxRetries: MaxRetryPerDownloadBody})
+			defer body.Close()
+			h := md5.New()
+			if _, err = io.Copy(h, body); err != nil {
+				return nil, err
+			}
+			return h.Sum(nil), nil
+		}
+	case common.EEntityType.Folder():
+		return nil, fmt.Errorf("cannot get body or md5 of a folder")
+	default:
+		panic("unexpected case")
+	}
 }

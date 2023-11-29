@@ -21,18 +21,18 @@
 package ste
 
 import (
-	"io"
-	"time"
-
+	"crypto/md5"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"io"
+	"time"
 )
 
 // Source info provider for Azure blob
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
-	source               *blob.Client
+	source *blob.Client
 }
 
 func (p *blobSourceInfoProvider) IsDFSSource() bool {
@@ -146,4 +146,33 @@ func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 		return time.Time{}, err
 	}
 	return common.IffNotNil(properties.LastModified, time.Time{}), nil
+}
+
+func (p *blobSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	var rangeGetContentMD5 *bool
+	if count <= common.MaxRangeGetSize {
+		rangeGetContentMD5 = to.Ptr(true)
+	}
+	response, err := p.source.DownloadStream(p.jptm.Context(),
+		&blob.DownloadStreamOptions{
+			Range:              blob.HTTPRange{Offset: offset, Count: count},
+			RangeGetContentMD5: rangeGetContentMD5,
+			CPKInfo:            p.jptm.CpkInfo(),
+			CPKScopeInfo:       p.jptm.CpkScopeInfo(),
+		})
+	if err != nil {
+		return nil, err
+	}
+	if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
+		return response.ContentMD5, nil
+	} else {
+		// compute md5
+		body := response.NewRetryReader(p.jptm.Context(), &blob.RetryReaderOptions{MaxRetries: MaxRetryPerDownloadBody})
+		defer body.Close()
+		h := md5.New()
+		if _, err = io.Copy(h, body); err != nil {
+			return nil, err
+		}
+		return h.Sum(nil), nil
+	}
 }

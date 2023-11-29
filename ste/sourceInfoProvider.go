@@ -21,9 +21,11 @@
 package ste
 
 import (
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -41,6 +43,8 @@ type ISourceInfoProvider interface {
 	IsLocal() bool
 
 	EntityType() common.EntityType
+
+	GetMD5(offset, count int64) ([]byte, error)
 }
 
 type ILocalSourceInfoProvider interface {
@@ -140,4 +144,17 @@ func (p *defaultRemoteSourceInfoProvider) SourceSize() int64 {
 
 func (p *defaultRemoteSourceInfoProvider) EntityType() common.EntityType {
 	return p.transferInfo.EntityType
+}
+
+// formatHTTPRange converts an offset and count to its header format.
+func formatHTTPRange(offset, count int64) *string {
+	if offset == 0 && count == 0 {
+		return nil // No specified range
+	}
+	endOffset := "" // if count == CountToEnd (0)
+	if count > 0 {
+		endOffset = strconv.FormatInt((offset+count)-1, 10)
+	}
+	dataRange := fmt.Sprintf("bytes=%v-%s", offset, endOffset)
+	return &dataRange
 }

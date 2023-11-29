@@ -2,9 +2,11 @@ package ste
 
 import (
 	gcpUtils "cloud.google.com/go/storage"
+	"crypto/md5"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/oauth2/google"
+	"io"
 	"os"
 
 	"net/url"
@@ -158,4 +160,19 @@ func (p *gcpSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error
 
 func (p *gcpSourceInfoProvider) EntityType() common.EntityType {
 	return common.EEntityType.File() // All folders are virtual in GCP and only files exist.
+}
+
+func (p *gcpSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	// gcp does not support getting range md5
+	body, err := p.gcpClient.Bucket(p.gcpURLParts.BucketName).Object(p.gcpURLParts.ObjectKey).NewRangeReader(p.jptm.Context(), offset, count)
+	if err != nil {
+		return nil, err
+	}
+	// compute md5
+	defer body.Close() //nolint:staticcheck
+	h := md5.New()
+	if _, err = io.Copy(h, body); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }
