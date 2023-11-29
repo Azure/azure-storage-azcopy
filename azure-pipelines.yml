@@ -153,6 +153,11 @@ jobs:
       vmImage: $(imageName)
 
     steps:
+      - task: PowerShell@2
+        condition: eq(variable.type, 'windows' )
+        inputs: 
+          targetType: 'inline'
+          script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
