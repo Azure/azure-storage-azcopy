@@ -153,9 +153,9 @@ jobs:
 
     steps:
       - task: PowerShell@2
-        condition: eq(variables.type, 'windows')
       - script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
         displayName: 'Installing Azure Powershell Module'
+        condition: eq(variables.type, 'windows')
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
