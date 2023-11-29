@@ -154,7 +154,7 @@ jobs:
 
     steps:
       - task: PowerShell@2
-        condition: eq(variable.type, 'windows' )
+        condition: eq(variables.type, 'windows' )
         inputs: 
           targetType: 'inline'
           script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
