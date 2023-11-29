@@ -47,12 +47,41 @@ func (t testJobPartTransferManager) Info() TransferInfo {
 	return t.info
 }
 
-func (t testJobPartTransferManager) SrcServiceClient() {
-	panic("implement me")
+func (t testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
+	options := t.S2SSourceClientOptions()
+	var azureFileSpecificOptions any
+	if t.fromTo.From() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot: true,
+		}
+	}
+	client, _ := common.GetServiceClientForLocation(
+		t.fromTo.From(),
+		t.info.Source,
+		t.S2SSourceCredentialInfo().OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+	return client
 }
 
-func (t testJobPartTransferManager) DstServiceClient() {
-	panic("implement me")
+func (t testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
+	options := t.ClientOptions()
+	var azureFileSpecificOptions any
+	if t.fromTo.To() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot:       true,
+			AllowSourceTrailingDot: true,
+		}
+	}
+	client, _ := common.GetServiceClientForLocation(
+		t.fromTo.To(),
+		t.info.Destination,
+		t.CredentialInfo().OAuthTokenInfo.TokenCredential,
+		&options,
+		azureFileSpecificOptions,
+	)
+	return client
 }
 
 func (t testJobPartTransferManager) SourceTrailingDot() *common.TrailingDotOption {
