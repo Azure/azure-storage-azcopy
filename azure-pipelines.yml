@@ -152,10 +152,6 @@ jobs:
       vmImage: $(imageName)
 
     steps:
-      - task: PowerShell@2
-      - script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
-        displayName: 'Installing Azure Powershell Module'
-        condition: eq(variables.type, 'windows')
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
@@ -165,6 +161,11 @@ jobs:
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
         displayName: 'Installing dependencies'
+        
+      - script: |
+          'powershell Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
+        displayName: 'Installing Azure Powershell Module'
+        condition: eq(variables.type, 'windows')
 
       # Running E2E Tests on AMD64
       - script: |
