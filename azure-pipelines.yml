@@ -153,7 +153,7 @@ jobs:
 
     steps:
       - task: PowerShell@2
-        condition: eq(variables['Agent.OS'], 'Windows_NT'))
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
       - script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
         displayName: 'Installing Azure Powershell Module'
       - task: GoTool@0
