@@ -1,12 +1,13 @@
 package common
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"net/url"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -143,8 +144,14 @@ type CopyJobPartOrderRequest struct {
 	// list of blobTypes to exclude.
 	ExcludeBlobType []blob.BlobType
 
-	SourceRoot      ResourceString
-	DestinationRoot ResourceString
+	SourceRoot       ResourceString
+	DestinationRoot  ResourceString
+	SrcServiceClient *ServiceClient
+	DstServiceClient *ServiceClient
+
+	//These clients are required only in S2S transfers from/to datalake
+	SrcDatalakeClient *datalake.Client
+	DstDatalakeClient *datalake.Client
 
 	Transfers      Transfers
 	LogLevel       LogLevel
@@ -178,7 +185,7 @@ type CredentialInfo struct {
 	OAuthTokenInfo           OAuthTokenInfo
 	S3CredentialInfo         S3CredentialInfo
 	GCPCredentialInfo        GCPCredentialInfo
-	S2SSourceTokenCredential azcore.TokenCredential
+	S2SSourceTokenCredential AuthTokenFunction
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
@@ -335,6 +342,8 @@ type ResumeJobRequest struct {
 	JobID           JobID
 	SourceSAS       string
 	DestinationSAS  string
+	SrcServiceClient *ServiceClient
+	DstServiceClient *ServiceClient
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
 	CredentialInfo  CredentialInfo

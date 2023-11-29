@@ -33,7 +33,7 @@ import (
 var _ IJobPartTransferMgr = testJobPartTransferManager{}
 
 type testJobPartTransferManager struct {
-	info       TransferInfo
+	info       *TransferInfo
 	fromTo     common.FromTo
 	jobPartMgr jobPartMgr
 	ctx        context.Context
@@ -43,7 +43,7 @@ func (t testJobPartTransferManager) DeleteUncommittedBlocks() bool {
 	return t.jobPartMgr.DeleteUncommittedBlocks()
 }
 
-func (t testJobPartTransferManager) Info() TransferInfo {
+func (t testJobPartTransferManager) Info() *TransferInfo {
 	return t.info
 }
 
@@ -437,5 +437,5 @@ func (t testJobPartTransferManager) TransferIndex() (partNum, transferIndex uint
 }
 
 func (t testJobPartTransferManager) RestartedTransfer() bool {
-	return false // TODO: implement this properly
+	return false
 }

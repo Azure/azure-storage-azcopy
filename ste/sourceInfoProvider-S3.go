@@ -21,7 +21,9 @@
 package ste
 
 import (
+	"crypto/md5"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"time"
@@ -33,7 +35,7 @@ import (
 // Source info provider for S3
 type s3SourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 
 	rawSourceURL *url.URL
 
@@ -186,4 +188,25 @@ func (p *s3SourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error)
 
 func (p *s3SourceInfoProvider) EntityType() common.EntityType {
 	return common.EEntityType.File() // no real folders exist in S3
+}
+
+func (p *s3SourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	options := minio.GetObjectOptions{}
+	r := formatHTTPRange(offset, count)
+	if r != nil {
+		options.Set("Range", *r)
+	}
+
+	// s3 does not support getting range md5
+	body, err := p.s3Client.GetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, options)
+	if err != nil {
+		return nil, err
+	}
+	// compute md5
+	defer body.Close() //nolint:staticcheck
+	h := md5.New()
+	if _, err = io.Copy(h, body); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }

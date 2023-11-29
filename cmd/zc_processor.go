@@ -49,9 +49,7 @@ type copyTransferProcessor struct {
 	dryrunMode             bool
 }
 
-func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source, destination common.ResourceString,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrunMode bool) *copyTransferProcessor {
+func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -72,11 +70,16 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	// And re-encode them where the characters are valid.
 	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
 	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
-
+	if srcRelativePath != "" {
+		srcRelativePath = "/" + srcRelativePath
+	}
+	if dstRelativePath != "" {
+		dstRelativePath = "/" + dstRelativePath
+	}
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
-		copyTransfer.BlobTier = *s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
+		copyTransfer.BlobTier = s.copyJobTemplate.BlobAttributes.BlockBlobTier.ToAccessTierType()
 
 		metadataString := s.copyJobTemplate.BlobAttributes.Metadata
 		metadataMap := common.Metadata{}

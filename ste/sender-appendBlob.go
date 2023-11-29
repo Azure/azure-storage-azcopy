@@ -21,10 +21,15 @@
 package ste
 
 import (
+	"bytes"
 	"context"
+	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"io"
 	"time"
 
 	"golang.org/x/sync/semaphore"
@@ -68,7 +73,11 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	destAppendBlobClient := common.CreateAppendBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	bsc, err := jptm.DstServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, err
+	}
+	destAppendBlobClient := bsc.NewContainerClient(transferInfo.DstContainer).NewAppendBlobClient(transferInfo.DstFilePath)
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
@@ -147,10 +156,10 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		blobTags = nil
 	}
 	_, err := s.destAppendBlobClient.Create(s.jptm.Context(), &appendblob.CreateOptions{
-		HTTPHeaders: &s.headersToApply,
-		Metadata: s.metadataToApply,
-		Tags: blobTags,
-		CPKInfo: s.jptm.CpkInfo(),
+		HTTPHeaders:  &s.headersToApply,
+		Metadata:     s.metadataToApply,
+		Tags:         blobTags,
+		CPKInfo:      s.jptm.CpkInfo(),
 		CPKScopeInfo: s.jptm.CpkScopeInfo(),
 	})
 	if err != nil {
@@ -202,4 +211,58 @@ func (s *appendBlobSenderBase) GetDestinationLength() (int64, error) {
 		return -1, fmt.Errorf("destination content length not returned")
 	}
 	return *prop.ContentLength, nil
+}
+
+func (s *appendBlobSenderBase) GetMD5(offset, count int64) ([]byte, error) {
+	var rangeGetContentMD5 *bool
+	if count <= common.MaxRangeGetSize {
+		rangeGetContentMD5 = to.Ptr(true)
+	}
+	response, err := s.destAppendBlobClient.DownloadStream(s.jptm.Context(),
+		&blob.DownloadStreamOptions{
+			Range:              blob.HTTPRange{Offset: offset, Count: count},
+			RangeGetContentMD5: rangeGetContentMD5,
+			CPKInfo:            s.jptm.CpkInfo(),
+			CPKScopeInfo:       s.jptm.CpkScopeInfo(),
+		})
+	if err != nil {
+		return nil, err
+	}
+	if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
+		return response.ContentMD5, nil
+	} else {
+		// compute md5
+		body := response.NewRetryReader(s.jptm.Context(), &blob.RetryReaderOptions{MaxRetries: MaxRetryPerDownloadBody})
+		defer body.Close()
+		h := md5.New()
+		if _, err = io.Copy(h, body); err != nil {
+			return nil, err
+		}
+		return h.Sum(nil), nil
+	}
+}
+
+func (s *appendBlobSenderBase) transformAppendConditionMismatchError(timeoutFromCtx bool, offset, count int64, err error) (string, error) {
+	if err != nil && bloberror.HasCode(err, bloberror.AppendPositionConditionNotMet) && timeoutFromCtx {
+		if _, ok := s.sip.(benchmarkSourceInfoProvider); ok {
+			// If the source is a benchmark, then we don't need to check MD5 since the data is constantly changing.  This is OK.
+			return "", nil
+		}
+		// Download Range of last append
+		destMD5, destErr := s.GetMD5(offset, count)
+		if destErr != nil {
+			return ", get destination md5 after timeout", destErr
+		}
+		sourceMD5, sourceErr := s.sip.GetMD5(offset, count)
+		if sourceErr != nil {
+			return ", get source md5 after timeout", sourceErr
+		}
+		if destMD5 != nil && sourceMD5 != nil && len(destMD5) > 0 && len(sourceMD5) > 0 {
+			// Compare MD5
+			if bytes.Equal(destMD5, sourceMD5) {
+				return "", nil
+			}
+		}
+	}
+	return "", err
 }

@@ -113,8 +113,8 @@ type logPolicyOpValues struct {
 
 type LogOptions struct {
 	// TODO : Unravel LogOptions and RequestLogOptions
-	RequestLogOptions  RequestLogOptions
-	Log                func(level common.LogLevel, message string)
+	RequestLogOptions RequestLogOptions
+	Log               func(level common.LogLevel, message string)
 	// ShouldLog is called periodically allowing you to return whether the specified LogLevel should be logged or not.
 	// An application can return different values over the its lifetime; this allows the application to dynamically
 	// alter what is logged. NOTE: This method can be called by multiple goroutines simultaneously so make sure
@@ -124,7 +124,7 @@ type LogOptions struct {
 }
 
 type logPolicy struct {
-	LogOptions         LogOptions
+	LogOptions            LogOptions
 	disallowedHeaders     map[string]struct{}
 	sanitizedUrlHeaders   map[string]struct{}
 	disallowedQueryParams map[string]struct{}
@@ -254,8 +254,8 @@ func newLogPolicy(options LogOptions) policy.Policy {
 		options.Log = func(common.LogLevel, string) {} // No-op logger
 	}
 	disallowedHeaders := map[string]struct{}{
-		"authorization": {},
-		"x-ms-encryption-key": {},
+		"authorization":                  {},
+		"x-ms-encryption-key":            {},
 		"x-ms-copy-source-authorization": {},
 	}
 	sanitizedUrlHeaders := map[string]struct{}{
@@ -322,7 +322,7 @@ func (p *logPolicy) writeHeader(b *bytes.Buffer, header http.Header) {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		value := header.Get(k)
+		value := header[k][0]
 		// sanitize or redact certain headers
 		// redact all header values in the disallow-list
 		if _, ok := p.disallowedHeaders[strings.ToLower(k)]; ok {

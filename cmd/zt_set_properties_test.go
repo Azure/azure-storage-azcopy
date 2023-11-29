@@ -115,8 +115,9 @@ func validateSetPropertiesTransfersAreScheduled(a *assert.Assertions, isSrcEncod
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
-		srcRelativeFilePath := transfer.Source
-		a.Equal(*transferParams.blockBlobTier.ToAccessTierType(), transfer.BlobTier)
+		srcRelativeFilePath := strings.TrimPrefix(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING)
+		a.Equal(transferParams.blockBlobTier.ToAccessTierType(), transfer.BlobTier)
+
 		checkMetadataEqual(a, transfer.Metadata, transferParams.getMetadata())
 		checkTagsEqual(a, transfer.BlobTags, transferParams.blobTags)
 
@@ -218,7 +219,8 @@ func TestSetPropertiesBlobsUnderContainerForBlobTier(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -260,7 +262,6 @@ func TestSetPropertiesWithIncludeFlagForBlobTier(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -302,7 +303,6 @@ func TestSetPropertiesWithExcludeFlagForBlobTier(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobList, transferParams, mockedRPC)
 	})
 }
@@ -350,7 +350,6 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForBlobTier(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -583,7 +582,8 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTier(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -640,7 +640,8 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTier(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -770,7 +771,8 @@ func TestSetPropertiesBlobsUnderContainerForMetadata(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -810,7 +812,6 @@ func TestSetPropertiesWithIncludeFlagForMetadata(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -852,7 +853,6 @@ func TestSetPropertiesWithExcludeFlagForMetadata(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobList, transferParams, mockedRPC)
 	})
 }
@@ -900,7 +900,6 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForMetadata(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -1133,7 +1132,8 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForMetadata(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -1190,7 +1190,8 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForMetadata(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -1320,7 +1321,8 @@ func TestSetPropertiesBlobsUnderContainerForBlobTags(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -1360,7 +1362,6 @@ func TestSetPropertiesWithIncludeFlagForBlobTags(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -1402,7 +1403,6 @@ func TestSetPropertiesWithExcludeFlagForBlobTags(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobList, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobList, transferParams, mockedRPC)
 	})
 }
@@ -1450,7 +1450,6 @@ func TestSetPropertiesWithIncludeAndExcludeFlagForBlobTags(t *testing.T) {
 
 	runCopyAndVerify(a, raw, func(err error) {
 		a.Nil(err)
-		validateDownloadTransfersAreScheduled(a, "", "", blobsToInclude, mockedRPC)
 		validateSetPropertiesTransfersAreScheduled(a, true, blobsToInclude, transferParams, mockedRPC)
 	})
 }
@@ -1683,7 +1682,8 @@ func TestSetPropertiesBlobsUnderContainerWithFromToForBlobTags(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }
@@ -1740,7 +1740,8 @@ func TestSetPropertiesBlobsUnderVirtualDirWithFromToForBlobTags(t *testing.T) {
 		a.NotEqual(len(blobList), len(mockedRPC.transfers))
 
 		for _, transfer := range mockedRPC.transfers {
-			a.False(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING))
+			source := strings.TrimPrefix(transfer.Source, "/")
+			a.False(strings.Contains(source, common.AZCOPY_PATH_SEPARATOR_STRING))
 		}
 	})
 }

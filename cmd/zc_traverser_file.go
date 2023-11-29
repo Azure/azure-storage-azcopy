@@ -89,10 +89,7 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	directoryClient, err := createDirectoryClientFromServiceClient(fileURLParts, t.serviceClient)
-	if err != nil {
-		return false, err
-	}
+	directoryClient := t.serviceClient.NewShareClient(fileURLParts.ShareName).NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
 	_, err = directoryClient.GetProperties(t.ctx, nil)
 	if err != nil {
 		if azcopyScanningLogger != nil {

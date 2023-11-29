@@ -25,15 +25,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -64,7 +65,7 @@ type blockBlobSenderBase struct {
 	completedBlockList     map[int]string
 }
 
-func getVerifiedChunkParams(transferInfo TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
+func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
 	chunkSize = transferInfo.BlockSize
 	srcSize := transferInfo.SourceSize
 	numChunks = getNumChunks(srcSize, chunkSize)
@@ -129,7 +130,11 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		return nil, err
 	}
 
-	destBlockBlobClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	c, err:= jptm.DstServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, err
+	}
+	destBlockBlobClient := c.NewContainerClient(jptm.Info().DstContainer).NewBlockBlobClient(jptm.Info().DstFilePath)
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
@@ -141,7 +146,8 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	destBlobTier := inferredAccessTierType
 	blockBlobTierOverride, _ := jptm.BlobTiers()
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
-		destBlobTier = blockBlobTierOverride.ToAccessTierType()
+		t := blockBlobTierOverride.ToAccessTierType()
+		destBlobTier = &t
 	}
 
 	if (props.SrcMetadata["hdi_isfolder"] != nil && *props.SrcMetadata["hdi_isfolder"] == "true") ||
@@ -217,7 +223,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		jptm.Log(common.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
-		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient, s.jptm.Context(), false) {
+		if !ValidateTier(jptm, s.destBlobTier, s.destBlockBlobClient.BlobClient(), s.jptm.Context(), false) {
 			s.destBlobTier = nil
 		}
 
@@ -257,22 +263,25 @@ func (s *blockBlobSenderBase) Epilogue() {
 	// Upload ADLS Gen 2 ACLs
 	fromTo := jptm.FromTo()
 	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && jptm.Info().PreserveSMBPermissions.IsTruthy() {
-		blobURLParts, err := blob.ParseURL(s.destBlockBlobClient.URL())
-		if err != nil {
-			jptm.FailActiveSend("Parsing blob URL", err)
-		}
-		blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
-		blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
-
-		fileClient := common.CreateDatalakeFileClient(blobURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 		// We know for a fact our source is a "blob".
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
 		if err != nil {
 			jptm.FailActiveSend("Grabbing source ACLs", err)
+			return
 		}
-		_, err = fileClient.SetAccessControl(jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
+
+		dsc, err := jptm.DstServiceClient().DatalakeServiceClient()
+		if err != nil {
+			jptm.FailActiveSend("Getting source client", err)
+			return 
+		}
+		dstDatalakeClient := dsc.NewFileSystemClient(jptm.Info().DstContainer).NewFileClient(jptm.Info().DstFilePath)
+	
+		
+		_, err = dstDatalakeClient.SetAccessControl(jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 		if err != nil {
 			jptm.FailActiveSend("Putting ACLs", err)
+			return
 		}
 	}
 }

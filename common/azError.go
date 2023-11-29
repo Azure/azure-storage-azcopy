@@ -20,6 +20,8 @@
 
 package common
 
+import "fmt"
+
 // AzError is to handle AzCopy internal errors in a fine way
 type AzError struct {
 	code          uint64
@@ -56,5 +58,13 @@ func (err AzError) InvalidBlobName() AzError {
 }
 
 func (err AzError) InvalidBlobOrWindowsName() AzError {
-	return AzError{uint64(2), "Invalid Blob or Windows Name.", ""}
+	return AzError{uint64(3), "Invalid Blob or Windows Name. ", ""}
+}
+
+func (err AzError) InvalidServiceClient() AzError {
+	return AzError{uint64(4), "Invalid Service Client. ", ""}
+}
+
+func ErrInvalidClient(msg string) AzError {
+	return NewAzError(EAzError.InvalidServiceClient(), fmt.Sprintf("Expecting %s client", msg))
 }

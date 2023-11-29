@@ -25,9 +25,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -243,6 +245,69 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
+
+func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
+									ctx context.Context,
+									fromTo common.FromTo,
+									source string,
+									destination string,
+									) (*common.ServiceClient, *common.ServiceClient, error) {
+	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
+		rca.SourceSAS = "?" + rca.SourceSAS
+	}
+	if len(rca.DestinationSAS) > 0 && rca.DestinationSAS[0] != '?' {
+		rca.DestinationSAS = "?" + rca.DestinationSAS
+	}
+
+	srcCredType, _, err := getCredentialTypeForLocation(ctx,
+		fromTo.From(),	
+		source,
+		rca.SourceSAS,
+		true,
+		common.CpkOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	dstCredType, _, err := getCredentialTypeForLocation(ctx,
+		fromTo.To(),
+		destination,
+		rca.DestinationSAS,
+		false,
+		common.CpkOptions{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var tc azcore.TokenCredential
+	if srcCredType.IsAzureOAuth() || dstCredType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		tokenInfo, err := uotm.GetTokenInfo(ctx)
+		if  err != nil {
+			return nil, nil, err
+		}
+
+		tc, err = tokenInfo.GetTokenCredential()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger)
+
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source + rca.SourceSAS, tc, &options, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination + rca.DestinationSAS, tc, &options, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return srcServiceClient, dstServiceClient, nil
+}
 // processes the resume command,
 // dispatches the resume Job order to the storage engine.
 func (rca resumeCmdArgs) process() error {
@@ -305,6 +370,9 @@ func (rca resumeCmdArgs) process() error {
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
+
+	// we should stop using credentiaLInfo and use the clients instead. But before we fix
+	// that there will be repeated calls to get Credential type for correctness.
 	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         getJobFromToResponse.FromTo,
 		source:         getJobFromToResponse.Source,
@@ -313,16 +381,39 @@ func (rca resumeCmdArgs) process() error {
 		destinationSAS: rca.DestinationSAS,
 	}, common.CpkOptions{}); err != nil {
 		return err
-	} else if credentialInfo.CredentialType.IsAzureOAuth() {
+	}
+
+	srcCredType, _, err := getCredentialTypeForLocation(ctx,
+		getJobFromToResponse.FromTo.From(),
+		getJobFromToResponse.Source,
+		rca.SourceSAS,
+		true,
+		common.CpkOptions{})
+	if err != nil {
+		return err
+	}
+	
+	if (credentialInfo.CredentialType.IsAzureOAuth())  || srcCredType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
 			credentialInfo.OAuthTokenInfo = *tokenInfo
+			if rca.SourceSAS == "" {
+				credentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenInfo, []string{common.StorageScope}) 
+			}
 		}
 	}
 
+	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
+				ctx, getJobFromToResponse.FromTo,
+				getJobFromToResponse.Source,
+				getJobFromToResponse.Destination,
+	)
+	if err != nil {
+		return errors.New("could not create service clients " + err.Error() )
+	}
 	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.ResumeJob(),
@@ -330,6 +421,8 @@ func (rca resumeCmdArgs) process() error {
 			JobID:           jobID,
 			SourceSAS:       rca.SourceSAS,
 			DestinationSAS:  rca.DestinationSAS,
+			SrcServiceClient: srcServiceClient,
+			DstServiceClient: dstServiceClient,
 			CredentialInfo:  credentialInfo,
 			IncludeTransfer: includeTransfer,
 			ExcludeTransfer: excludeTransfer,

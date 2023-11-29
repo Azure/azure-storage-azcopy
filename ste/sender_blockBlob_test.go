@@ -33,7 +33,7 @@ import (
 func TestGetVerifiedChunkParams(t *testing.T) {
 	a := assert.New(t)
 	// Mock required params
-	transferInfo := TransferInfo{
+	transferInfo := &TransferInfo{
 		BlockSize:  4195352576, // 4001MiB
 		Source:     "tmpSrc",
 		SourceSize: 8389656576, // 8001MiB
