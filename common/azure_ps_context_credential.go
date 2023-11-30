@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -68,6 +67,7 @@ type PowershellContextCredential struct {
 	opts PowershellContextCredentialOptions
 }
 
+// NewPowershellContextCredential constructs an AzureDeveloperCLICredential. Pass nil to accept default options.
 func NewPowershellContextCredential(options *PowershellContextCredentialOptions) (*PowershellContextCredential, error) {
 	cp := PowershellContextCredentialOptions{}
 	if options != nil {
@@ -117,11 +117,12 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 		defer cancel()
 	}
 
+	r := regexp.MustCompile(`\{"token".*"expiresOn".*\}`)
 
 	if tenantID != "" {
 		tenantID += " -TenantId " + tenantID
 	}
-	cmd := `($token = Get-AzAccessToken -ResourceUrl https://storage.azure.com` + tenantID + ") > $null;"
+	cmd := `$token = Get-AzAccessToken -ResourceUrl https://storage.azure.com` + tenantID + ";"
 	cmd += `$output = -join('{"token":','"',$token.Token,'"', ',"expiresOn":', '"',$token.ExpiresOn.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),'"',"}");`
 	cmd += "echo $output"
 
@@ -133,16 +134,16 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 	output, err := cliCmd.Output()
 	if err != nil {
 		msg := stderr.String()
-		var exErr *exec.ExitError
-		if errors.As(err, &exErr) && exErr.ExitCode() == 127 || strings.HasPrefix(msg, "Not found") {
-			msg = "Powershell path not found"
-		}
 		if msg == "" {
 			msg = err.Error()
 		}
 		return nil, errors.New(credNamePSContext + msg)
 	}
 
+	output = []byte(r.FindString(string(output)))
+	if string(output) == "" {
+		return nil, errors.New(credNamePSContext + "Invalid output while retrving token")
+	}
 	return output, nil
 }
 
@@ -154,7 +155,7 @@ func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.Acces
 
 	err := json.Unmarshal(tk, &t)
 	if err != nil {
-		return azcore.AccessToken{}, errors.New(err.Error() + string(tk))
+		return azcore.AccessToken{}, errors.New(err.Error())
 	}
 	
 	parseErr := "error parsing token expiration time %q: %v"
@@ -169,6 +170,3 @@ func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.Acces
 }
 
 var _ azcore.TokenCredential = (*PowershellContextCredential)(nil)
-
-
-// NewPowershellContextCredential constructs an AzureDeveloperCLICredential. Pass nil to accept default options.
