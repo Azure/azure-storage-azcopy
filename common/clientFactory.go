@@ -170,3 +170,13 @@ func CreateDatalakeDirectoryClient(u string, credInfo CredentialInfo, credOpOpti
 
 	return createClient(callbacks, u, credInfo, credOpOptions, options)
 }
+
+func GetSharedKeyCredential() (*azdatalake.SharedKeyCredential, error) {
+	name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
+	key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+	if name == "" || key == "" {
+		return nil, fmt.Errorf("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the SharedKey credential")
+	}
+	return azdatalake.NewSharedKeyCredential(name, key)
+}

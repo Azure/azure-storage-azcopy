@@ -453,6 +453,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		dstURL,
+		dstCredInfo.CredentialType,
 		dstCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		nil, // trailingDot is not required when creating a share

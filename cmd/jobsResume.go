@@ -245,13 +245,12 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
-
 func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
-									ctx context.Context,
-									fromTo common.FromTo,
-									source string,
-									destination string,
-									) (*common.ServiceClient, *common.ServiceClient, error) {
+	ctx context.Context,
+	fromTo common.FromTo,
+	source string,
+	destination string,
+) (*common.ServiceClient, *common.ServiceClient, error) {
 	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
 		rca.SourceSAS = "?" + rca.SourceSAS
 	}
@@ -260,7 +259,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 
 	srcCredType, _, err := getCredentialTypeForLocation(ctx,
-		fromTo.From(),	
+		fromTo.From(),
 		source,
 		rca.SourceSAS,
 		true,
@@ -284,7 +283,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		tokenInfo, err := uotm.GetTokenInfo(ctx)
-		if  err != nil {
+		if err != nil {
 			return nil, nil, err
 		}
 
@@ -296,18 +295,19 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 
-	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source + rca.SourceSAS, tc, &options, nil)
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source+rca.SourceSAS, srcCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination + rca.DestinationSAS, tc, &options, nil)
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination+rca.DestinationSAS, dstCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return srcServiceClient, dstServiceClient, nil
 }
+
 // processes the resume command,
 // dispatches the resume Job order to the storage engine.
 func (rca resumeCmdArgs) process() error {
@@ -392,8 +392,8 @@ func (rca resumeCmdArgs) process() error {
 	if err != nil {
 		return err
 	}
-	
-	if (credentialInfo.CredentialType.IsAzureOAuth())  || srcCredType.IsAzureOAuth() {
+
+	if (credentialInfo.CredentialType.IsAzureOAuth()) || srcCredType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
@@ -401,31 +401,31 @@ func (rca resumeCmdArgs) process() error {
 		} else {
 			credentialInfo.OAuthTokenInfo = *tokenInfo
 			if rca.SourceSAS == "" {
-				credentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenInfo, []string{common.StorageScope}) 
+				credentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenInfo, []string{common.StorageScope})
 			}
 		}
 	}
 
 	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
-				ctx, getJobFromToResponse.FromTo,
-				getJobFromToResponse.Source,
-				getJobFromToResponse.Destination,
+		ctx, getJobFromToResponse.FromTo,
+		getJobFromToResponse.Source,
+		getJobFromToResponse.Destination,
 	)
 	if err != nil {
-		return errors.New("could not create service clients " + err.Error() )
+		return errors.New("could not create service clients " + err.Error())
 	}
 	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.ResumeJob(),
 		&common.ResumeJobRequest{
-			JobID:           jobID,
-			SourceSAS:       rca.SourceSAS,
-			DestinationSAS:  rca.DestinationSAS,
+			JobID:            jobID,
+			SourceSAS:        rca.SourceSAS,
+			DestinationSAS:   rca.DestinationSAS,
 			SrcServiceClient: srcServiceClient,
 			DstServiceClient: dstServiceClient,
-			CredentialInfo:  credentialInfo,
-			IncludeTransfer: includeTransfer,
-			ExcludeTransfer: excludeTransfer,
+			CredentialInfo:   credentialInfo,
+			IncludeTransfer:  includeTransfer,
+			ExcludeTransfer:  excludeTransfer,
 		},
 		&resumeJobResponse)
 

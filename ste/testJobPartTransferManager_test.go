@@ -52,6 +52,7 @@ func (t testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 	client, _ := common.GetServiceClientForLocation(
 		t.fromTo.From(),
 		t.info.Source,
+		t.S2SSourceCredentialInfo().CredentialType,
 		t.S2SSourceCredentialInfo().OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
@@ -71,6 +72,7 @@ func (t testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 	client, _ := common.GetServiceClientForLocation(
 		t.fromTo.To(),
 		t.info.Destination,
+		t.CredentialInfo().CredentialType,
 		t.CredentialInfo().OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,

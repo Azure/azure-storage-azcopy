@@ -1545,6 +1545,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		sourceURL,
+		sourceCredInfo.CredentialType,
 		sourceCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
@@ -1555,14 +1556,15 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	if cca.FromTo.To() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions {
-			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File()),
+			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
+			AllowSourceTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File(),
 		}
 	}
 	dstURL, _ := cca.Destination.String()
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		dstURL,
+		cca.credentialInfo.CredentialType,
 		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,

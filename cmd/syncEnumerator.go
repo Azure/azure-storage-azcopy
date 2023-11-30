@@ -190,6 +190,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.From(),
 		sourceURL,
+		srcCredInfo.CredentialType,
 		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
@@ -210,6 +211,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
 		dstURL,
+		dstCredInfo.CredentialType,
 		dstCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,

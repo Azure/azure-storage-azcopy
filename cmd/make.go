@@ -99,6 +99,12 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		var filesystemClient *filesystem.Client
 		if credentialInfo.CredentialType.IsAzureOAuth() {
 			filesystemClient, err = filesystem.NewClient(resourceURL, cred, &filesystem.ClientOptions{ClientOptions: options})
+		} else if credentialInfo.CredentialType.IsSharedKey() {
+			sharedKeyCred, err := common.GetSharedKeyCredential()
+			if err != nil {
+				return err
+			}
+			filesystemClient, err = filesystem.NewClientWithSharedKeyCredential(resourceURL, sharedKeyCred, &filesystem.ClientOptions{ClientOptions: options})
 		} else {
 			filesystemClient, err = filesystem.NewClientWithNoCredential(resourceURL, &filesystem.ClientOptions{ClientOptions: options})
 		}

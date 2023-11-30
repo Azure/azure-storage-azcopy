@@ -100,6 +100,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		targetURL,
+		cca.credentialInfo.CredentialType,
 		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		fileClientOptions,
@@ -145,7 +146,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	sourceURL, _ := cca.Source.String()
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 	
-	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
+	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, cca.credentialInfo.CredentialType, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
 	if err != nil {
 		return err
 	}
