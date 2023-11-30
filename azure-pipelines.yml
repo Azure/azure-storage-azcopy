@@ -167,11 +167,6 @@ jobs:
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
         displayName: 'Installing dependencies'
-        
-      - script: |
-          'powershell Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
-        displayName: 'Installing Azure Powershell Module'
-        condition: eq(variables.type, 'windows')
 
       # Running E2E Tests on AMD64
       - script: |
