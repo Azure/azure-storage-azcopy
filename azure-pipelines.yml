@@ -158,6 +158,7 @@ jobs:
         inputs: 
           targetType: 'inline'
           script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
+        displayName: 'Install Powershell Az Module'
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
