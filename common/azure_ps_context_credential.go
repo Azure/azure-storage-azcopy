@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -118,12 +117,15 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 		defer cancel()
 	}
 
-	const StorageResourceName = "https://storage.azure.com"
-	commandLine := "Get-AzAccessToken -ResourceUrl " + StorageResourceName + " | ConvertTo-Json"
+
 	if tenantID != "" {
-		commandLine += " -TenantId " + tenantID
+		tenantID += " -TenantId " + tenantID
 	}
-	cliCmd := exec.CommandContext(ctx, "powershell", commandLine)
+	cmd := `$token = Get-AzAccessToken -ResourceUrl https://storage.azure.com` + tenantID + ";"
+	cmd += `$output = -join('{"token":','"',$token.Token,'"', ',"expireson":', '"',$token.ExpiresOn.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),'"',"}");`
+	cmd += "echo $output"
+
+	cliCmd := exec.CommandContext(ctx, "powershell", cmd)
 	cliCmd.Env = os.Environ()
 	var stderr bytes.Buffer
 	cliCmd.Stderr = &stderr
@@ -156,20 +158,9 @@ func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.Acces
 	}
 	
 	parseErr := "error parsing token expiration time %q: %v"
-	exp, err := time.Parse("2006-01-02T15:04:05Z", t.ExpiresOn)
+	exp, err := time.Parse(time.RFC3339, t.ExpiresOn)
 	if err != nil {
-		// In some environments time is a unix stamp of format 'Date(<unixtime>)'
-		rgx := regexp.MustCompile(`\((.*?)\)`)
-		if rgx.Match([]byte(t.ExpiresOn)) {
-			rs := rgx.FindStringSubmatch(t.ExpiresOn)
-			expTime, err := strconv.ParseInt(rs[1], 10, 64)
-			if err != nil {
-				return azcore.AccessToken{}, fmt.Errorf(parseErr, t.ExpiresOn, err)
-			}
-			exp = time.Unix(expTime, 0)
-		} else {
-			return azcore.AccessToken{}, fmt.Errorf(parseErr, t.ExpiresOn, err)
-		}
+		return azcore.AccessToken{}, fmt.Errorf(parseErr, t.ExpiresOn, err)
 	}
 	return azcore.AccessToken{
 		ExpiresOn: exp.UTC(),
