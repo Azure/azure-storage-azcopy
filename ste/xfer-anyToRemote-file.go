@@ -526,8 +526,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s sender, sip ISo
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
 	}
 	if jptm.IsLive() {
-		if _, isS2SCopier := s.(s2sCopier);
-			sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
+		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetFreshFileLastModifiedTime()
 			if err != nil {

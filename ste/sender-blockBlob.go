@@ -198,6 +198,10 @@ func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModi
 	if s.jptm.ShouldInferContentType() {
 		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
+	if s.jptm.DeleteDestinationFileIfNecessary() {
+		s.DeleteDstBlob()
+	}
+
 	return false
 }
 
@@ -427,4 +431,18 @@ func (s *blockBlobSenderBase) GetDestinationLength() (int64, error) {
 		return -1, fmt.Errorf("destination content length not returned")
 	}
 	return *prop.ContentLength, nil
+}
+
+func (s *blockBlobSenderBase) DeleteDstBlob() {
+	// Delete destination blob with uncommitted blocks, called in Prologue
+	resp, err := s.destBlockBlobClient.GetBlockList(s.jptm.Context(), blockblob.BlockListTypeUncommitted, nil)
+	if err != nil {
+		s.jptm.LogError(s.destBlockBlobClient.URL(), "GetBlockList with Uncommitted BlockListType failed ", err)
+	}
+	if len(resp.UncommittedBlocks) > 0 {
+		_, err := s.destBlockBlobClient.Delete(s.jptm.Context(), nil)
+		if err != nil {
+			s.jptm.LogError(s.destBlockBlobClient.URL(), "Deleting destination blob with uncommitted blocks failed ", err)
+		}
+	}
 }

@@ -181,6 +181,9 @@ type rawCopyCmdArgs struct {
 	rehydratePriority string
 	// The priority setting can be changed from Standard to High by calling Set Blob Tier with this header set to High and setting x-ms-access-tier to the same value as previously set. The priority setting cannot be lowered from High to Standard.
 	trailingDot string
+
+	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
+	deleteDestinationFileIfNecessary bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -874,6 +877,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
+	cooked.deleteDestinationFileIfNecessary = raw.deleteDestinationFileIfNecessary
+
 	return cooked, nil
 }
 
@@ -1219,6 +1224,8 @@ type CookedCopyCmdArgs struct {
 	propertiesToTransfer common.SetPropertiesFlags
 
 	trailingDot common.TrailingDotOption
+
+	deleteDestinationFileIfNecessary bool
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1283,7 +1290,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger) }
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1520,7 +1527,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			MD5ValidationOption:      cca.md5ValidationOption,
 			DeleteSnapshotsOption:    cca.deleteSnapshotsOption,
 			// Setting tags when tags explicitly provided by the user through blob-tags flag
-			BlobTagsString: cca.blobTags.ToString(),
+			BlobTagsString:                   cca.blobTags.ToString(),
+			DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
 		},
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
@@ -2120,4 +2128,8 @@ func init() {
 	// Deprecate the old persist-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+
+	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
+	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
+	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
 }

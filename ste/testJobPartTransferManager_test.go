@@ -33,8 +33,14 @@ import (
 var _ IJobPartTransferMgr = testJobPartTransferManager{}
 
 type testJobPartTransferManager struct {
-	info   *TransferInfo
-	fromTo common.FromTo
+	info       *TransferInfo
+	fromTo     common.FromTo
+	jobPartMgr jobPartMgr
+	ctx        context.Context
+}
+
+func (t testJobPartTransferManager) DeleteDestinationFileIfNecessary() bool {
+	return t.jobPartMgr.DeleteDestinationFileIfNecessary()
 }
 
 func (t testJobPartTransferManager) Info() *TransferInfo {
@@ -398,7 +404,8 @@ func (t testJobPartTransferManager) GetDestinationRoot() string {
 }
 
 func (t testJobPartTransferManager) ShouldInferContentType() bool {
-	panic("implement me")
+	fromTo := t.FromTo()
+	return fromTo.From() == common.ELocation.Local()
 }
 
 func (t testJobPartTransferManager) CpkInfo() *blob.CPKInfo {
@@ -430,5 +437,5 @@ func (t testJobPartTransferManager) TransferIndex() (partNum, transferIndex uint
 }
 
 func (t testJobPartTransferManager) RestartedTransfer() bool {
-	panic("implement me")
+	return false
 }

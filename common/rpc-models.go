@@ -225,24 +225,25 @@ type ListRequest struct {
 
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
-	BlobType                 BlobType              // The type of a blob - BlockBlob, PageBlob, AppendBlob
-	ContentType              string                // The content type specified for the blob.
-	ContentEncoding          string                // Specifies which content encodings have been applied to the blob.
-	ContentLanguage          string                // Specifies the language of the content
-	ContentDisposition       string                // Specifies the content disposition
-	CacheControl             string                // Specifies the cache control header
-	BlockBlobTier            BlockBlobTier         // Specifies the tier to set on the block blobs.
-	PageBlobTier             PageBlobTier          // Specifies the tier to set on the page blobs.
-	Metadata                 string                // User-defined Name-value pairs associated with the blob
-	NoGuessMimeType          bool                  // represents user decision to interpret the content-encoding from source file
-	PreserveLastModifiedTime bool                  // when downloading, tell engine to set file's timestamp to timestamp of blob
-	PutMd5                   bool                  // when uploading, should we create and PUT Content-MD5 hashes
-	MD5ValidationOption      HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
-	BlockSizeInBytes         int64                 // when uploading/downloading/copying, specify the size of each chunk
-	DeleteSnapshotsOption    DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
-	BlobTagsString           string                // when user explicitly provides blob tags
-	PermanentDeleteOption    PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
-	RehydratePriority        RehydratePriorityType // rehydrate priority of blob
+	BlobType                         BlobType              // The type of a blob - BlockBlob, PageBlob, AppendBlob
+	ContentType                      string                // The content type specified for the blob.
+	ContentEncoding                  string                // Specifies which content encodings have been applied to the blob.
+	ContentLanguage                  string                // Specifies the language of the content
+	ContentDisposition               string                // Specifies the content disposition
+	CacheControl                     string                // Specifies the cache control header
+	BlockBlobTier                    BlockBlobTier         // Specifies the tier to set on the block blobs.
+	PageBlobTier                     PageBlobTier          // Specifies the tier to set on the page blobs.
+	Metadata                         string                // User-defined Name-value pairs associated with the blob
+	NoGuessMimeType                  bool                  // represents user decision to interpret the content-encoding from source file
+	PreserveLastModifiedTime         bool                  // when downloading, tell engine to set file's timestamp to timestamp of blob
+	PutMd5                           bool                  // when uploading, should we create and PUT Content-MD5 hashes
+	MD5ValidationOption              HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
+	BlockSizeInBytes                 int64                 // when uploading/downloading/copying, specify the size of each chunk
+	DeleteSnapshotsOption            DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
+	BlobTagsString                   string                // when user explicitly provides blob tags
+	PermanentDeleteOption            PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
+	RehydratePriority                RehydratePriorityType // rehydrate priority of blob
+	DeleteDestinationFileIfNecessary bool                  // deletes the dst blob if indicated
 }
 
 // This struct represents the optional attribute for file request header
