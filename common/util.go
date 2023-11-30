@@ -131,7 +131,7 @@ func GetServiceClientForLocation(loc Location,
 		if credType.IsAzureOAuth() {
 			dsc, err = datalake.NewClient(resourceURL, cred, o)
 		} else if credType.IsSharedKey() {
-			sharedKeyCred, err := GetSharedKeyCredential()
+			sharedKeyCred, err := GetDatalakeSharedKeyCredential()
 			if err != nil {
 				return nil, err
 			}
@@ -160,8 +160,14 @@ func GetServiceClientForLocation(loc Location,
 			o = &blobservice.ClientOptions{ClientOptions: *policyOptions}
 		}
 
-		if cred != nil {
+		if credType.IsAzureOAuth() {
 			bsc, err = blobservice.NewClient(resourceURL, cred, o)
+		} else if credType.IsSharedKey() {
+			sharedKeyCred, err := GetBlobSharedKeyCredential()
+			if err != nil {
+				return nil, err
+			}
+			bsc, err = blobservice.NewClientWithSharedKeyCredential(resourceURL, sharedKeyCred, o)
 		} else {
 			bsc, err = blobservice.NewClientWithNoCredential(resourceURL, o)
 		}
