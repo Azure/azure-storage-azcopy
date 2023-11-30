@@ -122,7 +122,7 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 		tenantID += " -TenantId " + tenantID
 	}
 	cmd := `$token = Get-AzAccessToken -ResourceUrl https://storage.azure.com` + tenantID + ";"
-	cmd += `$output = -join('{"token":','"',$token.Token,'"', ',"expireson":', '"',$token.ExpiresOn.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),'"',"}");`
+	cmd += `$output = -join('{"token":','"',$token.Token,'"', ',"expiresOn":', '"',$token.ExpiresOn.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),'"',"}");`
 	cmd += "echo $output"
 
 	cliCmd := exec.CommandContext(ctx, "powershell", cmd)
@@ -154,7 +154,7 @@ func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.Acces
 
 	err := json.Unmarshal(tk, &t)
 	if err != nil {
-		return azcore.AccessToken{}, err
+		return azcore.AccessToken{}, errors.New(err.Error() + string(tk))
 	}
 	
 	parseErr := "error parsing token expiration time %q: %v"
