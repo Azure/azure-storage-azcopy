@@ -121,7 +121,7 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 	if tenantID != "" {
 		tenantID += " -TenantId " + tenantID
 	}
-	cmd := `$token = Get-AzAccessToken -ResourceUrl https://storage.azure.com` + tenantID + ";"
+	cmd := `($token = Get-AzAccessToken -ResourceUrl https://storage.azure.com` + tenantID + ") > $null;"
 	cmd += `$output = -join('{"token":','"',$token.Token,'"', ',"expiresOn":', '"',$token.ExpiresOn.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),'"',"}");`
 	cmd += "echo $output"
 
