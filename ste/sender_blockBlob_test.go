@@ -90,7 +90,7 @@ func TestDeleteDstBlob(t *testing.T) {
 	}
 
 	jp := testJobPartTransferManager{
-		info:       ti,
+		info:       &ti,
 		fromTo:     0,
 		jobPartMgr: jpm,
 		ctx:        ctxSender,
@@ -144,7 +144,7 @@ func TestDeleteDstBlobNegative(t *testing.T) {
 	}
 
 	jp := testJobPartTransferManager{
-		info:       ti,
+		info:       &ti,
 		fromTo:     0,
 		jobPartMgr: jpm,
 		ctx:        ctxSender,
