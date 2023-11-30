@@ -40,7 +40,7 @@ type IJobPartMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	ShouldPutMd5() bool
-	DeleteUncommittedBlocks() bool
+	DeleteDestinationFileIfNecessary() bool
 	SAS() (string, string)
 	// CancelJob()
 	Close()
@@ -216,7 +216,7 @@ type jobPartMgr struct {
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	putMd5 bool
 
-	deleteUncommittedBlocks bool
+	deleteDestinationFileIfNecessary bool
 
 	metadata common.Metadata
 
@@ -304,7 +304,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.putMd5 = dstData.PutMd5
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
-	jpm.deleteUncommittedBlocks = dstData.DeleteUncommittedBlocks
+	jpm.deleteDestinationFileIfNecessary = dstData.DeleteDestinationFileIfNecessary
 
 	// For this job part, split the metadata string apart and create an common.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
@@ -586,8 +586,8 @@ func (jpm *jobPartMgr) ShouldPutMd5() bool {
 	return jpm.putMd5
 }
 
-func (jpm *jobPartMgr) DeleteUncommittedBlocks() bool {
-	return jpm.deleteUncommittedBlocks
+func (jpm *jobPartMgr) DeleteDestinationFileIfNecessary() bool {
+	return jpm.deleteDestinationFileIfNecessary
 }
 
 func (jpm *jobPartMgr) SAS() (string, string) {

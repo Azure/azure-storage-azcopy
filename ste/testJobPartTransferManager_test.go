@@ -39,8 +39,8 @@ type testJobPartTransferManager struct {
 	ctx        context.Context
 }
 
-func (t testJobPartTransferManager) DeleteUncommittedBlocks() bool {
-	return t.jobPartMgr.DeleteUncommittedBlocks()
+func (t testJobPartTransferManager) DeleteDestinationFileIfNecessary() bool {
+	return t.jobPartMgr.DeleteDestinationFileIfNecessary()
 }
 
 func (t testJobPartTransferManager) Info() *TransferInfo {

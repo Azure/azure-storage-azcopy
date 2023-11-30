@@ -198,7 +198,7 @@ func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) (destinationModi
 	if s.jptm.ShouldInferContentType() {
 		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
-	if s.jptm.DeleteUncommittedBlocks() {
+	if s.jptm.DeleteDestinationFileIfNecessary() {
 		s.DeleteDstBlob()
 	}
 

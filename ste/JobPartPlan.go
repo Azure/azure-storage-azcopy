@@ -341,7 +341,7 @@ type JobPartPlanDstBlob struct {
 
 	SetPropertiesFlags common.SetPropertiesFlags
 
-	DeleteUncommittedBlocks bool
+	DeleteDestinationFileIfNecessary bool
 }
 
 // JobPartPlanDstFile holds additional settings required when the destination is a file

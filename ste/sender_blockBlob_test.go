@@ -82,7 +82,7 @@ func TestDeleteDstBlob(t *testing.T) {
 
 	// set up job part manager
 	jpm := jobPartMgr{
-		deleteUncommittedBlocks: true,
+		deleteDestinationFileIfNecessary: true,
 	}
 
 	ti := TransferInfo{
@@ -136,7 +136,7 @@ func TestDeleteDstBlobNegative(t *testing.T) {
 
 	// set up job part manager
 	jpm := jobPartMgr{
-		deleteUncommittedBlocks: false,
+		deleteDestinationFileIfNecessary: false,
 	}
 
 	ti := TransferInfo{
