@@ -157,7 +157,7 @@ jobs:
         condition: eq(variables.type, 'windows' )
         inputs: 
           targetType: 'inline'
-          script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber'
+          script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
         displayName: 'Install Powershell Az Module'
       - task: GoTool@0
         inputs:
