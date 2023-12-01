@@ -732,7 +732,7 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 		return nil, err
 	}
 	if OAuthTokenInfo.TokenRefreshSource == TokenRefreshSourceTokenStore {
-		OAuthTokenInfo.GetTokenStoreCredential()
+		_, _ = OAuthTokenInfo.GetTokenStoreCredential()
 	}
 	return &OAuthTokenInfo, nil
 }
