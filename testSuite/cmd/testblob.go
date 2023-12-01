@@ -424,14 +424,13 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		for pager.More() {
 			resp, err := pager.NextPage(testCtx)
 			if err != nil {
-				fmt.Println("error getting the block blob list ", err.Error())
+				fmt.Println("error getting the page blob list ", err.Error())
 				os.Exit(1)
 			}
 			pageRanges += len(resp.PageRange)
-			pageRanges += len(resp.ClearRange)
 		}
 		if numberOfPages != (pageRanges) {
-			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
+			fmt.Printf("number of blocks to be uploaded is different from the number of expected to be uploaded, %d, %d \n", numberOfPages, pageRanges)
 			os.Exit(1)
 		}
 	}
