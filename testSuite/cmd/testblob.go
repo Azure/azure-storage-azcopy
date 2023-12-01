@@ -164,9 +164,9 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 		ClientOptions: azcore.ClientOptions{
 			Telemetry: policy.TelemetryOptions{ApplicationID: common.UserAgent},
 			Retry: policy.RetryOptions{
-				MaxRetries: ste.UploadMaxTries,
-				TryTimeout: 10*time.Minute,
-				RetryDelay: ste.UploadRetryDelay,
+				MaxRetries:    ste.UploadMaxTries,
+				TryTimeout:    10 * time.Minute,
+				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
 			Transport: ste.NewAzcopyHTTPClient(0),
@@ -302,9 +302,9 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		ClientOptions: azcore.ClientOptions{
 			Telemetry: policy.TelemetryOptions{ApplicationID: common.UserAgent},
 			Retry: policy.RetryOptions{
-				MaxRetries: ste.UploadMaxTries,
-				TryTimeout: 10*time.Minute,
-				RetryDelay: ste.UploadRetryDelay,
+				MaxRetries:    ste.UploadMaxTries,
+				TryTimeout:    10 * time.Minute,
+				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
 			Transport: ste.NewAzcopyHTTPClient(0),
@@ -420,18 +420,17 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	if testBlobCmd.VerifyBlockOrPageSize {
 		numberOfPages := int(testBlobCmd.NumberOfBlocksOrPages)
 		pager := pageBlobClient.NewGetPageRangesPager(nil)
-		pageRanges := []*pageblob.PageRange{}
+		pageRanges := 0
 		for pager.More() {
 			resp, err := pager.NextPage(testCtx)
 			if err != nil {
-				fmt.Println("error getting the block blob list ", err.Error())
+				fmt.Println("error getting the page blob list ", err.Error())
 				os.Exit(1)
 			}
-			pageRanges = append(pageRanges, resp.PageRange...)
-
+			pageRanges += len(resp.PageRange)
 		}
-		if numberOfPages != (len(pageRanges)) {
-			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
+		if numberOfPages != (pageRanges) {
+			fmt.Printf("number of blocks to be uploaded (%d) is different from the number of expected to be uploaded (%d)\n", pageRanges, numberOfPages)
 			os.Exit(1)
 		}
 	}
@@ -467,9 +466,9 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		ClientOptions: azcore.ClientOptions{
 			Telemetry: policy.TelemetryOptions{ApplicationID: common.UserAgent},
 			Retry: policy.RetryOptions{
-				MaxRetries: ste.UploadMaxTries,
-				TryTimeout: 10*time.Minute,
-				RetryDelay: ste.UploadRetryDelay,
+				MaxRetries:    ste.UploadMaxTries,
+				TryTimeout:    10 * time.Minute,
+				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
 			Transport: ste.NewAzcopyHTTPClient(0),
@@ -623,9 +622,9 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		ClientOptions: azcore.ClientOptions{
 			Telemetry: policy.TelemetryOptions{ApplicationID: common.UserAgent},
 			Retry: policy.RetryOptions{
-				MaxRetries: ste.UploadMaxTries,
-				TryTimeout: 10*time.Minute,
-				RetryDelay: ste.UploadRetryDelay,
+				MaxRetries:    ste.UploadMaxTries,
+				TryTimeout:    10 * time.Minute,
+				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
 			Transport: ste.NewAzcopyHTTPClient(0),

@@ -56,12 +56,12 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 			// capture the necessary info so that we can perform optimizations later
 			// This is strictly an optimization, and not a necessity. We ignore
 			// any errors here.
-			if s, err := jptm.SrcServiceClient().BlobServiceClient(); err != nil {
-				pageRangeOptimizer = newPageRangeOptimizer(
-					s.NewContainerClient(jptm.Info().SrcContainer).NewPageBlobClient(
-					jptm.Info().SrcFilePath), jptm.Context())
-
+			s, err := jptm.SrcServiceClient().BlobServiceClient()
+			if err != nil {
+				return nil, err
 			}
+			pageRangeOptimizer = newPageRangeOptimizer(
+				s.NewContainerClient(jptm.Info().SrcContainer).NewPageBlobClient(jptm.Info().SrcFilePath), jptm.Context())
 
 		}
 	}

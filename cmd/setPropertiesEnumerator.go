@@ -82,6 +82,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		targetURL,
+		cca.credentialInfo.CredentialType,
 		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		fileClientOptions,

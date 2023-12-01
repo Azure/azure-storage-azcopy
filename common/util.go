@@ -2,6 +2,8 @@ package common
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"net"
 	"net/url"
 	"strings"
@@ -95,20 +97,21 @@ func VerifyIsURLResolvable(url_string string) error {
 	*/
 }
 
-
 type FileClientOptions struct {
-	AllowTrailingDot bool
+	AllowTrailingDot       bool
 	AllowSourceTrailingDot bool
 }
+
 // GetServiceClientForLocation returns service client for the resourceURL. It strips the
 // container and file related details before creating the client. locationSpecificOptions
 // are required currently only for files.
 func GetServiceClientForLocation(loc Location,
 	resourceURL string,
+	credType CredentialType,
 	cred azcore.TokenCredential,
 	policyOptions *azcore.ClientOptions,
 	locationSpecificOptions any,
-	) (*ServiceClient, error) {
+) (*ServiceClient, error) {
 
 	u, err := url.Parse(resourceURL)
 	if err != nil {
@@ -126,11 +129,18 @@ func GetServiceClientForLocation(loc Location,
 		if policyOptions != nil {
 			o = &datalake.ClientOptions{ClientOptions: *policyOptions}
 		}
-		
-		if cred != nil {
+
+		if credType.IsAzureOAuth() {
 			dsc, err = datalake.NewClient(resourceURL, cred, o)
+		} else if credType.IsSharedKey() {
+			var sharedKeyCred *azdatalake.SharedKeyCredential
+			sharedKeyCred, err = GetDatalakeSharedKeyCredential()
+			if err != nil {
+				return nil, err
+			}
+			dsc, err = datalake.NewClientWithSharedKeyCredential(resourceURL, sharedKeyCred, o)
 		} else {
-			dsc, err =  datalake.NewClientWithNoCredential(resourceURL, o)
+			dsc, err = datalake.NewClientWithNoCredential(resourceURL, o)
 		}
 
 		if err != nil {
@@ -153,8 +163,15 @@ func GetServiceClientForLocation(loc Location,
 			o = &blobservice.ClientOptions{ClientOptions: *policyOptions}
 		}
 
-		if cred != nil {
-			bsc, err =  blobservice.NewClient(resourceURL, cred, o)
+		if credType.IsAzureOAuth() {
+			bsc, err = blobservice.NewClient(resourceURL, cred, o)
+		} else if credType.IsSharedKey() {
+			var sharedKeyCred *blob.SharedKeyCredential
+			sharedKeyCred, err = GetBlobSharedKeyCredential()
+			if err != nil {
+				return nil, err
+			}
+			bsc, err = blobservice.NewClientWithSharedKeyCredential(resourceURL, sharedKeyCred, o)
 		} else {
 			bsc, err = blobservice.NewClientWithNoCredential(resourceURL, o)
 		}
@@ -179,11 +196,11 @@ func GetServiceClientForLocation(loc Location,
 
 		if cred != nil {
 			o.FileRequestIntent = to.Ptr(fileservice.ShareTokenIntentBackup)
-			fsc, err =  fileservice.NewClient(resourceURL, cred, o)
+			fsc, err = fileservice.NewClient(resourceURL, cred, o)
 		} else {
 			fsc, err = fileservice.NewClientWithNoCredential(resourceURL, o)
 		}
-		
+
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +217,7 @@ func GetServiceClientForLocation(loc Location,
 // and returns a function object. This function object on invocation returns 
 // a bearer token with specified scope and is of format "Bearer + <Token>".
 // TODO: Token should be cached.
-func ScopedCredential(cred azcore.TokenCredential, scopes []string) (func (context.Context) (*string, error)) {
+func ScopedCredential(cred azcore.TokenCredential, scopes []string) func(context.Context) (*string, error) {
 	return func(ctx context.Context) (*string, error) {
 		token, err := cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
 		t := "Bearer " + token.Token

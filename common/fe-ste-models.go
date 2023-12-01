@@ -180,7 +180,7 @@ var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
 type PermanentDeleteOption uint8
 
 func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
-func (PermanentDeleteOption) Versions()  PermanentDeleteOption  { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
 func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
 	return PermanentDeleteOption(2)
 }
@@ -334,6 +334,7 @@ func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
+
 const (
 	// LogNone tells a logger not to log any entries passed to it.
 	LogNone LogLevel = iota
@@ -403,6 +404,7 @@ func (ll LogLevel) String() string {
 type LogSanitizer interface {
 	SanitizeLogMessage(raw string) string
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EJobPriority = JobPriority(0)
 
@@ -574,9 +576,10 @@ func (l Location) SupportsTrailingDot() bool {
 	if (l == ELocation.File()) || (l == ELocation.Local() && runtime.GOOS != "windows") {
 		return true
 	}
-	
+
 	return false
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -931,6 +934,10 @@ func (CredentialType) S3PublicBucket() CredentialType       { return CredentialT
 
 func (ct CredentialType) IsAzureOAuth() bool {
 	return ct == ct.OAuthToken() || ct == ct.MDOAuthToken()
+}
+
+func (ct CredentialType) IsSharedKey() bool {
+	return ct == ct.SharedKey()
 }
 
 func (ct CredentialType) String() string {
@@ -1354,36 +1361,36 @@ type ResourceHTTPHeaders struct {
 // ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 	return blob.HTTPHeaders{
-		BlobContentType:        &h.ContentType,
+		BlobContentType:        IffNotEmpty(h.ContentType),
 		BlobContentMD5:         h.ContentMD5,
-		BlobContentEncoding:    &h.ContentEncoding,
-		BlobContentLanguage:    &h.ContentLanguage,
-		BlobContentDisposition: &h.ContentDisposition,
-		BlobCacheControl:       &h.CacheControl,
+		BlobContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		BlobContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		BlobContentDisposition: IffNotEmpty(h.ContentDisposition),
+		BlobCacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToFileHTTPHeaders converts ResourceHTTPHeaders to sharefile's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
 	return sharefile.HTTPHeaders{
-		ContentType:        &h.ContentType,
+		ContentType:        IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    &h.ContentEncoding,
-		ContentLanguage:    &h.ContentLanguage,
-		ContentDisposition: &h.ContentDisposition,
-		CacheControl:       &h.CacheControl,
+		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: IffNotEmpty(h.ContentDisposition),
+		CacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
 func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() datalakefile.HTTPHeaders {
 	return datalakefile.HTTPHeaders{
-		ContentType:        &h.ContentType,
+		ContentType:        IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    &h.ContentEncoding,
-		ContentLanguage:    &h.ContentLanguage,
-		ContentDisposition: &h.ContentDisposition,
-		CacheControl:       &h.CacheControl,
+		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: IffNotEmpty(h.ContentDisposition),
+		CacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
