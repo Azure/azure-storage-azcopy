@@ -2,6 +2,8 @@ package common
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"net"
 	"net/url"
 	"strings"
@@ -131,7 +133,8 @@ func GetServiceClientForLocation(loc Location,
 		if credType.IsAzureOAuth() {
 			dsc, err = datalake.NewClient(resourceURL, cred, o)
 		} else if credType.IsSharedKey() {
-			sharedKeyCred, err := GetDatalakeSharedKeyCredential()
+			var sharedKeyCred *azdatalake.SharedKeyCredential
+			sharedKeyCred, err = GetDatalakeSharedKeyCredential()
 			if err != nil {
 				return nil, err
 			}
@@ -163,7 +166,8 @@ func GetServiceClientForLocation(loc Location,
 		if credType.IsAzureOAuth() {
 			bsc, err = blobservice.NewClient(resourceURL, cred, o)
 		} else if credType.IsSharedKey() {
-			sharedKeyCred, err := GetBlobSharedKeyCredential()
+			var sharedKeyCred *blob.SharedKeyCredential
+			sharedKeyCred, err = GetBlobSharedKeyCredential()
 			if err != nil {
 				return nil, err
 			}

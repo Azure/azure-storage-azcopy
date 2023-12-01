@@ -430,7 +430,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 			pageRanges += len(resp.PageRange)
 		}
 		if numberOfPages != (pageRanges) {
-			fmt.Printf("number of blocks to be uploaded is different from the number of expected to be uploaded, %d, %d \n", numberOfPages, pageRanges)
+			fmt.Printf("number of blocks to be uploaded (%d) is different from the number of expected to be uploaded (%d)\n", pageRanges, numberOfPages)
 			os.Exit(1)
 		}
 	}
