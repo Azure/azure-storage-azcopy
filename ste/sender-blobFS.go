@@ -48,6 +48,7 @@ type DatalakeClientStub interface {
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
 	sip             ISourceInfoProvider
+	blobClient		blockblob.Client
 	fileOrDirClient DatalakeClientStub
 	parentDirClient *directory.Client
 	chunkSize       int64
@@ -92,9 +93,13 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	} else {
 		destClient = fsc.NewFileClient(directoryOrFilePath)
 	}
+
+	bsc, _ := jptm.DstServiceClient().BlobServiceClient()
+
 	return &blobFSSenderBase{
 		jptm:                jptm,
 		sip:                 sip,
+		blobClient: *bsc.NewContainerClient(info.DstContainer).NewBlockBlobClient(info.DstFilePath),
 		fileOrDirClient:     destClient,
 		parentDirClient:     fsc.NewDirectoryClient(parentPath),
 		chunkSize:           chunkSize,
@@ -224,10 +229,6 @@ func (u *blobFSSenderBase) doEnsureDirExists(directoryClient *directory.Client) 
 	return err
 }
 
-func (u *blobFSSenderBase) GetBlobClient() *blockblob.Client {
-	return common.CreateBlockBlobClient(u.fileOrDirClient.BlobURL(), u.jptm.CredentialInfo(), u.jptm.CredentialOpOptions(), u.jptm.ClientOptions())
-}
-
 func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, error) {
 	if unixSIP, ok := u.sip.(IUNIXPropertyBearingSourceInfoProvider); ok {
 		statAdapter, err := unixSIP.GetUNIXProperties()
@@ -253,8 +254,7 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 	common.AddStatToBlobMetadata(adapter, meta)
 	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
-	client := u.GetBlobClient()
-	_, err = client.SetMetadata(u.jptm.Context(), meta, nil)
+	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta, nil)
 	return err
 }
 
@@ -292,8 +292,7 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 		BlobCacheControl: u.creationTimeHeaders.CacheControl,
 		BlobContentMD5: u.creationTimeHeaders.ContentMD5,
 	}
-	client := u.GetBlobClient()
-	_, err = client.Upload(
+	_, err = u.blobClient.Upload(
 		u.jptm.Context(),
 		streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{
