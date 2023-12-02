@@ -731,6 +731,9 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
 		return nil, err
 	}
+	if OAuthTokenInfo.TokenRefreshSource == TokenRefreshSourceTokenStore {
+		_, _ = OAuthTokenInfo.GetTokenStoreCredential()
+	}
 	return &OAuthTokenInfo, nil
 }
 
