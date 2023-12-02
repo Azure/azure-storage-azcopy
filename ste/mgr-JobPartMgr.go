@@ -184,13 +184,8 @@ type jobPartMgr struct {
 	dstServiceClient *common.ServiceClient
 
 	credInfo               common.CredentialInfo
-	clientOptions          azcore.ClientOptions
 	s2sSourceToken         func(context.Context) (*string, error)
-	s2sSourceClientOptions azcore.ClientOptions
 	credOption             *common.CredentialOpOptions
-
-	from              *common.Location
-
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
