@@ -247,8 +247,8 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 	env := make([]string, len(os.Environ()))
 	copy(env, os.Environ())
 
-	// paste in OAuth environment variables
-	if needsOAuth {
+	// paste in OAuth environment variables if not specified
+	if needsOAuth && os.Getenv("AZCOPY_AUTO_LOGIN_TYPE") == "" {
 		tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 
 		env = append(env,

@@ -345,6 +345,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 	sc, err := common.GetServiceClientForLocation(
 		b.targetLocation,
 		b.rootURL.String(),
+		b.credInfo.CredentialType,
 		b.credInfo.OAuthTokenInfo.TokenCredential,
 		&b.clientOptions,
 		fileSpecificOptions,

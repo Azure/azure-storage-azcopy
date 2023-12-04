@@ -134,6 +134,7 @@ jobs:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
           display_name: "Windows"
+          type: 'windows'
           go_path: 'C:\Users\VssAdministrator\go\bin\'
           suffix: '.exe'
           run_e2e: 'go test -timeout=1h -v ./e2etest > test.txt'
@@ -152,6 +153,12 @@ jobs:
       vmImage: $(imageName)
 
     steps:
+      - task: PowerShell@2
+        condition: eq(variables.type, 'windows' )
+        inputs: 
+          targetType: 'inline'
+          script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+        displayName: 'Install Powershell Az Module'
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)

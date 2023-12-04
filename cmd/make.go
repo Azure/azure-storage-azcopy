@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"net/url"
 	"strings"
 
@@ -99,6 +100,13 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		var filesystemClient *filesystem.Client
 		if credentialInfo.CredentialType.IsAzureOAuth() {
 			filesystemClient, err = filesystem.NewClient(resourceURL, cred, &filesystem.ClientOptions{ClientOptions: options})
+		} else if credentialInfo.CredentialType.IsSharedKey() {
+			var sharedKeyCred *azdatalake.SharedKeyCredential
+			sharedKeyCred, err = common.GetDatalakeSharedKeyCredential()
+			if err != nil {
+				return err
+			}
+			filesystemClient, err = filesystem.NewClientWithSharedKeyCredential(resourceURL, sharedKeyCred, &filesystem.ClientOptions{ClientOptions: options})
 		} else {
 			filesystemClient, err = filesystem.NewClientWithNoCredential(resourceURL, &filesystem.ClientOptions{ClientOptions: options})
 		}

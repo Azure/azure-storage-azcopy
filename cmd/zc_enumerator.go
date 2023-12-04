@@ -440,7 +440,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -483,13 +483,13 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
 		fileOptions := &common.FileClientOptions{
-				AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
+			AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
 		}
-		c, err := common.GetServiceClientForLocation(common.ELocation.File(), fileURLParts.String(), credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		c, err := common.GetServiceClientForLocation(common.ELocation.File(), fileURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}
-		fsc, err :=  c.FileServiceClient()
+		fsc, err := c.FileServiceClient()
 		if err != nil {
 			return nil, err
 		}
@@ -525,8 +525,8 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.OAuthTokenInfo.TokenCredential, &options, nil)
+
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -534,7 +534,6 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		if err != nil {
 			return nil, err
 		}
-
 
 		includeDirectoryStubs = true // DFS is supposed to feed folders in
 		if containerName == "" || strings.Contains(containerName, "*") {

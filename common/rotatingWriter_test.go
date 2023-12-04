@@ -112,7 +112,7 @@ func TestRotatingWriter(t *testing.T) {
 	a.Nil(err)
 	a.Equal(3, len(entries))
 	f = convertToMap(entries)
-	a.Contains(f, logFileName)
+	a.Contains(f, logFileName + ".log")
 	a.Contains(f, logFileName + ".0.log")
 	a.Contains(f, logFileName + ".1.log")
 }
