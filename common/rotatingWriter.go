@@ -88,7 +88,13 @@ func (w *rotatingWriter) rotate(suffix int32) error {
 }
 
 func (w *rotatingWriter) Close() error {
-	return w.file.Close()
+	if err := w.file.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(w.filePath, w.filePath + ".log"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (w *rotatingWriter) Write(p []byte) (n int, err error) {
