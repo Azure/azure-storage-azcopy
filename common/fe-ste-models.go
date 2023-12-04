@@ -180,7 +180,7 @@ var EPermanentDeleteOption = PermanentDeleteOption(3) // Default to "None"
 type PermanentDeleteOption uint8
 
 func (PermanentDeleteOption) Snapshots() PermanentDeleteOption { return PermanentDeleteOption(0) }
-func (PermanentDeleteOption) Versions()  PermanentDeleteOption  { return PermanentDeleteOption(1) }
+func (PermanentDeleteOption) Versions() PermanentDeleteOption  { return PermanentDeleteOption(1) }
 func (PermanentDeleteOption) SnapshotsAndVersions() PermanentDeleteOption {
 	return PermanentDeleteOption(2)
 }
@@ -332,8 +332,9 @@ func (ExitCode) Error() ExitCode   { return ExitCode(1) }
 // NoExit is used as a marker, to suppress the normal exit behaviour
 func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
+
 const (
 	// LogNone tells a logger not to log any entries passed to it.
 	LogNone LogLevel = iota
@@ -396,14 +397,15 @@ func (ll LogLevel) String() string {
 	}
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // LogSanitizer can be implemented to clean secrets from lines logged by ForceLog
 // By default no implementation is provided here, because pipeline may be used in many different
 // contexts, so the correct implementation is context-dependent
 type LogSanitizer interface {
 	SanitizeLogMessage(raw string) string
 }
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EJobPriority = JobPriority(0)
 
 // JobPriority defines the transfer priorities supported by the Storage Transfer Engine's channels
@@ -574,9 +576,10 @@ func (l Location) SupportsTrailingDot() bool {
 	if (l == ELocation.File()) || (l == ELocation.Local() && runtime.GOOS != "windows") {
 		return true
 	}
-	
+
 	return false
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -1066,7 +1069,7 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 const (
 	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
-	MaxAppendBlobBlockSize         = 4 * 1024 * 1024
+	MaxAppendBlobBlockSize         = 100 * 1024 * 1024
 	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
 	MaxRangeGetSize                = 4 * 1024 * 1024

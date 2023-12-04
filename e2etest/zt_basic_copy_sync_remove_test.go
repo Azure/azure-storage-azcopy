@@ -77,6 +77,33 @@ func TestBasic_CopyUploadLargeBlob(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestBasic_CopyUploadLargeAppendBlob(t *testing.T) {
+	btype := common.EBlobType.AppendBlob()
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+		blobType:  btype.String(),
+		// disableParallelTesting: true, // todo: why do append blobs _specifically_ fail when this is done in parallel?
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			h.CreateFile(f("test.txt", with{blobType: btype}), true)
+		},
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			bprops, ok := props["test.txt"]
+			h.GetAsserter().Assert(ok, equals(), true)
+			if ok {
+				h.GetAsserter().Assert(bprops.blobType, equals(), btype)
+			}
+		},
+	}, testFiles{
+		defaultSize: "200M",
+
+		shouldFail: []interface{}{
+			f("test.txt", with{blobType: btype}),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), btype.String()+"-"+btype.String())
+}
+
 func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
 		recursive: true,
