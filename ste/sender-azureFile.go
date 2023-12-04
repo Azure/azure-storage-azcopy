@@ -100,7 +100,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	if err != nil {
 		return nil, err
 	}
-	addFileRequestIntent := fileURLParts.SAS.Signature() != ""
+	addFileRequestIntent := (fileURLParts.SAS.Signature() == "") // We are using oAuth
 	shareName := fileURLParts.ShareName
 	shareSnapshot := fileURLParts.ShareSnapshot
 	directoryOrFilePath := fileURLParts.DirectoryOrFilePath
