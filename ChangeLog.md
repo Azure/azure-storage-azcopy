@@ -1,6 +1,39 @@
 
 # Change Log
 
+## Version 10.22.0
+
+### New Features
+
+1. Migrated to the latest [azdatalake SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake).
+2. Added support for OAuth when performing File -> File and Blob -> File copy/sync and File make/list/remove ([#2302](https://github.com/Azure/azure-storage-azcopy/issues/2302)).
+3. Added support to set tier on premium block blob accounts. ([#2337](https://github.com/Azure/azure-storage-azcopy/issues/2337))
+4. Added support to cache latest AzCopy version and check the remote version every 24 hours instead of every run. ([#2426](https://github.com/Azure/azure-storage-azcopy/pull/2426))
+5. Updated all SDK dependencies to their latest version and the default service version to `2023-08-03` for all services. ([#2402](https://github.com/Azure/azure-storage-azcopy/pull/2402))
+6. Added support to rotate AzCopy logs. ([#2213](https://github.com/Azure/azure-storage-azcopy/issues/2213))
+7. Added support to authenticate with Powershell and Azure CLI credentials. ([#2433](https://github.com/Azure/azure-storage-azcopy/pull/2433))
+
+### Bug Fixes
+
+1. Fixed an issue where http headers and access tier would sometimes be sent as empty headers.
+2. Fixed an issue where AzCopy would panic when passing an un-parseable URL. ([#2404](https://github.com/Azure/azure-storage-azcopy/issues/2404))
+3. Fixed an issue where Object ID would be set as Resource ID when using MSI. ([#2395](https://github.com/Azure/azure-storage-azcopy/issues/2395))
+4. Fixed an issue where the percent complete stat could round incorrectly. ([#1078](https://github.com/Azure/azure-storage-azcopy/issues/1078))
+5. Fixed an issue where `no transfers were scheduled` would be logged as an error, it is now logged as a warning. ([#874](https://github.com/Azure/azure-storage-azcopy/issues/874))
+6. Fixed an issue where non canonicalized headers would not be printed in the log. ([#2454](https://github.com/Azure/azure-storage-azcopy/pull/2454))
+7. Fixed an issue where cold tier would not be recognized as an allowed tier. ([#2447](https://github.com/Azure/azure-storage-azcopy/issues/2447))
+8. Fixed an issue where s2s append blob copies would fail with `AppendPositionConditionNotMet` error on retry after first experiencing a service timeout error. ([#2430](https://github.com/Azure/azure-storage-azcopy/pull/2430))
+9. Fixed an issue where AZCOPY_OAUTH_TOKEN_INFO would not be refreshed. ([#2434](https://github.com/Azure/azure-storage-azcopy/issues/2434))
+
+### Documentation
+
+1. Updated `--preserve-permissions` documentation to indicate the correct roles necessary to perform the operation. ([#2440](https://github.com/Azure/azure-storage-azcopy/pull/2440))
+2. Updated help message for `sync` and `copy` to include all ADLS Gen2 supported auth methods. ([#2440](https://github.com/Azure/azure-storage-azcopy/pull/2440))
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
 ## Version 10.22.0-Preview
 
 ### New Features
@@ -11,6 +44,12 @@
 
 1. Fixed an issue where http headers and access tier would sometimes be sent as empty headers.
 2. Fixed an issue where AzCopy would panic when passing an un-parseable URL. ([#2404](https://github.com/Azure/azure-storage-azcopy/issues/2404))
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
+## Version 10.21.2
 
 ### Security fixes
 
