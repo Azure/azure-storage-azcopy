@@ -78,30 +78,60 @@ func TestBasic_CopyUploadLargeBlob(t *testing.T) {
 }
 
 func TestBasic_CopyUploadLargeAppendBlob(t *testing.T) {
-	btype := common.EBlobType.AppendBlob()
+	dst := common.EBlobType.AppendBlob()
+	src := dst
+
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
-		blobType:  btype.String(),
-		// disableParallelTesting: true, // todo: why do append blobs _specifically_ fail when this is done in parallel?
+		blobType:  src.String(),
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
-			h.CreateFile(f("test.txt", with{blobType: btype}), true)
+			h.CreateFile(f("test.txt", with{blobType: dst}), false)
 		},
 		afterValidation: func(h hookHelper) {
 			props := h.GetDestination().getAllProperties(h.GetAsserter())
 			bprops, ok := props["test.txt"]
 			h.GetAsserter().Assert(ok, equals(), true)
 			if ok {
-				h.GetAsserter().Assert(bprops.blobType, equals(), btype)
+				h.GetAsserter().Assert(bprops.blobType, equals(), dst)
 			}
 		},
 	}, testFiles{
-		defaultSize: "200M",
+		defaultSize: "100M",
 
-		shouldFail: []interface{}{
-			f("test.txt", with{blobType: btype}),
+		shouldTransfer: []interface{}{
+			f("test.txt", with{blobType: src}),
 		},
-	}, EAccountType.Standard(), EAccountType.Standard(), btype.String()+"-"+btype.String())
+	}, EAccountType.Standard(), EAccountType.Standard(), src.String()+"-"+dst.String())
+}
+
+func TestBasic_CopyUploadLargeAppendBlobBlockSizeFlag(t *testing.T) {
+	dst := common.EBlobType.AppendBlob()
+	src := dst
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		blobType:    src.String(),
+		blockSizeMB: 100, // 100 MB
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			h.CreateFile(f("test.txt", with{blobType: dst}), false)
+		},
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			bprops, ok := props["test.txt"]
+			h.GetAsserter().Assert(ok, equals(), true)
+			if ok {
+				h.GetAsserter().Assert(bprops.blobType, equals(), dst)
+			}
+		},
+	}, testFiles{
+		defaultSize: "100M",
+
+		shouldTransfer: []interface{}{
+			f("test.txt", with{blobType: src}),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), src.String()+"-"+dst.String())
 }
 
 func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
