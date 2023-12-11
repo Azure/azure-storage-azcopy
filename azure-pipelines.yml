@@ -141,7 +141,7 @@ jobs:
           run_e2e: 'go test -timeout=1h -v ./e2etest > test.txt'
           save_exit_code: 'set exit_code=%errorlevel%'
           return_exit_code: 'exit %exit_code%'
-          run_azurite: 'start /B azurite --silent --location azurite --debug azurite\debug.log'
+          run_azurite: 'azurite --silent --location azurite --debug azurite\debug.log'
         MacOS:
           imageName: 'macos-11'
           build_name: 'azcopy_darwin_amd64'
