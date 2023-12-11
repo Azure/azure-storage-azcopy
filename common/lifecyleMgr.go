@@ -372,7 +372,10 @@ func (lcm *lifecycleMgr) Exit(o OutputBuilder, applicationExitCode ExitCode) {
 		exitCode:   applicationExitCode,
 	}
 
-	AzcopyCurrentJobLogger.CloseLog()
+	if AzcopyCurrentJobLogger != nil {
+		AzcopyCurrentJobLogger.CloseLog()
+	}
+	
 	if applicationExitCode != EExitCode.NoExit() {
 		// stall forever until the success message is printed and program exits
 		lcm.SurrenderControl()
