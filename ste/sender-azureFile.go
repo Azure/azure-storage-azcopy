@@ -51,6 +51,7 @@ type FileClientStub interface {
 // if the entity type is folder).
 type azureFileSenderBase struct {
 	jptm            IJobPartTransferMgr
+	addFileRequestIntent bool
 	fileOrDirClient FileClientStub
 	shareClient     *share.Client
 	chunkSize       int64
@@ -99,6 +100,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	if err != nil {
 		return nil, err
 	}
+	addFileRequestIntent := (fileURLParts.SAS.Signature() == "") // We are using oAuth
 	shareName := fileURLParts.ShareName
 	shareSnapshot := fileURLParts.ShareSnapshot
 	directoryOrFilePath := fileURLParts.DirectoryOrFilePath
@@ -132,6 +134,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	return &azureFileSenderBase{
 		jptm:                 jptm,
+		addFileRequestIntent: addFileRequestIntent,
 		shareClient:          shareClient,
 		fileOrDirClient:      client,
 		chunkSize:            chunkSize,

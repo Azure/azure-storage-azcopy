@@ -55,20 +55,12 @@ type IJobPartMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 
-	CredentialInfo() common.CredentialInfo
-	ClientOptions() azcore.ClientOptions
-	S2SSourceTokenCredential(context.Context) (*string, error)
-	S2SSourceClientOptions() azcore.ClientOptions
-	CredentialOpOptions() *common.CredentialOpOptions
-
-	SourceTrailingDot() *common.TrailingDotOption
-	TrailingDot() *common.TrailingDotOption
-	From() *common.Location
 	// These functions return Container/fileshare clients.
 	// They must be type asserted before use. In cases where they dont
 	// make sense (say SrcServiceClient for upload) they are il
 	SrcServiceClient() *common.ServiceClient
 	DstServiceClient() *common.ServiceClient
+	S2SSourceTokenCredential(context.Context) (*string, error)
 
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -192,15 +184,8 @@ type jobPartMgr struct {
 	dstServiceClient *common.ServiceClient
 
 	credInfo               common.CredentialInfo
-	clientOptions          azcore.ClientOptions
 	s2sSourceToken         func(context.Context) (*string, error)
-	s2sSourceClientOptions azcore.ClientOptions
 	credOption             *common.CredentialOpOptions
-
-	sourceTrailingDot *common.TrailingDotOption
-	trailingDot       *common.TrailingDotOption
-	from              *common.Location
-
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
@@ -691,10 +676,6 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jpm.jobMgr.ChunkStatusLogger()
 }
 
-func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
-	return jpm.credInfo
-}
-
 func (jpm *jobPartMgr) SrcServiceClient() *common.ServiceClient {
 	return jpm.srcServiceClient
 }
@@ -708,30 +689,6 @@ func (jpm *jobPartMgr) S2SSourceTokenCredential(ctx context.Context) (*string, e
 		return jpm.s2sSourceToken(ctx)
 	}
 	return nil, nil
-}
-
-func (jpm *jobPartMgr) ClientOptions() azcore.ClientOptions {
-	return jpm.clientOptions
-}
-
-func (jpm *jobPartMgr) S2SSourceClientOptions() azcore.ClientOptions {
-	return jpm.s2sSourceClientOptions
-}
-
-func (jpm *jobPartMgr) CredentialOpOptions() *common.CredentialOpOptions {
-	return jpm.credOption
-}
-
-func (jpm *jobPartMgr) SourceTrailingDot() *common.TrailingDotOption {
-	return jpm.sourceTrailingDot
-}
-
-func (jpm *jobPartMgr) TrailingDot() *common.TrailingDotOption {
-	return jpm.trailingDot
-}
-
-func (jpm *jobPartMgr) From() *common.Location {
-	return jpm.from
 }
 
 /* Status update messages should not fail */
