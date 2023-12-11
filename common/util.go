@@ -117,6 +117,9 @@ func GetServiceClientForLocation(loc Location,
 	switch loc {
 	case ELocation.BlobFS():
 		datalakeURLParts, err := azdatalake.ParseURL(resourceURL)
+		if err != nil {
+			return nil, err
+		}
 		datalakeURLParts.FileSystemName = ""
 		datalakeURLParts.PathName = ""
 		resourceURL = datalakeURLParts.String()
@@ -150,14 +153,15 @@ func GetServiceClientForLocation(loc Location,
 		fallthrough
 	case ELocation.Blob():
 		blobURLParts, err := blob.ParseURL(resourceURL)
+		if err != nil {
+			return nil, err
+		}
 		blobURLParts.ContainerName = ""
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		// If create a blob client for a datalake target, correct endpoint
-		if strings.Contains(blobURLParts.Host, ".dfs") {
-			blobURLParts.Host = strings.Replace(blobURLParts.Host, ".dfs", ".blob", 1)
-		}
+		// In case we are creating a blob client for a datalake target, correct the endpoint
+		blobURLParts.Host = strings.Replace(blobURLParts.Host, ".dfs", ".blob", 1)
 		resourceURL = blobURLParts.String()
 		var o *blobservice.ClientOptions
 		var bsc *blobservice.Client
@@ -187,6 +191,9 @@ func GetServiceClientForLocation(loc Location,
 
 	case ELocation.File():
 		fileURLParts, err := file.ParseURL(resourceURL)
+		if err != nil {
+			return nil, err
+		}
 		fileURLParts.ShareName = ""
 		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
