@@ -85,7 +85,7 @@ func (EnvironmentVariable) UserDir() EnvironmentVariable {
 func (EnvironmentVariable) AutoLoginType() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_AUTO_LOGIN_TYPE",
-		Description: "Specify the credential type to access Azure Resource without invoking the login command and using the OS secret store, available values SPN, MSI and DEVICE - sequentially for Service Principal, Managed Service Identity and Device workflow.",
+		Description: "Specify the credential type to access Azure Resource without invoking the login command and using the OS secret store, available values SPN, MSI, DEVICE, AZCLI, and PSCRED  - sequentially for Service Principal, Managed Service Identity, Device workflow, Azure CLI, or Azure PowerShell.",
 	}
 }
 
