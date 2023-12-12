@@ -276,7 +276,7 @@ func beginDetectNewVersion() chan struct{} {
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)
-			close(completionChannel) // let caller know that we have finished early
+			// close(completionChannel) // let caller know that we have finished early
 		}
 
 		// step 2: initialize pipeline
