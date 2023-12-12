@@ -276,7 +276,7 @@ func beginDetectNewVersion() chan struct{} {
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)
-			return
+			close(completionChannel) // let caller know that we have finished early
 		}
 
 		// step 2: initialize pipeline
@@ -296,6 +296,7 @@ func beginDetectNewVersion() chan struct{} {
 		// step 4: read newest version str
 		data := make([]byte, *downloadBlobResp.ContentLength)
 		_, err = downloadBlobResp.Body.Read(data)
+		defer downloadBlobResp.Body.Close()
 		if err != nil && err != io.EOF {
 			return
 		}
