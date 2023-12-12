@@ -169,9 +169,9 @@ jobs:
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
         displayName: 'Installing dependencies'
       - bash: |
-          sudo npm install -g azurite
-          sudo mkdir azurite
-          sudo azurite --silent --location azurite --debug azurite\debug.log &
+          npm install -g azurite
+          mkdir azurite
+          azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
       # Running E2E Tests on AMD64
       - script: |
