@@ -136,10 +136,6 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		jobsAdmin.JobsAdmin.LogToJobLog(folderMessage, common.LogInfo)
 	}
 
-	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
-		cca.trailingDot = common.ETrailingDotOption.Disable()
-	}
-	
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,
@@ -179,10 +175,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 	
 	// Create Source Client. 
-	var azureFileSpecificOptions any
+	var filesOptions *common.FileClientOptions
 	if cca.fromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		filesOptions = &common.FileClientOptions {
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+			FileRequestIntentBackup: srcCredInfo.CredentialType.IsAzureOAuth(),
 		}
 	}
 
@@ -193,7 +190,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		srcCredInfo.CredentialType,
 		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
-		azureFileSpecificOptions,
+		filesOptions,
 	)
 	if err != nil {
 		return nil, err
@@ -201,9 +198,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// Create Destination client
 	if cca.fromTo.To() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		fileRequestIntent := dstCredInfo.CredentialType.IsAzureOAuth() ||
+			(cca.fromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth())
+		filesOptions = &common.FileClientOptions {
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
+			FileRequestIntentBackup: fileRequestIntent,
 		}
 	}
 	
@@ -214,7 +214,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		dstCredInfo.CredentialType,
 		dstCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
-		azureFileSpecificOptions,
+		filesOptions,
 	)
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)

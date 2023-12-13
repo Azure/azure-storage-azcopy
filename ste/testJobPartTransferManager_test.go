@@ -53,6 +53,7 @@ func (t testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 	if t.fromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: true,
+			FileRequestIntentBackup: t.S2SSourceCredentialInfo().CredentialType.IsAzureOAuth(),
 		}
 	}
 	client, _ := common.GetServiceClientForLocation(
@@ -73,6 +74,7 @@ func (t testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       true,
 			AllowSourceTrailingDot: true,
+			FileRequestIntentBackup: t.CredentialInfo().CredentialType.IsAzureOAuth(),
 		}
 	}
 	client, _ := common.GetServiceClientForLocation(

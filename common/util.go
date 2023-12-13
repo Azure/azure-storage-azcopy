@@ -98,8 +98,9 @@ func VerifyIsURLResolvable(url_string string) error {
 }
 
 type FileClientOptions struct {
-	AllowTrailingDot       bool
-	AllowSourceTrailingDot bool
+	AllowTrailingDot        bool
+	AllowSourceTrailingDot  bool
+	FileRequestIntentBackup bool
 }
 
 // GetServiceClientForLocation returns service client for the resourceURL. It strips the

@@ -1538,17 +1538,20 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
-	var azureFileSpecificOptions any
-	if cca.FromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
-			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
-		}
-	}
-
+	
 	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
 		return err
 	}
+	var filesOptions *common.FileClientOptions
+	if cca.FromTo.From() == common.ELocation.File() {
+		filesOptions = &common.FileClientOptions{}
+		filesOptions.AllowTrailingDot = (cca.trailingDot == common.ETrailingDotOption.Enable())
+		if sourceCredInfo.CredentialType.IsAzureOAuth() {
+			filesOptions.FileRequestIntentBackup = true
+		}
+	}
+
 	sourceURL, _ := cca.Source.String()
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.From(),
@@ -1556,16 +1559,18 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		sourceCredInfo.CredentialType,
 		sourceCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
-		azureFileSpecificOptions,
+		filesOptions,
 	)
 	if err != nil {
 		return err
 	}
 
 	if cca.FromTo.To() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
-			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File(),
+		filesOptions = &common.FileClientOptions{}
+		filesOptions.AllowTrailingDot = (cca.trailingDot == common.ETrailingDotOption.Enable())
+		filesOptions.AllowSourceTrailingDot = filesOptions.AllowTrailingDot && (cca.FromTo.From() == common.ELocation.File())
+		if cca.credentialInfo.CredentialType.IsAzureOAuth() || sourceCredInfo.CredentialType.IsAzureOAuth() {
+			filesOptions.FileRequestIntentBackup = true
 		}
 	}
 	dstURL, _ := cca.Destination.String()
@@ -1575,7 +1580,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.credentialInfo.CredentialType,
 		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
-		azureFileSpecificOptions,
+		filesOptions,
 	)
 	if err != nil {
 		return err

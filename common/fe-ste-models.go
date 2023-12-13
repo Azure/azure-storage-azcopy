@@ -685,10 +685,6 @@ func (ft FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
 }
 
-func (ft FromTo) BothSupportTrailingDot() bool {
-	return ft.From().SupportsTrailingDot() && ft.To().SupportsTrailingDot()
-}
-
 func (ft FromTo) IsPropertyOnlyTransfer() bool {
 	return ft == EFromTo.BlobNone() || ft == EFromTo.BlobFSNone() || ft == EFromTo.FileNone()
 }

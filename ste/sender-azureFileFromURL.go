@@ -72,9 +72,6 @@ func (u *urlToAzureFileCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 			return
 		}
 		ctx := u.ctx
-		if u.addFileRequestIntent || (token != nil && u.jptm.FromTo().From() == common.ELocation.File()) {
-			ctx = context.WithValue(u.ctx, addFileRequestIntent, true)
-		}
 		ctx = context.WithValue(ctx, removeSourceContentCRC64, true)
 		_, err = u.getFileClient().UploadRangeFromURL(
 			ctx, u.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize,

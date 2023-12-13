@@ -335,6 +335,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 	if b. targetLocation == common.ELocation.File(){
 		fileSpecificOptions = &common.FileClientOptions {
 			AllowSourceTrailingDot: *b.trailingDot == common.ETrailingDotOption.Enable(),
+			FileRequestIntentBackup: b.credInfo.CredentialType.IsAzureOAuth(),
 		}
 	}
 	

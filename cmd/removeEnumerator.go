@@ -88,14 +88,13 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	}
 
 	targetURL, _ := cca.Source.String()
-	from := cca.FromTo.From()
-	if !from.SupportsTrailingDot() {
-		cca.trailingDot = common.ETrailingDotOption.Disable()
-	}
+	
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
-	var fileClientOptions any
+	var fileClientOptions *common.FileClientOptions
 	if cca.FromTo.From() == common.ELocation.File() {
-		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable()}
+		fileClientOptions = &common.FileClientOptions {
+			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+		}
 	}
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),

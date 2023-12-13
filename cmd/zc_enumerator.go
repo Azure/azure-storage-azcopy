@@ -484,6 +484,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		fileURLParts.DirectoryOrFilePath = ""
 		fileOptions := &common.FileClientOptions{
 			AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
+			FileRequestIntentBackup: credential.CredentialType.IsAzureOAuth(),
 		}
 		c, err := common.GetServiceClientForLocation(common.ELocation.File(), fileURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
 		if err != nil {
