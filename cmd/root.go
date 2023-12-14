@@ -276,41 +276,41 @@ func beginDetectNewVersion() chan struct{} {
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)
-			return
-		}
+		} else {
+			// step 2: initialize pipeline
+			options := createClientOptions(nil)
 
-		// step 2: initialize pipeline
-		options := createClientOptions(nil)
+			// step 3: start download
+			blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
+			if err != nil {
+				return
+			}
 
-		// step 3: start download
-		blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
-		if err != nil {
-			return
-		}
+			downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
+			if err != nil {
+				return
+			}
 
-		downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
-		if err != nil {
-			return
-		}
+			// step 4: read newest version str
+			data := make([]byte, *downloadBlobResp.ContentLength)
+			_, err = downloadBlobResp.Body.Read(data)
+			defer downloadBlobResp.Body.Close()
+			if err != nil && err != io.EOF {
+				return
+			}
 
-		// step 4: read newest version str
-		data := make([]byte, *downloadBlobResp.ContentLength)
-		_, err = downloadBlobResp.Body.Read(data)
-		if err != nil && err != io.EOF {
-			return
-		}
+			remoteVersion, err := NewVersion(string(data))
+			if err != nil {
+				return
+			}
 
-		remoteVersion, err := NewVersion(string(data))
-		if err != nil {
-			return
-		}
+			PrintOlderVersion(*remoteVersion, *localVersion)
 
-		PrintOlderVersion(*remoteVersion, *localVersion)
-
-		// step 5: persist remote version in local
-		err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
-		if err != nil {
-			return
+			// step 5: persist remote version in local
+			err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
+			if err != nil {
+				return
+			}
 		}
 
 		// let caller know we have finished, if they want to know
