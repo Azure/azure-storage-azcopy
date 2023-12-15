@@ -360,9 +360,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// If the given blobType is AppendBlob, block-size-mb should not be greater than
-	// 100MB.
+	// common.MaxAppendBlobBlockSize.
 	if cookedSize, _ := blockSizeInBytes(raw.blockSizeMB); cooked.blobType == common.EBlobType.AppendBlob() && cookedSize > common.MaxAppendBlobBlockSize {
-		return cooked, fmt.Errorf("block size cannot be greater than %dMB for AppendBlob blob type", common.MaxAppendBlobBlockSize/1048576)
+		return cooked, fmt.Errorf("block size cannot be greater than %dMB for AppendBlob blob type", common.MaxAppendBlobBlockSize/common.MegaByte)
 	}
 
 	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)

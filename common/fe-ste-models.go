@@ -1080,6 +1080,7 @@ const (
 	MaxNumberOfBlocksPerBlob       = 50000
 	BlockSizeThreshold             = 256 * 1024 * 1024
 	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */
+	MegaByte                       = 1024 * 1024
 )
 
 // This struct represent a single transfer entry with source and destination details
