@@ -81,6 +81,7 @@ type rawCopyCmdArgs struct {
 	excludeRegex          string
 	includeFileAttributes string
 	excludeFileAttributes string
+	excludeContainer      string
 	includeBefore         string
 	includeAfter          string
 	legacyInclude         string // used only for warnings
@@ -854,6 +855,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.IncludePatterns = raw.parsePatterns(raw.include)
 	cooked.ExcludePatterns = raw.parsePatterns(raw.exclude)
 	cooked.ExcludePathPatterns = raw.parsePatterns(raw.excludePath)
+	cooked.excludeContainer = raw.parsePatterns(raw.excludeContainer)
 
 	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.From() != common.ELocation.Local() {
 		return cooked, errors.New("cannot check file attributes on remote objects")
@@ -1097,6 +1099,7 @@ type CookedCopyCmdArgs struct {
 	IncludePatterns       []string
 	ExcludePatterns       []string
 	ExcludePathPatterns   []string
+	excludeContainer      []string
 	IncludeFileAttributes []string
 	ExcludeFileAttributes []string
 	IncludeBefore         *time.Time
@@ -1540,7 +1543,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
 	}
@@ -1563,7 +1566,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	if cca.FromTo.To() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File(),
 		}
@@ -2078,6 +2081,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent')")
 	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeContainer, "exclude-container", "", "Exclude these containers when transferring from Account to Account only.")
 	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "Preserve full properties during service to service copy. "+
 		"For AWS S3 and Azure File non-single file source, the list operation doesn't return full properties of objects and files. To preserve full properties, AzCopy needs to send one additional request per object or file.")

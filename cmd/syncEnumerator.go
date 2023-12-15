@@ -43,7 +43,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		return nil, err
 	}
 
-	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType != common.ECredentialType.Anonymous()  {
+	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType != common.ECredentialType.Anonymous() {
 		if srcCredInfo.CredentialType.IsAzureOAuth() && cca.fromTo.To().CanForwardOAuthTokens() {
 			// no-op, this is OK
 		} else if srcCredInfo.CredentialType == common.ECredentialType.GoogleAppCredentials() || srcCredInfo.CredentialType == common.ECredentialType.S3AccessKey() || srcCredInfo.CredentialType == common.ECredentialType.S3PublicBucket() {
@@ -64,7 +64,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, cca.excludeContainer)
 
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, cca.excludeContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
-	
+
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,
@@ -175,13 +175,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 	}
 
-
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
-	
-	// Create Source Client. 
+
+	// Create Source Client.
 	var azureFileSpecificOptions any
 	if cca.fromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
 	}
@@ -201,12 +200,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// Create Destination client
 	if cca.fromTo.To() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
-			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
 		}
 	}
-	
+
 	dstURL, _ := cca.destination.String()
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
