@@ -4,13 +4,19 @@
 ## Version 10.22.1
 
 ### Bug Fixes
+
 1. Fixed a regression with Azurite support. ([#2485](https://github.com/Azure/azure-storage-azcopy/issues/2485))
 2. Fixed an issue where AZCOPY_OAUTH_TOKEN_INFO would be refreshed too often. ([#2503](https://github.com/Azure/azure-storage-azcopy/pull/2503))
 3. Fixed an issue where commands would lag for multiple seconds. ([#2482](https://github.com/Azure/azure-storage-azcopy/issues/2482))
 4. Fixed an issue where azcopy version would crash. ([#2483](https://github.com/Azure/azure-storage-azcopy/issues/2483))
 
 ### Documentation
+
 1. Updated documentation to include AZCLI and PSCRED auto login types. ([#2494](https://github.com/Azure/azure-storage-azcopy/pull/2494))
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
 
 ## Version 10.22.0
 
