@@ -270,6 +270,16 @@ func (s *ServiceClient) DatalakeServiceClient() (*datalake.Client, error) {
 	return s.dsc, nil
 }
 
+// This is currently used only in testcases
+func NewServiceClient(bsc *blobservice.Client,
+					  fsc *fileservice.Client,
+					  dsc *datalake.Client) *ServiceClient {
+	return &ServiceClient {
+		bsc: bsc,
+		fsc: fsc,
+		dsc: dsc,
+	}
+}
 
 type FileClientStub interface {
 	URL() string

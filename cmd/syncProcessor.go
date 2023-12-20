@@ -312,9 +312,9 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			bsc, _ := sc.BlobServiceClient()
 			var blobClient *blob.Client = bsc.NewContainerClient(b.containerName).NewBlobClient(path.Join(b.rootPath + object.relativePath))
 			
-			objURL, err := b.getObjectURL(blobClient.URL())
+			objURL, err = b.getObjectURL(blobClient.URL())
 			if err != nil {
-				return err
+				break
 			}
 			b.folderManager.RecordChildExists(objURL)
 			defer b.folderManager.RecordChildDeleted(objURL)
@@ -325,6 +325,9 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(path.Join(b.rootPath + object.relativePath))
 
 			objURL, err = b.getObjectURL(fileClient.URL())
+			if err != nil {
+				break
+			}
 			b.folderManager.RecordChildExists(objURL)
 			defer b.folderManager.RecordChildDeleted(objURL)
 
@@ -335,9 +338,9 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			dsc, _ := sc.DatalakeServiceClient()
 			fileClient := dsc.NewFileSystemClient(b.containerName).NewFileClient(path.Join(b.rootPath + object.relativePath))
 			
-			objURL, err := b.getObjectURL(fileClient.DFSURL())
+			objURL, err = b.getObjectURL(fileClient.DFSURL())
 			if err != nil {
-				return err
+				break
 			}
 			b.folderManager.RecordChildExists(objURL)
 			defer b.folderManager.RecordChildDeleted(objURL)
