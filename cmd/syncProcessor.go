@@ -254,7 +254,6 @@ type remoteResourceDeleter struct {
 	remoteClient    *common.ServiceClient
 	containerName   string // name of target container/share/filesystem
 	rootPath        string
-	rootURL         *url.URL
 	ctx             context.Context
 	targetLocation  common.Location
 	folderManager   common.FolderDeletionManager
@@ -268,7 +267,6 @@ func newRemoteResourceDeleter(ctx context.Context, remoteClient *common.ServiceC
 		return nil, err
 	}
 	return &remoteResourceDeleter{
-		rootURL:         rawRootURL,
 		containerName:   containerName,
 		rootPath:        rootPath,
 		remoteClient:    remoteClient,
