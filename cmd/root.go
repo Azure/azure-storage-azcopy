@@ -23,8 +23,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,6 +30,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -117,8 +118,27 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
-		common.AzcopyCurrentJobLogger.OpenLog()
+
+		// If the command is for resuming a job with a specific JobID,
+		// use the provided JobID to resume the job; otherwise, create a new JobID.
+		if cmd.Use == "resume [jobID]" {
+			// If no argument is passed then it is not valid
+			if len(args) != 1 {
+				return err
+			}
+
+			parsedJobID, err := common.ParseJobID(args[0])
+
+			if err != nil {
+				return err
+			}
+
+			common.AzcopyCurrentJobLogger = common.NewJobLogger(parsedJobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
+			common.AzcopyCurrentJobLogger.OpenLog()
+		} else {
+			common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
+			common.AzcopyCurrentJobLogger.OpenLog()
+		}
 
 		glcm.SetForceLogging()
 
