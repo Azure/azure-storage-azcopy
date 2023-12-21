@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -124,21 +125,19 @@ var rootCmd = &cobra.Command{
 		if cmd.Use == "resume [jobID]" {
 			// If no argument is passed then it is not valid
 			if len(args) != 1 {
-				return err
+				return errors.New("this command requires jobId to be passed as argument")
 			}
 
-			parsedJobID, err := common.ParseJobID(args[0])
+			loggerInfo.jobID, err = common.ParseJobID(args[0])
 
 			if err != nil {
 				return err
 			}
 
-			common.AzcopyCurrentJobLogger = common.NewJobLogger(parsedJobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
-			common.AzcopyCurrentJobLogger.OpenLog()
-		} else {
-			common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
-			common.AzcopyCurrentJobLogger.OpenLog()
 		}
+
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
+		common.AzcopyCurrentJobLogger.OpenLog()
 
 		glcm.SetForceLogging()
 
