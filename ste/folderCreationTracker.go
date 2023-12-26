@@ -85,6 +85,11 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return nil // Never persist to dev-null
 	}
 
+	if idx, ok := f.contents[folder]; ok &&
+		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
+			return nil
+	}
+	
 	err := doCreation()
 	if err != nil {
 		return err
