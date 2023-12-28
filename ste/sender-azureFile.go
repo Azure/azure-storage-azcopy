@@ -465,11 +465,7 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		u.fileOrDirClient,
 		u.jptm.GetForceIfReadOnly())
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (u *azureFileSenderBase) DirUrlToString() string {
