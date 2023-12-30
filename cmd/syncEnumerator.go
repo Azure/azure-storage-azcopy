@@ -176,7 +176,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 	
 	// Create Source Client. 
 	var azureFileSpecificOptions any

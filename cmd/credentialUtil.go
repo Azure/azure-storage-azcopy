@@ -189,7 +189,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		RequestLogOptions: ste.RequestLogOptions{
 			SyslogDisabled: common.IsForceLoggingDisabled(),
 		},
-	})
+	}, nil)
 	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
 	if isSASExisted := sasKey.Signature() != ""; isSASExisted {
 		if isMDAccount {
@@ -651,7 +651,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logger common.ILoggerResetable) azcore.ClientOptions {
+// createClientOptions creates generic client options which are required to create any
+// client to interact with storage service. Default options are modified to suit azcopy.
+// srcCred is required in cases where source is authenticated via oAuth for S2S transfers
+func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedCredential) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
 
 	if logger != nil {
@@ -665,7 +668,7 @@ func createClientOptions(logger common.ILoggerResetable) azcore.ClientOptions {
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions)
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, nil)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

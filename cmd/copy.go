@@ -1290,7 +1290,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1346,7 +1346,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1443,7 +1443,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 					scopes = []string{common.ManagedDiskScope}
 				}
 				srcCredInfo.OAuthTokenInfo = *tokenInfo
-				jpo.CredentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenCred, scopes)
+				jpo.CredentialInfo.S2SSourceTokenCredential = common.ScopedCredential1(tokenCred, scopes)
 			}
 			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
 			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
@@ -1537,10 +1537,10 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
 	}
@@ -1563,7 +1563,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	if cca.FromTo.To() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File(),
 		}

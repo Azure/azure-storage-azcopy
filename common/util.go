@@ -2,12 +2,13 @@ package common
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -227,16 +228,42 @@ func GetServiceClientForLocation(loc Location,
 	}
 }
 
-// ScopedCredential takes in a azcore.TokenCredential object & a list of scopes
-// and returns a function object. This function object on invocation returns 
+// ScopedCredential1 takes in a azcore.TokenCredential object & a list of scopes
+// and returns a function object. This function object on invocation returns
 // a bearer token with specified scope and is of format "Bearer + <Token>".
 // TODO: Token should be cached.
-func ScopedCredential(cred azcore.TokenCredential, scopes []string) func(context.Context) (*string, error) {
+func ScopedCredential1(cred azcore.TokenCredential, scopes []string) func(context.Context) (*string, error) {
 	return func(ctx context.Context) (*string, error) {
 		token, err := cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
 		t := "Bearer " + token.Token
 		return &t, err
 	}
+}
+
+// ScopedCredential takes in a credInfo object and returns ScopedCredential
+// if credentialType is either MDOAuth or oAuth. For anything else,
+// nil is returned
+func NewScopedCredential(cred azcore.TokenCredential, credType CredentialType) *ScopedCredential {
+	var scope string
+	if !credType.IsAzureOAuth() {
+		return nil
+	} else  if credType == ECredentialType.MDOAuthToken() {
+		scope = ManagedDiskScope
+	} else if credType == ECredentialType.OAuthToken() {
+		scope = StorageScope
+	}
+	return &ScopedCredential{cred: cred, scopes: []string{scope}}
+}
+
+type ScopedCredential struct {
+	cred azcore.TokenCredential
+	scopes []string
+}
+
+func (s *ScopedCredential) GetToken(ctx context.Context,
+	                                _ policy.TokenRequestOptions)(
+									azcore.AccessToken, error) {
+	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes})
 }
 
 type ServiceClient struct {

@@ -129,7 +129,7 @@ func (d *dialRateLimiter) DialContext(ctx context.Context, network, address stri
 	return d.dialer.DialContext(ctx, network, address)
 }
 
-func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions) azcore.ClientOptions {
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, srcCred azcore.TokenCredential) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	// TODO (gapra): Does this have to happen this happen here?
@@ -137,6 +137,9 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
 	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(statsAcc)}
+	if srcCred != nil {
+		perRetryPolicies = append(perRetryPolicies, NewSourceAuthPolicy(srcCred))
+	}
 	retry.ShouldRetry = getShouldRetry()
 
 	return azcore.ClientOptions{

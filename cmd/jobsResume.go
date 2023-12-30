@@ -293,7 +293,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		}
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 
 	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source+rca.SourceSAS, srcCredType, tc, &options, nil)
 	if err != nil {
@@ -401,7 +401,7 @@ func (rca resumeCmdArgs) process() error {
 		} else {
 			credentialInfo.OAuthTokenInfo = *tokenInfo
 			if rca.SourceSAS == "" {
-				credentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenInfo, []string{common.StorageScope})
+				credentialInfo.S2SSourceTokenCredential = common.ScopedCredential1(tokenInfo, []string{common.StorageScope})
 			}
 		}
 	}
