@@ -691,11 +691,8 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
-		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-			if srcCredInfo.CredentialType.IsAzureOAuth() {
-				cca.credentialInfo.S2SSourceTokenCredential = common.ScopedCredential1(tokenInfo, []string{common.StorageScope})
-			}
+		} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
+			return err
 		}
 	}
 

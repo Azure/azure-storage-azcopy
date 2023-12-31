@@ -300,6 +300,11 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		return nil, nil, err
 	}
 
+	var srcCred *common.ScopedCredential
+	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
+		srcCred = common.NewScopedCredential(tc, srcCredType)
+	}
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
 	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination+rca.DestinationSAS, dstCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err

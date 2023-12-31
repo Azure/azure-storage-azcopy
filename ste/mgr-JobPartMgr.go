@@ -129,7 +129,7 @@ func (d *dialRateLimiter) DialContext(ctx context.Context, network, address stri
 	return d.dialer.DialContext(ctx, network, address)
 }
 
-func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, srcCred azcore.TokenCredential) azcore.ClientOptions {
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, srcCred *common.ScopedCredential) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
 	// TODO (gapra): Does this have to happen this happen here?

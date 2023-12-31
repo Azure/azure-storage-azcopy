@@ -1545,7 +1545,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
 		return err
 	}
@@ -1553,8 +1553,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		sourceURL,
-		sourceCredInfo.CredentialType,
-		sourceCredInfo.OAuthTokenInfo.TokenCredential,
+		srcCredInfo.CredentialType,
+		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
@@ -1569,6 +1569,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 	dstURL, _ := cca.Destination.String()
+
+	var srcCred *common.ScopedCredential
+	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
+		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
+	}
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		dstURL,
@@ -1602,12 +1608,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
 		var e *CopyEnumerator
-		var srcCredInfo common.CredentialInfo
-		srcCredInfo, err = cca.getSrcCredential(ctx, &jobPartOrder)
-		if err != nil {
-			return fmt.Errorf("failed to discern source credential type: %w", err)
-		}
-
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
