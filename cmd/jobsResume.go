@@ -388,29 +388,6 @@ func (rca resumeCmdArgs) process() error {
 		return err
 	}
 
-	srcCredType, _, err := getCredentialTypeForLocation(ctx,
-		getJobFromToResponse.FromTo.From(),
-		getJobFromToResponse.Source,
-		rca.SourceSAS,
-		true,
-		common.CpkOptions{})
-	if err != nil {
-		return err
-	}
-
-	if (credentialInfo.CredentialType.IsAzureOAuth()) || srcCredType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
-			if rca.SourceSAS == "" {
-				credentialInfo.S2SSourceTokenCredential = common.ScopedCredential1(tokenInfo, []string{common.StorageScope})
-			}
-		}
-	}
-
 	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
 		ctx, getJobFromToResponse.FromTo,
 		getJobFromToResponse.Source,

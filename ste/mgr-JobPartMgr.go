@@ -60,7 +60,7 @@ type IJobPartMgr interface {
 	// make sense (say SrcServiceClient for upload) they are il
 	SrcServiceClient() *common.ServiceClient
 	DstServiceClient() *common.ServiceClient
-	S2SSourceTokenCredential(context.Context) (*string, error)
+	SourceIsOAuth() bool
 
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
@@ -186,8 +186,9 @@ type jobPartMgr struct {
 	srcServiceClient *common.ServiceClient
 	dstServiceClient *common.ServiceClient
 
+
 	credInfo               common.CredentialInfo
-	s2sSourceToken         func(context.Context) (*string, error)
+	srcIsOAuth			   bool // true if source is authenticated via oauth
 	credOption             *common.CredentialOpOptions
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
@@ -443,8 +444,6 @@ func (jpm *jobPartMgr) clientInfo() {
 		jpm.credInfo = jobState.CredentialInfo
 	}
 
-	jpm.s2sSourceToken = jpm.credInfo.S2SSourceTokenCredential
-
 	jpm.credOption = &common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
 		LogError: func(str string) { jpm.Log(common.LogError, str) },
@@ -687,11 +686,8 @@ func (jpm *jobPartMgr) DstServiceClient() *common.ServiceClient {
 	return jpm.dstServiceClient
 }
 
-func (jpm *jobPartMgr) S2SSourceTokenCredential(ctx context.Context) (*string, error) {
-	if jpm.s2sSourceToken != nil {
-		return jpm.s2sSourceToken(ctx)
-	}
-	return nil, nil
+func (jpm *jobPartMgr) SourceIsOAuth() bool {
+	return jpm.srcIsOAuth
 }
 
 /* Status update messages should not fail */

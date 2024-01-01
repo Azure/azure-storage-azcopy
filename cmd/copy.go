@@ -1435,18 +1435,10 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 			// get token from env var or cache
 			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 				return srcCredInfo, err
-			} else if tokenCred, err := tokenInfo.GetTokenCredential(); err != nil {
+			} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
+				// we just verified we can get a token credential
 				return srcCredInfo, err
-			} else {
-				scopes := []string{common.StorageScope}
-				if jpo.S2SSourceCredentialType == common.ECredentialType.MDOAuthToken() {
-					scopes = []string{common.ManagedDiskScope}
-				}
-				srcCredInfo.OAuthTokenInfo = *tokenInfo
-				jpo.CredentialInfo.S2SSourceTokenCredential = common.ScopedCredential1(tokenCred, scopes)
 			}
-			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
-			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
 		}
 	}
 	return srcCredInfo, nil

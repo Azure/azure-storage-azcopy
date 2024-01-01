@@ -983,7 +983,11 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 }
 
 func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {
-	return jptm.jobPartMgr.S2SSourceTokenCredential(ctx)
+	invalidToken := "InvalidToken" // This will be replaced by srcAuthPolicy with valid one
+	if jptm.jobPartMgr.SourceIsOAuth() {
+		return &invalidToken, nil
+	}
+	return nil, nil
 }
 
 func (jptm *jobPartTransferMgr) SrcServiceClient() *common.ServiceClient {
