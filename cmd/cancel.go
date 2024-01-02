@@ -58,8 +58,10 @@ func (cca cookedCancelCmdArgs) process() error {
 	if !cancelJobResponse.CancelledPauseResumed {
 		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
 			glcm.Info(cancelJobResponse.ErrorMsg)
-			var summary common.ListJobSummaryResponse
-			Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+			resp := common.ListJobSummaryResponse{}
+			rpcCmd := common.ERpcCmd.ListJobSummary()
+			Rpc(rpcCmd, &cca.jobID, &resp)
+			PrintJobProgressSummary(resp)
 			return nil
 		}
 		return errors.New(cancelJobResponse.ErrorMsg)
