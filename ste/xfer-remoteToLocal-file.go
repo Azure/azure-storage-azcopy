@@ -383,9 +383,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		jptm.SetStatus(common.ETransferStatus.Cancelled())
 	}
 
-	// when decompressing we have an active file, but we would not be using
-	// chunked writer and we dont do md5 comparision
-	haveNonEmptyFile := (activeDstFile != nil && cw != nil)
+	haveNonEmptyFile := activeDstFile != nil
 	if haveNonEmptyFile {
 
 		// wait until all received chunks are flushed out
@@ -421,11 +419,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 					jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
 				}
 			}
-		}
 
-		// In case we are writing zero byte files or if decompressing, we still need to 
-		// rename files
-		if activeDstFile != nil {
 			// check if we need to rename back to original name. At this point, we're sure the file is completely
 			// downloaded and not corrupt. In fact, post this point we should only log errors and
 			// not fail the transfer.
