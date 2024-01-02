@@ -27,7 +27,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // sourceAuthPolicy should be used as a per-retry policy
@@ -46,18 +45,20 @@ func NewSourceAuthPolicy(cred azcore.TokenCredential) policy.Policy {
 }
 
 func (s *sourceAuthPolicy) Do(req *policy.Request) (*http.Response, error) {
-	if req.Raw().Header.Get(copySourceAuthHeader) == "" { //nolint:staticcheck
+	if len(req.Raw().Header[copySourceAuthHeader]) == 0 { // nolint:staticcheck
 		return req.Next()
 	}
 
-	options := policy.TokenRequestOptions{Scopes: []string{common.StorageScope}}
+	// s.cred is common.ScopedCredential, options gets ignored. This is done so 
+	// that common.ScopedCredential is tagged as azcore.TokenCredential interface
+	options := policy.TokenRequestOptions{Scopes: nil}
 	s.lock.RLock()
-	if time.Until(s.token.ExpiresOn) < minimumTokenValidDuration {
+	if s.token == nil || time.Until(s.token.ExpiresOn) < minimumTokenValidDuration {
 		s.lock.RUnlock()			
 		s.lock.Lock()
 		// If someone else has updated the token while we waited
 		// above, we dont have to refresh again
-		if time.Until(s.token.ExpiresOn) < minimumTokenValidDuration {
+		if s.token == nil || time.Until(s.token.ExpiresOn) < minimumTokenValidDuration {
 			tk, err := s.cred.GetToken(req.Raw().Context(), options)
 			if err != nil {
 				s.lock.Unlock()
@@ -65,10 +66,10 @@ func (s *sourceAuthPolicy) Do(req *policy.Request) (*http.Response, error) {
 			}
 			s.token = &tk
 		}
-		req.Raw().Header.Set(copySourceAuthHeader, s.token.Token)
+		req.Raw().Header[copySourceAuthHeader] = []string{"Bearer " + s.token.Token}
 		s.lock.Unlock()
 	} else {
-		req.Raw().Header.Set(copySourceAuthHeader, s.token.Token)
+		req.Raw().Header[copySourceAuthHeader] = []string{"Bearer " + s.token.Token}
 		s.lock.RUnlock()
 	}
 
