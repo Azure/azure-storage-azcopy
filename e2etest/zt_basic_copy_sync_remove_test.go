@@ -147,6 +147,24 @@ func TestBasic_CopyDownloadSingleBlob(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
+func TestBasic_CopyDownloadSingleBlobEmptyDir(t *testing.T) {
+	// Only Windows fails to rename if there is an empty dir name in the path
+	if runtime.GOOS != "windows" {
+		return
+	}
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+		},
+		shouldFail: []interface{}{
+			f("dir1//dir3/file1.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
 func TestBasic_CopyDownloadEmptyBlob(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllDownloads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
