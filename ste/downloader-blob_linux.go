@@ -31,6 +31,7 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 	// try to remove the file before we create something else over it
 	_ = os.Remove(destination)
 
+	//needChunks = (size > 0 || jptm.ShouldDecompress())
 	needChunks = size > 0
 	needMakeFile := true
 	var mode = uint32(common.DEFAULT_FILE_PERM)

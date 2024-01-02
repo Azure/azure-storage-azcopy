@@ -174,7 +174,7 @@ func remoteToLocal_file(jptm IJobPartTransferMgr, pacer pacer, df downloaderFact
 
 		if !needChunks { // If no chunks need to be transferred (e.g. this is 0-bytes long, a symlink, etc.), treat it as a 0-byte transfer
 			dl.Prologue(jptm)
-			epilogueWithCleanupDownload(jptm, dl, nil, nil)
+			epilogueWithCleanupDownload(jptm, dl, dstFile, nil)
 			return
 		}
 
