@@ -484,7 +484,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			if err := gz.Close(); err != nil {
 				c.AssertNoErr(err)
 			}
-			if ad.obj.creationProperties.contentHeaders != nil {
+			if ad.obj.creationProperties.contentHeaders == nil {
 				ad.obj.creationProperties.contentHeaders = &contentHeaders{}
 			}
 			contentEncoding := "gzip"
