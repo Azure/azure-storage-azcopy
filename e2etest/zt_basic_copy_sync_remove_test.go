@@ -237,7 +237,7 @@ func TestBasic_CopyRemoveFileHNS(t *testing.T) {
 	}
 
 	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), allCredentialTypes, anonymousAuthOnly, params{}, nil, testFiles{
-		objectTarget: "file1.txt",
+		objectTarget: objectTarget{objectName: "file1.txt"},
 		defaultSize:  "1K",
 		shouldTransfer: []interface{}{
 			"file1.txt",
@@ -329,7 +329,7 @@ func TestBasic_CopyRemoveFolderHNS(t *testing.T) {
 			},
 		},
 		testFiles{
-			objectTarget: "foo",
+			objectTarget: objectTarget{objectName: "foo"},
 			defaultSize:  "1K",
 			shouldTransfer: []interface{}{
 				folder(""), // really only should target root

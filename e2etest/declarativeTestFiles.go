@@ -110,7 +110,7 @@ type objectUnixStatContainer struct {
 	// mode can contain THE FOLLOWING file type specifier bits (common.S_IFSOCK, common.S_IFIFO)
 	// common.S_IFDIR and common.S_IFLNK are achievable using folder() and symlink().
 	// TODO/Spike: common.S_IFBLK and common.S_IFCHR may be difficult to replicate consistently in a test environment
-	mode       *uint32
+	mode *uint32
 
 	accessTime *time.Time
 	modTime    *time.Time
@@ -196,9 +196,9 @@ func (o *objectUnixStatContainer) AddToMetadata(metadata map[string]*string) {
 		delete(metadata, common.POSIXFIFOMeta)
 		delete(metadata, common.POSIXSocketMeta)
 		switch {
-		case *o.mode & common.S_IFIFO == common.S_IFIFO:
+		case *o.mode&common.S_IFIFO == common.S_IFIFO:
 			metadata[common.POSIXFIFOMeta] = to.Ptr("true")
-		case *o.mode & common.S_IFSOCK == common.S_IFSOCK:
+		case *o.mode&common.S_IFSOCK == common.S_IFSOCK:
 			metadata[common.POSIXSocketMeta] = to.Ptr("true")
 		}
 	}
@@ -456,15 +456,21 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 	return result
 }
 
+type objectTarget struct {
+	objectName string
+	snapshotid bool    // add snapshot id
+	versionid  *string // add version id
+}
+
 //////////
 
 // Represents a set of source files, including what we expect should happen to them
 // Our expectations, e.g. success or failure, are represented by whether we put each file into
 // "shouldTransfer", "shouldFail" etc.
 type testFiles struct {
-	defaultSize  string                  // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
-	objectTarget string                  // should we target only a single file/folder?
-	destTarget   string                  // do we want to copy under a folder or rename?
+	defaultSize  string                      // how big should the files be? Applies to those files that don't specify individual sizes. Uses the same K, M, G suffixes as benchmark mode's size-per-file
+	objectTarget objectTarget                // should we target only a single file/folder?
+	destTarget   string                      // do we want to copy under a folder or rename?
 	sourcePublic *container.PublicAccessType // should the source blob container be public? (ONLY APPLIES TO BLOB.)
 
 	// The files/folders that we expect to be transferred. Elements of the list must be strings or testObject's.
