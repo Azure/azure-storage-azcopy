@@ -498,7 +498,8 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			b.creationProperties.contentHeaders = &contentHeaders{}
 		}
 		if ad.obj.creationProperties.contentHeaders.contentMD5 == nil {
-			contentMD5 := md5.Sum(b.body)
+			contentMD5 := md5.Sum(sourceData) // md5 should always be of original data because
+			// that is what azcopy will compare against.
 			ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 		}
 
