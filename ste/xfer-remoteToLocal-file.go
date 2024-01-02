@@ -425,7 +425,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 			// not fail the transfer.
 			renameNecessary := !strings.EqualFold(info.getDownloadPath(), info.Destination) &&
 				!strings.EqualFold(info.Destination, common.Dev_Null)
-			if renameNecessary {
+			if err == nil && renameNecessary { {
 				renameErr := os.Rename(info.getDownloadPath(), info.Destination)
 				if renameErr != nil {
 					jptm.LogError(info.Destination, fmt.Sprintf(
