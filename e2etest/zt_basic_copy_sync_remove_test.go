@@ -31,6 +31,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -73,6 +74,63 @@ func TestBasic_CopyUploadLargeBlob(t *testing.T) {
 		shouldTransfer: []interface{}{
 			folder(""),
 			f("file1.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_CopyUploadLargeAppendBlob(t *testing.T) {
+	dst := common.EBlobType.AppendBlob()
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+		blobType:  dst.String(),
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			bprops := &objectProperties{}
+			for key, _ := range props {
+				// we try to match the test.txt substring because local test files have randomizing prefix to file names
+				if strings.Contains(key, "test.txt") {
+					bprops = props[key]
+				}
+			}
+			h.GetAsserter().Assert(bprops.blobType, equals(), dst)
+		},
+	}, testFiles{
+		defaultSize: "101M",
+
+		shouldTransfer: []interface{}{
+			f("test.txt", with{blobType: dst}),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_CopyUploadLargeAppendBlobBlockSizeFlag(t *testing.T) {
+	dst := common.EBlobType.AppendBlob()
+
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		blobType:    dst.String(),
+		blockSizeMB: 100, // 100 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			bprops := &objectProperties{}
+			for key, _ := range props {
+				// we try to match the test.txt substring because local test files have randomizing prefix to file names
+				if strings.Contains(key, "test.txt") {
+					bprops = props[key]
+				}
+			}
+			h.GetAsserter().Assert(bprops.blobType, equals(), dst)
+		},
+	}, testFiles{
+		defaultSize: "101M",
+
+		shouldTransfer: []interface{}{
+			f("test.txt", with{blobType: dst}),
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

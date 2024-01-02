@@ -360,9 +360,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// If the given blobType is AppendBlob, block-size-mb should not be greater than
-	// 4MB.
+	// common.MaxAppendBlobBlockSize.
 	if cookedSize, _ := blockSizeInBytes(raw.blockSizeMB); cooked.blobType == common.EBlobType.AppendBlob() && cookedSize > common.MaxAppendBlobBlockSize {
-		return cooked, fmt.Errorf("block size cannot be greater than 4MB for AppendBlob blob type")
+		return cooked, fmt.Errorf("block size cannot be greater than %dMB for AppendBlob blob type", common.MaxAppendBlobBlockSize/common.MegaByte)
 	}
 
 	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)
@@ -1540,7 +1540,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
 	}

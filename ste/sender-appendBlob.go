@@ -63,8 +63,8 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 
 	// compute chunk count
 	chunkSize := transferInfo.BlockSize
-	// If the given chunk Size for the Job is greater than maximum append blob block size i.e 4 MB,
-	// then set chunkSize as 4 MB.
+	// If the given chunk Size for the Job is greater than maximum append blob block size i.e common.MaxAppendBlobBlockSize,
+	// then set chunkSize as common.MaxAppendBlobBlockSize.
 	chunkSize = common.Iff(
 		chunkSize > common.MaxAppendBlobBlockSize,
 		common.MaxAppendBlobBlockSize,
