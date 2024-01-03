@@ -43,7 +43,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		return nil, err
 	}
 
-	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType != common.ECredentialType.Anonymous()  {
+	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType != common.ECredentialType.Anonymous() {
 		if srcCredInfo.CredentialType.IsAzureOAuth() && cca.fromTo.To().CanForwardOAuthTokens() {
 			// no-op, this is OK
 		} else if srcCredInfo.CredentialType == common.ECredentialType.GoogleAppCredentials() || srcCredInfo.CredentialType == common.ECredentialType.S3AccessKey() || srcCredInfo.CredentialType == common.ECredentialType.S3PublicBucket() {
@@ -139,7 +139,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if cca.trailingDot == common.ETrailingDotOption.Enable() && !cca.fromTo.BothSupportTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()
 	}
-	
+
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:               cca.jobID,
 		CommandString:       cca.commandString,
@@ -152,10 +152,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime: cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
-			PutMd5:                   cca.putMd5,
-			MD5ValidationOption:      cca.md5ValidationOption,
-			BlockSizeInBytes:         cca.blockSize},
+			PreserveLastModifiedTime:         cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
+			PutMd5:                           cca.putMd5,
+			MD5ValidationOption:              cca.md5ValidationOption,
+			BlockSizeInBytes:                 cca.blockSize,
+			DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
+		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
 		LogLevel:                       azcopyLogVerbosity,
@@ -175,13 +177,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 	}
 
-
 	options := createClientOptions(common.AzcopyCurrentJobLogger)
-	
-	// Create Source Client. 
+
+	// Create Source Client.
 	var azureFileSpecificOptions any
 	if cca.fromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
 	}
@@ -201,12 +202,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// Create Destination client
 	if cca.fromTo.To() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
-			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
 		}
 	}
-	
+
 	dstURL, _ := cca.destination.String()
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
