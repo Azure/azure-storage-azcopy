@@ -85,7 +85,7 @@ type resourceManager interface {
 	cleanup(a asserter)
 
 	// gets the azCopy command line param that represents the resource.  withSas is ignored when not applicable
-	getParam(stripTopDir bool, withSas bool, withFile string) string
+	getParam(stripTopDir bool, withSas bool, withFile objectTarget) string
 
 	getSAS() string
 
@@ -155,14 +155,14 @@ func (r *resourceLocal) cleanup(_ asserter) {
 	}
 }
 
-func (r *resourceLocal) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceLocal) getParam(stripTopDir bool, withSas bool, withFile objectTarget) string {
 	if r.dirPath == common.Dev_Null {
 		return common.Dev_Null
 	}
 
 	if !stripTopDir {
-		if withFile != "" {
-			p := path.Join(r.dirPath, withFile)
+		if withFile.objectName != "" {
+			p := path.Join(r.dirPath, withFile.objectName)
 
 			if runtime.GOOS == "windows" {
 				p = strings.ReplaceAll(p, "/", "\\")
@@ -288,7 +288,7 @@ func (r *resourceBlobContainer) cleanup(a asserter) {
 	}
 }
 
-func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFile objectTarget) string {
 	var uri string
 	if withSas {
 		uri = r.rawSasURL.String()
@@ -296,10 +296,18 @@ func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFil
 		uri = r.containerClient.URL()
 	}
 
-	if withFile != "" {
+	if withFile.objectName != "" {
 		bURLParts, _ := blob.ParseURL(uri)
 
-		bURLParts.BlobName = withFile
+		bURLParts.BlobName = withFile.objectName
+
+		bURLParts.BlobName = withFile.objectName
+		if withFile.snapshotid {
+			// Get latest snapshot
+			blobClient := r.containerClient.NewBlobClient(withFile.objectName)
+			resp, _ := blobClient.CreateSnapshot(ctx, nil)
+			bURLParts.Snapshot = *resp.Snapshot
+		}
 
 		uri = bURLParts.String()
 	}
@@ -399,7 +407,7 @@ func (r *resourceAzureFileShare) cleanup(a asserter) {
 	}
 }
 
-func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFile objectTarget) string {
 	assertNoStripTopDir(stripTopDir)
 	var uri string
 	if withSas {
@@ -409,14 +417,14 @@ func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFi
 	}
 
 	// append the snapshot ID if present
-	if r.snapshotID != "" || withFile != "" {
+	if r.snapshotID != "" || withFile.objectName != "" {
 		parts, _ := file.ParseURL(uri)
 		if r.snapshotID != "" {
 			parts.ShareSnapshot = r.snapshotID
 		}
 
-		if withFile != "" {
-			parts.DirectoryOrFilePath = withFile
+		if withFile.objectName != "" {
+			parts.DirectoryOrFilePath = withFile.objectName
 		}
 		uri = parts.String()
 	}
@@ -495,7 +503,7 @@ func (r *resourceManagedDisk) cleanup(a asserter) {
 }
 
 // getParam works functionally different because resourceManagerDisk inherently only targets a single file.
-func (r *resourceManagedDisk) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceManagedDisk) getParam(stripTopDir bool, withSas bool, withFile objectTarget) string {
 	out := *r.accessURI // clone the URI
 
 	if !withSas {
@@ -542,7 +550,7 @@ func (r *resourceDummy) createFile(a asserter, o *testObject, s *scenario, isSou
 func (r *resourceDummy) cleanup(_ asserter) {
 }
 
-func (r *resourceDummy) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceDummy) getParam(stripTopDir bool, withSas bool, withFile objectTarget) string {
 	assertNoStripTopDir(stripTopDir)
 	return ""
 }

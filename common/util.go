@@ -158,8 +158,6 @@ func GetServiceClientForLocation(loc Location,
 		}
 		blobURLParts.ContainerName = ""
 		blobURLParts.BlobName = ""
-		blobURLParts.Snapshot = ""
-		blobURLParts.VersionID = ""
 		// In case we are creating a blob client for a datalake target, correct the endpoint
 		blobURLParts.Host = strings.Replace(blobURLParts.Host, ".dfs", ".blob", 1)
 		resourceURL = blobURLParts.String()
@@ -195,7 +193,6 @@ func GetServiceClientForLocation(loc Location,
 			return nil, err
 		}
 		fileURLParts.ShareName = ""
-		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
 		resourceURL = fileURLParts.String()
 		var o *fileservice.ClientOptions

@@ -308,7 +308,7 @@ func (s *scenario) runAzCopy(logDirectory string) {
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
 		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
-		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.Iff(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
+		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), objectTarget{objectName: common.Iff(tf.destTarget != "", tf.destTarget, tf.objectTarget.objectName)}),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		needsFromTo,
 		s.fromTo,
@@ -415,8 +415,8 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 }
 
 func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool, addedDirAtDest string) {
-	srcRoot = s.state.source.getParam(false, false, "")
-	dstRoot = s.state.dest.getParam(false, false, "")
+	srcRoot = s.state.source.getParam(false, false, objectTarget{})
+	dstRoot = s.state.dest.getParam(false, false, objectTarget{})
 
 	srcBase := filepath.Base(srcRoot)
 	srcRootURL, err := url.Parse(srcRoot)
@@ -446,17 +446,17 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// Yes, this is arguably inconsistent. But its the way its always been, and it does seem to match user expectations for copies
 		// of that kind.
 		expectRootFolder = false
-	} else if expectRootFolder && s.fromTo == common.EFromTo.BlobLocal() && s.destAccountType != EAccountType.HierarchicalNamespaceEnabled() && tf.objectTarget == "" {
+	} else if expectRootFolder && s.fromTo == common.EFromTo.BlobLocal() && s.destAccountType != EAccountType.HierarchicalNamespaceEnabled() && tf.objectTarget.objectName == "" {
 		expectRootFolder = false // we can only persist the root folder if it's a subfolder of the container on Blob.
 
-		if tf.objectTarget == "" && tf.destTarget == "" {
+		if tf.objectTarget.objectName == "" && tf.destTarget == "" {
 			addedDirAtDest = path.Base(srcRoot)
 		} else if tf.destTarget != "" {
 			addedDirAtDest = tf.destTarget
 		}
 		dstRoot = fmt.Sprintf("%s/%s", dstRoot, addedDirAtDest)
 	} else if s.fromTo.From().IsLocal() {
-		if tf.objectTarget == "" && tf.destTarget == "" {
+		if tf.objectTarget.objectName == "" && tf.destTarget == "" {
 			addedDirAtDest = srcBase
 		} else if tf.destTarget != "" {
 			addedDirAtDest = tf.destTarget
@@ -466,7 +466,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 		// Preserving permissions includes the root folder, but for container-container, we don't expect any added folder name.
 		expectRootFolder = true
 	} else {
-		if tf.objectTarget == "" && tf.destTarget == "" {
+		if tf.objectTarget.objectName == "" && tf.destTarget == "" {
 			addedDirAtDest = srcBase
 		} else if tf.destTarget != "" {
 			addedDirAtDest = tf.destTarget
