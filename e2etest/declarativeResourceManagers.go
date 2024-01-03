@@ -306,8 +306,8 @@ func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFil
 			resp, _ := blobClient.CreateSnapshot(ctx, nil)
 			bURLParts.Snapshot = *resp.Snapshot
 		}
-		if withFile.versionid != nil {
-			bURLParts.VersionID = *withFile.versionid
+		if withFile.versionid {
+
 		}
 
 		uri = bURLParts.String()

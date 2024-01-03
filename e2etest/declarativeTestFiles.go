@@ -458,8 +458,8 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 
 type objectTarget struct {
 	objectName string
-	snapshotid bool    // add snapshot id
-	versionid  *string // add version id
+	snapshotid bool // add snapshot id
+	versionid  bool // add version id
 }
 
 //////////
