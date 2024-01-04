@@ -66,9 +66,28 @@ func newBlobDownloader(jptm IJobPartTransferMgr) (downloader, error) {
 		return nil, err
 	}
 
+	blobClient := s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
+
+	blobURLParts, err := blob.ParseURL(jptm.Info().Source)
+	if err != nil {
+		return nil, err
+	}
+
+	if blobURLParts.VersionID != "" {
+		blobClient, err = s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).WithVersionID(blobURLParts.VersionID)
+		if err != nil {
+			return nil, err
+		}
+	} else if blobURLParts.Snapshot != "" {
+		blobClient, err = s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).WithSnapshot(blobURLParts.Snapshot)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &blobDownloader{
 		filePacer: NewNullAutoPacer(), // defer creation of real one, if needed, to Prologue
-		source:    s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath),
+		source:    blobClient,
 	}, nil
 }
 
