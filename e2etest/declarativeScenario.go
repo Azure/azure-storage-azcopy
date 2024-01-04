@@ -107,13 +107,13 @@ func (s *scenario) Run() {
 	// setup scenario
 	// First, validate the accounts make sense for the source/dests
 	if s.srcAccountType.IsBlobOnly() {
-		s.a.Assert(s.fromTo.From(), equals(), common.ELocation.Blob())
+		s.a.Assert(true, equals(), s.fromTo.From() == common.ELocation.Blob() || s.fromTo.From() == common.ELocation.BlobFS())
 	}
 
 	if s.destAccountType.IsBlobOnly() {
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.StdManagedDisk(), "Upload is not supported in MD testing yet")
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.OAuthManagedDisk(), "Upload is not supported in MD testing yet")
-		s.a.Assert(s.fromTo.To(), equals(), common.ELocation.Blob())
+		s.a.Assert(true, equals(), s.fromTo.From() == common.ELocation.Blob() || s.fromTo.From() == common.ELocation.BlobFS())
 	}
 
 	// setup
@@ -261,7 +261,7 @@ func (s *scenario) assignSourceAndDest() {
 			return &resourceLocal{common.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: accType}
-		case common.ELocation.Blob():
+		case common.ELocation.Blob(), common.ELocation.BlobFS():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
 			if accType.IsManagedDisk() {
@@ -270,10 +270,7 @@ func (s *scenario) assignSourceAndDest() {
 				return &resourceManagedDisk{config: *mdCfg}
 			}
 
-			return &resourceBlobContainer{accountType: accType}
-		case common.ELocation.BlobFS():
-			s.a.Error("Not implemented yet for blob FS")
-			return &resourceDummy{}
+			return &resourceBlobContainer{accountType: accType, isBlobFS: loc == common.ELocation.BlobFS()}
 		case common.ELocation.S3():
 			s.a.Error("Not implemented yet for S3")
 			return &resourceDummy{}
@@ -484,7 +481,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	expectFolders = (s.fromTo.From().IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
 		s.p.allowsFolderTransfers()) ||
-		(s.p.preserveSMBPermissions && s.FromTo() == common.EFromTo.BlobBlob()) ||
+		(s.p.preserveSMBPermissions && s.FromTo().From().SupportsHnsACLs() && s.FromTo().To().SupportsHnsACLs()) ||
 		(s.p.preservePOSIXProperties && (s.FromTo() == common.EFromTo.LocalBlob() || s.FromTo() == common.EFromTo.BlobBlob() || s.FromTo() == common.EFromTo.BlobLocal()))
 	expectRootFolder := expectFolders
 
