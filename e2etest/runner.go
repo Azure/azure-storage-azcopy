@@ -80,7 +80,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	}
 
 	// TODO: TODO: nakulkar-msft there will be many more to add here
-	if o == eOperation.Copy() || o == eOperation.Sync() {
+	if o != eOperation.Cancel() {
 		set("recursive", p.recursive, false)
 		set("as-subdir", !p.invertedAsSubdir, true)
 		set("include-path", p.includePath, "")
