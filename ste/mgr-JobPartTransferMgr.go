@@ -137,6 +137,9 @@ type TransferInfo struct {
 	S2SSrcBlobTier blob.AccessTier // AccessTierType (string) is used to accommodate service-side support matrix change.
 
 	RehydratePriority blob.RehydratePriority
+
+	VersionID  string
+	SnapshotID string
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -418,6 +421,8 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		SrcBlobType:       srcBlobType,
 		S2SSrcBlobTier:    srcBlobTier,
 		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
+		VersionID:         versionID,
+		SnapshotID:        snapshotID,
 	}
 }
 
