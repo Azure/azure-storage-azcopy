@@ -349,6 +349,8 @@ func (s *scenario) cancelAzCopy(logDir string) {
 		s.state.result.jobID.String(),
 		"",
 		false,
+		false,
+		s.fromTo,
 		afterStart,
 		s.chToStdin,
 		logDir,
