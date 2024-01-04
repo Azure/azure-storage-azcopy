@@ -97,7 +97,7 @@ func init() {
 
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("failed to perform copy command due to error " + err.Error())
+				glcm.Error("failed to perform cancel command due to error " + err.Error())
 			}
 
 			glcm.Exit(nil, common.EExitCode.Success())
