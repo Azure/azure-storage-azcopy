@@ -216,7 +216,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, needsFromTo bool, fromTo common.FromTo, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -250,6 +250,9 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		args = args[:2]
 	}
 	args = append(args, t.computeArgs()...)
+	if needsFromTo {
+		args = append(args, "--from-to="+fromTo.String())
+	}
 
 	// pass along existing environment variables (because $HOME doesn't come along if we just use the OAuth vars, that can be troublesome!)
 	env := make([]string, len(os.Environ()))

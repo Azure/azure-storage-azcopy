@@ -310,6 +310,8 @@ func (s *scenario) runAzCopy(logDirectory string) {
 		return credType == common.ECredentialType.Anonymous() || credType == common.ECredentialType.MDOAuthToken()
 	}
 
+	needsFromTo := s.destAccountType == EAccountType.Azurite() || s.srcAccountType == EAccountType.Azurite()
+
 	tf := s.GetTestFiles()
 	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
@@ -317,6 +319,8 @@ func (s *scenario) runAzCopy(logDirectory string) {
 		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
 		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), common.Iff(tf.destTarget != "", tf.destTarget, tf.objectTarget)),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
+		needsFromTo,
+		s.fromTo,
 		afterStart, s.chToStdin, logDirectory)
 
 	if !wasClean {
@@ -386,6 +390,8 @@ func (s *scenario) resumeAzCopy(logDir string) {
 		s.state.result.jobID.String(),
 		"",
 		false,
+		false,
+		s.fromTo,
 		afterStart,
 		s.chToStdin,
 		logDir,

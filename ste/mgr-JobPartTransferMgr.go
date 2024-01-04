@@ -61,18 +61,9 @@ type IJobPartTransferMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 
-	CredentialInfo() common.CredentialInfo
-	ClientOptions() azcore.ClientOptions
-	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
-	S2SSourceClientOptions() azcore.ClientOptions
-	CredentialOpOptions() *common.CredentialOpOptions
-
 	SrcServiceClient() *common.ServiceClient
 	DstServiceClient() *common.ServiceClient
-
-	SourceTrailingDot() *common.TrailingDotOption
-	TrailingDot() *common.TrailingDotOption
-	From() *common.Location
+	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
 
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
@@ -991,14 +982,6 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }
 
-func (jptm *jobPartTransferMgr) CredentialInfo() common.CredentialInfo {
-	return jptm.jobPartMgr.CredentialInfo()
-}
-
-func (jptm *jobPartTransferMgr) ClientOptions() azcore.ClientOptions {
-	return jptm.jobPartMgr.ClientOptions()
-}
-
 func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {
 	return jptm.jobPartMgr.S2SSourceTokenCredential(ctx)
 }
@@ -1009,26 +992,6 @@ func (jptm *jobPartTransferMgr) SrcServiceClient() *common.ServiceClient {
 
 func (jptm *jobPartTransferMgr) DstServiceClient() *common.ServiceClient {
 	return jptm.jobPartMgr.DstServiceClient()
-}
-
-func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
-	return jptm.jobPartMgr.S2SSourceClientOptions()
-}
-
-func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
-	return jptm.jobPartMgr.CredentialOpOptions()
-}
-
-func (jptm *jobPartTransferMgr) SourceTrailingDot() *common.TrailingDotOption {
-	return jptm.jobPartMgr.SourceTrailingDot()
-}
-
-func (jptm *jobPartTransferMgr) TrailingDot() *common.TrailingDotOption {
-	return jptm.jobPartMgr.TrailingDot()
-}
-
-func (jptm *jobPartTransferMgr) From() *common.Location {
-	return jptm.jobPartMgr.From()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
