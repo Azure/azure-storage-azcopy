@@ -68,18 +68,13 @@ func newBlobDownloader(jptm IJobPartTransferMgr) (downloader, error) {
 
 	blobClient := s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
 
-	blobURLParts, err := blob.ParseURL(jptm.Info().Source)
-	if err != nil {
-		return nil, err
-	}
-
-	if blobURLParts.VersionID != "" {
-		blobClient, err = s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).WithVersionID(blobURLParts.VersionID)
+	if jptm.Info().VersionID != "" {
+		blobClient, err = s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).WithVersionID(jptm.Info().VersionID)
 		if err != nil {
 			return nil, err
 		}
-	} else if blobURLParts.Snapshot != "" {
-		blobClient, err = s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).WithSnapshot(blobURLParts.Snapshot)
+	} else if jptm.Info().SnapshotID != "" {
+		blobClient, err = s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).WithSnapshot(jptm.Info().SnapshotID)
 		if err != nil {
 			return nil, err
 		}
