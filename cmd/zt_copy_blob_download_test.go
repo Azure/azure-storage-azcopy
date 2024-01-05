@@ -962,6 +962,7 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 
 func TestListOfVersions(t *testing.T) {
 	a := assert.New(t)
+	t.Skip("Enable test after allowing versioning on storage account ")
 	bsc := getBlobServiceClient()
 
 	// set up the container with single blob with 2 versions
@@ -1031,5 +1032,7 @@ func TestListOfVersions(t *testing.T) {
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(2, len(mockedRPC.transfers))
+		versionsTransfer := [2]string{mockedRPC.transfers[0].BlobVersionID, mockedRPC.transfers[1].BlobVersionID}
+		a.Equal(versions, versionsTransfer)
 	})
 }
