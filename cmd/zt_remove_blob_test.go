@@ -23,6 +23,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -784,6 +785,80 @@ func TestPermDeleteSnapshotsVersionsUnderSingleBlob(t *testing.T) {
 
 		// validate that the right number of transfers were scheduled
 		a.Equal(3, len(mockedRPC.transfers))
+	})
+}
+
+func TestListOfVersions(t *testing.T) {
+	a := assert.New(t)
+	bsc := getBlobServiceClient()
+
+	// set up the container with single blob with 2 versions
+	containerClient, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, containerClient)
+
+	bbClient, blobName := getBlockBlobClient(a, containerClient, "")
+	// initial upload
+	_, err := bbClient.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+	a.NoError(err)
+
+	blobProp, err := bbClient.GetProperties(ctx, nil)
+	a.NoError(err)
+
+	// second upload to create 1st version
+	uploadResp, err := bbClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random random")), nil)
+	a.NoError(err)
+	a.NotNil(uploadResp.VersionID)
+	a.NotEqual(blobProp.VersionID, uploadResp.VersionID)
+
+	// second upload to create 2nd version
+	uploadResp2, err := bbClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random stuff again")), nil)
+	a.NoError(err)
+	a.NotNil(uploadResp2.VersionID)
+	a.NotEqual(blobProp.VersionID, uploadResp2.VersionID)
+	a.NotEqual(uploadResp.VersionID, uploadResp2.VersionID)
+
+	// creating list of version files
+	versions := [2]string{*uploadResp.VersionID, *uploadResp2.VersionID}
+
+	tmpDir, err := os.MkdirTemp("", "tmpdir")
+	defer os.RemoveAll(tmpDir)
+	a.NoError(err)
+
+	fileName := "listofversions.txt"
+	file, err := os.CreateTemp(tmpDir, fileName)
+	a.NoError(err)
+	defer os.Remove(file.Name())
+	defer file.Close()
+
+	for _, ver := range versions {
+		fmt.Fprintln(file, ver)
+	}
+
+	// confirm that base blob has 2 versions
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Prefix:  to.Ptr(blobName),
+		Include: container.ListBlobsInclude{Versions: true},
+	})
+	list, err := pager.NextPage(ctx)
+	a.NoError(err)
+	a.NotNil(list.Segment.BlobItems)
+	a.Equal(3, len(list.Segment.BlobItems))
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, blobName)
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.recursive = true
+	raw.listOfVersionIDs = file.Name()
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+
+		// validate that the right number of transfers were scheduled
+		a.Equal(2, len(mockedRPC.transfers))
 	})
 }
 
