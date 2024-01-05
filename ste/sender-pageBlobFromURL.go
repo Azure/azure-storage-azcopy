@@ -63,8 +63,12 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 
 			pbClient := s.NewContainerClient(jptm.Info().SrcContainer).NewPageBlobClient(jptm.Info().SrcFilePath)
 
-			// page blobs only supports snapshots
-			if jptm.Info().SnapshotID != "" {
+			if jptm.Info().VersionID != "" {
+				pbClient, err = pbClient.WithVersionID(jptm.Info().VersionID)
+				if err != nil {
+					return nil, err
+				}
+			} else if jptm.Info().SnapshotID != "" {
 				pbClient, err = pbClient.WithSnapshot(jptm.Info().SnapshotID)
 				if err != nil {
 					return nil, err
