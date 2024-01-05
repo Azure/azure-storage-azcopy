@@ -27,6 +27,19 @@ type ResourceManager interface {
 	// Account specifies the parent account.
 	// Can return nil, indicating there is no associated account
 	Account() AccountResourceManager
+
+	/*Canon specifies an object's canonical location in the resource tree created by a test.
+
+	A Canon string is a `/` delimited list of parents up to the final element, representing the resource itself.
+	The format goes
+	<account>/<location>/<container>/<object>
+
+	For locations where an account does not exist (e.g. local), substitute account with "accountless".
+	e.g. accountless/Local/<tmpdirname>/<object>
+
+	For flat namespaces, e.g. raw blob, / is ignored past objects, as it gets no more granular.
+	*/
+	Canon() string
 }
 
 type RemoteResourceManager interface {

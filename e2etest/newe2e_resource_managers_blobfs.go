@@ -46,6 +46,10 @@ type BlobFSServiceResourceManager struct {
 	internalClient  *service.Client
 }
 
+func (b *BlobFSServiceResourceManager) Canon() string {
+	return buildCanonForAzureResourceManager(b)
+}
+
 func (b *BlobFSServiceResourceManager) Parent() ResourceManager {
 	return nil
 }
@@ -119,6 +123,10 @@ type BlobFSFileSystemResourceManager struct {
 
 	containerName  string
 	internalClient *filesystem.Client
+}
+
+func (b *BlobFSFileSystemResourceManager) Canon() string {
+	return buildCanonForAzureResourceManager(b)
 }
 
 func (b *BlobFSFileSystemResourceManager) Exists() bool {
@@ -245,6 +253,10 @@ type BlobFSPathResourceProvider struct {
 
 	entityType common.EntityType
 	objectPath string
+}
+
+func (b *BlobFSPathResourceProvider) Canon() string {
+	return buildCanonForAzureResourceManager(b)
 }
 
 func (b *BlobFSPathResourceProvider) Parent() ResourceManager {

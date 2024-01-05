@@ -69,6 +69,10 @@ type MockServiceResourceManager struct {
 	serviceType common.Location
 }
 
+func (m *MockServiceResourceManager) Canon() string {
+	return fmt.Sprintf("%s/%s", m.parent.accountName, m.serviceType.String())
+}
+
 func (m *MockServiceResourceManager) URI(a Asserter, withSas bool) string {
 	return ""
 }
@@ -123,6 +127,10 @@ type MockContainerResourceManager struct {
 	account          *MockAccountResourceManager
 	parent           *MockServiceResourceManager
 	containerName    string
+}
+
+func (m *MockContainerResourceManager) Canon() string {
+	return m.parent.Canon() + "/" + m.containerName
 }
 
 func (m *MockContainerResourceManager) Exists() bool {
@@ -191,6 +199,10 @@ type MockObjectResourceManager struct {
 	account    *MockAccountResourceManager
 	entityType common.EntityType
 	path       string
+}
+
+func (m *MockObjectResourceManager) Canon() string {
+	return m.parent.Canon() + "/" + m.path
 }
 
 func (m *MockObjectResourceManager) URI(a Asserter, withSas bool) string {

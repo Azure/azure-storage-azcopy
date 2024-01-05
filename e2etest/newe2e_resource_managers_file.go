@@ -51,6 +51,10 @@ type FileServiceResourceManager struct {
 	internalClient  *service.Client
 }
 
+func (s *FileServiceResourceManager) Canon() string {
+	return buildCanonForAzureResourceManager(s)
+}
+
 func (s *FileServiceResourceManager) Account() AccountResourceManager {
 	return s.internalAccount
 }
@@ -126,6 +130,10 @@ type FileShareResourceManager struct {
 
 	containerName  string
 	internalClient *share.Client
+}
+
+func (s *FileShareResourceManager) Canon() string {
+	return buildCanonForAzureResourceManager(s)
 }
 
 func (s *FileShareResourceManager) Exists() bool {
@@ -335,6 +343,10 @@ type FileObjectResourceManager struct {
 
 	path       string
 	entityType common.EntityType
+}
+
+func (f *FileObjectResourceManager) Canon() string {
+	return buildCanonForAzureResourceManager(f)
 }
 
 func (f *FileObjectResourceManager) Parent() ResourceManager {

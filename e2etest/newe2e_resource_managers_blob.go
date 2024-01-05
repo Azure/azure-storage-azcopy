@@ -52,6 +52,37 @@ func blobStripSAS(uri string) string {
 	return parts.String()
 }
 
+func buildCanonForAzureResourceManager(manager ResourceManager) string {
+	// None of the Azure resource managers rely upon Asserter at this moment.
+	// This is *OK* for the time being, but also, mentally prepare yourself for the footgun down the line.
+	uri := manager.URI(nil, false)
+	// Similarly, the err is ignored.
+	// BlobSAS can be used here (for now, again, prepare for the footgun) because
+	// we're really interested in extracting details that are shared across all Azure services
+	// e.g. acct name, container name, object name
+	parsedURI, _ := blobsas.ParseURL(uri)
+
+	out := ""
+	// First, try to extract the account name.
+	if parsedURI.IPEndpointStyleInfo.AccountName != "" { // IP endpoints are the easiest
+		out += parsedURI.IPEndpointStyleInfo.AccountName
+	} else { // (footgun incoming) In public & gov clouds, the account name always comes first. THIS DOES NOT SUPPORT CUSTOM HOSTNAMES.
+		out += strings.Split(parsedURI.Host, ".")[0]
+	}
+
+	out += "/" + manager.Location().String()
+
+	if manager.Level() >= cmd.ELocationLevel.Container() {
+		out += "/" + parsedURI.ContainerName
+
+		if manager.Level() >= cmd.ELocationLevel.Object() {
+			out += "/" + parsedURI.BlobName
+		}
+	}
+
+	return out
+}
+
 // ==================== SERVICE ====================
 
 type BlobServiceResourceManager struct {
@@ -59,12 +90,8 @@ type BlobServiceResourceManager struct {
 	internalClient  *service.Client
 }
 
-func (b *BlobServiceResourceManager) Account() AccountResourceManager {
-	return b.internalAccount
-}
-
-func (b *BlobServiceResourceManager) Parent() ResourceManager {
-	return nil // Services don't really have parent ResourceManagers-- At least not in the defined interface.
+func (b *BlobServiceResourceManager) Canon() string {
+	return buildCanonForAzureResourceManager(b)
 }
 
 func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
@@ -132,6 +159,10 @@ type BlobContainerResourceManager struct {
 	Service         *BlobServiceResourceManager
 	containerName   string
 	internalClient  *container.Client
+}
+
+func (b *BlobContainerResourceManager) Canon() string {
+	return buildCanonForAzureResourceManager(b)
 }
 
 func (b *BlobContainerResourceManager) Exists() bool {
@@ -333,6 +364,10 @@ type BlobObjectResourceManager struct {
 	entityType      common.EntityType
 
 	internalClient *blob.Client
+}
+
+func (b *BlobObjectResourceManager) Canon() string {
+	return buildCanonForAzureResourceManager(b)
 }
 
 func (b *BlobObjectResourceManager) Account() AccountResourceManager {

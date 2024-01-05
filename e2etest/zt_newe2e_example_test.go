@@ -23,7 +23,7 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
 	//svm.InsertVariationSeparator("->")
-	//dstService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	dstService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
 
 	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
@@ -32,20 +32,19 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 		Body: body,
 	}) // todo: generic CreateResource is something to pursue in another branch, but it's an interesting thought.
 	// Scale up from service to container
-	//dstObj := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{}).GetObject(svm, "foobar", common.EEntityType.File())
+	dstObj := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
 
-	//_, _ = srcObj, dstObj
 	RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbRemove}),
+			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy}),
 			Targets: []ResourceManager{
 				srcObj,
+				dstObj,
 			},
 		})
 
 	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
-		Body:              body,
-		ObjectShouldExist: PtrOf(false),
+		Body: body,
 	}, true)
 }

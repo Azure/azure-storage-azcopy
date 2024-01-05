@@ -34,96 +34,57 @@ type ScenarioVariationManager struct {
 	VariationData *VariationDataContainer // todo call order, prepared options
 
 	// wetrun data
-	CreatedResources map[ResourceManager]bool
-	CreatedAccounts  map[AccountResourceManager]bool
-	RootResources    map[ResourceManager]bool
-	ResourceTree     map[ResourceManager][]ResourceManager
+	CreatedResources *PathTrie[createdResource]
+}
+
+type createdResource struct {
+	acct AccountResourceManager
+	res  ResourceManager
 }
 
 func (svm *ScenarioVariationManager) initResourceTracker() {
-	if svm.CreatedResources == nil || svm.CreatedAccounts == nil || svm.RootResources == nil || svm.ResourceTree == nil {
-		svm.CreatedResources = make(map[ResourceManager]bool)
-		svm.CreatedAccounts = make(map[AccountResourceManager]bool)
-		svm.RootResources = make(map[ResourceManager]bool)
-		svm.ResourceTree = make(map[ResourceManager][]ResourceManager)
+	if svm.CreatedResources == nil {
+		svm.CreatedResources = NewTrie[createdResource]('/')
 	}
 }
 
 func (svm *ScenarioVariationManager) TrackCreatedResource(manager ResourceManager) {
 	svm.initResourceTracker()
 
-	svm.CreatedResources[manager] = true
-	svm.ResourceTree[manager] = make([]ResourceManager, 0) // put something there so we know it still exists
-	target := manager
-	for { // attach it to the tree
-		parent := target.Parent()
-
-		if parent == nil {
-			svm.RootResources[target] = true
-			break
-		}
-
-		svm.ResourceTree[parent] = append(svm.ResourceTree[parent], target)
-		target = parent
-	}
+	canon := manager.Canon()
+	svm.CreatedResources.Insert(canon, &createdResource{res: manager})
 }
 
 func (svm *ScenarioVariationManager) TrackCreatedAccount(account AccountResourceManager) {
 	svm.initResourceTracker()
 
-	svm.CreatedAccounts[account] = true
+	svm.CreatedResources.Insert(account.AccountName(), &createdResource{acct: account})
 }
 
 func (svm *ScenarioVariationManager) DeleteCreatedResources() {
 	svm.initResourceTracker()
 
-	deletedAccounts := make(map[AccountResourceManager]bool)
-	for res := range svm.RootResources {
-		if ok := svm.CreatedAccounts[res.Account()]; ok {
-			DeleteAccount(svm, res.Account())
-			deletedAccounts[res.Account()] = true
-		}
-
-		if ok := deletedAccounts[res.Account()]; ok {
-			delete(svm.RootResources, res)
-		}
-	}
-
-	// now, delete the remaining resources
-	queue := make([]ResourceManager, 0)
-	for res := range svm.RootResources {
-		queue = append(queue, res)
-	}
-
 	type deletable interface {
 		Delete(a Asserter)
 	}
 
-	for len(queue) > 0 {
-		target := queue[0]
-		queue = queue[1:]
+	svm.CreatedResources.Traverse(func(data *createdResource) TraversalOperation {
+		if data.acct != nil {
+			DeleteAccount(svm, data.acct)
+		} else if data.res != nil {
+			del, isDeletable := data.res.(deletable)
 
-		if ok := svm.CreatedResources[target]; ok {
-			del, isDeletable := target.(deletable)
-			svm.Assert("must be deletable", Equal{}, isDeletable, true)
-
-			if isDeletable {
-				del.Delete(svm)
-
-				delete(svm.CreatedResources, target) // no further tracking
-				continue                             // Don't add children
+			if !isDeletable {
+				return TraversalOperationContinue
 			}
+
+			del.Delete(svm)
 		}
 
-		if children, ok := svm.ResourceTree[target]; ok {
-			queue = append(queue, children...)
-		}
-	}
+		return TraversalOperationRemove
+	})
 
 	svm.CreatedResources = nil
-	svm.CreatedAccounts = nil
-	svm.RootResources = nil
-	svm.ResourceTree = nil
 }
 
 // Assertions
@@ -132,6 +93,7 @@ func (svm *ScenarioVariationManager) NoError(comment string, err error) {
 	if svm.Dryrun() {
 		return
 	}
+	svm.t.Helper()
 
 	svm.AssertNow(comment, IsNil{}, err)
 }
@@ -157,6 +119,7 @@ func (svm *ScenarioVariationManager) AssertNow(comment string, assertion Asserti
 	if svm.Dryrun() {
 		return
 	}
+	svm.t.Helper()
 
 	svm.Assert(comment, assertion, items...)
 	if svm.Failed() {

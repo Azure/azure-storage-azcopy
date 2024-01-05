@@ -89,8 +89,6 @@ func (sm *ScenarioManager) RunScenario() {
 				})
 
 				sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
-
-				t.Log(svm.VariationName())
 			})
 		}
 	}
