@@ -103,7 +103,18 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 		transferDone(common.ETransferStatus.Failed(), err)
 		return
 	}
-	srcFileClient := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
+
+	sourceShare := s.NewShareClient(jptm.Info().SrcContainer)
+
+	if jptm.Info().SnapshotID != "" {
+		sourceShare, err = sourceShare.WithSnapshot(jptm.Info().SnapshotID)
+		if err != nil {
+			transferDone(common.ETransferStatus.Failed(), err)
+			return
+		}
+	}
+
+	srcFileClient := sourceShare.NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
 
 	// Delete the source file
 	helper := &azureFileSenderBase{}
@@ -143,8 +154,16 @@ func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr
 	if err != nil {
 		return false
 	}
-	
-	srcDirClient := s.NewShareClient(jptm.Info().SrcContainer).NewDirectoryClient(jptm.Info().SrcFilePath)
+
+	sourceShare := s.NewShareClient(jptm.Info().SrcContainer)
+
+	if jptm.Info().SnapshotID != "" {
+		sourceShare, err = sourceShare.WithSnapshot(jptm.Info().SnapshotID)
+		if err != nil {
+			return false
+		}
+	}
+	srcDirClient := sourceShare.NewDirectoryClient(jptm.Info().SrcFilePath)
 	loggableName := fileURLParts.DirectoryOrFilePath
 	logger.Log(common.LogDebug, "About to attempt to delete folder "+loggableName)
 

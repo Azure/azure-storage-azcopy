@@ -60,8 +60,19 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, pacer 
 			if err != nil {
 				return nil, err
 			}
+
+			pbClient := s.NewContainerClient(jptm.Info().SrcContainer).NewPageBlobClient(jptm.Info().SrcFilePath)
+
+			// page blobs only supports snapshots
+			if jptm.Info().SnapshotID != "" {
+				pbClient, err = pbClient.WithSnapshot(jptm.Info().SnapshotID)
+				if err != nil {
+					return nil, err
+				}
+			}
+
 			pageRangeOptimizer = newPageRangeOptimizer(
-				s.NewContainerClient(jptm.Info().SrcContainer).NewPageBlobClient(jptm.Info().SrcFilePath), jptm.Context())
+				pbClient, jptm.Context())
 
 		}
 	}
