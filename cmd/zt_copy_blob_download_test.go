@@ -964,7 +964,7 @@ func TestListOfVersions(t *testing.T) {
 	a := assert.New(t)
 	// t.Skip("Enable test after allowing versioning on storage account ")
 	bsc := getBlobServiceClient()
-
+	fmt.Println(bsc.URL())
 	// set up the container with single blob with 2 versions
 	containerClient, containerName := createNewContainer(a, bsc)
 	defer deleteContainer(a, containerClient)
