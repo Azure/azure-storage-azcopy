@@ -263,8 +263,18 @@ func getRandomDataAndReader(n int) (*bytes.Reader, []byte) {
 }
 
 func getAccountAndKey() (string, string) {
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
+	name := os.Getenv("AZURE_STORAGE_ACCOUNT_NAME")
+	key := os.Getenv("AZURE_STORAGE_ACCOUNT_KEY")
+	if name == "" || key == "" {
+		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before running tests")
+	}
+
+	return name, key
+}
+
+func getSecondaryAccountAndKey() (string, string) {
+	name := os.Getenv("SECONDARY_AZURE_STORAGE_ACCOUNT_NAME")
+	key := os.Getenv("SECONDARY_AZURE_STORAGE_ACCOUNT_KEY")
 	if name == "" || key == "" {
 		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before running tests")
 	}
@@ -274,6 +284,22 @@ func getAccountAndKey() (string, string) {
 
 // get blob account service client
 func getBlobServiceClient() *blobservice.Client {
+	accountName, accountKey := getAccountAndKey()
+	u := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
+
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	client, err := blobservice.NewClientWithSharedKeyCredential(u, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+// get blob account service client
+func getSecondaryBlobServiceClient() *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
 	u := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 

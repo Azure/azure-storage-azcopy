@@ -646,6 +646,14 @@ func (scenarioHelper) getBlobServiceClientWithSAS(a *assert.Assertions) *blobser
 	return getBlobServiceClientWithSAS(a, credential)
 }
 
+func (scenarioHelper) getSecondaryBlobServiceClientWithSAS(a *assert.Assertions) *blobservice.Client {
+	accountName, accountKey := getSecondaryAccountAndKey()
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	a.Nil(err)
+
+	return getBlobServiceClientWithSAS(a, credential)
+}
+
 func (scenarioHelper) getBlobServiceClientWithSASFromURL(a *assert.Assertions, rawURL string) *blobservice.Client {
 	blobURLParts, err := blob.ParseURL(rawURL)
 	a.Nil(err)
