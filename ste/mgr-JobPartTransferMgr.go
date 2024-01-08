@@ -337,9 +337,9 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 			panic(e)
 		}
 		if len(sURL.RawQuery) > 0 {
-			sURL.RawQuery += "&" + versionID
+			sURL.RawQuery += "&versionId=" + versionID
 		} else {
-			sURL.RawQuery = versionID
+			sURL.RawQuery = "versionId=" + versionID
 		}
 		srcURI = sURL.String()
 	}
@@ -350,9 +350,9 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 			panic(e)
 		}
 		if len(sURL.RawQuery) > 0 {
-			sURL.RawQuery += "&" + snapshotID
+			sURL.RawQuery += "&snapshot=" + snapshotID
 		} else {
-			sURL.RawQuery = snapshotID
+			sURL.RawQuery = "snapshot=" + snapshotID
 		}
 		srcURI = sURL.String()
 	}
