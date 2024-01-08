@@ -331,7 +331,8 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		srcURI = sUrl.String()
 	}
 
-	if versionID != "" {
+	// TODO: since we do not use source URL saved in jptm.Source in downloader-blob.go, AzCopy appends version id twice.
+	/*if versionID != "" {
 		versionID = "versionId=" + versionID
 		sURL, e := url.Parse(srcURI)
 		if e != nil {
@@ -344,7 +345,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		}
 		srcURI = sURL.String()
 	}
-
+	*/
 	if snapshotID != "" {
 		snapshotID = "snapshot=" + snapshotID
 		sURL, e := url.Parse(srcURI)
