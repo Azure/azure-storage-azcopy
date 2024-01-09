@@ -445,16 +445,11 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 func getEntityType(metadata map[string]*string) common.EntityType {
 	// Note: We are just checking keys here, not their corresponding values. Is that safe?
-	if _, isfolder := metadata["hdi_isfolder"]; isfolder {
+	if _, isFolder := common.TryReadMetadata(metadata, common.POSIXFolderMeta); isFolder {
 		return common.EEntityType.Folder()
-	} else if _, isfolder := metadata["Hdi_isfolder"]; isfolder {
-		return common.EEntityType.Folder()
-	} else if _, isSymlink := metadata["is_symlink"]; isSymlink {
-		return common.EEntityType.Symlink()
-	} else if _, isSymlink := metadata["Is_symlink"]; isSymlink {
+	} else if _, isSymlink := common.TryReadMetadata(metadata, common.POSIXSymlinkMeta); isSymlink {
 		return common.EEntityType.Symlink()
 	}
-
 	return common.EEntityType.File()
 }
 
@@ -560,8 +555,8 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
-		preservePermissions: 		 preservePermissions,
-		isDFS:			     	     isDFS,
+		preservePermissions:         preservePermissions,
+		isDFS:                       isDFS,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
