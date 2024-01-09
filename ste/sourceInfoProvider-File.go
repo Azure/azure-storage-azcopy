@@ -177,7 +177,16 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	source := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
+	sourceShare := s.NewShareClient(jptm.Info().SrcContainer)
+
+	if jptm.Info().SnapshotID != "" {
+		sourceShare, err = sourceShare.WithSnapshot(jptm.Info().SnapshotID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	source := sourceShare.NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
 
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
