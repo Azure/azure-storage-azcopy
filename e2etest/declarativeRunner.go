@@ -167,19 +167,20 @@ func RunScenarios(
 					subtestName += "-" + scenarioSuffix
 				}
 
+				usedSrc, usedDst := srcAccountType, destAccountType
 				if fromTo.From() == common.ELocation.BlobFS() {
 					// switch to an account made for dfs
-					srcAccountType = EAccountType.HierarchicalNamespaceEnabled()
+					usedSrc = EAccountType.HierarchicalNamespaceEnabled()
 				}
 
 				if fromTo.To() == common.ELocation.BlobFS() {
 					// switch to an account made for dfs
-					destAccountType = EAccountType.HierarchicalNamespaceEnabled()
+					usedDst = EAccountType.HierarchicalNamespaceEnabled()
 				}
 
 				s := scenario{
-					srcAccountType:      srcAccountType,
-					destAccountType:     destAccountType,
+					srcAccountType:      usedSrc,
+					destAccountType:     usedDst,
 					subtestName:         subtestName,
 					compactScenarioName: compactScenarioName,
 					fullScenarioName:    fullScenarioName,
