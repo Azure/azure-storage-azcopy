@@ -97,6 +97,7 @@ type objectProperties struct {
 	nameValueMetadata  map[string]*string
 	blobTags           common.BlobTags
 	blobType           common.BlobType
+	blobVersions       *uint
 	creationTime       *time.Time
 	lastWriteTime      *time.Time
 	smbAttributes      *uint32
@@ -265,6 +266,10 @@ func (op objectProperties) DeepCopy() objectProperties {
 	ret.blobTags = make(map[string]string)
 	for k, v := range op.blobTags {
 		ret.blobTags[k] = v
+	}
+
+	if op.blobVersions != nil {
+		ret.blobVersions = pointerTo(*op.blobVersions)
 	}
 
 	if op.creationTime != nil {
@@ -461,7 +466,14 @@ func folder(n string, properties ...withPropertyProvider) *testObject {
 type objectTarget struct {
 	objectName string
 	snapshotid bool // add snapshot id
-	versionid  bool // add version id
+	// versions specifies a zero-indexed list of versions to copy.
+	// ID is automatically filled in based off the versions specified in this field.
+	// Nil or empty list does nothing. A single version ID will be passed as a part of the URI,
+	// unless singleVersionList is true.
+	// Negative cases for list of versions, e.g. specifying nonexistent versions, shouldn't be done here.
+	// Those get trimmed out by the traverser.
+	versions          []uint
+	singleVersionList bool
 }
 
 // Represents a set of source files, including what we expect should happen to them
@@ -562,7 +574,35 @@ func (tf *testFiles) allObjects(isSource bool) []*testObject {
 	return tf.toTestObjects(tf.shouldSkip, false)
 }
 
-func (tf *testFiles) getForStatus(status common.TransferStatus, expectFolders bool, expectRootFolder bool) []*testObject {
+func (tf *testFiles) isListOfVersions() bool {
+	return tf.objectTarget.objectName != "" && (len(tf.objectTarget.versions) > 1 || (len(tf.objectTarget.versions) == 1 && tf.objectTarget.singleVersionList))
+}
+
+func (tf *testFiles) getForStatus(s *scenario, status common.TransferStatus, expectFolders bool, expectRootFolder bool) []*testObject {
+	if status == common.ETransferStatus.Success() && tf.isListOfVersions() {
+		s.a.Assert(s.fromTo.From(), equals(), common.ELocation.Blob(), "List of Versions must be used with Blob")
+		versions := s.GetSource().(*resourceBlobContainer).getVersions(s.a, tf.objectTarget.objectName)
+
+		// track down the original testObject
+		var target *testObject
+		for _, v := range tf.toTestObjects(tf.shouldTransfer, false) {
+			if v.name == tf.objectTarget.objectName {
+				target = v
+				break
+			}
+		}
+		s.a.Assert(target, notEquals(), nil, "objectTarget must exist in successful transfers")
+
+		out := make([]*testObject, len(tf.objectTarget.versions))
+		for k, v := range tf.objectTarget.versions {
+			// flatten the version ID
+			versions[v] = strings.ReplaceAll(versions[v], ":", "-")
+			out[k] = target.DeepCopy()
+			out[k].name = versions[v] + "-" + out[k].name
+		}
+		return out
+	}
+
 	shouldInclude := func(f *testObject) bool {
 		if !f.isFolder() {
 			return true

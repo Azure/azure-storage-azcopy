@@ -248,7 +248,7 @@ func (s *scenario) assignSourceAndDest() {
 		// TODO: handle account to account (multi-container) scenarios
 		switch loc {
 		case common.ELocation.Local():
-			return &resourceLocal{common.Iff(s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
+			return &resourceLocal{common.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: accType}
 		case common.ELocation.Blob():
@@ -282,8 +282,10 @@ func (s *scenario) runAzCopy(logDirectory string) {
 	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
 
+	tf := s.GetTestFiles()
+
 	r := newTestRunner()
-	r.SetAllFlags(s.p, s.operation)
+	r.SetAllFlags(s)
 
 	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,
 	// for the _specific_ purpose of running beforeOpenFirstFile, if that hook exists.
@@ -303,12 +305,20 @@ func (s *scenario) runAzCopy(logDirectory string) {
 
 	needsFromTo := s.destAccountType == EAccountType.Azurite() || s.srcAccountType == EAccountType.Azurite()
 
-	tf := s.GetTestFiles()
+	var destObjTarget objectTarget
+	if tf.destTarget != "" {
+		destObjTarget.objectName = tf.destTarget
+	} else if tf.objectTarget.objectName != "" &&
+		// Object target must have no list of versions.
+		(len(tf.objectTarget.versions) == 0 || (len(tf.objectTarget.versions) == 1 && !tf.objectTarget.singleVersionList)) {
+		destObjTarget.objectName = tf.objectTarget.objectName
+	}
+
 	// run AzCopy
 	result, wasClean, err := r.ExecuteAzCopyCommand(
 		s.operation,
-		s.state.source.getParam(s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
-		s.state.dest.getParam(false, needsSAS(s.credTypes[1]), objectTarget{objectName: common.Iff(tf.destTarget != "", tf.destTarget, tf.objectTarget.objectName)}),
+		s.state.source.getParam(s.a, s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
+		s.state.dest.getParam(s.a, false, needsSAS(s.credTypes[1]), destObjTarget),
 		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
 		needsFromTo,
 		s.fromTo,
@@ -402,11 +412,11 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 		// TODO: testing of skipped is implicit, in that they are created at the source, but don't exist in Success or Failed lists
 		//       Is that OK? (Not sure what to do if it's not, because azcopy jobs show, apparently doesn't offer us a way to get the skipped list)
 	} {
-		expectedTransfers := s.fs.getForStatus(statusToTest, expectFolders, expectRootFolder)
+		expectedTransfers := s.fs.getForStatus(s, statusToTest, expectFolders, expectRootFolder)
 		actualTransfers, err := s.state.result.GetTransferList(statusToTest, azcopyDir)
 		s.a.AssertNoErr(err)
 
-		Validator{}.ValidateCopyTransfersAreScheduled(s.a, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, expectFolders)
+		Validator{}.ValidateCopyTransfersAreScheduled(s, isSrcEncoded, isDstEncoded, srcRoot, dstRoot, expectedTransfers, actualTransfers, statusToTest, expectFolders)
 		// TODO: how are we going to validate folder transfers????
 	}
 
@@ -415,8 +425,8 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 }
 
 func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFolders bool, expectedRootFolder bool, addedDirAtDest string) {
-	srcRoot = s.state.source.getParam(false, false, objectTarget{})
-	dstRoot = s.state.dest.getParam(false, false, objectTarget{})
+	srcRoot = s.state.source.getParam(s.a, false, false, objectTarget{})
+	dstRoot = s.state.dest.getParam(s.a, false, false, objectTarget{})
 
 	srcBase := filepath.Base(srcRoot)
 	srcRootURL, err := url.Parse(srcRoot)
@@ -491,7 +501,7 @@ func (s *scenario) validateProperties() {
 	_, _, expectFolders, expectRootFolder, addedDirAtDest := s.getTransferInfo()
 
 	// for everything that should have been transferred, verify that any expected properties have been transferred to the destination
-	expectedFilesAndFolders := s.fs.getForStatus(common.ETransferStatus.Success(), expectFolders, expectRootFolder)
+	expectedFilesAndFolders := s.fs.getForStatus(s, common.ETransferStatus.Success(), expectFolders, expectRootFolder)
 	for _, f := range expectedFilesAndFolders {
 		expected := f.verificationProperties // use verificationProperties (i.e. what we expect) NOT creationProperties (what we made at the source). They won't ALWAYS be the same
 		if expected == nil {
@@ -562,7 +572,7 @@ func (s *scenario) validateContent() {
 	_, _, expectFolders, expectRootFolder, addedDirAtDest := s.getTransferInfo()
 
 	// for everything that should have been transferred, verify that any expected properties have been transferred to the destination
-	expectedFilesAndFolders := s.fs.getForStatus(common.ETransferStatus.Success(), expectFolders, expectRootFolder)
+	expectedFilesAndFolders := s.fs.getForStatus(s, common.ETransferStatus.Success(), expectFolders, expectRootFolder)
 	for _, f := range expectedFilesAndFolders {
 		if f.creationProperties.contentHeaders == nil {
 			s.a.Failed()
