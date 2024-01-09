@@ -57,14 +57,14 @@ func TestRotatingWriter(t *testing.T) {
 	w.Write([]byte(data[:10]))
 	entries, err := os.ReadDir(tmpDir)
 	a.Nil(err)
-	a.Equal(1, len(entries))
+	a.Equal(2, len(entries))
 	a.Equal(logFileName, entries[0].Name())
 
 	// write 90 more bytes and verify there is still only one file
 	w.Write([]byte(data[:90]))
 	entries, err = os.ReadDir(tmpDir)
 	a.Nil(err)
-	a.Equal(1, len(entries))
+	a.Equal(2, len(entries))
 	a.Equal(logFileName, entries[0].Name())
 
 	// write 10 more bytes and verify a new log file is created
@@ -74,7 +74,7 @@ func TestRotatingWriter(t *testing.T) {
 
 	entries, err = os.ReadDir(tmpDir)
 	a.Nil(err)
-	a.Equal(2, len(entries))
+	a.Equal(3, len(entries))
 	f := convertToMap(entries)
 	a.Contains(f, logFileName)
 	a.Contains(f, logFileName + ".0.log")
@@ -100,7 +100,7 @@ func TestRotatingWriter(t *testing.T) {
 	// verify only one new log file is created.
 	entries, err = os.ReadDir(tmpDir)
 	a.Nil(err)
-	a.Equal(3, len(entries))
+	a.Equal(4, len(entries))
 	f = convertToMap(entries)
 	a.Contains(f, logFileName)
 	a.Contains(f, logFileName + ".0.log")

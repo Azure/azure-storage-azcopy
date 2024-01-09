@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"sync"
 	"sync/atomic"
 )
@@ -38,6 +39,8 @@ type rotatingWriter struct {
 
 func NewRotatingWriter(filePath string, size uint64) (io.WriteCloser, error) {
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, DEFAULT_FILE_PERM)
+	logFileName := path.Base(file.Name())
+	_ = os.Symlink(logFileName, filePath + ".log") //best effort. We'll ignore error
 	if err != nil {
 		return nil, err
 	}
