@@ -1035,3 +1035,47 @@ func TestListOfVersions(t *testing.T) {
 		a.Equal(versions, versionsTransfer)
 	})
 }
+
+func TestListOfVersionsNegative(t *testing.T) {
+	a := assert.New(t)
+	bsc := getBlobServiceClient()
+	// set up the container with single blob with 2 versions
+	containerClient, containerName := createNewContainer(a, bsc)
+	defer deleteContainer(a, containerClient)
+
+	bbClient, blobName := getBlockBlobClient(a, containerClient, "")
+	// initial upload
+	_, err := bbClient.Upload(ctx, streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+	a.NoError(err)
+
+	// creating list of version files
+	versions := [1]string{"fakeversionid"}
+
+	tmpDir, err := os.MkdirTemp("", "tmpdir")
+	defer os.RemoveAll(tmpDir)
+	a.NoError(err)
+
+	fileName := "listofversions.txt"
+	file, err := os.CreateTemp(tmpDir, fileName)
+	a.NoError(err)
+	defer os.Remove(file.Name())
+	defer file.Close()
+
+	for _, ver := range versions {
+		fmt.Fprintln(file, ver)
+	}
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, blobName)
+	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
+	raw.recursive = true
+	raw.listOfVersionIDs = file.Name()
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Error(err)
+	})
+}
