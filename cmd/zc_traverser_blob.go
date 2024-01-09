@@ -445,9 +445,9 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 func getEntityType(metadata map[string]*string) common.EntityType {
 	// Note: We are just checking keys here, not their corresponding values. Is that safe?
-	if _, isFolder := common.TryReadMetadata(metadata, common.POSIXFolderMeta); isFolder {
+	if folderValue, isFolder := common.TryReadMetadata(metadata, common.POSIXFolderMeta); isFolder && folderValue != nil && strings.ToLower(*folderValue) == "true" {
 		return common.EEntityType.Folder()
-	} else if _, isSymlink := common.TryReadMetadata(metadata, common.POSIXSymlinkMeta); isSymlink {
+	} else if symlinkValue, isSymlink := common.TryReadMetadata(metadata, common.POSIXSymlinkMeta); isSymlink && symlinkValue != nil && strings.ToLower(*symlinkValue) == "true" {
 		return common.EEntityType.Symlink()
 	}
 	return common.EEntityType.File()
