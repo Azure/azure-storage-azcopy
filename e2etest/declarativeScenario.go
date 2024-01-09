@@ -110,7 +110,7 @@ func (s *scenario) Run() {
 		s.a.Assert(true, equals(), s.fromTo.From() == common.ELocation.Blob() || s.fromTo.From() == common.ELocation.BlobFS())
 	}
 
-	if s.destAccountType.IsBlobOnly() {
+	if s.destAccountType.IsManagedDisk() {
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.StdManagedDisk(), "Upload is not supported in MD testing yet")
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.OAuthManagedDisk(), "Upload is not supported in MD testing yet")
 		s.a.Assert(true, equals(), s.fromTo.From() == common.ELocation.Blob() || s.fromTo.From() == common.ELocation.BlobFS())
