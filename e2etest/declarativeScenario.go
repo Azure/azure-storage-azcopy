@@ -30,6 +30,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -73,7 +74,7 @@ type scenarioState struct {
 func (s *scenario) Run() {
 	defer func() { // catch a test panicking
 		if err := recover(); err != nil {
-			s.a.Error(fmt.Sprintf("Test panicked: %v", err))
+			s.a.Error(fmt.Sprintf("Test panicked: %v\n%s", err, debug.Stack()))
 		}
 	}()
 	defer s.cleanup()

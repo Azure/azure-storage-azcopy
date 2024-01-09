@@ -460,7 +460,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 		}
 
 		blobHadBody := b.body != nil
-		versionsRequested := common.Iff[uint](b.creationProperties.blobVersions != nil, *b.creationProperties.blobVersions, 1)
+		versionsRequested := common.IffNotNil[uint](b.creationProperties.blobVersions, 1)
 		versionsCreated := uint(0)
 
 		for versionsCreated < versionsRequested {
