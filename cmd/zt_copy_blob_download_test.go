@@ -962,8 +962,7 @@ func TestDryrunCopyGCPtoBlob(t *testing.T) {
 
 func TestListOfVersions(t *testing.T) {
 	a := assert.New(t)
-	t.Skip("Enable test after allowing versioning on storage account ")
-	bsc := getBlobServiceClient()
+	bsc := getSecondaryBlobServiceClient()
 	// set up the container with single blob with 2 versions
 	containerClient, containerName := createNewContainer(a, bsc)
 	defer deleteContainer(a, containerClient)
@@ -1022,7 +1021,7 @@ func TestListOfVersions(t *testing.T) {
 	mockedRPC.init()
 
 	// construct the raw input to simulate user input
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, containerName, blobName)
+	rawBlobURLWithSAS := scenarioHelper{}.getSecondaryRawBlobURLWithSAS(a, containerName, blobName)
 	raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 	raw.recursive = true
 	raw.listOfVersionIDs = file.Name()
