@@ -19,3 +19,32 @@
 // THE SOFTWARE.
 
 package e2etest
+
+import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"testing"
+)
+
+func TestBlobVersioning_ListOfVersions(t *testing.T) {
+	RunScenarios(t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{},
+		&hooks{},
+		testFiles{
+			defaultSize: "1k",
+			objectTarget: objectTarget{
+				objectName: "versioned",
+				versions:   []uint{0, 2},
+			},
+			shouldTransfer: []any{
+				f("versioned", with{
+					blobVersions: 3, // create 3 unique versions to read from
+				}),
+			},
+		},
+		EAccountType.Standard(), EAccountType.Standard(), "")
+}
