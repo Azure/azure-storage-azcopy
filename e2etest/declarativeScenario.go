@@ -352,7 +352,8 @@ func (s *scenario) runAzCopy(logDirectory string) {
 
 func (s *scenario) cancelAzCopy(logDir string) {
 	r := newTestRunner()
-	r.SetAllFlags(s.p, eOperation.Cancel())
+	s.operation = eOperation.Cancel()
+	r.SetAllFlags(s)
 
 	afterStart := func() string { return "" }
 	result, wasClean, err := r.ExecuteAzCopyCommand(
