@@ -262,3 +262,36 @@ func (s *ServiceClient) DatalakeServiceClient() (*datalake.Client, error) {
 	}
 	return s.dsc, nil
 }
+
+// Metadata utility functions to work around GoLang's metadata capitalization
+
+func TryAddMetadata(metadata Metadata, key, value string) {
+	if _, ok := metadata[key]; ok {
+		return // Don't overwrite the user's metadata
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if _, ok := metadata[capitalizedKey]; ok {
+			return
+		}
+	}
+
+	v := value
+	metadata[key] = &v
+}
+
+func TryReadMetadata(metadata Metadata, key string) (*string, bool) {
+	if v, ok := metadata[key]; ok {
+		return v, true
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if v, ok := metadata[capitalizedKey]; ok {
+			return v, true
+		}
+	}
+
+	return nil, false
+}
