@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -50,12 +52,17 @@ func fixSlashes(s string, loc common.Location) string {
 	return s
 }
 
+// versionIDRegex is intended to capture variations of the destination version ID.
+var versionIDRegex = regexp.MustCompile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}[-:]\\d{2}[-:]\\d{2}\\.\\d{7}Z")
+
 func (Validator) ValidateRemoveTransfer(c asserter, isSrcEncoded bool, isDstEncoded bool,
 	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
 	// TODO: Think of how to validate files in case of remove
 }
-func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool, isDstEncoded bool,
+func (Validator) ValidateCopyTransfersAreScheduled(s *scenario, isSrcEncoded bool, isDstEncoded bool,
 	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus, expectFolders bool) {
+	c := s.a
+	tf := s.GetTestFiles()
 
 	sourcePrefix = makeSlashesComparable(sourcePrefix)
 	destinationPrefix = makeSlashesComparable(destinationPrefix)
@@ -119,6 +126,15 @@ func (Validator) ValidateCopyTransfersAreScheduled(c asserter, isSrcEncoded bool
 
 		if isDstEncoded {
 			dstRelativeFilePath, _ = url.PathUnescape(dstRelativeFilePath)
+		}
+
+		if tf.isListOfVersions() { // Append the appropriate version for the lookup
+			versionID := versionIDRegex.FindString(filepath.Base(dstRelativeFilePath))
+			c.Assert(versionID, notEquals(), "", "expected to find a version attached to the file name")
+			// flatten the version ID
+			versionID = strings.ReplaceAll(versionID, ":", "-")
+
+			srcRelativeFilePath = filepath.Join(filepath.Dir(srcRelativeFilePath), versionID+"-"+filepath.Base(srcRelativeFilePath))
 		}
 
 		if transfer.Dst != os.DevNull { // Don't check if the destination is NUL-- It won't be correct.
