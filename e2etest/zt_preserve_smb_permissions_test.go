@@ -43,7 +43,7 @@ func AdjustSDDLToLocal(sample, placeholder string) (sddlOut string, err error) {
 	return strings.ReplaceAll(sample, placeholder, sid.String()), nil
 }
 
-func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
+func TestPermissions_SMBSDDLPreserved(t *testing.T) {
 	fileSDDL, err := AdjustSDDLToLocal(SampleSDDL, SampleSDDLPlaceHolder)
 	if err != nil {
 		t.Error(err)
@@ -81,7 +81,7 @@ func TestProperties_SMBPermissionsSDDLPreserved(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-func TestProperties_SMBWithCopyWithShareRoot(t *testing.T) {
+func TestPermissions_SMBWithCopyWithShareRoot(t *testing.T) {
 	fileSDDL, err := AdjustSDDLToLocal(SampleSDDL, SampleSDDLPlaceHolder)
 	if err != nil {
 		t.Error(err)
