@@ -24,10 +24,21 @@ package e2etest
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -48,15 +59,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
-	"io"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/minio/minio-go"
@@ -411,6 +413,7 @@ type generateBlobFromListOptions struct {
 	cpkInfo         *blob.CPKInfo
 	cpkScopeInfo    *blob.CPKScopeInfo
 	accessTier      *blob.AccessTier
+	compressToGZ    bool
 	generateFromListOptions
 }
 
@@ -472,12 +475,31 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 			size = len(b.body)
 		}
 
+		if options.compressToGZ {
+			var buff bytes.Buffer
+			gz := gzip.NewWriter(&buff)
+			if _, err := gz.Write([]byte(sourceData)); err != nil {
+				c.AssertNoErr(err)
+			}
+			if err := gz.Close(); err != nil {
+				c.AssertNoErr(err)
+			}
+			if ad.obj.creationProperties.contentHeaders == nil {
+				ad.obj.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			contentEncoding := "gzip"
+			ad.obj.creationProperties.contentHeaders.contentEncoding = &contentEncoding
+			b.body = buff.Bytes()
+			b.name += ".gz"
+		}
+
 		// Setting content MD5
 		if ad.obj.creationProperties.contentHeaders == nil {
 			b.creationProperties.contentHeaders = &contentHeaders{}
 		}
 		if ad.obj.creationProperties.contentHeaders.contentMD5 == nil {
-			contentMD5 := md5.Sum(sourceData)
+			contentMD5 := md5.Sum(sourceData) // md5 should always be of original data because
+			// that is what azcopy will compare against.
 			ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
 		}
 

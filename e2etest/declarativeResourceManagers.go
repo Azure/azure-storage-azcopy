@@ -240,6 +240,7 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 	if isSource {
 		options.accessTier = s.p.accessTier
 	}
+	options.compressToGZ = isSource && s.fromTo.IsDownload() && s.p.decompress
 	scenarioHelper{}.generateBlobsFromList(a, options)
 
 	// set root ACL
@@ -278,6 +279,7 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
+	options.compressToGZ = isSource && s.fromTo.IsDownload() && s.p.decompress
 
 	scenarioHelper{}.generateBlobsFromList(a, options)
 }
