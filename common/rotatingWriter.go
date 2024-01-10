@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -68,8 +69,8 @@ func (w *rotatingWriter) rotate(suffix int32) error {
 		return err
 	}
 
-	suffixString := fmt.Sprintf(".%d.log", w.currentSuffix)
-	if err := os.Rename(w.filePath, w.filePath + suffixString); err != nil {
+	logFileName := strings.TrimSuffix(w.filePath, ".log") + fmt.Sprintf(".%d.log", w.currentSuffix)
+	if err := os.Rename(w.filePath, logFileName); err != nil {
 		return err
 	}
 	
@@ -89,9 +90,6 @@ func (w *rotatingWriter) rotate(suffix int32) error {
 
 func (w *rotatingWriter) Close() error {
 	if err := w.file.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(w.filePath, w.filePath + ".log"); err != nil {
 		return err
 	}
 	return nil
