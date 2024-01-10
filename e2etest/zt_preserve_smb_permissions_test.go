@@ -4,12 +4,8 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"strings"
 	"testing"
-	"time"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sys/windows"
 )
