@@ -43,7 +43,6 @@ type FileClientStub interface {
 	URL() string
 }
 
-var doWithOverrideReadOnly = common.DoWithOverrideReadOnlyOnAzureFiles
 
 // azureFileSenderBase implements both IFolderSender and (most of) IFileSender.
 // Why implement both interfaces in the one type, even though they are largely unrelated? Because it
@@ -204,7 +203,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		creationProperties.Attributes.ReadOnly = false
 	}
 
-	err = doWithOverrideReadOnly(u.ctx,
+	err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
 			return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{HTTPHeaders: &u.headersToApply, Permissions: &u.permissionsToApply, SMBProperties: &creationProperties, Metadata: u.metadataToApply})
 		},
@@ -220,7 +219,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		}
 
 		// retrying file creation
-		err = doWithOverrideReadOnly(u.ctx,
+		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 			func() (interface{}, error) {
 				return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{
 					HTTPHeaders:   &u.headersToApply,
@@ -404,7 +403,7 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		return err
 	}
 
-	err = doWithOverrideReadOnly(u.ctx,
+	err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
 			return u.getDirectoryClient().SetProperties(u.ctx, &directory.SetPropertiesOptions{
 				FileSMBProperties: &u.smbPropertiesToApply,

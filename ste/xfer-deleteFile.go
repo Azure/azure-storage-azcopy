@@ -106,7 +106,7 @@ func doDeleteFile(jptm IJobPartTransferMgr) {
 	srcFileClient := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
 
 	// Delete the source file
-	err = doWithOverrideReadOnly(jptm.Context(),
+	err = common.DoWithOverrideReadOnlyOnAzureFiles(jptm.Context(),
 		func() (interface{}, error) { return srcFileClient.Delete(jptm.Context(), nil) },
 		srcFileClient,
 		jptm.GetForceIfReadOnly())
@@ -147,7 +147,7 @@ func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr
 	loggableName := fileURLParts.DirectoryOrFilePath
 	logger.Log(common.LogDebug, "About to attempt to delete folder "+loggableName)
 
-	err = doWithOverrideReadOnly(ctx,
+	err = common.DoWithOverrideReadOnlyOnAzureFiles(ctx,
 		func() (interface{}, error) { return srcDirClient.Delete(ctx, nil) },
 		srcDirClient,
 		jptm.GetForceIfReadOnly())
