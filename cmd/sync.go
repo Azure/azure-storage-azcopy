@@ -54,7 +54,6 @@ type rawSyncCmdArgs struct {
 	legacyExclude         string // for warning messages only
 	includeRegex          string
 	excludeRegex          string
-	excludeContainer      string
 	compareHash           string
 	localHashStorageMode  string
 
@@ -331,7 +330,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
 	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
-	cooked.excludeContainer = raw.parsePatterns(raw.excludeContainer)
 
 	cooked.dryrunMode = raw.dryrun
 
@@ -384,7 +382,6 @@ type cookedSyncCmdArgs struct {
 	excludeFileAttributes []string
 	includeRegex          []string
 	excludeRegex          []string
-	excludeContainer      []string
 
 	// options
 	compareHash             common.SyncHashType
@@ -789,7 +786,6 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "", "Include the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
 	syncCmd.PersistentFlags().StringVar(&raw.excludeRegex, "exclude-regex", "", "Exclude the relative path of the files that match with the regular expressions. Separate regular expressions with ';'.")
-	syncCmd.PersistentFlags().StringVar(&raw.excludeContainer, "exclude-container", "", "Exclude these containers when transferring from Account to Account only.")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "Defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")

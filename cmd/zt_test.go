@@ -263,8 +263,8 @@ func getRandomDataAndReader(n int) (*bytes.Reader, []byte) {
 }
 
 func getAccountAndKey() (string, string) {
-	name := os.Getenv("AZURE_STORAGE_ACCOUNT_NAME")
-	key := os.Getenv("AZURE_STORAGE_ACCOUNT_KEY")
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
 	if name == "" || key == "" {
 		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before running tests")
 	}
@@ -273,12 +273,11 @@ func getAccountAndKey() (string, string) {
 }
 
 func getSecondaryAccountAndKey() (string, string) {
-	name := os.Getenv("SECONDARY_AZURE_STORAGE_ACCOUNT_NAME")
-	key := os.Getenv("SECONDARY_AZURE_STORAGE_ACCOUNT_KEY")
+	name := os.Getenv("AZCOPY_E2E_ACCOUNT_NAME")
+	key := os.Getenv("AZCOPY_E2E_ACCOUNT_KEY")
 	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before running tests")
+		panic("AZCOPY_E2E_ACCOUNT_NAME and AZCOPY_E2E_ACCOUNT_KEY environment vars must be set before running tests")
 	}
-
 	return name, key
 }
 

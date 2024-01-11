@@ -61,7 +61,7 @@ func (f *excludeBlobTypeFilter) DoesPass(object StoredObject) bool {
 
 // excludeContainerFilter filters out container names that must be excluded
 type excludeContainerFilter struct {
-	containerNamesList []string
+	containerNamesList map[string]bool
 }
 
 func (s *excludeContainerFilter) DoesSupportThisOS() (msg string, supported bool) {
@@ -76,18 +76,18 @@ func (s *excludeContainerFilter) DoesPass(storedObject StoredObject) bool {
 	if len(s.containerNamesList) == 0 {
 		return true
 	}
-	for _, cName := range s.containerNamesList {
-		// container name matches the excluded container name and return false to exclude
-		if strings.Compare(cName, storedObject.ContainerName) == 0 {
-			return false
-		}
+
+	if _, exists := s.containerNamesList[storedObject.ContainerName]; exists {
+		return false
 	}
 	return true
 }
 
 func buildExcludeContainerFilter(containerNames []string) []ObjectFilter {
-	excludeContainerSet := make([]string, 0)
-	excludeContainerSet = append(excludeContainerSet, containerNames...)
+	excludeContainerSet := make(map[string]bool)
+	for _, name := range containerNames {
+		excludeContainerSet[name] = true
+	}
 
 	return append(make([]ObjectFilter, 0), &excludeContainerFilter{containerNamesList: excludeContainerSet})
 }
