@@ -199,8 +199,12 @@ func TestBasic_CopyS2SDir(t *testing.T) {
 		shouldTransfer: []interface{}{
 			folder(""),
 			f("file1"),
+			f("file2"),
 			folder("folder1"),
+			folder("folder2"),
 			f("folder1/file1"),
+			f("folder1/file2"),
+			f("folder2/file3"),
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
