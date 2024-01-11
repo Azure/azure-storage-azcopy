@@ -837,6 +837,11 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			}
 
 			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil || f.creationProperties.lastWriteTime != nil {
+				if f.name == "" {
+					// On azure files, SetAccessCtrl fails, if we dont do GetProperties.
+					_, err := dir.GetProperties(context.TODO(), nil)
+					c.AssertNoErr(err)
+				}
 				_, err := dir.SetProperties(ctx, &directory.SetPropertiesOptions{
 					FileSMBProperties: ad.toSMBProperties(c),
 					FilePermissions:   ad.toPermissions(c, options.shareClient),
