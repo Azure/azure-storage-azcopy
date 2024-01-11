@@ -22,9 +22,8 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,6 +31,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -117,6 +119,23 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		// If the command is for resuming a job with a specific JobID,
+		// use the provided JobID to resume the job; otherwise, create a new JobID.
+		if cmd.Use == "resume [jobID]" {
+			// If no argument is passed then it is not valid
+			if len(args) != 1 {
+				return errors.New("this command requires jobId to be passed as argument")
+			}
+
+			loggerInfo.jobID, err = common.ParseJobID(args[0])
+
+			if err != nil {
+				return err
+			}
+
+		}
+
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
 
@@ -276,41 +295,41 @@ func beginDetectNewVersion() chan struct{} {
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)
-			return
-		}
+		} else {
+			// step 2: initialize pipeline
+			options := createClientOptions(nil)
 
-		// step 2: initialize pipeline
-		options := createClientOptions(nil)
+			// step 3: start download
+			blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
+			if err != nil {
+				return
+			}
 
-		// step 3: start download
-		blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
-		if err != nil {
-			return
-		}
+			downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
+			if err != nil {
+				return
+			}
 
-		downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
-		if err != nil {
-			return
-		}
+			// step 4: read newest version str
+			data := make([]byte, *downloadBlobResp.ContentLength)
+			_, err = downloadBlobResp.Body.Read(data)
+			defer downloadBlobResp.Body.Close()
+			if err != nil && err != io.EOF {
+				return
+			}
 
-		// step 4: read newest version str
-		data := make([]byte, *downloadBlobResp.ContentLength)
-		_, err = downloadBlobResp.Body.Read(data)
-		if err != nil && err != io.EOF {
-			return
-		}
+			remoteVersion, err := NewVersion(string(data))
+			if err != nil {
+				return
+			}
 
-		remoteVersion, err := NewVersion(string(data))
-		if err != nil {
-			return
-		}
+			PrintOlderVersion(*remoteVersion, *localVersion)
 
-		PrintOlderVersion(*remoteVersion, *localVersion)
-
-		// step 5: persist remote version in local
-		err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
-		if err != nil {
-			return
+			// step 5: persist remote version in local
+			err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
+			if err != nil {
+				return
+			}
 		}
 
 		// let caller know we have finished, if they want to know

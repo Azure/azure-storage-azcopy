@@ -297,9 +297,9 @@ func getBlobServiceClient() *blobservice.Client {
 	return client
 }
 
-// get blob account service client
+// get secondary blob account service client
 func getSecondaryBlobServiceClient() *blobservice.Client {
-	accountName, accountKey := getAccountAndKey()
+	accountName, accountKey := getSecondaryAccountAndKey()
 	u := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)

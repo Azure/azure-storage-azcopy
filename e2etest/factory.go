@@ -48,7 +48,12 @@ type TestResourceFactory struct{}
 
 func (TestResourceFactory) GetBlobServiceURL(accountType AccountType) *blobservice.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
-	resourceURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
+	var resourceURL string
+	if accountName != "devstoreaccount1" {
+		resourceURL = fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
+	} else {
+		resourceURL = fmt.Sprintf("http://127.0.0.1:10000/%s/", accountName)
+	}
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
@@ -117,16 +122,24 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	c.AssertNoErr(err)
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s", credential.AccountName(), containerName)
-	client, err := container.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+	if accountName == "devstoreaccount1" {
+		rawURL = fmt.Sprintf("http://127.0.0.1:10000/%s/%s", credential.AccountName(), containerName)
+	}
+
+	permissions := blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, ModifyOwnership: true, ModifyPermissions: true, Tag: true}
+	qps, err := blobsas.BlobSignatureValues{
+		Version:       blobsas.Version,
+		Protocol:      blobsas.ProtocolHTTPSandHTTP,
+		ContainerName: containerName,
+		Permissions:   permissions.String(),
+		StartTime:     time.Time{},
+		ExpiryTime:    time.Now().Add(48 * time.Hour).UTC(),
+	}.SignWithSharedKey(credential)
 	c.AssertNoErr(err)
 
-	sasURL, err := client.GetSASURL(
-		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, ModifyOwnership: true, ModifyPermissions: true, Tag: true},
-		time.Now().Add(48*time.Hour),
-		nil)
-	c.AssertNoErr(err)
+	sasURL := rawURL + "?" + qps.Encode()
 
-	client, err = container.NewClientWithNoCredential(sasURL, nil)
+	client, err := container.NewClientWithNoCredential(sasURL, nil)
 	c.AssertNoErr(err)
 
 	return client

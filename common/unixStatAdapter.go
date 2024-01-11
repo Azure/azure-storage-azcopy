@@ -165,7 +165,7 @@ func (u UnixStatContainer) CTime() time.Time {
 func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapter, error) {
 	s := UnixStatContainer{size: uint64(contentLength)}
 
-	if mask, ok := metadata[LINUXStatxMaskMeta]; ok {
+	if mask, ok := TryReadMetadata(metadata, LINUXStatxMaskMeta); ok {
 		m, err := strconv.ParseUint(*mask, 10, 32)
 		if err != nil {
 			return s, err
@@ -175,7 +175,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 	}
 
 	// cover additional statx properties here
-	if attr, ok := metadata[LINUXAttributeMeta]; ok {
+	if attr, ok := TryReadMetadata(metadata, LINUXAttributeMeta); ok {
 		a, err := strconv.ParseUint(*attr, 10, 64)
 		if err != nil {
 			return s, err
@@ -183,7 +183,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.attributes = a
 	}
 
-	if attr, ok := metadata[LINUXAttributeMaskMeta]; ok {
+	if attr, ok := TryReadMetadata(metadata, LINUXAttributeMaskMeta); ok {
 		a, err := strconv.ParseUint(*attr, 10, 64)
 		if err != nil {
 			return s, err
@@ -191,7 +191,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.attributesMask = a
 	}
 
-	if btime, ok := metadata[LINUXBTimeMeta]; ok {
+	if btime, ok := TryReadMetadata(metadata, LINUXBTimeMeta); ok {
 		b, err := strconv.ParseInt(*btime, 10, 64)
 		if err != nil {
 			return s, err
@@ -200,7 +200,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 	}
 
 	// base stat properties
-	if nlink, ok := metadata[POSIXNlinkMeta]; ok {
+	if nlink, ok := TryReadMetadata(metadata, POSIXNlinkMeta); ok {
 		n, err := strconv.ParseUint(*nlink, 10, 64)
 		if err != nil {
 			return s, err
@@ -208,7 +208,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.numLinks = n
 	}
 
-	if owner, ok := metadata[POSIXOwnerMeta]; ok {
+	if owner, ok := TryReadMetadata(metadata, POSIXOwnerMeta); ok {
 		o, err := strconv.ParseUint(*owner, 10, 32)
 		if err != nil {
 			return s, err
@@ -216,7 +216,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.ownerUID = uint32(o)
 	}
 
-	if group, ok := metadata[POSIXGroupMeta]; ok {
+	if group, ok := TryReadMetadata(metadata, POSIXGroupMeta); ok {
 		g, err := strconv.ParseUint(*group, 10, 32)
 		if err != nil {
 			return s, err
@@ -224,7 +224,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.groupGID = uint32(g)
 	}
 
-	if mode, ok := metadata[POSIXModeMeta]; ok {
+	if mode, ok := TryReadMetadata(metadata, POSIXModeMeta); ok {
 		m, err := strconv.ParseUint(*mode, 10, 32)
 		if err != nil {
 			return s, err
@@ -233,7 +233,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.mode = uint32(m)
 	}
 
-	if inode, ok := metadata[POSIXINodeMeta]; ok {
+	if inode, ok := TryReadMetadata(metadata, POSIXINodeMeta); ok {
 		ino, err := strconv.ParseUint(*inode, 10, 64)
 		if err != nil {
 			return s, err
@@ -242,7 +242,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.iNode = ino
 	}
 
-	if dev, ok := metadata[POSIXDevMeta]; ok {
+	if dev, ok := TryReadMetadata(metadata, POSIXDevMeta); ok {
 		d, err := strconv.ParseUint(*dev, 10, 64)
 		if err != nil {
 			return s, err
@@ -251,7 +251,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.devID = d
 	}
 
-	if rdev, ok := metadata[POSIXRDevMeta]; ok {
+	if rdev, ok := TryReadMetadata(metadata, POSIXRDevMeta); ok {
 		rd, err := strconv.ParseUint(*rdev, 10, 64)
 		if err != nil {
 			return s, err
@@ -260,7 +260,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.repDevID = rd
 	}
 
-	if atime, ok := metadata[POSIXATimeMeta]; ok {
+	if atime, ok := TryReadMetadata(metadata, POSIXATimeMeta); ok {
 		at, err := strconv.ParseInt(*atime, 10, 64)
 		if err != nil {
 			return s, err
@@ -269,7 +269,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.accessTime = time.Unix(0, at)
 	}
 
-	if mtime, ok := metadata[POSIXModTimeMeta]; ok {
+	if mtime, ok := TryReadMetadata(metadata, POSIXModTimeMeta); ok {
 		mt, err := strconv.ParseInt(*mtime, 10, 64)
 		if err != nil {
 			return s, err
@@ -278,7 +278,7 @@ func ReadStatFromMetadata(metadata Metadata, contentLength int64) (UnixStatAdapt
 		s.modTime = time.Unix(0, mt)
 	}
 
-	if ctime, ok := metadata[POSIXCTimeMeta]; ok {
+	if ctime, ok := TryReadMetadata(metadata, POSIXCTimeMeta); ok {
 		ct, err := strconv.ParseInt(*ctime, 10, 64)
 		if err != nil {
 			return s, err
@@ -352,14 +352,14 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
 			S_IFCHR:  POSIXCharDeviceMeta,
 			S_IFBLK:  POSIXBlockDeviceMeta,
 			S_IFSOCK: POSIXSocketMeta,
-			S_IFIFO: POSIXFIFOMeta,
-			S_IFDIR: POSIXFolderMeta,
-			S_IFLNK: POSIXSymlinkMeta,
+			S_IFIFO:  POSIXFIFOMeta,
+			S_IFDIR:  POSIXFolderMeta,
+			S_IFLNK:  POSIXSymlinkMeta,
 		}
 
 		for modeToTest, metaToApply := range modes {
 			if mode&os.FileMode(modeToTest) == os.FileMode(modeToTest) {
-				tryAddMetadata(metadata, metaToApply, "true")
+				TryAddMetadata(metadata, metaToApply, "true")
 			}
 		}
 	}
@@ -367,83 +367,74 @@ func AddStatToBlobMetadata(s UnixStatAdapter, metadata Metadata) {
 	if s.Extended() { // try to poll the other properties
 		mask := s.StatxMask()
 
-		tryAddMetadata(metadata, LINUXStatxMaskMeta, strconv.FormatUint(uint64(mask), 10))
-		tryAddMetadata(metadata, LINUXAttributeMeta, strconv.FormatUint(s.Attribute()&s.AttributeMask(), 10)) // AttributesMask indicates what attributes are supported by the filesystem
-		tryAddMetadata(metadata, LINUXAttributeMaskMeta, strconv.FormatUint(s.AttributeMask(), 10))
+		TryAddMetadata(metadata, LINUXStatxMaskMeta, strconv.FormatUint(uint64(mask), 10))
+		TryAddMetadata(metadata, LINUXAttributeMeta, strconv.FormatUint(s.Attribute()&s.AttributeMask(), 10)) // AttributesMask indicates what attributes are supported by the filesystem
+		TryAddMetadata(metadata, LINUXAttributeMaskMeta, strconv.FormatUint(s.AttributeMask(), 10))
 
 		if StatXReturned(mask, STATX_BTIME) {
-			tryAddMetadata(metadata, LINUXBTimeMeta, strconv.FormatInt(s.BTime().UnixNano(), 10))
+			TryAddMetadata(metadata, LINUXBTimeMeta, strconv.FormatInt(s.BTime().UnixNano(), 10))
 		}
 
 		if StatXReturned(mask, STATX_NLINK) {
-			tryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
+			TryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
 		}
 
 		if StatXReturned(mask, STATX_UID) {
-			tryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+			TryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
 		}
 
 		if StatXReturned(mask, STATX_GID) {
-			tryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+			TryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
 		}
 
 		if StatXReturned(mask, STATX_MODE) {
-			tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+			TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
 			applyMode(os.FileMode(s.FileMode()))
 		}
 
 		if StatXReturned(mask, STATX_INO) {
-			tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
+			TryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
 		}
 
 		// This is not optional.
-		tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
+		TryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
 
 		if StatXReturned(mask, STATX_MODE) && ((s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK) {
-			tryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
+			TryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
 		}
 
 		// Sometimes, the filesystem will return ATime, but the vfs layer will overwrite it in the mask. It's still accurate, so we can use it.
 		// e.g. ext4+noatime will still return & properly store atimes, but won't be included in the statx mask.
 		if StatXReturned(mask, STATX_ATIME) || s.ATime().UnixNano() > 0 {
-			tryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
+			TryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
 		}
 
 		if StatXReturned(mask, STATX_MTIME) {
-			tryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
+			TryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
 		}
 
 		if StatXReturned(mask, STATX_CTIME) {
-			tryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
+			TryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
 		}
 	} else {
-		tryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
-		tryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
-		tryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
-		tryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
+		TryAddMetadata(metadata, POSIXNlinkMeta, strconv.FormatUint(s.NLink(), 10))
+		TryAddMetadata(metadata, POSIXOwnerMeta, strconv.FormatUint(uint64(s.Owner()), 10))
+		TryAddMetadata(metadata, POSIXGroupMeta, strconv.FormatUint(uint64(s.Group()), 10))
+		TryAddMetadata(metadata, POSIXModeMeta, strconv.FormatUint(uint64(s.FileMode()), 10))
 		applyMode(os.FileMode(s.FileMode()))
-		tryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
-		tryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
+		TryAddMetadata(metadata, POSIXINodeMeta, strconv.FormatUint(s.INode(), 10))
+		TryAddMetadata(metadata, POSIXDevMeta, strconv.FormatUint(s.Device(), 10))
 
 		if (s.FileMode()&S_IFCHR) == S_IFCHR || (s.FileMode()&S_IFBLK) == S_IFBLK { // this is not relevant unless the file is a block or character device.
-			tryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
+			TryAddMetadata(metadata, POSIXRDevMeta, strconv.FormatUint(s.RDevice(), 10))
 		}
 
-		tryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
-		tryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
-		tryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
+		TryAddMetadata(metadata, POSIXATimeMeta, strconv.FormatInt(s.ATime().UnixNano(), 10))
+		TryAddMetadata(metadata, POSIXModTimeMeta, strconv.FormatInt(s.MTime().UnixNano(), 10))
+		TryAddMetadata(metadata, POSIXCTimeMeta, strconv.FormatInt(s.CTime().UnixNano(), 10))
 	}
 }
 
 func StatXReturned(mask uint32, want uint32) bool {
 	return (mask & want) == want
-}
-
-func tryAddMetadata(metadata Metadata, key, value string) {
-	if _, ok := metadata[key]; ok {
-		return // Don't overwrite the user's metadata
-	}
-
-	v := value
-	metadata[key] = &v
 }

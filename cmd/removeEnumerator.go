@@ -24,10 +24,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"net/http"
 	"path"
 	"strings"
@@ -151,6 +151,8 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 		return err
 	}
 
+	dsc, _ := targetServiceClient.DatalakeServiceClient() // We've just created client above, need not verify error here.
+
 	transferProcessor := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, common.EFolderPropertiesOption.AllFolders(), targetServiceClient)
 
 	// return an error if the unsupported options are passed in
@@ -172,7 +174,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 
 	if cca.ListOfFilesChannel == nil {
 		if cca.dryrunMode {
-			return dryrunRemoveSingleDFSResource(ctx, datalakeURLParts, cca.credentialInfo, options, cca.Recursive)
+			return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 		} else {
 			err := transferProcessor.scheduleCopyTransfer(newStoredObject(
 				nil,
@@ -201,7 +203,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 			//remove the child path
 			datalakeURLParts.PathName = common.GenerateFullPath(parentPath, childPath)
 			if cca.dryrunMode {
-				return dryrunRemoveSingleDFSResource(ctx, datalakeURLParts, cca.credentialInfo, options, cca.Recursive)
+				return dryrunRemoveSingleDFSResource(ctx, dsc, datalakeURLParts, cca.Recursive)
 			} else {
 				err := transferProcessor.scheduleCopyTransfer(newStoredObject(
 					nil,
@@ -227,7 +229,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	return err
 }
 
-func dryrunRemoveSingleDFSResource(ctx context.Context, datalakeURLParts azdatalake.URLParts, credInfo common.CredentialInfo, options azcore.ClientOptions, recursive bool) error {
+func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, datalakeURLParts azdatalake.URLParts, recursive bool) error {
 	//deleting a filesystem
 	if datalakeURLParts.PathName == "" {
 		glcm.Dryrun(func(_ common.OutputFormat) string {
@@ -237,7 +239,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, datalakeURLParts azdatal
 	}
 	// we do not know if the source is a file or a directory
 	// we assume it is a directory and get its properties
-	directoryClient := common.CreateDatalakeDirectoryClient(datalakeURLParts.String(), credInfo, nil, options)
+	directoryClient := dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).NewDirectoryClient(datalakeURLParts.PathName)
 	var respFromCtx *http.Response
 	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
 	_, err := directoryClient.GetProperties(ctxWithResp, nil)
@@ -257,8 +259,7 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, datalakeURLParts azdatal
 
 	pathName := datalakeURLParts.PathName
 	datalakeURLParts.PathName = ""
-	filesystemClient := common.CreateFilesystemClient(datalakeURLParts.String(), credInfo, nil, options)
-	pager := filesystemClient.NewListPathsPager(recursive, &filesystem.ListPathsOptions{Prefix: &pathName})
+	pager := dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).NewListPathsPager(recursive, &filesystem.ListPathsOptions{Prefix: &pathName})
 	for pager.More() {
 		resp, err := pager.NextPage(ctx)
 		if err != nil {

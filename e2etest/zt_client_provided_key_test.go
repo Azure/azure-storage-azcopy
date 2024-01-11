@@ -63,14 +63,14 @@ func TestClient_ProvidedScopeUpload(t *testing.T) {
 func TestClient_ProvidedScopeUploadSingleFile(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:  true,
+		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
 		defaultSize: "100K",
 		shouldTransfer: []interface{}{
 			f("file1", verifyOnly{with{cpkByName: cpkByName}}),
 		},
-		objectTarget: "file1",
+		objectTarget: objectTarget{objectName: "file1"},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -113,14 +113,14 @@ func TestClient_ProvidedScopeDownload(t *testing.T) {
 func TestClient_ProvidedScopeDownloadSingleFile(t *testing.T) {
 	cpkByName := "blobgokeytestscope"
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:  true,
+		recursive: true,
 		cpkByName: cpkByName,
 	}, nil, testFiles{
 		defaultSize: "100K",
 		shouldTransfer: []interface{}{
 			f("file1", with{cpkByName: cpkByName}),
 		},
-		objectTarget: "file1",
+		objectTarget: objectTarget{objectName: "file1"},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -188,7 +188,7 @@ func TestClient_ProvidedScopeDeleteSingleFile(t *testing.T) {
 		shouldTransfer: []interface{}{
 			f("file1"),
 		},
-		objectTarget: "file1",
+		objectTarget: objectTarget{objectName: "file1"},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -222,7 +222,7 @@ func TestClient_ProvidedKeyUploadSingleFile(t *testing.T) {
 		shouldTransfer: []interface{}{
 			f("file1", verifyOnly{with{cpkByValue: true}}),
 		},
-		objectTarget: "file1",
+		objectTarget: objectTarget{objectName: "file1"},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -270,7 +270,7 @@ func TestClient_ProvidedKeyDownloadSingleFile(t *testing.T) {
 		shouldTransfer: []interface{}{
 			f("file1", with{cpkByValue: true}),
 		},
-		objectTarget: "file1",
+		objectTarget: objectTarget{objectName: "file1"},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
@@ -327,6 +327,6 @@ func TestClient_ProvidedKeyDeleteSingleFile(t *testing.T) {
 		shouldTransfer: []interface{}{
 			f("file1"),
 		},
-		objectTarget: "file1",
+		objectTarget: objectTarget{objectName: "file1"},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

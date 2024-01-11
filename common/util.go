@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net"
 	"net/url"
 	"strings"
@@ -112,18 +113,17 @@ func GetServiceClientForLocation(loc Location,
 	policyOptions *azcore.ClientOptions,
 	locationSpecificOptions any,
 ) (*ServiceClient, error) {
-
-	u, err := url.Parse(resourceURL)
-	if err != nil {
-		return nil, nil
-	}
-	u.Path = ""
-
 	ret := &ServiceClient{}
-
-	resourceURL = u.String()
 	switch loc {
 	case ELocation.BlobFS():
+		datalakeURLParts, err := azdatalake.ParseURL(resourceURL)
+		if err != nil {
+			return nil, err
+		}
+		datalakeURLParts.FileSystemName = ""
+		datalakeURLParts.PathName = ""
+		resourceURL = datalakeURLParts.String()
+
 		var o *datalake.ClientOptions
 		var dsc *datalake.Client
 		if policyOptions != nil {
@@ -152,11 +152,15 @@ func GetServiceClientForLocation(loc Location,
 		// For BlobFS, we additionally create a blob client as well. We interact with both endpoints.
 		fallthrough
 	case ELocation.Blob():
-		// If create a blob client for a datalake target, correct endpoint
-		if strings.Contains(u.Host, ".dfs") {
-			u.Host = strings.Replace(u.Host, ".dfs", ".blob", 1)
-			resourceURL = u.String()
+		blobURLParts, err := blob.ParseURL(resourceURL)
+		if err != nil {
+			return nil, err
 		}
+		blobURLParts.ContainerName = ""
+		blobURLParts.BlobName = ""
+		// In case we are creating a blob client for a datalake target, correct the endpoint
+		blobURLParts.Host = strings.Replace(blobURLParts.Host, ".dfs", ".blob", 1)
+		resourceURL = blobURLParts.String()
 		var o *blobservice.ClientOptions
 		var bsc *blobservice.Client
 		if policyOptions != nil {
@@ -184,6 +188,13 @@ func GetServiceClientForLocation(loc Location,
 		return ret, nil
 
 	case ELocation.File():
+		fileURLParts, err := file.ParseURL(resourceURL)
+		if err != nil {
+			return nil, err
+		}
+		fileURLParts.ShareName = ""
+		fileURLParts.DirectoryOrFilePath = ""
+		resourceURL = fileURLParts.String()
 		var o *fileservice.ClientOptions
 		var fsc *fileservice.Client
 		if policyOptions != nil {
@@ -250,4 +261,37 @@ func (s *ServiceClient) DatalakeServiceClient() (*datalake.Client, error) {
 		return nil, ErrInvalidClient("Datalake Service")
 	}
 	return s.dsc, nil
+}
+
+// Metadata utility functions to work around GoLang's metadata capitalization
+
+func TryAddMetadata(metadata Metadata, key, value string) {
+	if _, ok := metadata[key]; ok {
+		return // Don't overwrite the user's metadata
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if _, ok := metadata[capitalizedKey]; ok {
+			return
+		}
+	}
+
+	v := value
+	metadata[key] = &v
+}
+
+func TryReadMetadata(metadata Metadata, key string) (*string, bool) {
+	if v, ok := metadata[key]; ok {
+		return v, true
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if v, ok := metadata[capitalizedKey]; ok {
+			return v, true
+		}
+	}
+
+	return nil, false
 }

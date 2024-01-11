@@ -193,6 +193,7 @@ func setPropertiesFile(jptm IJobPartTransferMgr) {
 		transferDone(common.ETransferStatus.Failed(), err)
 		return
 	}
+
 	srcFileClient := s.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath)
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 	_, metadata, _, _ := jptm.ResourceDstData(nil)
