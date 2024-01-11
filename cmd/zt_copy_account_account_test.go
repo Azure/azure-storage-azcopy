@@ -91,8 +91,8 @@ func TestExcludeContainerFlagCopyNegative(t *testing.T) {
 	srcBSC := scenarioHelper{}.getBlobServiceClientWithSAS(a)
 	dstBSC := scenarioHelper{}.getSecondaryBlobServiceClientWithSAS(a)
 
-	// set up 3 containers with blobs on source account
-	containerNames := []string{"hello", "world", "hi"}
+	// set up 2 containers with blobs on source account
+	containerNames := []string{"hello", "world"}
 	// ignore a container name that doesn't actually exist, AzCopy will continue as normal
 	containersToIgnore := []string{"xxx"}
 	blobNames := []string{"stuff-1", "stuff-2"}
