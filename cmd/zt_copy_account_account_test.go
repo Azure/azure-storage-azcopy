@@ -27,7 +27,7 @@ import (
 	"testing"
 )
 
-// test copy, sync, remove
+// test copy
 func TestExcludeContainerFlagCopy(t *testing.T) {
 	a := assert.New(t)
 	srcBSC := scenarioHelper{}.getBlobServiceClientWithSAS(a)
@@ -84,4 +84,59 @@ func TestExcludeContainerFlagCopy(t *testing.T) {
 	// deleting test containers from dst acc
 	deleteContainer(a, dstBSC.NewContainerClient(containerNames[2]))
 
+}
+
+func TestExcludeContainerFlagCopyNegative(t *testing.T) {
+	a := assert.New(t)
+	srcBSC := scenarioHelper{}.getBlobServiceClientWithSAS(a)
+	dstBSC := scenarioHelper{}.getSecondaryBlobServiceClientWithSAS(a)
+
+	// set up 3 containers with blobs on source account
+	containerNames := []string{"foo", "bar", "baz"}
+	// ignore a container name that doesn't actually exist, AzCopy will continue as normal
+	containersToIgnore := []string{"xxx"}
+	blobNames := []string{"stuff-1", "stuff-2"}
+	var containerClients []*container.Client
+
+	for _, name := range containerNames {
+		// create container client
+		cc := srcBSC.NewContainerClient(name)
+		_, err := cc.Create(ctx, nil)
+		a.NoError(err)
+
+		// create blobs
+		scenarioHelper{}.generateBlobsFromList(a, cc, blobNames, blockBlobDefaultData)
+
+		// append to array of container clients
+		containerClients = append(containerClients, cc)
+	}
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	raw := getDefaultCopyRawInput(srcBSC.URL(), dstBSC.URL())
+	raw.recursive = true
+	raw.excludeContainer = strings.Join(containersToIgnore, ";")
+
+	runCopyAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+
+		// validate that each transfer is not of the excluded container names
+		for _, transfer := range mockedRPC.transfers {
+			a.NotNil(transfer)
+			for _, excludeName := range containersToIgnore {
+				a.False(strings.Contains(transfer.Source, excludeName))
+				a.False(strings.Contains(transfer.Destination, excludeName))
+			}
+		}
+	})
+
+	// deleting test containers from source acc
+	for i, _ := range containerNames {
+		deleteContainer(a, srcBSC.NewContainerClient(containerNames[i]))
+		deleteContainer(a, dstBSC.NewContainerClient(containerNames[i]))
+	}
 }
