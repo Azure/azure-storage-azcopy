@@ -147,9 +147,9 @@ type params struct {
 	includeAttributes         string
 	excludePath               string
 	excludePattern            string
-	excludeAttributes 		  string
-	forceIfReadOnly   		  bool
-	capMbps           		  float32
+	excludeAttributes         string
+	forceIfReadOnly           bool
+	capMbps                   float32
 	blockSizeMB               float32
 	deleteDestination         common.DeleteDestination // Manual validation is needed.
 	s2sSourceChangeValidation bool
@@ -179,8 +179,8 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
-	trailingDot common.TrailingDotOption
-	decompress                bool
+	trailingDot            common.TrailingDotOption
+	decompress             bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -190,6 +190,11 @@ type params struct {
 	/*
 		INFO: source:  dest: /New Text Document.txt
 	*/
+
+	// benchmark params
+	mode        string
+	fileCount   int
+	sizePerFile string
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
@@ -209,6 +214,7 @@ func (Operation) Sync() Operation        { return Operation(1 << 1) }
 func (Operation) CopyAndSync() Operation { return eOperation.Copy() | eOperation.Sync() }
 func (Operation) Remove() Operation      { return Operation(1 << 2) }
 func (Operation) Resume() Operation      { return Operation(1 << 7) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
+func (Operation) Benchmark() Operation   { return Operation(1 << 4) }
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
