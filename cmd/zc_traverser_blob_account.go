@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 )
 
 // Enumerates an entire blob account, looking into each matching container as it goes
@@ -53,6 +54,12 @@ func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
 }
 
 func (t *blobAccountTraverser) listContainers() ([]string, error) {
+	cachedContainers, _, err := t.getListContainers()
+	return cachedContainers, err
+}
+
+func (t *blobAccountTraverser) getListContainers() ([]string, []string, error) {
+	var skippedContainers []string
 	// a nil list also returns 0
 	if len(t.cachedContainers) == 0 || len(t.excludeContainerName) > 0 {
 		cList := make([]string, 0)
@@ -60,7 +67,7 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 		for pager.More() {
 			resp, err := pager.NextPage(t.ctx)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			for _, v := range resp.ContainerItems {
 				// a nil list also returns 0
@@ -69,7 +76,7 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 					if t.containerPattern != "" {
 						if ok, err := containerNameMatchesPattern(*v.Name, t.containerPattern); err != nil {
 							// Break if the pattern is invalid
-							return nil, err
+							return nil, nil, err
 						} else if !ok {
 							// Ignore the container if it doesn't match the pattern.
 							continue
@@ -83,6 +90,7 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 					for _, f := range t.excludeContainerName {
 						if !f.DoesPass(so) {
 							// Ignore the container if the container name should be excluded
+							skippedContainers = append(skippedContainers, *v.Name)
 							continue
 						} else {
 							cList = append(cList, *v.Name)
@@ -96,12 +104,13 @@ func (t *blobAccountTraverser) listContainers() ([]string, error) {
 		t.cachedContainers = cList
 	}
 
-	return t.cachedContainers, nil
+	return t.cachedContainers, skippedContainers, nil
 }
 
 func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached container list if containers have already been listed by this traverser.
-	cList, err := t.listContainers()
+	cList, skippedContainers, err := t.getListContainers()
+	glcm.Info("Skipped container(s): " + strings.Join(skippedContainers, ", "))
 
 	if err != nil {
 		return err
