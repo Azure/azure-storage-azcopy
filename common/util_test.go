@@ -134,7 +134,7 @@ func TestDoWithOverrideReadonlyonAzureFiles(t *testing.T) {
 	testMeta := make(map[string]*string)
 	testMeta["Testkey"] = to.Ptr("Testvalue")
 
-	//verfify that with force=false, we'll still fail the op.
+	//verify that with force=false, we'll still fail the op.
 	err = DoWithOverrideReadOnlyOnAzureFiles(context.TODO(), func() (interface{}, error) {
 		return f.Create(context.TODO(), 0, &file.CreateOptions{
 			Metadata: testMeta,
