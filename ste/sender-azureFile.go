@@ -202,7 +202,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		creationProperties.Attributes.ReadOnly = false
 	}
 
-	err = u.DoWithOverrideReadOnly(u.ctx,
+	err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
 			return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{HTTPHeaders: &u.headersToApply, Permissions: &u.permissionsToApply, SMBProperties: &creationProperties, Metadata: u.metadataToApply})
 		},
@@ -218,7 +218,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		}
 
 		// retrying file creation
-		err = u.DoWithOverrideReadOnly(u.ctx,
+		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 			func() (interface{}, error) {
 				return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{
 					HTTPHeaders:   &u.headersToApply,
@@ -237,60 +237,6 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 	}
 
 	return
-}
-
-// DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
-// NOTE that all SMB attributes (and other headers?) on the target will be lost, so only use this if you don't need them any more
-// (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)
-func (u *azureFileSenderBase) DoWithOverrideReadOnly(ctx context.Context, action func() (interface{}, error), targetFileOrDir FileClientStub, enableForcing bool) error {
-	// try the action
-	_, err := action()
-
-	if fileerror.HasCode(err, fileerror.ParentNotFound, fileerror.ShareNotFound) {
-		return err
-	}
-	failedAsReadOnly := false
-	if fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
-		failedAsReadOnly = true
-	}
-	if !failedAsReadOnly {
-		return err
-	}
-
-	// did fail as readonly, but forcing is not enabled
-	if !enableForcing {
-		return errors.New("target is readonly. To force the action to proceed, add --force-if-read-only to the command line")
-	}
-
-	// did fail as readonly, and forcing is enabled
-	if f, ok := targetFileOrDir.(*file.Client); ok {
-		h := file.HTTPHeaders{}
-		_, err = f.SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{
-			HTTPHeaders: &h,
-			SMBProperties: &file.SMBProperties{
-				// clear the attributes
-				Attributes: &file.NTFSFileAttributes{None: true},
-			},
-		})
-	} else if d, ok := targetFileOrDir.(*directory.Client); ok {
-		// this code path probably isn't used, since ReadOnly (in Windows file systems at least)
-		// only applies to the files in a folder, not to the folder itself. But we'll leave the code here, for now.
-		_, err = d.SetProperties(ctx, &directory.SetPropertiesOptions{
-			FileSMBProperties: &file.SMBProperties{
-				// clear the attributes
-				Attributes: &file.NTFSFileAttributes{None: true},
-			},
-		})
-	} else {
-		err = errors.New("cannot remove read-only attribute from unknown target type")
-	}
-	if err != nil {
-		return err
-	}
-
-	// retry the action
-	_, err = action()
-	return err
 }
 
 func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destURL string) (stage string, err error) {
@@ -451,7 +397,7 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		return err
 	}
 
-	err = u.DoWithOverrideReadOnly(u.ctx,
+	err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
 			_, err := u.getDirectoryClient().SetMetadata(u.ctx, &directory.SetMetadataOptions{Metadata: u.metadataToApply})
 			if err != nil {
