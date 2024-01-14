@@ -542,9 +542,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 		// some operations like SetMetadata or SetProperties will fail. 
 		// TODO: Remove this block once the bug is fixed.
 		_, err := directoryClient.GetProperties(ctx, nil)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 	currentDirectoryClient := shareClient.NewRootDirectoryClient() // Share directory should already exist, doesn't support creating share
 	// Try to create the directories
