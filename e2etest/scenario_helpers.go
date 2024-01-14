@@ -582,12 +582,6 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 
 			if b.isFolder() {
 				dc := fsc.NewDirectoryClient(b.name)
-				if b.name == "" {
-					// On azure files, SetAccessCtrl fails, if we dont do GetProperties.
-					_, err := dc.GetProperties(context.TODO(), nil)
-					c.AssertNoErr(err)
-				}
-
 				_, err = dc.SetAccessControl(ctx,
 					&datalakedirectory.SetAccessControlOptions{ACL: b.creationProperties.adlsPermissionsACL})
 			} else {
@@ -827,21 +821,11 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 
 			// set its metadata if any
 			if f.creationProperties.nameValueMetadata != nil {
-				if f.name == "" {
-					// On azure files, SetAccessCtrl fails, if we dont do GetProperties.
-					_, err := dir.GetProperties(context.TODO(), nil)
-					c.AssertNoErr(err)
-				}
 				_, err := dir.SetMetadata(context.TODO(), &directory.SetMetadataOptions{Metadata: ad.obj.creationProperties.nameValueMetadata})
 				c.AssertNoErr(err)
 			}
 
 			if f.creationProperties.smbPermissionsSddl != nil || f.creationProperties.smbAttributes != nil || f.creationProperties.lastWriteTime != nil {
-				if f.name == "" {
-					// On azure files, SetAccessCtrl fails, if we dont do GetProperties.
-					_, err := dir.GetProperties(context.TODO(), nil)
-					c.AssertNoErr(err)
-				}
 				_, err := dir.SetProperties(ctx, &directory.SetPropertiesOptions{
 					FileSMBProperties: ad.toSMBProperties(c),
 					FilePermissions:   ad.toPermissions(c, options.shareClient),

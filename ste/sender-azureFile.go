@@ -536,6 +536,16 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 
 	// Try to create the parent directories. Split directories as segments.
 	segments := d.splitWithoutToken(fileURLParts.DirectoryOrFilePath, '/')
+	if len(segments) == 0 {
+		// If we are trying to create root, perform GetProperties instead.
+		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
+		// some operations like SetMetadata or SetProperties will fail. 
+		// TODO: Remove this block once the bug is fixed.
+		_, err := directoryClient.GetProperties(ctx, nil)
+		if err != nil {
+			return err
+		}
+	}
 	currentDirectoryClient := shareClient.NewRootDirectoryClient() // Share directory should already exist, doesn't support creating share
 	// Try to create the directories
 	for i := 0; i < len(segments); i++ {
