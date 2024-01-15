@@ -24,16 +24,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"net/http"
-	"net/url"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -50,15 +51,15 @@ type FileClientStub interface {
 // (The alternative would be to have the likes of newAzureFilesUploader call sip.EntityType and return a different type
 // if the entity type is folder).
 type azureFileSenderBase struct {
-	jptm            IJobPartTransferMgr
+	jptm                 IJobPartTransferMgr
 	addFileRequestIntent bool
-	fileOrDirClient FileClientStub
-	shareClient     *share.Client
-	chunkSize       int64
-	numChunks       uint32
-	pacer           pacer
-	ctx             context.Context
-	sip             ISourceInfoProvider
+	fileOrDirClient      FileClientStub
+	shareClient          *share.Client
+	chunkSize            int64
+	numChunks            uint32
+	pacer                pacer
+	ctx                  context.Context
+	sip                  ISourceInfoProvider
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -450,13 +451,12 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		return err
 	}
 
-	_, err = u.getDirectoryClient().SetMetadata(u.ctx, &directory.SetMetadataOptions{Metadata: u.metadataToApply})
-	if err != nil {
-		return err
-	}
-
 	err = u.DoWithOverrideReadOnly(u.ctx,
 		func() (interface{}, error) {
+			_, err := u.getDirectoryClient().SetMetadata(u.ctx, &directory.SetMetadataOptions{Metadata: u.metadataToApply})
+			if err != nil {
+				return nil, err
+			}
 			return u.getDirectoryClient().SetProperties(u.ctx, &directory.SetPropertiesOptions{
 				FileSMBProperties: &u.smbPropertiesToApply,
 				FilePermissions:   &u.permissionsToApply,
@@ -464,6 +464,7 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		},
 		u.fileOrDirClient,
 		u.jptm.GetForceIfReadOnly())
+
 	return err
 }
 

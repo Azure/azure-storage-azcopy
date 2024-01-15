@@ -1,6 +1,11 @@
 
 # Change Log
 
+## Version 10.22.2
+
+1. Fixed an issue where AzCopy operations pointed at a snapshot or version object would operation on the base object instead. 
+2. Fixed an issue where AzCopy would download only the base blob when the --list-of-versions flag was used.
+
 ## Version 10.22.1
 
 ### Bug Fixes

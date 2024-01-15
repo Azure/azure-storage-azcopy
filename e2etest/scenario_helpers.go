@@ -24,10 +24,21 @@ package e2etest
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -48,15 +59,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/google/uuid"
-	"io"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/minio/minio-go"
@@ -411,6 +413,7 @@ type generateBlobFromListOptions struct {
 	cpkInfo         *blob.CPKInfo
 	cpkScopeInfo    *blob.CPKScopeInfo
 	accessTier      *blob.AccessTier
+	compressToGZ    bool
 	generateFromListOptions
 }
 
@@ -458,118 +461,149 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				}
 			}
 		}
-		ad := blobResourceAdapter{b}
-		var reader io.ReadSeekCloser
-		var size int
-		var sourceData []byte
-		if b.body != nil {
-			reader = streaming.NopCloser(bytes.NewReader(b.body))
-			sourceData = b.body
-			size = len(b.body)
-		} else {
-			reader, sourceData = getRandomDataAndReader(b.creationProperties.sizeBytes(c, options.defaultSize))
-			b.body = sourceData // set body
-			size = len(b.body)
-		}
 
-		// Setting content MD5
-		if ad.obj.creationProperties.contentHeaders == nil {
-			b.creationProperties.contentHeaders = &contentHeaders{}
-		}
-		if ad.obj.creationProperties.contentHeaders.contentMD5 == nil {
-			contentMD5 := md5.Sum(sourceData)
-			ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
-		}
+		blobHadBody := b.body != nil
+		versionsRequested := common.IffNotNil[uint](b.creationProperties.blobVersions, 1)
+		versionsCreated := uint(0)
 
-		tags := ad.obj.creationProperties.blobTags
-		metadata := ad.obj.creationProperties.nameValueMetadata
+		for versionsCreated < versionsRequested {
+			versionsCreated++
 
-		if options.accountType == EAccountType.HierarchicalNamespaceEnabled() {
-			tags = nil
-		}
+			ad := blobResourceAdapter{b}
+			var reader io.ReadSeekCloser
+			var size int
+			var sourceData []byte
+			if b.body != nil && blobHadBody {
+				reader = streaming.NopCloser(bytes.NewReader(b.body))
+				sourceData = b.body
+				size = len(b.body)
+			} else {
+				reader, sourceData = getRandomDataAndReader(b.creationProperties.sizeBytes(c, options.defaultSize))
+				b.body = sourceData // set body
+				size = len(b.body)
+			}
 
-		headers := ad.toHeaders()
+			if options.compressToGZ {
+				var buff bytes.Buffer
+				gz := gzip.NewWriter(&buff)
+				if _, err := gz.Write([]byte(sourceData)); err != nil {
+					c.AssertNoErr(err)
+				}
+				if err := gz.Close(); err != nil {
+					c.AssertNoErr(err)
+				}
+				if ad.obj.creationProperties.contentHeaders == nil {
+					ad.obj.creationProperties.contentHeaders = &contentHeaders{}
+				}
+				contentEncoding := "gzip"
+				ad.obj.creationProperties.contentHeaders.contentEncoding = &contentEncoding
+				b.body = buff.Bytes()
+				b.name += ".gz"
+			}
 
-		var err error
+			// Setting content MD5
+			if ad.obj.creationProperties.contentHeaders == nil {
+				b.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			// only set MD5 when we're on the last version
+			if ad.obj.creationProperties.contentHeaders.contentMD5 == nil && versionsCreated == versionsRequested {
+				contentMD5 := md5.Sum(sourceData)
+				ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			}
 
-		switch b.creationProperties.blobType {
-		case common.EBlobType.BlockBlob(), common.EBlobType.Detect():
-			bb := options.containerClient.NewBlockBlobClient(b.name)
+			tags := ad.obj.creationProperties.blobTags
+			metadata := ad.obj.creationProperties.nameValueMetadata
 
-			if size > 0 {
-				// to prevent the service from erroring out with an improper MD5, we opt to commit a block, then the list.
-				blockID := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
-				_, err = bb.StageBlock(ctx, blockID, reader,
-					&blockblob.StageBlockOptions{
+			if options.accountType == EAccountType.HierarchicalNamespaceEnabled() {
+				tags = nil
+			}
+
+			headers := ad.toHeaders()
+
+			var err error
+
+			switch b.creationProperties.blobType {
+			case common.EBlobType.BlockBlob(), common.EBlobType.Detect():
+				bb := options.containerClient.NewBlockBlobClient(b.name)
+
+				if size > 0 {
+					// to prevent the service from erroring out with an improper MD5, we opt to commit a block, then the list.
+					blockID := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
+					_, err = bb.StageBlock(ctx, blockID, reader,
+						&blockblob.StageBlockOptions{
+							CPKInfo:      options.cpkInfo,
+							CPKScopeInfo: options.cpkScopeInfo,
+						})
+
+					c.AssertNoErr(err)
+
+					// Commit block list will generate a new version.
+					_, err = bb.CommitBlockList(ctx,
+						[]string{blockID},
+						&blockblob.CommitBlockListOptions{
+							HTTPHeaders:  headers,
+							Metadata:     metadata,
+							Tier:         options.accessTier,
+							Tags:         tags,
+							CPKInfo:      options.cpkInfo,
+							CPKScopeInfo: options.cpkScopeInfo,
+						})
+
+					c.AssertNoErr(err)
+				} else { // todo: invalid MD5 on empty blob is impossible like this, but it's doubtful we'll need to support it.
+					// handle empty blobs
+					_, err := bb.Upload(ctx, reader,
+						&blockblob.UploadOptions{
+							HTTPHeaders:  headers,
+							Metadata:     metadata,
+							Tier:         options.accessTier,
+							Tags:         tags,
+							CPKInfo:      options.cpkInfo,
+							CPKScopeInfo: options.cpkScopeInfo,
+						})
+
+					c.AssertNoErr(err)
+				}
+			case common.EBlobType.PageBlob():
+				// A create call will generate a new version
+				pb := options.containerClient.NewPageBlobClient(b.name)
+				_, err := pb.Create(ctx, int64(size),
+					&pageblob.CreateOptions{
+						SequenceNumber: to.Ptr(int64(0)),
+						HTTPHeaders:    headers,
+						Metadata:       metadata,
+						Tags:           tags,
+						CPKInfo:        options.cpkInfo,
+						CPKScopeInfo:   options.cpkScopeInfo,
+					})
+				c.AssertNoErr(err)
+
+				_, err = pb.UploadPages(ctx, reader, blob.HTTPRange{Offset: 0, Count: int64(size)},
+					&pageblob.UploadPagesOptions{
 						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
-
 				c.AssertNoErr(err)
-
-				_, err = bb.CommitBlockList(ctx,
-					[]string{blockID},
-					&blockblob.CommitBlockListOptions{
+			case common.EBlobType.AppendBlob():
+				// A create call will generate a new version
+				ab := options.containerClient.NewAppendBlobClient(b.name)
+				_, err := ab.Create(ctx,
+					&appendblob.CreateOptions{
 						HTTPHeaders:  headers,
 						Metadata:     metadata,
-						Tier:         options.accessTier,
 						Tags:         tags,
 						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
-
 				c.AssertNoErr(err)
-			} else { // todo: invalid MD5 on empty blob is impossible like this, but it's doubtful we'll need to support it.
-				// handle empty blobs
-				_, err := bb.Upload(ctx, reader,
-					&blockblob.UploadOptions{
-						HTTPHeaders:  headers,
-						Metadata:     metadata,
-						Tier:         options.accessTier,
-						Tags:         tags,
+
+				_, err = ab.AppendBlock(ctx, reader,
+					&appendblob.AppendBlockOptions{
 						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
-
 				c.AssertNoErr(err)
 			}
-		case common.EBlobType.PageBlob():
-			pb := options.containerClient.NewPageBlobClient(b.name)
-			_, err := pb.Create(ctx, int64(size),
-				&pageblob.CreateOptions{
-					SequenceNumber: to.Ptr(int64(0)),
-					HTTPHeaders:    headers,
-					Metadata:       metadata,
-					Tags:           tags,
-					CPKInfo:        options.cpkInfo,
-					CPKScopeInfo:   options.cpkScopeInfo,
-				})
-			c.AssertNoErr(err)
-
-			_, err = pb.UploadPages(ctx, reader, blob.HTTPRange{Offset: 0, Count: int64(size)},
-				&pageblob.UploadPagesOptions{
-					CPKInfo:      options.cpkInfo,
-					CPKScopeInfo: options.cpkScopeInfo,
-				})
-			c.AssertNoErr(err)
-		case common.EBlobType.AppendBlob():
-			ab := options.containerClient.NewAppendBlobClient(b.name)
-			_, err := ab.Create(ctx,
-				&appendblob.CreateOptions{
-					HTTPHeaders:  headers,
-					Metadata:     metadata,
-					Tags:         tags,
-					CPKInfo:      options.cpkInfo,
-					CPKScopeInfo: options.cpkScopeInfo,
-				})
-			c.AssertNoErr(err)
-
-			_, err = ab.AppendBlock(ctx, reader,
-				&appendblob.AppendBlockOptions{
-					CPKInfo:      options.cpkInfo,
-					CPKScopeInfo: options.cpkScopeInfo,
-				})
-			c.AssertNoErr(err)
 		}
 
 		if b.creationProperties.adlsPermissionsACL != nil {
