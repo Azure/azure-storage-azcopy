@@ -22,6 +22,7 @@ vendor/
 
 ## Ignore the executables
 azcopy*
+!Microsoft.AzCopy/Microsoft.AzCopy/AzCopyRunner.cs
 
 ## Dep tool
 vendor/

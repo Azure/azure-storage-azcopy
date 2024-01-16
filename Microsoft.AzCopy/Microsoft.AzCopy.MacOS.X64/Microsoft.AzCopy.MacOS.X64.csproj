@@ -1,36 +1,39 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>Library</OutputType>
     <Title>Microsoft.AzCopy.MacOS.X64</Title>
-    <Version>10.21.0</Version>
-    <Authors>adreed@microsoft.com</Authors>
+    <Version>10.22.2</Version>
+    <Authors>azcopydev@microsoft.com</Authors>
+    <Authors>azcopydev@microsoft.com</Authors>
     <Company>Microsoft</Company>
-    <Description>A .NET wrapper around AzCopy v10. https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10</Description>
+    <Description>Packaged OS/Arch specific version of AzCopy; check Microsoft.AzCopy for the wrapper https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10</Description>
     <Copyright>Microsoft, 2023</Copyright>
     <PackageProjectUrl>https://github.com/azure/azure-storage-azcopy</PackageProjectUrl>
     <RepositoryUrl>https://github.com/azure/azure-storage-azcopy</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <DebugType>embedded</DebugType>
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="contentFiles\any\any\Executable\MacOS\X64\azcopy" PackagePath="contentFiles\any\any\Executable\MacOS\x64\azcopy">
+    <Content Include="contentFiles\any\any\Executable\MacOS\X64\azcopy" PackagePath="contentFiles\any\any\Executable\MacOS\X64\azcopy">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="contentFiles\any\any\Executable\MacOS\X64\" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <PackageReference Include="DotNet.ReproducibleBuilds" Version="1.1.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="NuGet.Build.Tasks.Pack" Version="6.7.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-
 </Project>
