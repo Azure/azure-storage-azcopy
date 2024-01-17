@@ -108,6 +108,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("check-md5", p.checkMd5.String(), "FailIfDifferent")
 	set("trailing-dot", p.trailingDot.String(), "Enable")
 	set("force-if-read-only", p.forceIfReadOnly, false)
+	set("delete-destination-file", p.deleteDestinationFile, false)
 
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)

@@ -147,9 +147,9 @@ type params struct {
 	includeAttributes         string
 	excludePath               string
 	excludePattern            string
-	excludeAttributes 		  string
-	forceIfReadOnly   		  bool
-	capMbps           		  float32
+	excludeAttributes         string
+	forceIfReadOnly           bool
+	capMbps                   float32
 	blockSizeMB               float32
 	deleteDestination         common.DeleteDestination // Manual validation is needed.
 	s2sSourceChangeValidation bool
@@ -179,7 +179,9 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
-	trailingDot common.TrailingDotOption
+	trailingDot            common.TrailingDotOption
+
+	deleteDestinationFile bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt

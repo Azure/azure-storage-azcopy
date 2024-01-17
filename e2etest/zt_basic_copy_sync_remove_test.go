@@ -24,13 +24,16 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -1019,6 +1022,55 @@ func TestBasic_SyncRemoveFoldersHNS(t *testing.T) {
 		},
 		EAccountType.HierarchicalNamespaceEnabled(),
 		EAccountType.HierarchicalNamespaceEnabled(),
+		"",
+	)
+}
+
+func TestCopySync_DeleteDestinationFileFlag(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:             true,
+		deleteDestinationFile: true,
+	},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient("filea")
+				// initial stage block
+				id := []string{BlockIDIntToBase64(1)}
+				_, err := blobClient.StageBlock(ctx, id[0], streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+				if err != nil {
+					t.Errorf("error staging block %s", err)
+				}
+
+				_, err = blobClient.CommitBlockList(ctx, id, nil)
+				if err != nil {
+					t.Errorf("error committing block %s", err)
+				}
+
+				// second stage block
+				_, err = blobClient.StageBlock(ctx, id[0], streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+				if err != nil {
+					t.Errorf("error staging block %s", err)
+				}
+
+				// make sure there is an uncommitted block
+				resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeUncommitted, nil)
+				if err != nil {
+					t.Errorf("error staging block %s", err)
+				}
+
+				if len(resp.UncommittedBlocks) < 1 {
+					t.Error("there should be an uncommitted block")
+				}
+			},
+		},
+		testFiles{
+			defaultSize: "100M",
+			shouldTransfer: []interface{}{
+				f("filea"),
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.Standard(),
 		"",
 	)
 }

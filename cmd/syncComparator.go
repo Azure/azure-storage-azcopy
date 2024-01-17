@@ -28,13 +28,14 @@ import (
 )
 
 const (
-	syncSkipReasonTime           = "the source has an older LMT than the destination"
-	syncSkipReasonMissingHash    = "the source lacks an associated hash; please upload with --put-md5"
-	syncSkipReasonSameHash       = "the source has the same hash"
-	syncOverwriteReasonNewerHash = "the source has a differing hash"
-	syncOverwriteReasonNewerLMT  = "the source is more recent than the destination"
-	syncStatusSkipped            = "skipped"
-	syncStatusOverwritten        = "overwritten"
+	syncSkipReasonTime                       = "the source has an older LMT than the destination"
+	syncSkipReasonMissingHash                = "the source lacks an associated hash; please upload with --put-md5"
+	syncSkipReasonSameHash                   = "the source has the same hash"
+	syncOverwriteReasonNewerHash             = "the source has a differing hash"
+	syncOverwriteReasonNewerLMT              = "the source is more recent than the destination"
+	syncStatusSkipped                        = "skipped"
+	syncStatusOverwritten                    = "overwritten"
+	syncOverwriteReasonDeleteDestinationFile = "the flag delete-destination-file is set to true, all files are overwritten"
 )
 
 func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
@@ -141,12 +142,13 @@ type syncSourceComparator struct {
 
 	comparisonHashType common.SyncHashType
 
-	preferSMBTime     bool
-	disableComparison bool
+	preferSMBTime             bool
+	disableComparison         bool
+	deleteDestinationFileSync bool
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncSourceComparator {
-	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, deleteDestNew bool) *syncSourceComparator {
+	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType, deleteDestinationFileSync: deleteDestNew}
 }
 
 // it will only transfer source items that are:
@@ -161,12 +163,15 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 	if f.destinationIndex.isDestinationCaseInsensitive {
 		relPath = strings.ToLower(relPath)
 	}
-
 	destinationObjectInMap, present := f.destinationIndex.indexMap[relPath]
 
 	if present {
 		defer delete(f.destinationIndex.indexMap, relPath)
 
+		if f.deleteDestinationFileSync { // when  delete-destination-file flag is turned on via sync command, we want to overwrite the file at destination
+			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonDeleteDestinationFile, true)
+			return f.copyTransferScheduler(sourceObject)
+		}
 		// if destination is stale, schedule source for transfer
 		if f.disableComparison {
 			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
