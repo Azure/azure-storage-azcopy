@@ -21,30 +21,20 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func TestBlobVersioning_ListOfVersions(t *testing.T) {
-	RunScenarios(t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal()),
-		eValidate.Auto(),
-		anonymousAuthOnly,
-		anonymousAuthOnly,
-		params{},
-		&hooks{},
-		testFiles{
-			defaultSize: "1k",
-			objectTarget: objectTarget{
-				objectName: "versioned",
-				versions:   []uint{0, 2},
-			},
-			shouldTransfer: []any{
-				f("versioned", with{
-					blobVersions: 3, // create 3 unique versions to read from
-				}),
-			},
+func TestDecompress_Basic(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobLocal()), eValidate.Auto(), oAuthOnly, anonymousAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
+		decompress:   true,
+		recursive: true,
+	}, &hooks{},
+	 testFiles{ 
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			"compressionTest",
 		},
-		EAccountType.Standard(), EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

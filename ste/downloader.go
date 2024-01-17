@@ -67,12 +67,14 @@ type symlinkDownloader interface {
 	CreateSymlink(jptm IJobPartTransferMgr) error
 }
 
-// smbPropertyAwareDownloader is a windows-triggered interface.
+// smbPropertyAwareDownloader is a windows and linux triggered interface.
 // Code outside of windows-specific files shouldn't implement this ever.
 type smbPropertyAwareDownloader interface {
-	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
-
 	PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
+}
+
+type smbACLAwareDownloader interface {
+	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }
 
 type downloaderFactory func(jptm IJobPartTransferMgr) (downloader, error)

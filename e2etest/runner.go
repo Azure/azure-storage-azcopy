@@ -54,7 +54,10 @@ var isLaunchedByDebugger = func() bool {
 	return false
 }()
 
-func (t *TestRunner) SetAllFlags(p params, o Operation) {
+func (t *TestRunner) SetAllFlags(s *scenario) {
+	p := s.p
+	o := s.operation
+
 	set := func(key string, value interface{}, dflt interface{}, formats ...string) {
 		if value == dflt {
 			return // nothing to do. The flag is not supposed to be set
@@ -119,6 +122,33 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 			set("follow-symlinks", true, nil)
 		case common.ESymlinkHandlingType.Preserve():
 			set("preserve-symlinks", true, nil)
+		}
+
+		target := s.GetTestFiles().objectTarget
+		if s.fromTo.From() == common.ELocation.Blob() && s.fs.isListOfVersions() { // Otherwise, it must be a list.
+			s.a.Assert(s.fromTo.From(), equals(), common.ELocation.Blob(), "list of files can only be used in blob.")
+
+			versions := s.GetSource().(*resourceBlobContainer).getVersions(s.a, target.objectName)
+			s.a.Assert(len(versions) > 0, equals(), true, "blob was expected to have versions!")
+			listOfVersions := make([]string, len(target.versions))
+
+			for idx, val := range target.versions {
+				s.a.Assert(int(val) < len(versions), equals(), true, fmt.Sprintf("Not enough versions are present! (needed version %d of %d)", val, len(versions)))
+				listOfVersions[idx] = versions[val]
+			}
+
+			file, err := os.CreateTemp("", "listofversions*.json")
+			defer func(file *os.File) {
+				_ = file.Close()
+			}(file)
+			s.a.AssertNoErr(err, "create temp list of versions file")
+
+			for _, v := range listOfVersions {
+				_, err = file.WriteString(v + "\n")
+				s.a.AssertNoErr(err, "write to list of versions file")
+			}
+
+			set("list-of-versions", file.Name(), "")
 		}
 	} else if o == eOperation.Sync() {
 		set("delete-destination", p.deleteDestination.String(), "False")
@@ -213,7 +243,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, needsFromTo bool, fromTo common.FromTo, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -243,6 +273,9 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		args = args[:3]
 	}
 	args = append(args, t.computeArgs()...)
+	if needsFromTo {
+		args = append(args, "--from-to="+fromTo.String())
+	}
 
 	// pass along existing environment variables (because $HOME doesn't come along if we just use the OAuth vars, that can be troublesome!)
 	env := make([]string, len(os.Environ()))

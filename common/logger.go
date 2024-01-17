@@ -82,7 +82,7 @@ func (jl *jobLogger) OpenLog() {
 		return
 	}
 
-	file, err := NewRotatingWriter(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix), maxLogSize)
+	file, err := NewRotatingWriter(path.Join(jl.logFileFolder, jl.jobID.String()+jl.logFileNameSuffix+".log"), maxLogSize)
 	PanicIfErr(err)
 
 	jl.file = file
