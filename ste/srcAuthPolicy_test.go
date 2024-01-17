@@ -39,8 +39,8 @@ import (
 // This is to be used only for testing reasons
 func getE2ESPNCredential(a *assert.Assertions) azcore.TokenCredential {
 	tenantId := os.Getenv("AZCOPY_E2E_TENANT_ID")
-	appID := os.Getenv("AZCOPY_E2E_APPLICATION_ID")
-	clientSecret := os.Getenv("AZCOPY_E2E_CLIENT_SECRET")
+	appID := os.Getenv("ACTIVE_DIRECTORY_APPLICATION_ID")
+	clientSecret := os.Getenv("AZCOPY_SPA_CLIENT_SECRET")
 	a.NotZero(tenantId)
 	a.NotZero(appID)
 	a.NotZero(clientSecret)
