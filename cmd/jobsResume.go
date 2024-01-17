@@ -258,6 +258,9 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		rca.DestinationSAS = "?" + rca.DestinationSAS
 	}
 
+	source.SAS = rca.SourceSAS
+	destination.SAS = rca.DestinationSAS
+
 	srcCredType, _, err := getCredentialTypeForLocation(ctx,
 		fromTo.From(),
 		source,
