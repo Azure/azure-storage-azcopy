@@ -2,13 +2,16 @@ package common
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -157,8 +160,6 @@ func GetServiceClientForLocation(loc Location,
 		}
 		blobURLParts.ContainerName = ""
 		blobURLParts.BlobName = ""
-		blobURLParts.Snapshot = ""
-		blobURLParts.VersionID = ""
 		// In case we are creating a blob client for a datalake target, correct the endpoint
 		blobURLParts.Host = strings.Replace(blobURLParts.Host, ".dfs", ".blob", 1)
 		resourceURL = blobURLParts.String()
@@ -194,7 +195,6 @@ func GetServiceClientForLocation(loc Location,
 			return nil, err
 		}
 		fileURLParts.ShareName = ""
-		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
 		resourceURL = fileURLParts.String()
 		var o *fileservice.ClientOptions
@@ -289,4 +289,95 @@ func (s *ServiceClient) DatalakeServiceClient() (*datalake.Client, error) {
 		return nil, ErrInvalidClient("Datalake Service")
 	}
 	return s.dsc, nil
+}
+
+// Metadata utility functions to work around GoLang's metadata capitalization
+
+func TryAddMetadata(metadata Metadata, key, value string) {
+	if _, ok := metadata[key]; ok {
+		return // Don't overwrite the user's metadata
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if _, ok := metadata[capitalizedKey]; ok {
+			return
+		}
+	}
+
+	v := value
+	metadata[key] = &v
+}
+
+func TryReadMetadata(metadata Metadata, key string) (*string, bool) {
+	if v, ok := metadata[key]; ok {
+		return v, true
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if v, ok := metadata[capitalizedKey]; ok {
+			return v, true
+		}
+	}
+
+	return nil, false
+}
+
+type FileClientStub interface {
+	URL() string
+}
+
+// DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
+// NOTE that all SMB attributes (and other headers?) on the target will be lost, so only use this if you don't need them any more
+// (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)
+func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (interface{}, error), targetFileOrDir FileClientStub, enableForcing bool) error {
+	// try the action
+	_, err := action()
+
+	if fileerror.HasCode(err, fileerror.ParentNotFound, fileerror.ShareNotFound) {
+		return err
+	}
+	failedAsReadOnly := false
+	if fileerror.HasCode(err, fileerror.ReadOnlyAttribute) {
+		failedAsReadOnly = true
+	}
+	if !failedAsReadOnly {
+		return err
+	}
+
+	// did fail as readonly, but forcing is not enabled
+	if !enableForcing {
+		return errors.New("target is readonly. To force the action to proceed, add --force-if-read-only to the command line")
+	}
+
+	// did fail as readonly, and forcing is enabled
+	if f, ok := targetFileOrDir.(*file.Client); ok {
+		h := file.HTTPHeaders{}
+		_, err = f.SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{
+			HTTPHeaders: &h,
+			SMBProperties: &file.SMBProperties{
+				// clear the attributes
+				Attributes: &file.NTFSFileAttributes{None: true},
+			},
+		})
+	} else if d, ok := targetFileOrDir.(*directory.Client); ok {
+		// this code path probably isn't used, since ReadOnly (in Windows file systems at least)
+		// only applies to the files in a folder, not to the folder itself. But we'll leave the code here, for now.
+		_, err = d.SetProperties(ctx, &directory.SetPropertiesOptions{
+			FileSMBProperties: &file.SMBProperties{
+				// clear the attributes
+				Attributes: &file.NTFSFileAttributes{None: true},
+			},
+		})
+	} else {
+		err = errors.New("cannot remove read-only attribute from unknown target type")
+	}
+	if err != nil {
+		return err
+	}
+
+	// retry the action
+	_, err = action()
+	return err
 }

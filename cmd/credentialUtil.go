@@ -88,7 +88,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			return
 		}
 
-		if autoLoginType != "SPN" && autoLoginType != "MSI" && autoLoginType != "DEVICE" && autoLoginType != "AZCLI"  && autoLoginType != "PSCRED" {
+		if autoLoginType != "SPN" && autoLoginType != "MSI" && autoLoginType != "DEVICE" && autoLoginType != "AZCLI" && autoLoginType != "PSCRED" {
 			glcm.Error("Invalid Auto-login type specified.")
 			return
 		}
@@ -102,7 +102,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		}
 
 		// Fill up lca
-		switch glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()) {
+		switch autoLoginType {
 		case "SPN":
 			lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
 			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
@@ -118,7 +118,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 
 		case "DEVICE":
 			lca.identity = false
-		
+
 		case "AZCLI":
 			lca.identity = false
 			lca.servicePrincipal = false

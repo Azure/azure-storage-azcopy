@@ -21,7 +21,7 @@ import (
 // This file implements the linux-triggered smbPropertyAwareDownloader interface.
 
 // works for both folders and files
-func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo TransferInfo) error {
+func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
 	if err != nil {
 		return fmt.Errorf("Failed to get SMB properties for %s: %w", txInfo.Destination, err)
