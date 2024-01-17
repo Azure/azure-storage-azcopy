@@ -59,6 +59,39 @@ func (f *excludeBlobTypeFilter) DoesPass(object StoredObject) bool {
 	return false
 }
 
+// excludeContainerFilter filters out container names that must be excluded
+type excludeContainerFilter struct {
+	containerNamesList map[string]bool
+}
+
+func (s *excludeContainerFilter) DoesSupportThisOS() (msg string, supported bool) {
+	return "", true
+}
+
+func (s *excludeContainerFilter) AppliesOnlyToFiles() bool {
+	return false // excludeContainerFilter is related to container names, not related to files
+}
+
+func (s *excludeContainerFilter) DoesPass(storedObject StoredObject) bool {
+	if len(s.containerNamesList) == 0 {
+		return true
+	}
+
+	if _, exists := s.containerNamesList[storedObject.ContainerName]; exists {
+		return false
+	}
+	return true
+}
+
+func buildExcludeContainerFilter(containerNames []string) []ObjectFilter {
+	excludeContainerSet := make(map[string]bool)
+	for _, name := range containerNames {
+		excludeContainerSet[name] = true
+	}
+
+	return append(make([]ObjectFilter, 0), &excludeContainerFilter{containerNamesList: excludeContainerSet})
+}
+
 type excludeFilter struct {
 	pattern     string
 	targetsPath bool

@@ -105,7 +105,7 @@ func TestServiceTraverserWithManyObjects(t *testing.T) {
 
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
-	blobAccountTraverser := newBlobAccountTraverser(rawBSU, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, "", ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false, nil)
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
@@ -273,7 +273,7 @@ func TestServiceTraverserWithWildcards(t *testing.T) {
 	// construct a blob account traverser
 	rawBSU := scenarioHelper{}.getBlobServiceClientWithSAS(a)
 	container := "objectmatch*" // set the container name to contain a wildcard
-	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false)
+	blobAccountTraverser := newBlobAccountTraverser(rawBSU, container, ctx, false, func(common.EntityType) {}, false, common.CpkOptions{}, common.EPreservePermissionsOption.None(), false, nil)
 
 	// invoke the blob account traversal with a dummy processor
 	blobDummyProcessor := dummyProcessor{}
