@@ -7,11 +7,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -162,8 +161,6 @@ func GetServiceClientForLocation(loc Location,
 		}
 		blobURLParts.ContainerName = ""
 		blobURLParts.BlobName = ""
-		blobURLParts.Snapshot = ""
-		blobURLParts.VersionID = ""
 		// In case we are creating a blob client for a datalake target, correct the endpoint
 		blobURLParts.Host = strings.Replace(blobURLParts.Host, ".dfs", ".blob", 1)
 		resourceURL = blobURLParts.String()
@@ -199,7 +196,6 @@ func GetServiceClientForLocation(loc Location,
 			return nil, err
 		}
 		fileURLParts.ShareName = ""
-		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
 		resourceURL = fileURLParts.String()
 		var o *fileservice.ClientOptions
@@ -281,11 +277,44 @@ func NewServiceClient(bsc *blobservice.Client,
 	}
 }
 
+// Metadata utility functions to work around GoLang's metadata capitalization
+func TryAddMetadata(metadata Metadata, key, value string) {
+	if _, ok := metadata[key]; ok {
+		return // Don't overwrite the user's metadata
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if _, ok := metadata[capitalizedKey]; ok {
+			return
+		}
+	}
+
+	v := value
+	metadata[key] = &v
+}
+
+func TryReadMetadata(metadata Metadata, key string) (*string, bool) {
+	if v, ok := metadata[key]; ok {
+		return v, true
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if v, ok := metadata[capitalizedKey]; ok {
+			return v, true
+		}
+	}
+
+	return nil, false
+}
+
 type FileClientStub interface {
 	URL() string
 }
 
-// DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
+// DoWithOverrideReadOnlyOnAzureFiles performs the given action,
+// and forces it to happen even if the target is read only.
 // NOTE that all SMB attributes (and other headers?) on the target will be lost,
 // so only use this if you don't need them any more
 // (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)

@@ -62,7 +62,24 @@ func doDeleteBlob(jptm IJobPartTransferMgr) {
 	}
 	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob
 	// we still count this delete operation as successful since we accomplished the desired outcome
-	_, err = s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath).Delete(jptm.Context(), &blob.DeleteOptions{
+
+	blobClient := s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
+
+	if jptm.Info().VersionID != "" {
+		blobClient, err = blobClient.WithVersionID(jptm.Info().VersionID)
+		if err != nil {
+			transferDone(common.ETransferStatus.Failed(), err)
+			return
+		}
+	} else if jptm.Info().SnapshotID != "" {
+		blobClient, err = blobClient.WithSnapshot(jptm.Info().SnapshotID)
+		if err != nil {
+			transferDone(common.ETransferStatus.Failed(), err)
+			return
+		}
+	}
+
+	_, err = blobClient.Delete(jptm.Context(), &blob.DeleteOptions{
 		DeleteSnapshots: jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(),
 		BlobDeleteType:  jptm.PermanentDeleteOption().ToPermanentDeleteOptionType(),
 	})

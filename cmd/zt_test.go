@@ -272,9 +272,34 @@ func getAccountAndKey() (string, string) {
 	return name, key
 }
 
+func getSecondaryAccountAndKey() (string, string) {
+	name := os.Getenv("AZCOPY_E2E_ACCOUNT_NAME")
+	key := os.Getenv("AZCOPY_E2E_ACCOUNT_KEY")
+	if name == "" || key == "" {
+		panic("AZCOPY_E2E_ACCOUNT_NAME and AZCOPY_E2E_ACCOUNT_KEY environment vars must be set before running tests")
+	}
+	return name, key
+}
+
 // get blob account service client
 func getBlobServiceClient() *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
+	u := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
+
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	client, err := blobservice.NewClientWithSharedKeyCredential(u, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+// get secondary blob account service client
+func getSecondaryBlobServiceClient() *blobservice.Client {
+	accountName, accountKey := getSecondaryAccountAndKey()
 	u := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)

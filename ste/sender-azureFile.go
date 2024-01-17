@@ -398,13 +398,12 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		return err
 	}
 
-	_, err = u.getDirectoryClient().SetMetadata(u.ctx, &directory.SetMetadataOptions{Metadata: u.metadataToApply})
-	if err != nil {
-		return err
-	}
-
 	err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
+			_, err := u.getDirectoryClient().SetMetadata(u.ctx, &directory.SetMetadataOptions{Metadata: u.metadataToApply})
+			if err != nil {
+				return nil, err
+			}
 			return u.getDirectoryClient().SetProperties(u.ctx, &directory.SetPropertiesOptions{
 				FileSMBProperties: &u.smbPropertiesToApply,
 				FilePermissions:   &u.permissionsToApply,
@@ -412,6 +411,7 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 		},
 		u.fileOrDirClient,
 		u.jptm.GetForceIfReadOnly())
+
 	return err
 }
 

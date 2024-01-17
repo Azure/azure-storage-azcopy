@@ -137,6 +137,9 @@ type TransferInfo struct {
 	S2SSrcBlobTier blob.AccessTier // AccessTierType (string) is used to accommodate service-side support matrix change.
 
 	RehydratePriority blob.RehydratePriority
+
+	VersionID  string
+	SnapshotID string
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -329,29 +332,27 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	}
 
 	if versionID != "" {
-		versionID = "versionId=" + versionID
 		sURL, e := url.Parse(srcURI)
 		if e != nil {
 			panic(e)
 		}
 		if len(sURL.RawQuery) > 0 {
-			sURL.RawQuery += "&" + versionID
+			sURL.RawQuery += "&versionId=" + versionID
 		} else {
-			sURL.RawQuery = versionID
+			sURL.RawQuery = "versionId=" + versionID
 		}
 		srcURI = sURL.String()
 	}
 
 	if snapshotID != "" {
-		snapshotID = "snapshot=" + snapshotID
 		sURL, e := url.Parse(srcURI)
 		if e != nil {
 			panic(e)
 		}
 		if len(sURL.RawQuery) > 0 {
-			sURL.RawQuery += "&" + snapshotID
+			sURL.RawQuery += "&snapshot=" + snapshotID
 		} else {
-			sURL.RawQuery = snapshotID
+			sURL.RawQuery = "snapshot=" + snapshotID
 		}
 		srcURI = sURL.String()
 	}
@@ -418,6 +419,8 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		SrcBlobType:       srcBlobType,
 		S2SSrcBlobTier:    srcBlobTier,
 		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
+		VersionID:         versionID,
+		SnapshotID:        snapshotID,
 	}
 }
 
