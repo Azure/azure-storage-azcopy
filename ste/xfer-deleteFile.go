@@ -143,7 +143,7 @@ func doDeleteFolder(ctx context.Context, folder string, jptm IJobPartTransferMgr
 	if err != nil {
 		return false
 	}
-	
+
 	srcDirClient := s.NewShareClient(jptm.Info().SrcContainer).NewDirectoryClient(jptm.Info().SrcFilePath)
 	loggableName := fileURLParts.DirectoryOrFilePath
 	logger.Log(common.LogDebug, "About to attempt to delete folder "+loggableName)

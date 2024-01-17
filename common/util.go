@@ -158,8 +158,6 @@ func GetServiceClientForLocation(loc Location,
 		}
 		blobURLParts.ContainerName = ""
 		blobURLParts.BlobName = ""
-		blobURLParts.Snapshot = ""
-		blobURLParts.VersionID = ""
 		// In case we are creating a blob client for a datalake target, correct the endpoint
 		blobURLParts.Host = strings.Replace(blobURLParts.Host, ".dfs", ".blob", 1)
 		resourceURL = blobURLParts.String()
@@ -195,7 +193,6 @@ func GetServiceClientForLocation(loc Location,
 			return nil, err
 		}
 		fileURLParts.ShareName = ""
-		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
 		resourceURL = fileURLParts.String()
 		var o *fileservice.ClientOptions
@@ -264,4 +261,37 @@ func (s *ServiceClient) DatalakeServiceClient() (*datalake.Client, error) {
 		return nil, ErrInvalidClient("Datalake Service")
 	}
 	return s.dsc, nil
+}
+
+// Metadata utility functions to work around GoLang's metadata capitalization
+
+func TryAddMetadata(metadata Metadata, key, value string) {
+	if _, ok := metadata[key]; ok {
+		return // Don't overwrite the user's metadata
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if _, ok := metadata[capitalizedKey]; ok {
+			return
+		}
+	}
+
+	v := value
+	metadata[key] = &v
+}
+
+func TryReadMetadata(metadata Metadata, key string) (*string, bool) {
+	if v, ok := metadata[key]; ok {
+		return v, true
+	}
+
+	if key != "" {
+		capitalizedKey := strings.ToUpper(string(key[0])) + key[1:]
+		if v, ok := metadata[capitalizedKey]; ok {
+			return v, true
+		}
+	}
+
+	return nil, false
 }

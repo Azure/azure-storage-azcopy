@@ -130,7 +130,8 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(metadata map[string]*string
 	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
 	// The empty directory has meta-data 'hdi_isfolder = true'
 	// Note: GoLang sometimes sets metadata keys with the first letter capitalized
-	return (metadata["hdi_isfolder"] != nil && strings.ToLower(*metadata["hdi_isfolder"]) == "true") || (metadata["Hdi_isfolder"] != nil && strings.ToLower(*metadata["Hdi_isfolder"]) == "true")
+	v, ok := common.TryReadMetadata(metadata, common.POSIXFolderMeta)
+	return ok && v != nil && strings.ToLower(*v) == "true"
 }
 
 func startsWith(s string, t string) bool {

@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 )
 
 // Enumerates an entire blob account, looking into each matching container as it goes
@@ -44,6 +45,8 @@ type blobAccountTraverser struct {
 	preservePermissions common.PreservePermissionsOption
 
 	isDFS bool
+
+	excludeContainerName []ObjectFilter
 }
 
 func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
@@ -51,42 +54,65 @@ func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
 }
 
 func (t *blobAccountTraverser) listContainers() ([]string, error) {
+	cachedContainers, _, err := t.getListContainers()
+	return cachedContainers, err
+}
+
+func (t *blobAccountTraverser) getListContainers() ([]string, []string, error) {
+	var skippedContainers []string
 	// a nil list also returns 0
-	if len(t.cachedContainers) == 0 {
+	if len(t.cachedContainers) == 0 || len(t.excludeContainerName) > 0 {
 		cList := make([]string, 0)
 		pager := t.serviceClient.NewListContainersPager(nil)
 		for pager.More() {
 			resp, err := pager.NextPage(t.ctx)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			for _, v := range resp.ContainerItems {
-				// Match a pattern for the container name and the container name only.
-				if t.containerPattern != "" {
-					if ok, err := containerNameMatchesPattern(*v.Name, t.containerPattern); err != nil {
-						// Break if the pattern is invalid
-						return nil, err
-					} else if !ok {
-						// Ignore the container if it doesn't match the pattern.
-						continue
+				// a nil list also returns 0
+				if len(t.cachedContainers) == 0 {
+					// Match a pattern for the container name and the container name only.
+					if t.containerPattern != "" {
+						if ok, err := containerNameMatchesPattern(*v.Name, t.containerPattern); err != nil {
+							// Break if the pattern is invalid
+							return nil, nil, err
+						} else if !ok {
+							// Ignore the container if it doesn't match the pattern.
+							continue
+						}
 					}
 				}
 
-				cList = append(cList, *v.Name)
+				// get a list of containers that are not excluded
+				if len(t.excludeContainerName) > 0 {
+					so := StoredObject{ContainerName: *v.Name}
+					for _, f := range t.excludeContainerName {
+						if !f.DoesPass(so) {
+							// Ignore the container if the container name should be excluded
+							skippedContainers = append(skippedContainers, *v.Name)
+							continue
+						} else {
+							cList = append(cList, *v.Name)
+						}
+					}
+				} else {
+					cList = append(cList, *v.Name)
+				}
 			}
 		}
-
 		t.cachedContainers = cList
-
-		return cList, nil
-	} else {
-		return t.cachedContainers, nil
 	}
+
+	return t.cachedContainers, skippedContainers, nil
 }
 
 func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
 	// listContainers will return the cached container list if containers have already been listed by this traverser.
-	cList, err := t.listContainers()
+	cList, skippedContainers, err := t.getListContainers()
+	if len(skippedContainers) > 0 {
+		glcm.Info("Skipped container(s): " + strings.Join(skippedContainers, ", "))
+	}
 
 	if err != nil {
 		return err
@@ -109,7 +135,7 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 	return nil
 }
 
-func newBlobAccountTraverser(serviceClient *service.Client, container string, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, preservePermissions common.PreservePermissionsOption, isDFS bool) (t *blobAccountTraverser) {
+func newBlobAccountTraverser(serviceClient *service.Client, container string, ctx context.Context, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, preservePermissions common.PreservePermissionsOption, isDFS bool, containerNames []string) (t *blobAccountTraverser) {
 	t = &blobAccountTraverser{
 		ctx:                         ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
@@ -119,7 +145,8 @@ func newBlobAccountTraverser(serviceClient *service.Client, container string, ct
 		s2sPreserveSourceTags:       s2sPreserveSourceTags,
 		cpkOptions:                  cpkOptions,
 		preservePermissions:         preservePermissions,
-		isDFS:			             isDFS,
+		isDFS:                       isDFS,
+		excludeContainerName:        buildExcludeContainerFilter(containerNames),
 	}
 
 	return

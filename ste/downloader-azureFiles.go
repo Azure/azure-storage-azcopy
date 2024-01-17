@@ -42,8 +42,17 @@ func newAzureFilesDownloader(jptm IJobPartTransferMgr) (downloader, error) {
 		return nil, err
 	}
 
+	source := fsc.NewShareClient(jptm.Info().SrcContainer)
+	
+	if jptm.Info().SnapshotID != "" {
+		source, err = source.WithSnapshot(jptm.Info().SnapshotID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &azureFilesDownloader{
-		source: fsc.NewShareClient(jptm.Info().SrcContainer).NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath),
+		source: source.NewRootDirectoryClient().NewFileClient(jptm.Info().SrcFilePath),
 	}, nil
 }
 

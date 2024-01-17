@@ -619,6 +619,18 @@ func (scenarioHelper) getRawBlobURLWithSAS(a *assert.Assertions, containerName s
 	return parsedURL
 }
 
+func (scenarioHelper) getSecondaryRawBlobURLWithSAS(a *assert.Assertions, containerName string, blobName string) *url.URL {
+	accountName, accountKey := getSecondaryAccountAndKey()
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	a.Nil(err)
+	cc := getContainerClientWithSAS(a, credential, containerName)
+	bc := cc.NewBlockBlobClient(blobName)
+
+	u := bc.URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
+}
+
 func (scenarioHelper) getBlobClientWithSAS(a *assert.Assertions, containerName string, blobName string) *blob.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
@@ -640,6 +652,14 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(a *assert.Assertions) *url.URL
 
 func (scenarioHelper) getBlobServiceClientWithSAS(a *assert.Assertions) *blobservice.Client {
 	accountName, accountKey := getAccountAndKey()
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	a.Nil(err)
+
+	return getBlobServiceClientWithSAS(a, credential)
+}
+
+func (scenarioHelper) getSecondaryBlobServiceClientWithSAS(a *assert.Assertions) *blobservice.Client {
+	accountName, accountKey := getSecondaryAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	a.Nil(err)
 
