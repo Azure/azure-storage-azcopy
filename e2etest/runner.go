@@ -89,37 +89,40 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 		return
 	}
 
-	// TODO: TODO: nakulkar-msft there will be many more to add here
-	if o != eOperation.Cancel() {
-		set("recursive", p.recursive, false)
-		set("as-subdir", !p.invertedAsSubdir, true)
-		set("include-path", p.includePath, "")
-		set("exclude-path", p.excludePath, "")
-		set("include-pattern", p.includePattern, "")
-		set("exclude-pattern", p.excludePattern, "")
-		set("include-after", p.includeAfter, "")
-		set("include-pattern", p.includePattern, "")
-		set("exclude-path", p.excludePath, "")
-		set("exclude-pattern", p.excludePattern, "")
-		set("cap-mbps", p.capMbps, float32(0))
-		set("block-size-mb", p.blockSizeMB, float32(0))
-		set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
-		set("metadata", p.metadata, "")
-		set("cancel-from-stdin", p.cancelFromStdin, false)
-		set("preserve-smb-info", p.preserveSMBInfo, nil)
-		set("preserve-smb-permissions", p.preserveSMBPermissions, false)
-		set("backup", p.backupMode, false)
-		set("blob-tags", p.blobTags, "")
-		set("blob-type", p.blobType, "")
-		set("s2s-preserve-blob-tags", p.s2sPreserveBlobTags, false)
-		set("cpk-by-name", p.cpkByName, "")
-		set("cpk-by-value", p.cpkByValue, false)
-		set("is-object-dir", p.isObjectDir, false)
-		set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
-		set("check-md5", p.checkMd5.String(), "FailIfDifferent")
-		set("trailing-dot", p.trailingDot.String(), "Enable")
-		set("force-if-read-only", p.forceIfReadOnly, false)
+	if o == eOperation.Cancel() {
+		set("ignore-error-if-completed", p.ignoreErrorIfCompleted, "")
+		return
 	}
+
+	// TODO: TODO: nakulkar-msft there will be many more to add here
+	set("recursive", p.recursive, false)
+	set("as-subdir", !p.invertedAsSubdir, true)
+	set("include-path", p.includePath, "")
+	set("exclude-path", p.excludePath, "")
+	set("include-pattern", p.includePattern, "")
+	set("exclude-pattern", p.excludePattern, "")
+	set("include-after", p.includeAfter, "")
+	set("include-pattern", p.includePattern, "")
+	set("exclude-path", p.excludePath, "")
+	set("exclude-pattern", p.excludePattern, "")
+	set("cap-mbps", p.capMbps, float32(0))
+	set("block-size-mb", p.blockSizeMB, float32(0))
+	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
+	set("metadata", p.metadata, "")
+	set("cancel-from-stdin", p.cancelFromStdin, false)
+	set("preserve-smb-info", p.preserveSMBInfo, nil)
+	set("preserve-smb-permissions", p.preserveSMBPermissions, false)
+	set("backup", p.backupMode, false)
+	set("blob-tags", p.blobTags, "")
+	set("blob-type", p.blobType, "")
+	set("s2s-preserve-blob-tags", p.s2sPreserveBlobTags, false)
+	set("cpk-by-name", p.cpkByName, "")
+	set("cpk-by-value", p.cpkByValue, false)
+	set("is-object-dir", p.isObjectDir, false)
+	set("debug-skip-files", strings.Join(p.debugSkipFiles, ";"), "")
+	set("check-md5", p.checkMd5.String(), "FailIfDifferent")
+	set("trailing-dot", p.trailingDot.String(), "Enable")
+	set("force-if-read-only", p.forceIfReadOnly, false)
 
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
@@ -164,8 +167,6 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 		set("compare-hash", p.compareHash.String(), "None")
 		set("local-hash-storage-mode", p.hashStorageMode.String(), common.EHashStorageMode.Default().String())
 		set("hash-meta-dir", p.hashStorageDir, "")
-	} else if o == eOperation.Cancel() {
-		set("ignore-error-if-completed", p.ignoreErrorIfCompleted, "")
 	}
 }
 
