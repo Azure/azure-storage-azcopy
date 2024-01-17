@@ -103,6 +103,40 @@ func TestRemove_WithSnapshotsBlob(t *testing.T) {
 		shouldSkip: []interface{}{
 			f("filea"),
 		},
-		objectTarget: "filea",
+		objectTarget: objectTarget{objectName: "filea"},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestRemove_SnapshotsBlob(t *testing.T) {
+	blobRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+	RunScenarios(t, eOperation.Remove(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+	}, &hooks{
+		beforeRunJob: func(h hookHelper) {
+			// Snapshot creation will happen in the getParam method
+		},
+		afterValidation: func(h hookHelper) {
+			blobClient := h.GetSource().(*resourceBlobContainer).containerClient.NewBlobClient("filea")
+			_, err := blobClient.Delete(ctx, nil)
+			if err != nil {
+				t.Errorf("error deleting blob %s", err)
+			}
+		},
+	}, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("filea"),
+		},
+		objectTarget: objectTarget{objectName: "filea", snapshotid: true},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

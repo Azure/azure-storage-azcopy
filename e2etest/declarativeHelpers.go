@@ -179,9 +179,9 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
-	trailingDot            common.TrailingDotOption
-
 	deleteDestinationFile bool
+	trailingDot common.TrailingDotOption
+	decompress                bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt

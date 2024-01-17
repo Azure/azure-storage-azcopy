@@ -65,6 +65,10 @@ func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, str
 	case EAccountType.Classic():
 		name = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_NAME")
 		key = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_KEY")
+	case EAccountType.Azurite():
+		// Note: the key below is not a secret, this is the publicly documented Azurite key
+		name = "devstoreaccount1"
+		key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
 	default:
 		panic("Only the standard account type is supported for the moment.")
 	}
@@ -113,6 +117,7 @@ func (AccountType) HierarchicalNamespaceEnabled() AccountType { return AccountTy
 func (AccountType) Classic() AccountType                      { return AccountType(3) }
 func (AccountType) StdManagedDisk() AccountType               { return AccountType(4) }
 func (AccountType) OAuthManagedDisk() AccountType             { return AccountType(5) }
+func (AccountType) Azurite() AccountType                      { return AccountType(6) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))

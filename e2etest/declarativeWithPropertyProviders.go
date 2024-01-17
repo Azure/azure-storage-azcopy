@@ -48,9 +48,12 @@ type with struct {
 	contentType        string
 	contentMD5         []byte
 
-	nameValueMetadata  map[string]*string
-	blobTags           string
-	blobType           common.BlobType
+	nameValueMetadata map[string]*string
+	blobTags          string
+	blobType          common.BlobType
+	// blobVersions is a list of strings defining the data stored inside the object's body.
+	// These versions are treated as a key, as well, and correspond to the version IDs Azure assigns.
+	blobVersions       uint
 	lastWriteTime      time.Time
 	creationTime       time.Time
 	smbAttributes      uint32
@@ -136,6 +139,10 @@ func (w with) createObjectProperties() *objectProperties {
 	if w.blobType != common.EBlobType.Detect() {
 		populated = true
 		result.blobType = w.blobType
+	}
+	if w.blobVersions > 0 {
+		populated = true
+		result.blobVersions = &w.blobVersions
 	}
 	if w.lastWriteTime != (time.Time{}) {
 		populated = true
@@ -235,7 +242,8 @@ func (withDirStubMetadata) createObjectProperties() *objectProperties {
 // use withError ONLY on files in the shouldFail section.
 // It allows you to say what the error should be
 // TODO: as at 1 July 2020, we are not actually validating these.  Should we? It could be nice.  If we don't,
-//   remove this type and its usages, and the expectedFailureProvider interface
+//
+//	remove this type and its usages, and the expectedFailureProvider interface
 type withError struct {
 	msg string
 }

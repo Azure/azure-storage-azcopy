@@ -25,26 +25,44 @@ import (
 	"testing"
 )
 
-func TestBlobVersioning_ListOfVersions(t *testing.T) {
-	RunScenarios(t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal()),
-		eValidate.Auto(),
-		anonymousAuthOnly,
-		anonymousAuthOnly,
-		params{},
-		&hooks{},
+func TestAzurite_Local(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly,
+		params{
+			recursive: true,
+		}, nil,
 		testFiles{
-			defaultSize: "1k",
-			objectTarget: objectTarget{
-				objectName: "versioned",
-				versions:   []uint{0, 2},
+			defaultSize: "1K",
+			shouldTransfer: []interface{}{
+				folder(""),
+				f("file1"),
+				folder("test"),
+				folder("test/dir1"),
+				folder("test/dir1/dir2"),
+				f("test/file2"),
+				f("test/dir1/file3"),
+				f("test/dir1/dir2/file4"),
+				folder("test/dir3"),
 			},
-			shouldTransfer: []any{
-				f("versioned", with{
-					blobVersions: 3, // create 3 unique versions to read from
-				}),
-			},
+		}, EAccountType.Azurite(), EAccountType.Azurite(), "")
+}
+
+// Note: S2S is not really supported by Azurite.
+
+func TestAzurite_Remove(t *testing.T) {
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1"),
+			folder("test"),
+			folder("test/dir1"),
+			folder("test/dir1/dir2"),
+			f("test/file2"),
+			f("test/dir1/file3"),
+			f("test/dir1/dir2/file4"),
+			folder("test/dir3"),
 		},
-		EAccountType.Standard(), EAccountType.Standard(), "")
+	}, EAccountType.Azurite(), EAccountType.Azurite(), "")
 }
