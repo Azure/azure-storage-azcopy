@@ -81,12 +81,12 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 	}
 
 	for _, srcCredType := range sourceTypes {
-		if srcCredType == common.ECredentialType.MDOAuthToken() && accountTypes[0] != EAccountType.OAuthManagedDisk() {
+		if srcCredType == common.ECredentialType.MDOAuthToken() && accountTypes[0] != EAccountType.OAuthManagedDisk() && accountTypes[0] != EAccountType.ManagedDiskSnapshotOAuth() {
 			continue // invalid selection
 		}
 
 		for _, dstCredType := range validCredTypesPerLocation[fromTo.To()] {
-			if dstCredType == common.ECredentialType.MDOAuthToken() && accountTypes[1] != EAccountType.OAuthManagedDisk() {
+			if dstCredType == common.ECredentialType.MDOAuthToken() && accountTypes[1] != EAccountType.OAuthManagedDisk() && accountTypes[0] != EAccountType.ManagedDiskSnapshotOAuth() {
 				continue // invalid selection
 			}
 
@@ -111,16 +111,16 @@ func RunScenarios(
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
 	// _ interface{}, // TODO if we want it??, blockBlobsOnly or specific/all blob types
 
-// It would be a pain to list out every combo by hand,
-// In addition to the fact that not every credential type is sensible.
-// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
-// This allows you to make tests use OAuth only, SAS only, etc.
+	// It would be a pain to list out every combo by hand,
+	// In addition to the fact that not every credential type is sensible.
+	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
+	// This allows you to make tests use OAuth only, SAS only, etc.
 	requestedCredentialTypesSrc []common.CredentialType,
 	requestedCredentialTypesDst []common.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,
-// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
+	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 	destAccountType AccountType,
 	srcAccountType AccountType,
 	scenarioSuffix string) {

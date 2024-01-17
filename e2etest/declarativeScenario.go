@@ -113,6 +113,8 @@ func (s *scenario) Run() {
 	if s.destAccountType.IsBlobOnly() {
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.StdManagedDisk(), "Upload is not supported in MD testing yet")
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.OAuthManagedDisk(), "Upload is not supported in MD testing yet")
+		s.a.Assert(s.destAccountType, notEquals(), EAccountType.ManagedDiskSnapshot(), "Cannot upload to a MD snapshot")
+		s.a.Assert(s.destAccountType, notEquals(), EAccountType.ManagedDiskSnapshotOAuth(), "Cannot upload to a MD snapshot")
 		s.a.Assert(s.fromTo.To(), equals(), common.ELocation.Blob())
 	}
 
@@ -474,10 +476,8 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	srcBase := filepath.Base(srcRoot)
 	srcRootURL, err := url.Parse(srcRoot)
 	if err == nil {
-		snapshotID := srcRootURL.Query().Get("sharesnapshot")
-		if snapshotID != "" {
-			srcBase = filepath.Base(strings.TrimSuffix(srcRoot, "?sharesnapshot="+snapshotID))
-		}
+		srcBase, _ = trimBaseSnapshotDetails(s.a, srcRootURL, s.fromTo.From(), s.srcAccountType)
+		srcBase = filepath.Base(srcBase)
 	}
 
 	// do we expect folder transfers
