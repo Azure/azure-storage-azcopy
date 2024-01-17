@@ -97,7 +97,7 @@ func TestSrcAuthPolicyMultipleRefresh(t *testing.T) {
 
 	var wg sync.WaitGroup
 	ch := make(chan bool) // this channel will release flood gates so that all below routines
-	// excute in a high parallelism
+	// execute in a high parallelism
 
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
