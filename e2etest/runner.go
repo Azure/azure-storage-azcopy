@@ -82,6 +82,13 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 		t.flags[key] = fmt.Sprintf(format, value)
 	}
 
+	if o == eOperation.Benchmark() {
+		set("mode", p.mode, "")
+		set("file-count", p.fileCount, 0)
+		set("size-per-file", p.sizePerFile, "")
+		return
+	}
+
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
 	set("as-subdir", !p.invertedAsSubdir, true)
@@ -262,12 +269,14 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		verb = "remove"
 	case eOperation.Resume():
 		verb = "jobs resume"
+	case eOperation.Benchmark():
+		verb = "bench"
 	default:
 		panic("unsupported operation type")
 	}
 
 	args := append(strings.Split(verb, " "), src, dst)
-	if operation == eOperation.Remove() {
+	if operation == eOperation.Remove() || operation == eOperation.Benchmark() {
 		args = args[:2]
 	} else if operation == eOperation.Resume() {
 		args = args[:3]
