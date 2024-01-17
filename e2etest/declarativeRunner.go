@@ -153,7 +153,7 @@ func RunScenarios(
 			for _, credTypes := range credentialTypes {
 				// Create unique name for generating container names
 				compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
-				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
+				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s%s", suiteName, testName, op.String(), fromTo.From().String(), fromTo.To().String())
 				// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 				subtestName := fmt.Sprintf("%s-%s", op, fromTo)
 

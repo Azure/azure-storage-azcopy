@@ -86,7 +86,7 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 		// so in that way, we can cordon off these sections that would otherwise require filler functions.
 		// To do that, we'll do some type wrangling:
 		// bd can't directly be wrangled from a struct, so we wrangle it to an interface, then do so.
-		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
+		if spdl, ok := interface{}(bd).(smbACLAwareDownloader); ok {
 			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.
 			err = spdl.PutSDDL(bd.sip.(ISMBPropertyBearingSourceInfoProvider), bd.txInfo)
 			if err == errorNoSddlFound {

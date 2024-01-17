@@ -436,6 +436,11 @@ func (s *scenario) validateTransferStates(azcopyDir string) {
 		return
 	}
 
+	if s.operation == eOperation.Benchmark() {
+		// TODO: Benchmark validation will occur in new e2e test framework. For now the goal is to test that AzCopy doesn't crash.
+		return
+	}
+
 	isSrcEncoded := s.fromTo.From().IsRemote() // TODO: is this right, reviewers?
 	isDstEncoded := s.fromTo.To().IsRemote()   // TODO: is this right, reviewers?
 	srcRoot, dstRoot, expectFolders, expectRootFolder, _ := s.getTransferInfo()
