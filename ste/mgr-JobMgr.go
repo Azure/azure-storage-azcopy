@@ -1149,12 +1149,14 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 	}
 
 	jpp0 := jpm.Plan()
+	status := jpp0.JobStatus()
 	var jr common.CancelPauseResumeResponse
-	switch jpp0.JobStatus() { // Current status
+	switch status { // Current status
 	case common.EJobStatus.Completed(): // You can't change state of a completed job
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("Can't %s JobID=%v because it has already completed", verb, jobID),
+			JobStatus:             status,
 		}
 	case common.EJobStatus.Cancelled():
 		// If the status of Job is cancelled, it means that it has already been cancelled
@@ -1162,6 +1164,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("cannot cancel the job %s since it is already cancelled", jobID),
+			JobStatus:             status,
 		}
 	case common.EJobStatus.Cancelling():
 		// If the status of Job is cancelling, it means that it has already been requested for cancellation
@@ -1169,6 +1172,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              fmt.Sprintf("cannot cancel the job %s since it has already been requested for cancellation", jobID),
+			JobStatus:             status,
 		}
 	case common.EJobStatus.InProgress():
 		// If the Job status is in Progress and Job is not completely ordered
@@ -1189,6 +1193,7 @@ func (jm *jobMgr) CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              msg,
+			JobStatus:             status,
 		}
 	}
 	return jr

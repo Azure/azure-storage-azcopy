@@ -61,6 +61,7 @@ type scenario struct {
 	a          asserter
 	state      scenarioState // TODO: does this really need to be a separate struct?
 	needResume bool
+	needCancel bool
 	chToStdin  chan string
 }
 
@@ -148,6 +149,14 @@ func (s *scenario) Run() {
 		}
 
 		s.resumeAzCopy(azcopyDir)
+	}
+	if s.a.Failed() {
+		return // resume failed. No point in running validation
+	}
+
+	// cancel if needed
+	if s.needCancel {
+		s.cancelAzCopy(azcopyDir)
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
@@ -341,6 +350,31 @@ func (s *scenario) runAzCopy(logDirectory string) {
 	s.state.result = &result
 }
 
+func (s *scenario) cancelAzCopy(logDir string) {
+	r := newTestRunner()
+	s.operation = eOperation.Cancel()
+	r.SetAllFlags(s)
+
+	afterStart := func() string { return "" }
+	result, wasClean, err := r.ExecuteAzCopyCommand(
+		eOperation.Cancel(),
+		s.state.result.jobID.String(),
+		"",
+		false,
+		false,
+		s.fromTo,
+		afterStart,
+		s.chToStdin,
+		logDir,
+	)
+
+	if !wasClean {
+		s.a.AssertNoErr(err, "running AzCopy")
+	}
+
+	s.state.result = &result
+}
+
 func (s *scenario) resumeAzCopy(logDir string) {
 	s.chToStdin = make(chan string) // unubuffered seems the most predictable for our usages
 	defer close(s.chToStdin)
@@ -399,6 +433,11 @@ func (s *scenario) validateRemove() {
 func (s *scenario) validateTransferStates(azcopyDir string) {
 	if s.operation == eOperation.Remove() {
 		s.validateRemove()
+		return
+	}
+
+	if s.operation == eOperation.Benchmark() {
+		// TODO: Benchmark validation will occur in new e2e test framework. For now the goal is to test that AzCopy doesn't crash.
 		return
 	}
 
