@@ -23,7 +23,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/spf13/cobra"
 )
@@ -31,7 +30,8 @@ import (
 // TODO should this command be removed? Previously AzCopy was supposed to have an independent backend (out of proc)
 // TODO but that's not the plan anymore
 type rawCancelCmdArgs struct {
-	jobID string
+	jobID                   string
+	ignoreCompletedJobError bool
 }
 
 func (raw rawCancelCmdArgs) cook() (cookedCancelCmdArgs, error) {
@@ -42,11 +42,12 @@ func (raw rawCancelCmdArgs) cook() (cookedCancelCmdArgs, error) {
 		return cookedCancelCmdArgs{}, fmt.Errorf("invalid jobId string passed: %q", raw.jobID)
 	}
 
-	return cookedCancelCmdArgs{jobID: jobID}, nil
+	return cookedCancelCmdArgs{jobID: jobID, ignoreCompletedJobError: raw.ignoreCompletedJobError}, nil
 }
 
 type cookedCancelCmdArgs struct {
-	jobID common.JobID
+	jobID                   common.JobID
+	ignoreCompletedJobError bool
 }
 
 // handles the cancel command
@@ -55,6 +56,14 @@ func (cca cookedCancelCmdArgs) process() error {
 	var cancelJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.CancelJob(), cca.jobID, &cancelJobResponse)
 	if !cancelJobResponse.CancelledPauseResumed {
+		if cca.ignoreCompletedJobError && cancelJobResponse.JobStatus == common.EJobStatus.Completed() {
+			glcm.Info(cancelJobResponse.ErrorMsg)
+			resp := common.ListJobSummaryResponse{}
+			rpcCmd := common.ERpcCmd.ListJobSummary()
+			Rpc(rpcCmd, &cca.jobID, &resp)
+			PrintJobProgressSummary(resp)
+			return nil
+		}
 		return errors.New(cancelJobResponse.ErrorMsg)
 	}
 	return nil
@@ -88,7 +97,7 @@ func init() {
 
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("failed to perform copy command due to error " + err.Error())
+				glcm.Error("failed to perform cancel command due to error " + err.Error())
 			}
 
 			glcm.Exit(nil, common.EExitCode.Success())
@@ -98,4 +107,6 @@ func init() {
 		Hidden: true,
 	}
 	rootCmd.AddCommand(cancelCmd)
+
+	cancelCmd.PersistentFlags().BoolVar(&raw.ignoreCompletedJobError, "ignore-error-if-completed", false, "")
 }

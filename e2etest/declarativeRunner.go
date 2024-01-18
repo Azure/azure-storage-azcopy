@@ -135,7 +135,7 @@ func RunScenarios(
 	// construct all the scenarios
 	scenarios := make([]scenario, 0)
 	for _, op := range operations.getValues() {
-		if op == eOperation.Resume() {
+		if op == eOperation.Resume() || op == eOperation.Cancel() {
 			continue
 		}
 
@@ -180,6 +180,7 @@ func RunScenarios(
 					hs:                  hsToUse,
 					fs:                  fs.DeepCopy(),
 					needResume:          operations&eOperation.Resume() != 0,
+					needCancel:          operations&eOperation.Cancel() != 0,
 					stripTopDir:         p.stripTopDir,
 				}
 

@@ -179,8 +179,9 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
-	trailingDot            common.TrailingDotOption
-	decompress             bool
+
+	trailingDot common.TrailingDotOption
+	decompress  bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -190,6 +191,9 @@ type params struct {
 	/*
 		INFO: source:  dest: /New Text Document.txt
 	*/
+
+	// cancel params
+	ignoreErrorIfCompleted bool
 
 	// benchmark params
 	mode        string
@@ -214,6 +218,7 @@ func (Operation) Sync() Operation        { return Operation(1 << 1) }
 func (Operation) CopyAndSync() Operation { return eOperation.Copy() | eOperation.Sync() }
 func (Operation) Remove() Operation      { return Operation(1 << 2) }
 func (Operation) Resume() Operation      { return Operation(1 << 7) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
+func (Operation) Cancel() Operation      { return Operation(1 << 3) }
 func (Operation) Benchmark() Operation   { return Operation(1 << 4) }
 
 func (o Operation) String() string {
