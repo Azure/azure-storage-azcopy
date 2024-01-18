@@ -121,9 +121,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 
 	parentDirName := "dest_dir"
 	parentDirClient := fileSystemURL.NewDirectoryClient(parentDirName)
-	_, err := parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
-		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
-			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+	_, err := parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
@@ -223,4 +221,71 @@ func TestIsSourceFileDoesNotExist(t *testing.T) {
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)
 	a.Equal(common.FILE_NOT_FOUND, err.Error())
+}
+
+func TestGetEntityType(t *testing.T) {
+	a := assert.New(t)
+
+	// Test case 1: metadata is file
+	metadata := make(common.Metadata)
+	entityType := getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["key"] = to.Ptr("value")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["hdi_isfolder"] = to.Ptr("false")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["Hdi_isfolder"] = to.Ptr("false")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["is_symlink"] = to.Ptr("false")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["Is_symlink"] = to.Ptr("false")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	// Test case 2: metadata is a folder
+	metadata = make(common.Metadata)
+	metadata["hdi_isfolder"] = to.Ptr("true")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Folder(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["hdi_isfolder"] = to.Ptr("True")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Folder(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["Hdi_isfolder"] = to.Ptr("true")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Folder(), entityType)
+
+	// Test case 2: metadata is a symlink
+	metadata = make(common.Metadata)
+	metadata["is_symlink"] = to.Ptr("true")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Symlink(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["is_symlink"] = to.Ptr("True")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Symlink(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["Is_symlink"] = to.Ptr("true")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Symlink(), entityType)
+
 }

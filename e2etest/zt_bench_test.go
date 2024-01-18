@@ -25,26 +25,24 @@ import (
 	"testing"
 )
 
-func TestBlobVersioning_ListOfVersions(t *testing.T) {
-	RunScenarios(t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal()),
-		eValidate.Auto(),
-		anonymousAuthOnly,
-		anonymousAuthOnly,
-		params{},
-		&hooks{},
-		testFiles{
-			defaultSize: "1k",
-			objectTarget: objectTarget{
-				objectName: "versioned",
-				versions:   []uint{0, 2},
-			},
-			shouldTransfer: []any{
-				f("versioned", with{
-					blobVersions: 3, // create 3 unique versions to read from
-				}),
-			},
+// Purpose: Tests benchmark to validate that AzCopy doesn't crash. Note: This does not validate the benchmark results.
+
+func TestBench_Upload(t *testing.T) {
+	blobBench := TestFromTo{
+		desc:      "BlobBench",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
 		},
-		EAccountType.Standard(), EAccountType.Standard(), "")
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+	// Note: The fromTo is not technically correct, but if you set it to LocalBlob, the runner will try to use the local path as the param
+	RunScenarios(t, eOperation.Benchmark(), blobBench, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		mode:        "Upload",
+		fileCount:   50,
+		sizePerFile: "128M",
+	}, nil, testFiles{}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
