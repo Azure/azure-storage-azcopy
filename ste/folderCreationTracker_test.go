@@ -58,7 +58,7 @@ func (jpph *mockedJPPH)	TransferSrcPropertiesAndMetadata(uint32) (common.Resourc
 func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	a := assert.New(t)
 
-	// create a plan with one registered and one unregistred folder
+	// create a plan with one registered and one unregistered folder
 	folderReg := "folderReg"
 	folderUnReg  := "folderUnReg"
 
