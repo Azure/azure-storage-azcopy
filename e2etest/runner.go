@@ -89,6 +89,11 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 		return
 	}
 
+	if o == eOperation.Cancel() {
+		set("ignore-error-if-completed", p.ignoreErrorIfCompleted, "")
+		return
+	}
+
 	// TODO: TODO: nakulkar-msft there will be many more to add here
 	set("recursive", p.recursive, false)
 	set("as-subdir", !p.invertedAsSubdir, true)
@@ -269,6 +274,8 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		verb = "remove"
 	case eOperation.Resume():
 		verb = "jobs resume"
+	case eOperation.Cancel():
+		verb = "cancel"
 	case eOperation.Benchmark():
 		verb = "bench"
 	default:
@@ -280,6 +287,8 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		args = args[:2]
 	} else if operation == eOperation.Resume() {
 		args = args[:3]
+	} else if operation == eOperation.Cancel() {
+		args = args[:2]
 	}
 	args = append(args, t.computeArgs()...)
 	if needsFromTo {

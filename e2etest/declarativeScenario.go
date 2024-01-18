@@ -61,6 +61,7 @@ type scenario struct {
 	a          asserter
 	state      scenarioState // TODO: does this really need to be a separate struct?
 	needResume bool
+	needCancel bool
 	chToStdin  chan string
 }
 
@@ -148,6 +149,14 @@ func (s *scenario) Run() {
 		}
 
 		s.resumeAzCopy(azcopyDir)
+	}
+	if s.a.Failed() {
+		return // resume failed. No point in running validation
+	}
+
+	// cancel if needed
+	if s.needCancel {
+		s.cancelAzCopy(azcopyDir)
 	}
 	if s.a.Failed() {
 		return // resume failed. No point in running validation
@@ -336,6 +345,31 @@ func (s *scenario) runAzCopy(logDirectory string) {
 				s.a.Error("Job " + result.jobID.String() + " authorization failed, perhaps SPN auth or the SAS token is bad?")
 			}
 		}
+	}
+
+	s.state.result = &result
+}
+
+func (s *scenario) cancelAzCopy(logDir string) {
+	r := newTestRunner()
+	s.operation = eOperation.Cancel()
+	r.SetAllFlags(s)
+
+	afterStart := func() string { return "" }
+	result, wasClean, err := r.ExecuteAzCopyCommand(
+		eOperation.Cancel(),
+		s.state.result.jobID.String(),
+		"",
+		false,
+		false,
+		s.fromTo,
+		afterStart,
+		s.chToStdin,
+		logDir,
+	)
+
+	if !wasClean {
+		s.a.AssertNoErr(err, "running AzCopy")
 	}
 
 	s.state.result = &result
