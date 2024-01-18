@@ -181,13 +181,13 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	// Add this part to the Job and schedule its transfers
-	args := &ste.AddJobPartArgs {
-		PartNum: order.PartNum,
-		PlanFile: jppfn,
-		ExistingPlanMMF: nil,
-		SrcClient: order.SrcServiceClient,
-		DstClient: order.DstServiceClient,
-		SourceTokenCred: order.CredentialInfo.S2SSourceTokenCredential,
+	args := &ste.AddJobPartArgs{
+		PartNum:           order.PartNum,
+		PlanFile:          jppfn,
+		ExistingPlanMMF:   nil,
+		SrcClient:         order.SrcServiceClient,
+		DstClient:         order.DstServiceClient,
+		SourceTokenCred:   order.CredentialInfo.S2SSourceTokenCredential,
 		ScheduleTransfers: true,
 	}
 	jm.AddJobPart2(args)
@@ -226,62 +226,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	return jm.CancelPauseJobOrder(desiredJobStatus)
 }
 
-/*
-		// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
-		jpm, found := jm.JobPartMgr(0)
-		if !found {
-			return common.CancelPauseResumeResponse{
-				CancelledPauseResumed: false,
-				ErrorMsg:              fmt.Sprintf("job with JobId %s has a missing 0th part", jobID.String()),
-			}
-		}
-
-		jpp0 := jpm.Plan()
-		var jr common.CancelPauseResumeResponse
-		switch jpp0.JobStatus() { // Current status
-		case common.EJobStatus.Completed(): // You can't change state of a completed job
-			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed: false,
-				ErrorMsg:              fmt.Sprintf("Can't %s JobID=%v because it has already completed", verb, jobID),
-			}
-		case common.EJobStatus.Cancelled():
-			// If the status of Job is cancelled, it means that it has already been cancelled
-			// No need to cancel further
-			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed: false,
-				ErrorMsg:              fmt.Sprintf("cannot cancel the job %s since it is already cancelled", jobID),
-			}
-		case common.EJobStatus.Cancelling():
-			// If the status of Job is cancelling, it means that it has already been requested for cancellation
-			// No need to cancel further
-			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed: true,
-				ErrorMsg:              fmt.Sprintf("cannot cancel the job %s since it has already been requested for cancellation", jobID),
-			}
-		case common.EJobStatus.InProgress():
-			// If the Job status is in Progress and Job is not completely ordered
-			// Job cannot be resumed later, hence graceful cancellation is not required
-			// hence sending the response immediately. Response CancelPauseResumeResponse
-			// returned has CancelledPauseResumed set to false, because that will let
-			// Job immediately stop.
-			fallthrough
-		case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
-			jpp0.SetJobStatus(desiredJobStatus)
-			msg := fmt.Sprintf("JobID=%v %s", jobID,
-				common.Iff(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
-
-			if jm.ShouldLog(pipeline.LogInfo) {
-				jm.Log(pipeline.LogInfo, msg)
-			}
-			jm.Cancel() // Stop all inflight-chunks/transfer for this job (this includes all parts)
-			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed: true,
-				ErrorMsg:              msg,
-			}
-		}
-		return jr
-	}
-*/
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
 	// Strip '?' if present as first character of the source sas / destination sas
 	if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
