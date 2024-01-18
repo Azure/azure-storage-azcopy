@@ -616,6 +616,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 
 			if b.isFolder() {
 				dc := fsc.NewDirectoryClient(b.name)
+
 				_, err = dc.SetAccessControl(ctx,
 					&datalakedirectory.SetAccessControlOptions{ACL: b.creationProperties.adlsPermissionsACL})
 			} else {
