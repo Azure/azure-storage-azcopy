@@ -188,7 +188,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		ExistingPlanMMF:   nil,
 		SrcClient:         order.SrcServiceClient,
 		DstClient:         order.DstServiceClient,
-		SourceTokenCred:   order.CredentialInfo.S2SSourceTokenCredential,
+		SrcIsOAuth: order.S2SSourceCredentialType.IsAzureOAuth(),
 		ScheduleTransfers: true,
 	}
 	jm.AddJobPart2(args)
