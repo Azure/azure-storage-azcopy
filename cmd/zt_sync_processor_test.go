@@ -83,9 +83,10 @@ func TestBlobDeleter(t *testing.T) {
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.LocalBlob(),
 	}
+	sc := common.NewServiceClient(bsc, nil, nil)
 
 	// set up the blob deleter
-	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
+	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
 	a.Nil(err)
 
 	// exercise the deleter
@@ -121,8 +122,9 @@ func TestFileDeleter(t *testing.T) {
 		fromTo:            common.EFromTo.FileFile(),
 	}
 
+	sc := common.NewServiceClient(nil, fsc, nil)
 	// set up the file deleter
-	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders())
+	deleter, err := newSyncDeleteProcessor(cca, common.EFolderPropertiesOption.NoFolders(), sc)
 	a.Nil(err)
 
 	// exercise the deleter
