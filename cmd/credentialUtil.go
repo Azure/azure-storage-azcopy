@@ -428,7 +428,14 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	public = false
 	err = nil
 
-	defer logAuthType(credType, location, isSource)
+	switch location {
+	case common.ELocation.Local(), common.ELocation.Benchmark(), common.ELocation.None(), common.ELocation.Pipe():
+		return common.ECredentialType.Anonymous(), false, nil
+	}
+	
+	defer func() { 
+		logAuthType(credType, location, isSource) 
+	}()
 
 	// caution: If auth-type is unsafe, below defer statement will change the return value credType
 	defer func() {
