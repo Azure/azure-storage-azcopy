@@ -471,8 +471,6 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		return
 	}
 
-	tokenExists := oAuthTokenExists()
-
 	// Special blob destinations - public and MD account needing oAuth
 	if location == common.ELocation.Blob() {
 		if isSource && resourceSAS == "" && isPublic(ctx, resource, cpkOptions) {
@@ -483,7 +481,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 
 		uri, _ := url.Parse(resource)
 		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, resource, cpkOptions) {
-			if !tokenExists {
+			if !oAuthTokenExists() {
 				return common.ECredentialType.Unknown(), false,
 					common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 			}
@@ -498,7 +496,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		return
 	}
 
-	if tokenExists {
+	if oAuthTokenExists() {
 		credType = common.ECredentialType.OAuthToken()
 		return
 	}
