@@ -7,17 +7,16 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
 
@@ -291,8 +290,18 @@ func (s *ServiceClient) DatalakeServiceClient() (*datalake.Client, error) {
 	return s.dsc, nil
 }
 
-// Metadata utility functions to work around GoLang's metadata capitalization
+// This is currently used only in testcases
+func NewServiceClient(bsc *blobservice.Client,
+					  fsc *fileservice.Client,
+					  dsc *datalake.Client) *ServiceClient {
+	return &ServiceClient {
+		bsc: bsc,
+		fsc: fsc,
+		dsc: dsc,
+	}
+}
 
+// Metadata utility functions to work around GoLang's metadata capitalization
 func TryAddMetadata(metadata Metadata, key, value string) {
 	if _, ok := metadata[key]; ok {
 		return // Don't overwrite the user's metadata
@@ -328,8 +337,10 @@ type FileClientStub interface {
 	URL() string
 }
 
-// DoWithOverrideReadOnly performs the given action, and forces it to happen even if the target is read only.
-// NOTE that all SMB attributes (and other headers?) on the target will be lost, so only use this if you don't need them any more
+// DoWithOverrideReadOnlyOnAzureFiles performs the given action,
+// and forces it to happen even if the target is read only.
+// NOTE that all SMB attributes (and other headers?) on the target will be lost,
+// so only use this if you don't need them any more
 // (e.g. you are about to delete the resource, or you are going to reset the attributes/headers)
 func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (interface{}, error), targetFileOrDir FileClientStub, enableForcing bool) error {
 	// try the action
