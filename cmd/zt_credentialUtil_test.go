@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -95,6 +96,7 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
+	common.AzcopyJobPlanFolder = os.TempDir()	
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.OAuthToken() // force it to OAuth, which is the case we want to test
