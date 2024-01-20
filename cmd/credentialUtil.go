@@ -391,6 +391,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 	return false
 }
 
+// mdAccountNeedsOAuth pings the passed in md account, and checks if we need additional token with Disk-socpe
 func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) bool {
 	// This request will not be logged. This can fail, and too many Cx do not like this. 
 	clientOptions := ste.NewClientOptions(policy.RetryOptions{
