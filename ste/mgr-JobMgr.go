@@ -420,12 +420,13 @@ type AddJobPartArgs struct {
 
 	// this is required in S2S transfers authenticating to src
 	// via oAuth
-	SourceTokenCred common.AuthTokenFunction
+	SourceTokenCred *string
 
 	// These clients are valid if this fits the FromTo. i.e if
 	// we're uploading
 	SrcClient *common.ServiceClient
 	DstClient *common.ServiceClient
+	SrcIsOAuth bool // true if source is authenticated via token
 
 	ScheduleTransfers bool
 
@@ -445,7 +446,7 @@ func (jm *jobMgr) AddJobPart2(args *AddJobPartArgs) IJobPartMgr {
 		cacheLimiter:      jm.cacheLimiter,
 		fileCountLimiter:  jm.fileCountLimiter,
 		closeOnCompletion: args.CompletionChan,
-		s2sSourceToken:    args.SourceTokenCred,
+		srcIsOAuth:    	   args.SrcIsOAuth,
 	}
 	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
 	if args.ExistingPlanMMF == nil {
@@ -535,8 +536,6 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, order.JobID.String(), 0, DataSchemaVersion))
 	jppfn.Create(order) // Convert the order to a plan file
 
-	s2sSourceCredInfo := order.CredentialInfo.WithType(order.S2SSourceCredentialType)
-
 	jpm := &jobPartMgr{
 		jobMgr:           jm,
 		filename:         jppfn,
@@ -547,7 +546,7 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 		cacheLimiter:     jm.cacheLimiter,
 		fileCountLimiter: jm.fileCountLimiter,
 		credInfo:         order.CredentialInfo,
-		s2sSourceToken:   s2sSourceCredInfo.S2SSourceTokenCredential,
+		srcIsOAuth:       order.S2SSourceCredentialType.IsAzureOAuth(),
 	}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(order.PartNum, jpm)

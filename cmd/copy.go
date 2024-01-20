@@ -1293,7 +1293,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1349,7 +1349,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1438,18 +1438,10 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 			// get token from env var or cache
 			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 				return srcCredInfo, err
-			} else if tokenCred, err := tokenInfo.GetTokenCredential(); err != nil {
+			} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
+				// we just verified we can get a token credential
 				return srcCredInfo, err
-			} else {
-				scopes := []string{common.StorageScope}
-				if jpo.S2SSourceCredentialType == common.ECredentialType.MDOAuthToken() {
-					scopes = []string{common.ManagedDiskScope}
-				}
-				srcCredInfo.OAuthTokenInfo = *tokenInfo
-				jpo.CredentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenCred, scopes)
 			}
-			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
-			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
 		}
 	}
 	return srcCredInfo, nil
@@ -1540,7 +1532,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1548,7 +1540,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
 		return err
 	}
@@ -1556,8 +1548,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		sourceURL,
-		sourceCredInfo.CredentialType,
-		sourceCredInfo.OAuthTokenInfo.TokenCredential,
+		srcCredInfo.CredentialType,
+		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
@@ -1572,6 +1564,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 	dstURL, _ := cca.Destination.String()
+
+	var srcCred *common.ScopedCredential
+	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
+		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
+	}
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		dstURL,
@@ -1605,12 +1603,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
 		var e *CopyEnumerator
-		var srcCredInfo common.CredentialInfo
-		srcCredInfo, err = cca.getSrcCredential(ctx, &jobPartOrder)
-		if err != nil {
-			return fmt.Errorf("failed to discern source credential type: %w", err)
-		}
-
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)

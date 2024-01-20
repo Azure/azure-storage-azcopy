@@ -177,9 +177,10 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger)
 
-	// Create Source Client.
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	
+	// Create Source Client. 
 	var azureFileSpecificOptions any
 	if cca.fromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -208,6 +209,12 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	}
 
+	var srcTokenCred *common.ScopedCredential
+	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
+		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
+	}
+	
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred)
 	dstURL, _ := cca.destination.String()
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
