@@ -102,19 +102,17 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	if err != nil {
 		return nil, err
 	}
-	addFileRequestIntent := (fileURLParts.SAS.Signature() == "") // We are using oAuth
 	shareName := fileURLParts.ShareName
 	shareSnapshot := fileURLParts.ShareSnapshot
 	directoryOrFilePath := fileURLParts.DirectoryOrFilePath
-	// Strip any non-service related things away
-	fileURLParts.ShareName = ""
-	fileURLParts.ShareSnapshot = ""
-	fileURLParts.DirectoryOrFilePath = ""
 	serviceClient, err := jptm.DstServiceClient().FileServiceClient()
 	if err != nil {
 		return nil, err
 	}
 
+	sURL, _ := file.ParseURL(serviceClient.URL())
+	addFileRequestIntent := (sURL.SAS.Signature() == "") // We are using oAuth
+	
 	shareClient := serviceClient.NewShareClient(shareName)
 	if shareSnapshot != "" {
 		shareClient, err = shareClient.WithSnapshot(shareSnapshot)
