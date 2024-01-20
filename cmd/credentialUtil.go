@@ -450,6 +450,12 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		}
 	}()
 
+	if getForcedCredType() != common.ECredentialType.Unknown() &&
+			location != common.ELocation.S3() && location != common.ELocation.GCP() {
+				credType = getForcedCredType()
+				return
+	}
+	
 	if location == common.ELocation.S3() {
 		accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
 		secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
