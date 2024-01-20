@@ -78,7 +78,7 @@ var JobsAdmin interface {
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, sourceTokenCred common.AuthTokenFunction) bool
+	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
 
 	ResurrectJobParts()
 
@@ -363,7 +363,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 								  destinationSAS string,
 								  srcServiceClient *common.ServiceClient,
 								  dstServiceClient *common.ServiceClient,
-								  sourceTokenCred common.AuthTokenFunction) bool {
+								  srcIsOAuth bool) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
@@ -397,7 +397,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 			ExistingPlanMMF: mmf,
 			SrcClient: srcServiceClient,
 			DstClient: dstServiceClient,
-			SourceTokenCred: sourceTokenCred,
+			SrcIsOAuth: srcIsOAuth,
 			ScheduleTransfers: false,
 			CompletionChan: nil,
 		}

@@ -92,6 +92,9 @@ type rawSyncCmdArgs struct {
 	// dry run mode bool
 	dryrun      bool
 	trailingDot string
+
+	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
+	deleteDestinationFileIfNecessary bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -344,6 +347,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
+	cooked.deleteDestinationFileIfNecessary = raw.deleteDestinationFileIfNecessary
+
 	return cooked, nil
 }
 
@@ -430,6 +435,8 @@ type cookedSyncCmdArgs struct {
 
 	dryrunMode  bool
 	trailingDot common.TrailingDotOption
+
+	deleteDestinationFileIfNecessary bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -691,11 +698,8 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
-		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-			if srcCredInfo.CredentialType.IsAzureOAuth() {
-				cca.credentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenInfo, []string{common.StorageScope})
-			}
+		} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
+			return err
 		}
 	}
 
@@ -824,4 +828,8 @@ func init() {
 	// Deprecate the old persist-smb-permissions flag
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+
+	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
+	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
+	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
 }

@@ -179,7 +179,7 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
-
+	deleteDestinationFile bool
 	trailingDot common.TrailingDotOption
 	decompress  bool
 	// looks like this for a folder transfer:

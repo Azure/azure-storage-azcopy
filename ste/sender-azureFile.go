@@ -477,39 +477,36 @@ func (d AzureFileParentDirCreator) CreateParentDirToRoot(ctx context.Context, fi
 }
 
 func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareClient *share.Client, directoryClient *directory.Client, t FolderCreationTracker) error {
-	fileURLParts, err := file.ParseURL(directoryClient.URL())
-	if err != nil {
+	// ignoring error below because we're getting URL from a valid client.
+	fileURLParts, _ := file.ParseURL(directoryClient.URL())
+
+	// Try to create the parent directories. Split directories as segments.
+	segments := d.splitWithoutToken(fileURLParts.DirectoryOrFilePath, '/')
+	if len(segments) == 0 {
+		// If we are trying to create root, perform GetProperties instead.
+		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
+		// some operations like SetMetadata or SetProperties will fail. 
+		// TODO: Remove this block once the bug is fixed.
+		_, err := directoryClient.GetProperties(ctx, nil)
 		return err
 	}
-	_, err = directoryClient.GetProperties(ctx, nil)
-	if err != nil {
-		var respErr *azcore.ResponseError
-		if errors.As(err, &respErr) && (respErr.StatusCode == http.StatusNotFound || respErr.StatusCode == http.StatusForbidden) {
-			// Either the parent directory does not exist, or we may not have read permissions.
-			// Try to create the parent directories. Split directories as segments.
-			segments := d.splitWithoutToken(fileURLParts.DirectoryOrFilePath, '/')
-			currentDirectoryClient := shareClient.NewRootDirectoryClient() // Share directory should already exist, doesn't support creating share
-			// Try to create the directories
-			for i := 0; i < len(segments); i++ {
-				currentDirectoryClient = currentDirectoryClient.NewSubdirectoryClient(segments[i])
-				rawURL := currentDirectoryClient.URL()
-				recorderURL, err := url.Parse(rawURL)
-				if err != nil {
-					return err
-				}
-				recorderURL.RawQuery = ""
-				err = t.CreateFolder(recorderURL.String(), func() error {
-					_, err := currentDirectoryClient.Create(ctx, nil)
-					return err
-				})
-				if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
-					return verifiedErr
-				}
-			}
-		} else {
+	currentDirectoryClient := shareClient.NewRootDirectoryClient() // Share directory should already exist, doesn't support creating share
+	// Try to create the directories
+	for i := 0; i < len(segments); i++ {
+		currentDirectoryClient = currentDirectoryClient.NewSubdirectoryClient(segments[i])
+		rawURL := currentDirectoryClient.URL()
+		recorderURL, err := url.Parse(rawURL)
+		if err != nil {
 			return err
 		}
+		recorderURL.RawQuery = ""
+		err = t.CreateFolder(recorderURL.String(), func() error {
+			_, err := currentDirectoryClient.Create(ctx, nil)
+			return err
+		})
+		if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
+			return verifiedErr
+		}
 	}
-	// Directly return if parent directory exists.
 	return nil
 }

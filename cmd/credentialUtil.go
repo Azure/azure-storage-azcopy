@@ -368,7 +368,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, nil, nil, ste.LogOptions{})
+	}, nil, nil, ste.LogOptions{}, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(bURLParts.String(), &blob.ClientOptions{ClientOptions: clientOptions})
 	bURLParts.BlobName = ""
@@ -400,7 +400,7 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, nil, nil, ste.LogOptions{})
+	}, nil, nil, ste.LogOptions{}, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
 	_, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
@@ -569,7 +569,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-func createClientOptions(logger common.ILoggerResetable) azcore.ClientOptions {
+// createClientOptions creates generic client options which are required to create any
+// client to interact with storage service. Default options are modified to suit azcopy.
+// srcCred is required in cases where source is authenticated via oAuth for S2S transfers
+func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedCredential) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
 
 	if logger != nil {
@@ -584,7 +587,7 @@ func createClientOptions(logger common.ILoggerResetable) azcore.ClientOptions {
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions)
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, srcCred)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
