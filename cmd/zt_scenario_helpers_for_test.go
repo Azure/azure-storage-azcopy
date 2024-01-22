@@ -599,6 +599,17 @@ func (scenarioHelper) getRawContainerURLWithSAS(a *assert.Assertions, containerN
 	return parsedURL
 }
 
+func (scenarioHelper) getSecondaryRawContainerURLWithSAS(a *assert.Assertions, containerName string) *url.URL {
+	accountName, accountKey := getSecondaryAccountAndKey()
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	a.Nil(err)
+	cc := getContainerClientWithSAS(a, credential, containerName)
+
+	u := cc.URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
+}
+
 func (scenarioHelper) getContainerClientWithSAS(a *assert.Assertions, containerName string) *container.Client {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
@@ -858,6 +869,17 @@ func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(er
 	verifier(err)
 }
 
+func runListAndVerify(a *assert.Assertions, raw rawListCmdArgs, verifier func(err error)) {
+	// the simulated user input should parse properly
+	cooked, err := raw.cook()
+	a.NoError(err)
+
+	err = cooked.HandleListContainerCommand()
+
+	// the err is passed to verified, which knows whether it is expected or not
+	verifier(err)
+}
+
 func validateUploadTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
 	validateCopyTransfersAreScheduled(a, false, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
@@ -986,6 +1008,17 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		includeDirectoryStubs:          true,
+	}
+}
+
+func getDefaultListRawInput(src string) rawListCmdArgs {
+	return rawListCmdArgs{
+		sourcePath:      src,
+		Properties:      "",
+		MachineReadable: false,
+		RunningTally:    false,
+		MegaUnits:       false,
+		trailingDot:     "",
 	}
 }
 
