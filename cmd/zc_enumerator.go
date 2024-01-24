@@ -353,6 +353,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		includeVersion = true
 	}
 
+	// print out version id when using azcopy list
+	if includeVersionsList {
+		includeVersion = true
+	}
 	// Clean up the resource if it's a local path
 	if location == common.ELocation.Local() {
 		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
@@ -457,7 +461,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, false, includeVersionsList)
+			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, false)
 		}
 	case common.ELocation.File():
 		// TODO (last service migration) : Remove dependency on URLs.
@@ -544,7 +548,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
-			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true, false)
+			output = newBlobTraverser(r, bsc, *ctx, recursive, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, includeDeleted, includeSnapshot, includeVersion, preservePermissions, true)
 		}
 	case common.ELocation.S3():
 		resourceURL, err := resource.FullURL()
