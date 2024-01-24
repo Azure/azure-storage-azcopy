@@ -61,6 +61,16 @@ const (
 	archiveStatus    validProperty = "ArchiveStatus"
 )
 
+// containsProperty checks if the property array contains a valid property
+func containsProperty(properties []validProperty, prop validProperty) bool {
+	for _, item := range properties {
+		if item == prop {
+			return true
+		}
+	}
+	return false
+}
+
 // validProperties returns an array of possible values for the validProperty const type.
 func validProperties() []validProperty {
 	return []validProperty{lastModifiedTime, versionId, blobType, blobAccessTier,
@@ -237,7 +247,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil)
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, containsProperty(cooked.properties, versionId))
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

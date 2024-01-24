@@ -68,6 +68,8 @@ type blobTraverser struct {
 
 	includeVersion bool
 
+	includeVersionList bool
+
 	isDFS bool
 }
 
@@ -319,7 +321,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 		pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
 			Prefix:  &currentDirPath,
-			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion},
+			Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion || t.includeVersionList},
 		})
 		var marker *string
 		for pager.More() {
@@ -476,9 +478,7 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)
 	if t.includeDeleted && t.includeSnapshot {
 		object.blobSnapshotID = common.IffNotNil(blobInfo.Snapshot, "")
-	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
-		object.blobVersionID = common.IffNotNil(blobInfo.VersionID, "")
-	} else if blobInfo.VersionID != nil {
+	} else if (t.includeVersionList || (t.includeDeleted && t.includeVersion)) && blobInfo.VersionID != nil {
 		object.blobVersionID = common.IffNotNil(blobInfo.VersionID, "")
 	}
 	return object
@@ -497,7 +497,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	prefix := searchPrefix + extraSearchPrefix
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
 		Prefix:  &prefix,
-		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion},
+		Include: container.ListBlobsInclude{Metadata: true, Tags: t.s2sPreserveSourceTags, Deleted: t.includeDeleted, Snapshots: t.includeSnapshot, Versions: t.includeVersion || t.includeVersionList},
 	})
 	for pager.More() {
 		resp, err := pager.NextPage(t.ctx)
@@ -543,7 +543,7 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	return nil
 }
 
-func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, preservePermissions common.PreservePermissionsOption, isDFS bool) (t *blobTraverser) {
+func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, preservePermissions common.PreservePermissionsOption, isDFS bool, includeVersionList bool) (t *blobTraverser) {
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
@@ -557,6 +557,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
+		includeVersionList:          includeVersionList,
 		preservePermissions:         preservePermissions,
 		isDFS:                       isDFS,
 	}
