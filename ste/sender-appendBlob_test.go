@@ -3,6 +3,10 @@ package ste
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -13,9 +17,6 @@ import (
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"net/http"
-	"testing"
-	"time"
 )
 
 type appendErrorInjectionPolicy struct {
@@ -81,7 +82,7 @@ func Test500FollowedBy412Logic(t *testing.T) {
 		}),
 		fromTo: common.EFromTo.BlobBlob(),
 	}
-	blobSIP, err := newBlobSourceInfoProvider(jptm)
+	blobSIP, err := newBlobSourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	injectionPolicy := &appendErrorInjectionPolicy{timedOut: false}
@@ -92,7 +93,7 @@ func Test500FollowedBy412Logic(t *testing.T) {
 		},
 	})
 	a.Nil(err)
-	base := appendBlobSenderBase{jptm: jptm, destAppendBlobClient: destClient, sip: blobSIP}
+	base := appendBlobSenderBase{jptm: &jptm, destAppendBlobClient: destClient, sip: blobSIP}
 
 	// Get MD5 range within service calculation
 	offset := int64(0)
@@ -107,4 +108,47 @@ func Test500FollowedBy412Logic(t *testing.T) {
 	errString, err := base.transformAppendConditionMismatchError(timeoutFromCtx, offset, count, err)
 	a.Nil(err)
 	a.Empty(errString)
+}
+
+func Test404DeleteLogic(t *testing.T) {
+	a := assert.New(t)
+	//accountName, accountKey := getAccountAndKey()
+	accountName := "nakulkarhns4"
+	accountKey := "E9qRN+7QFREtSLAQB1w+vRrMt2/1bz4XVNqhnVOwdH7Gp8tfFpDGahVmzK6GxbIF34KX4uHOEena/8f24rfnHg=="
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/", accountName)
+
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	a.Nil(err)
+	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential, &blobservice.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Transport: NewAzcopyHTTPClient(0),
+		}})
+	a.Nil(err)
+
+	cName := generateContainerName()
+	cc := client.NewContainerClient(cName)
+	_, err = cc.Create(context.Background(), nil)
+	a.Nil(err)
+	defer cc.Delete(context.Background(), nil)
+
+	sasURL, err := cc.NewBlobClient(cName).GetSASURL(
+		blobsas.BlobPermissions{Read: true},
+		time.Now().Add(1*time.Hour),
+		nil)
+	a.Nil(err)
+
+	jptm := &testJobPartTransferManager{
+		info: to.Ptr(TransferInfo{
+			Source:       sasURL,
+			SrcContainer: cName,
+			SrcFilePath:  "azure",
+		}),
+		fromTo: common.EFromTo.BlobFSTrash(),
+	}
+	jptm.SetStatus(common.ETransferStatus.Started())
+	doDeleteHNSResource(jptm)
+
+	a.Nil(err)
+	a.Equal(1, 1)
+
 }
