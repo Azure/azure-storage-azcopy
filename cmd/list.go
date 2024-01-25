@@ -255,15 +255,23 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 
 	var fileCount int64 = 0
 	var sizeCount int64 = 0
+	var objectSummary string
 
 	processor := func(object StoredObject) error {
+		if cooked.RunningTally {
+			if !(strings.Contains(objectSummary, object.name) && containsProperty(cooked.properties, versionId)) {
+				fileCount++
+				sizeCount += object.size
+			}
+		}
+
 		path := object.relativePath
 		if object.entityType == common.EEntityType.Folder() {
 			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
 		}
 
 		properties := "; " + cooked.processProperties(object)
-		objectSummary := path + properties + " Content Length: "
+		objectSummary = path + properties + " Content Length: "
 
 		if level == level.Service() {
 			objectSummary = object.ContainerName + "/" + objectSummary
@@ -273,11 +281,6 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 			objectSummary += strconv.Itoa(int(object.size))
 		} else {
 			objectSummary += byteSizeToString(object.size)
-		}
-
-		if cooked.RunningTally {
-			fileCount++
-			sizeCount += object.size
 		}
 
 		glcm.Info(objectSummary)

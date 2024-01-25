@@ -49,6 +49,7 @@ func TestListVersions(t *testing.T) {
 	rawContainerURLWithSAS := scenarioHelper{}.getSecondaryRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultListRawInput(rawContainerURLWithSAS.String())
 	raw.Properties = "VersionId"
+	raw.RunningTally = true
 
 	runListAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -59,8 +60,16 @@ func TestListVersions(t *testing.T) {
 		// check if info logs contain the correct version id for each blob
 		msg := mockedLcm.GatherAllLogs(mockedLcm.infoLog)
 		for i, m := range msg {
-			a.True(strings.Contains(m, blobsToInclude[i]))
-			a.True(strings.Contains(m, "VersionId: "+versions[blobsToInclude[i]]))
+			if i < 3 { // 0-2 will be blob names + version id
+				a.True(strings.Contains(m, blobsToInclude[i]))
+				a.True(strings.Contains(m, "VersionId: "+versions[blobsToInclude[i]]))
+			}
+			if i == 4 { // 4 will be file count
+				a.True(strings.Contains(m, "File count: 3"))
+			}
+			if i == 5 { // 5 will be file size
+				a.True(strings.Contains(m, "Total file size: 69.00 B"))
+			}
 		}
 	})
 
@@ -112,6 +121,7 @@ func TestListVersionsMultiVersions(t *testing.T) {
 	rawContainerURLWithSAS := scenarioHelper{}.getSecondaryRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultListRawInput(rawContainerURLWithSAS.String())
 	raw.Properties = "VersionId"
+	raw.RunningTally = true
 
 	runListAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -122,8 +132,16 @@ func TestListVersionsMultiVersions(t *testing.T) {
 		// check if info logs contain the correct version id for each blob
 		msg := mockedLcm.GatherAllLogs(mockedLcm.infoLog)
 		for i, m := range msg {
-			a.True(strings.Contains(m, blobs[i]))
-			a.True(strings.Contains(m, versions[i]))
+			if i < 4 { // 0-3 will be blob names + version id
+				a.True(strings.Contains(m, blobs[i]))
+				a.True(strings.Contains(m, versions[i]))
+			}
+			if i == 5 { // 5 will be file count
+				a.True(strings.Contains(m, "File count: 3"))
+			}
+			if i == 6 { // 6 will be file size
+				a.True(strings.Contains(m, "Total file size: 69.00 B"))
+			}
 		}
 	})
 
