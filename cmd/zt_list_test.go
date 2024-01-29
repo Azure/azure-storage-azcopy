@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
@@ -82,24 +81,24 @@ func TestListVersionsMultiVersions(t *testing.T) {
 	containerClient, containerName := createNewContainer(a, bsc)
 	defer deleteContainer(a, containerClient)
 
-	blobsToInclude := []string{"foo.txt", "sub1/dir2/bar.txt", "sub1/test/baz.txt"}
+	// testing how running tally will handle foo.txt vs foo/foo.txt, test/foo.txt
+	blobsToInclude := []string{"foo.txt", "foo/foo.txt", "test/foo.txt", "sub1/test/baz.txt"}
 	scenarioHelper{}.generateBlobsFromList(a, containerClient, blobsToInclude, blockBlobDefaultData)
 	a.NotNil(containerClient)
 
-	// make first blob have another version
-	bbClient := containerClient.NewBlockBlobClient(blobsToInclude[0])
-	uploadResp, err := bbClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random random")), nil)
-	a.NoError(err)
-	a.NotNil(uploadResp.VersionID)
+	// make first two blobs have 1 additional version
+	blobsToVersion := []string{blobsToInclude[0], blobsToInclude[1]}
+	scenarioHelper{}.generateVersionsForBlobsFromList(a, containerClient, blobsToVersion)
+	a.NotNil(containerClient)
 
-	// confirm that container has 3 blobs
+	// confirm that container has 6 blobs (4 blobs, 2 versions)
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
 		Include: container.ListBlobsInclude{Versions: true},
 	})
 	list, err := pager.NextPage(ctx)
 	a.NoError(err)
 	a.NotNil(list.Segment.BlobItems)
-	a.Equal(4, len(list.Segment.BlobItems))
+	a.Equal(6, len(list.Segment.BlobItems))
 
 	var blobs []string
 	var versions []string
@@ -132,17 +131,32 @@ func TestListVersionsMultiVersions(t *testing.T) {
 		// check if info logs contain the correct version id for each blob
 		msg := mockedLcm.GatherAllLogs(mockedLcm.infoLog)
 		for i, m := range msg {
-			if i < 4 { // 0-3 will be blob names + version id
-				a.True(strings.Contains(m, blobs[i]))
-				a.True(strings.Contains(m, versions[i]))
+			if i < 6 { // 0-5 will be blob names + version id
+				a.True(contains(blobs, m, true))
+				a.True(contains(versions, m, false))
 			}
-			if i == 5 { // 5 will be file count
-				a.True(strings.Contains(m, "File count: 3"))
+			if i == 7 { // 7 will be file count
+				a.True(strings.Contains(m, "File count: 4"))
 			}
-			if i == 6 { // 6 will be file size
-				a.True(strings.Contains(m, "Total file size: 69.00 B"))
+			if i == 8 { // 8 will be file size
+				a.True(strings.Contains(m, "Total file size: 92.00 B"))
 			}
 		}
 	})
 
+}
+
+func contains(arr []string, msg string, isBlob bool) bool {
+	for _, a := range arr {
+		if isBlob {
+			if strings.HasPrefix(msg, a) {
+				return true
+			}
+		} else {
+			if strings.Contains(msg, a) {
+				return true
+			}
+		}
+	}
+	return false
 }

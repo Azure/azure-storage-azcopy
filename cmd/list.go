@@ -259,7 +259,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 
 	processor := func(object StoredObject) error {
 		if cooked.RunningTally {
-			if !(strings.Contains(objectSummary, object.name) && containsProperty(cooked.properties, versionId)) {
+			if !(strings.HasPrefix(objectSummary, object.relativePath) && containsProperty(cooked.properties, versionId)) {
 				fileCount++
 				sizeCount += object.size
 			}

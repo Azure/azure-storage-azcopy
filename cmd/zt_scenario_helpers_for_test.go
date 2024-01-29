@@ -345,6 +345,18 @@ func (scenarioHelper) generateBlobsFromList(a *assert.Assertions, containerClien
 	time.Sleep(time.Millisecond * 1050)
 }
 
+func (scenarioHelper) generateVersionsForBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string) {
+	for _, blobName := range blobList {
+		blobClient := containerClient.NewBlockBlobClient(blobName)
+		uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random data "+generateBlobName())), nil)
+		a.NoError(err)
+		a.NotNil(uploadResp.VersionID)
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+}
+
 func (scenarioHelper) generatePageBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string, data string) {
 	for _, blobName := range blobList {
 		// Create the blob (PUT blob)
