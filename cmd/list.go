@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -59,7 +60,14 @@ const (
 	leaseDuration    validProperty = "LeaseDuration"
 	leaseStatus      validProperty = "LeaseStatus"
 	archiveStatus    validProperty = "ArchiveStatus"
+
+	versionIdTimeFormat = "2006-01-02T15:04:05.9999999Z"
 )
+
+type versionIdObject struct {
+	versionId string
+	fileSize  int64
+}
 
 // containsProperty checks if the property array contains a valid property
 func containsProperty(properties []validProperty, prop validProperty) bool {
@@ -255,23 +263,16 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 
 	var fileCount int64 = 0
 	var sizeCount int64 = 0
-	var objectSummary string
+	objectVer := make(map[string]versionIdObject)
 
 	processor := func(object StoredObject) error {
-		if cooked.RunningTally {
-			if !(strings.HasPrefix(objectSummary, object.relativePath) && containsProperty(cooked.properties, versionId)) {
-				fileCount++
-				sizeCount += object.size
-			}
-		}
-
 		path := object.relativePath
 		if object.entityType == common.EEntityType.Folder() {
 			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
 		}
 
 		properties := "; " + cooked.processProperties(object)
-		objectSummary = path + properties + " Content Length: "
+		objectSummary := path + properties + " Content Length: "
 
 		if level == level.Service() {
 			objectSummary = object.ContainerName + "/" + objectSummary
@@ -281,6 +282,42 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 			objectSummary += strconv.Itoa(int(object.size))
 		} else {
 			objectSummary += byteSizeToString(object.size)
+		}
+
+		if cooked.RunningTally {
+			if containsProperty(cooked.properties, versionId) {
+				// get new version id object
+				updatedVersionId := versionIdObject{
+					versionId: object.blobVersionID,
+					fileSize:  object.size,
+				}
+
+				// there exists a current version id of the object
+				if currentVersionId, ok := objectVer[object.relativePath]; ok {
+					// get current version id time
+					currentVid, err := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
+					if err != nil {
+						fmt.Errorf("unable to parse version id into time format: %s", err.Error())
+					}
+
+					// get new version id time
+					newVid, err := time.Parse(versionIdTimeFormat, object.blobVersionID)
+					if err != nil {
+						fmt.Errorf("unable to parse version id into time format: %s", err.Error())
+					}
+
+					// if new vid came after the current vid, then it is the latest version
+					// update the objectVer with the latest version
+					if newVid.After(currentVid) {
+						objectVer[object.relativePath] = updatedVersionId
+					}
+				} else {
+					objectVer[object.relativePath] = updatedVersionId
+				}
+			} else {
+				fileCount++
+				sizeCount += object.size
+			}
 		}
 
 		glcm.Info(objectSummary)
@@ -296,6 +333,15 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	if cooked.RunningTally {
+		if containsProperty(cooked.properties, versionId) {
+			// get file count by getting length of objectVer
+			fileCount = int64(len(objectVer))
+
+			// get size count by incrementing through objectVer and adding all values of versionIdObject.fileSize
+			for _, val := range objectVer {
+				sizeCount += val.fileSize
+			}
+		}
 		glcm.Info("")
 		glcm.Info("File count: " + strconv.Itoa(int(fileCount)))
 
