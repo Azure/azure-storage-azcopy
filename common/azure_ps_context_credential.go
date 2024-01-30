@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -117,16 +118,13 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 		defer cancel()
 	}
 
-	r := regexp.MustCompile(`\{"token".*"expiresOn".*\}`)
-
 	if tenantID != "" {
-		tenantID += " -TenantId " + tenantID
+		tenantID += " -TenantId" + tenantID
 	}
-	cmd := `$token = Get-AzAccessToken -ResourceUrl https://storage.azure.com` + tenantID + ";"
-	cmd += `$output = -join('{"token":','"',$token.Token,'"', ',"expiresOn":', '"',$token.ExpiresOn.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),'"',"}");`
-	cmd += "echo $output"
+	cmd := "Get-AzAccessToken -ResourceUrl https://storage.azure.com" + tenantID + " | ConvertTo-Json"
+	
 
-	cliCmd := exec.CommandContext(ctx, "powershell", cmd)
+	cliCmd := exec.CommandContext(ctx, "pwsh", "-Command", cmd)
 	cliCmd.Env = os.Environ()
 	var stderr bytes.Buffer
 	cliCmd.Stderr = &stderr
@@ -140,17 +138,18 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 		return nil, errors.New(credNamePSContext + msg)
 	}
 
-	output = []byte(r.FindString(string(output)))
-	if string(output) == "" {
-		return nil, errors.New(credNamePSContext + "Invalid output while retrving token")
+	if !strings.Contains(string(output), "Token") || !strings.Contains(string(output), "ExpiresOn") {
+		invalidTokenMsg := " Invalid output received while retriving token with Powershell. Run command \" + cmd + \"" +
+		" on powershell and verify that the output is indeed a valid token."
+		return nil, errors.New(credNamePSContext + invalidTokenMsg)
 	}
 	return output, nil
 }
 
 func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.AccessToken, error) {
 	t := struct {
-		AccessToken string `json:"token"`
-		ExpiresOn   string `json:"expiresOn"`
+		AccessToken string `json:"Token"`
+		ExpiresOn   string `json:"ExpiresOn"`
 	}{}
 
 	err := json.Unmarshal(tk, &t)
