@@ -295,16 +295,10 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 				// there exists a current version id of the object
 				if currentVersionId, ok := objectVer[object.relativePath]; ok {
 					// get current version id time
-					currentVid, err := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
-					if err != nil {
-						fmt.Errorf("unable to parse version id into time format: %s", err.Error())
-					}
+					currentVid, _ := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
 
 					// get new version id time
-					newVid, err := time.Parse(versionIdTimeFormat, object.blobVersionID)
-					if err != nil {
-						fmt.Errorf("unable to parse version id into time format: %s", err.Error())
-					}
+					newVid, _ := time.Parse(versionIdTimeFormat, object.blobVersionID)
 
 					// if new vid came after the current vid, then it is the latest version
 					// update the objectVer with the latest version

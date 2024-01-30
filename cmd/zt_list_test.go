@@ -149,8 +149,8 @@ func TestListVersionsMultiVersions(t *testing.T) {
 			if i == 8 { // 8 will be file count
 				a.True(strings.Contains(m, "File count: 4"))
 			}
-			if i == 9 { // 9 will be file size of latest versions (should be 106)
-				a.True(strings.Contains(m, "Total file size: 106.00 B"))
+			if i == 9 { // 9 will be file size of latest versions (should be 64)
+				a.True(strings.Contains(m, "Total file size: 64.00 B"))
 			}
 		}
 	})
@@ -222,8 +222,8 @@ func TestListVersionsMultiVersionsNoPropFlag(t *testing.T) {
 			if i == 5 { // 5 will be file count
 				a.True(strings.Contains(m, "File count: 4"))
 			}
-			if i == 6 { // 6 will be file size (should be 116)
-				a.True(strings.Contains(m, "Total file size: 116.00 B"))
+			if i == 6 { // 6 will be file size (should be 64)
+				a.True(strings.Contains(m, "Total file size: 64.00 B"))
 			}
 		}
 	})

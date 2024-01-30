@@ -348,7 +348,7 @@ func (scenarioHelper) generateBlobsFromList(a *assert.Assertions, containerClien
 func (scenarioHelper) generateVersionsForBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string) {
 	for _, blobName := range blobList {
 		blobClient := containerClient.NewBlockBlobClient(blobName)
-		uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random data "+generateBlobName())), nil)
+		uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random data ")), nil)
 		a.NoError(err)
 		a.NotNil(uploadResp.VersionID)
 	}
