@@ -1151,7 +1151,7 @@ func TestCopySync_DeleteDestinationFileFlag(t *testing.T) {
 }
 
 func TestBasic_PutBlobSizeSingleShot(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:     true,
 		putBlobSizeMB: 256, // 256 MB
 	}, &hooks{
@@ -1186,7 +1186,7 @@ func TestBasic_PutBlobSizeSingleShot(t *testing.T) {
 }
 
 func TestBasic_PutBlobSizeMultiPart(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:     true,
 		putBlobSizeMB: 50, // 256 MB
 	}, &hooks{
