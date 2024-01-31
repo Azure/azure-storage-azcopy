@@ -32,11 +32,18 @@ type NewE2EConfig struct {
 	E2EAuthConfig struct { // mutually exclusive
 		SubscriptionLoginInfo struct {
 			SubscriptionID string `env:"NEW_E2E_SUBSCRIPTION_ID,required"`
-			TenantID       string `env:"NEW_E2E_TENANT_ID,required"`
 			ApplicationID  string `env:"NEW_E2E_APPLICATION_ID,required"`
 			ClientSecret   string `env:"NEW_E2E_CLIENT_SECRET,required"`
+			TenantID       string `env:"NEW_E2E_TENANT_ID"`
 		} `env:",required"`
+
 		StaticStgAcctInfo struct {
+			StaticOAuth struct {
+				TenantID      string `env:"NEW_E2E_STATIC_TENANT_ID"`
+				ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID,required"`
+				ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET,required"`
+			}
+
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
 			// double todo: we should allow these to be missing.
 			Standard struct {

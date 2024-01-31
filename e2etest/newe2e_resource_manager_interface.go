@@ -43,8 +43,16 @@ type ResourceManager interface {
 }
 
 type RemoteResourceManager interface {
+	ResourceManager
+
+	// ValidAuthTypes specifies acceptable auth types to use
 	ValidAuthTypes() ExplicitCredentialTypes
-	ResourceClient() any // Should be wrangled by caller, check internalClient field of resource manager
+	// DefaultAuthType should return the resource's logical default auth type (e.g. SAS)
+	DefaultAuthType() ExplicitCredentialTypes
+	// WithSpecificAuthType should return a copy of itself with a specific auth type, intended for RunAzCopy
+	WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget
+	// ResourceClient attempts to return the native resource client, and should be wrangled by a caller knowing what they're expecting.
+	ResourceClient() any
 }
 
 // ExplicitCredentialTypes defines a more explicit enum for credential types as AzCopy's internal definition is very loose (e.g. Anonymous can be public or SAS); accepts the URI as-is.
@@ -81,6 +89,36 @@ func (e ExplicitCredentialTypes) Count() int {
 			out++
 		}
 	}
+
+	return out
+}
+
+func (e ExplicitCredentialTypes) String() string {
+	if e == 0 {
+		return "None"
+	}
+
+	out := "{"
+	enumStr := []string{
+		"PublicAuth",
+		"SASToken",
+		"OAuth",
+		"AccountKey",
+		"GCP",
+		"S3",
+	}
+
+	for idx, str := range enumStr {
+		if e.Includes(1 << idx) {
+			if len(out) > 1 {
+				out += ","
+			}
+
+			out += str
+		}
+	}
+
+	out += "}"
 
 	return out
 }

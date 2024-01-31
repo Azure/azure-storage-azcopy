@@ -46,6 +46,19 @@ type BlobFSServiceResourceManager struct {
 	internalClient  *service.Client
 }
 
+func (b *BlobFSServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	// This is what we primarily want to support, despite also supporting AcctKey.
+	return EExplicitCredentialType.SASToken()
+}
+
+func (b *BlobFSServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a)
+}
+
+func (b *BlobFSServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	return EExplicitCredentialType.With(EExplicitCredentialType.OAuth(), EExplicitCredentialType.SASToken(), EExplicitCredentialType.AcctKey())
+}
+
 func (b *BlobFSServiceResourceManager) Canon() string {
 	return buildCanonForAzureResourceManager(b)
 }
@@ -74,10 +87,6 @@ func (b *BlobFSServiceResourceManager) URI(a Asserter, withSas bool) string {
 	}
 
 	return base
-}
-
-func (b *BlobFSServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	return EExplicitCredentialType.With(EExplicitCredentialType.OAuth(), EExplicitCredentialType.SASToken(), EExplicitCredentialType.AcctKey())
 }
 
 func (b *BlobFSServiceResourceManager) ResourceClient() any {
@@ -125,6 +134,18 @@ type BlobFSFileSystemResourceManager struct {
 	internalClient *filesystem.Client
 }
 
+func (b *BlobFSFileSystemResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return (&BlobFSServiceResourceManager{}).DefaultAuthType()
+}
+
+func (b *BlobFSFileSystemResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a)
+}
+
+func (b *BlobFSFileSystemResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	return (&BlobFSServiceResourceManager{}).ValidAuthTypes()
+}
+
 func (b *BlobFSFileSystemResourceManager) Canon() string {
 	return buildCanonForAzureResourceManager(b)
 }
@@ -141,10 +162,6 @@ func (b *BlobFSFileSystemResourceManager) Parent() ResourceManager {
 
 func (b *BlobFSFileSystemResourceManager) Account() AccountResourceManager {
 	return b.internalAccount
-}
-
-func (b *BlobFSFileSystemResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	return b.Service.ValidAuthTypes()
 }
 
 func (b *BlobFSFileSystemResourceManager) ResourceClient() any {
@@ -255,6 +272,18 @@ type BlobFSPathResourceProvider struct {
 	objectPath string
 }
 
+func (b *BlobFSPathResourceProvider) DefaultAuthType() ExplicitCredentialTypes {
+	return (&BlobFSServiceResourceManager{}).DefaultAuthType()
+}
+
+func (b *BlobFSPathResourceProvider) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a)
+}
+
+func (b *BlobFSPathResourceProvider) ValidAuthTypes() ExplicitCredentialTypes {
+	return (&BlobFSServiceResourceManager{}).ValidAuthTypes()
+}
+
 func (b *BlobFSPathResourceProvider) Canon() string {
 	return buildCanonForAzureResourceManager(b)
 }
@@ -265,10 +294,6 @@ func (b *BlobFSPathResourceProvider) Parent() ResourceManager {
 
 func (b *BlobFSPathResourceProvider) Account() AccountResourceManager {
 	return b.internalAccount
-}
-
-func (b *BlobFSPathResourceProvider) ValidAuthTypes() ExplicitCredentialTypes {
-	return b.Service.ValidAuthTypes()
 }
 
 func (b *BlobFSPathResourceProvider) ResourceClient() any {

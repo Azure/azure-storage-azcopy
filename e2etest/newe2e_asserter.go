@@ -33,10 +33,10 @@ type DryrunAsserter interface {
 	InvalidateScenario()
 }
 
-type CleanupAsserter interface {
-	Asserter
+type ScenarioAsserter interface {
+	DryrunAsserter
 
-	Cleanup(func())
+	Cleanup(func(a ScenarioAsserter))
 }
 
 // ====== Assertion ======

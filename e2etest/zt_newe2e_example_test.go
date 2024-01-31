@@ -29,7 +29,8 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
-		Body: body,
+		ObjectName: pointerTo("test"),
+		Body:       body,
 	}) // todo: generic CreateResource is something to pursue in another branch, but it's an interesting thought.
 	// Scale up from service to container
 	dstObj := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
@@ -39,8 +40,15 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 		AzCopyCommand{
 			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy}),
 			Targets: []ResourceManager{
-				srcObj,
+				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.OAuth(), svm),
 				dstObj,
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+
+				ListOfFiles: []string{"test"},
 			},
 		})
 

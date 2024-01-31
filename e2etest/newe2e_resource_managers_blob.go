@@ -26,21 +26,19 @@ TODOs:
 - CPK
 */
 
-// check that everything aligns with interfaces
+// enforce interface compliance at compile time
 func init() {
 	void := func(_ ...any) {} // prevent go from erroring from unused vars
 
-	var sm ServiceResourceManager = &BlobServiceResourceManager{}
-	var cm ContainerResourceManager = &BlobContainerResourceManager{}
-	var om ObjectResourceManager = &BlobObjectResourceManager{}
+	void(
+		ServiceResourceManager(&BlobServiceResourceManager{}),
+		ContainerResourceManager(&BlobContainerResourceManager{}),
+		ObjectResourceManager(&BlobObjectResourceManager{}),
 
-	var rrm RemoteResourceManager
-
-	rrm = &BlobServiceResourceManager{}
-	rrm = &BlobContainerResourceManager{}
-	rrm = &BlobObjectResourceManager{}
-
-	void(rrm, sm, cm, om)
+		RemoteResourceManager(&BlobServiceResourceManager{}),
+		RemoteResourceManager(&BlobContainerResourceManager{}),
+		RemoteResourceManager(&BlobObjectResourceManager{}),
+	)
 }
 
 func blobStripSAS(uri string) string {
@@ -86,8 +84,31 @@ func buildCanonForAzureResourceManager(manager ResourceManager) string {
 // ==================== SERVICE ====================
 
 type BlobServiceResourceManager struct {
-	internalAccount *AzureAccountResourceManager
-	internalClient  *service.Client
+	internalAccount  *AzureAccountResourceManager
+	specificAuthType *ExplicitCredentialTypes
+	internalClient   *service.Client
+}
+
+func (b *BlobServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	// Technically AcctKey is valid because of backwards compat integrated for dfs
+	// But we don't want to
+	return EExplicitCredentialType.With(EExplicitCredentialType.PublicAuth(), EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth())
+}
+
+func (b *BlobServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return EExplicitCredentialType.SASToken()
+}
+
+func (b *BlobServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a)
+}
+
+func (b *BlobServiceResourceManager) Parent() ResourceManager {
+	return nil
+}
+
+func (b *BlobServiceResourceManager) Account() AccountResourceManager {
+	return b.internalAccount
 }
 
 func (b *BlobServiceResourceManager) Canon() string {
@@ -128,12 +149,6 @@ func (b *BlobServiceResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Service()
 }
 
-func (b *BlobServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	// Technically AcctKey is valid because of backwards compat integrated for dfs
-	// But we don't want to
-	return EExplicitCredentialType.With(EExplicitCredentialType.PublicAuth(), EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth())
-}
-
 func (b *BlobServiceResourceManager) ResourceClient() any {
 	return b.internalClient
 }
@@ -159,6 +174,18 @@ type BlobContainerResourceManager struct {
 	Service         *BlobServiceResourceManager
 	containerName   string
 	internalClient  *container.Client
+}
+
+func (b *BlobContainerResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	return (&BlobServiceResourceManager{}).ValidAuthTypes()
+}
+
+func (b *BlobContainerResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return (&BlobServiceResourceManager{}).DefaultAuthType()
+}
+
+func (b *BlobContainerResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a)
 }
 
 func (b *BlobContainerResourceManager) Canon() string {
@@ -303,10 +330,6 @@ func (b *BlobContainerResourceManager) GetObject(a Asserter, path string, eType 
 	}
 }
 
-func (b *BlobContainerResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	return b.Service.ValidAuthTypes()
-}
-
 func (b *BlobContainerResourceManager) ResourceClient() any {
 	return b.internalClient
 }
@@ -366,6 +389,22 @@ type BlobObjectResourceManager struct {
 	internalClient *blob.Client
 }
 
+func (b *BlobObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	return (&BlobServiceResourceManager{}).ValidAuthTypes()
+}
+
+func (b *BlobObjectResourceManager) ResourceClient() any {
+	return b.internalClient
+}
+
+func (b *BlobObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return (&BlobServiceResourceManager{}).ValidAuthTypes()
+}
+
+func (b *BlobObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a)
+}
+
 func (b *BlobObjectResourceManager) Canon() string {
 	return buildCanonForAzureResourceManager(b)
 }
@@ -376,14 +415,6 @@ func (b *BlobObjectResourceManager) Account() AccountResourceManager {
 
 func (b *BlobObjectResourceManager) Parent() ResourceManager {
 	return b.Container
-}
-
-func (b *BlobObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	return b.Service.ValidAuthTypes()
-}
-
-func (b *BlobObjectResourceManager) ResourceClient() any {
-	return b.internalClient
 }
 
 func (b *BlobObjectResourceManager) EntityType() common.EntityType {

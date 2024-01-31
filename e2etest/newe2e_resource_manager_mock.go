@@ -13,6 +13,30 @@ All resource managers implemented in this file are handed
 to tests currently in dry-runs, hold no state, and
 */
 
+// ensure interface compliance at compile time
+func init() {
+	void := func(_ ...any) {}
+
+	void(
+		// basic types
+		AccountResourceManager(&MockAccountResourceManager{}),
+		ServiceResourceManager(&MockServiceResourceManager{}),
+		ContainerResourceManager(&MockContainerResourceManager{}),
+		ObjectResourceManager(&MockObjectResourceManager{}),
+
+		// ensure remote resource manager is available >= service
+		RemoteResourceManager(&MockServiceResourceManager{}),
+		RemoteResourceManager(&MockContainerResourceManager{}),
+		RemoteResourceManager(&MockObjectResourceManager{}),
+
+		// ensure all are mock resource managers
+		mockResource(&MockAccountResourceManager{}),
+		mockResource(&MockServiceResourceManager{}),
+		mockResource(&MockContainerResourceManager{}),
+		mockResource(&MockObjectResourceManager{}),
+	)
+}
+
 var mockAccountServices = map[AccountType][]common.Location{
 	EAccountType.Standard():                     {common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()},
 	EAccountType.PremiumBlockBlobs():            {common.ELocation.Blob(), common.ELocation.BlobFS()},
@@ -64,9 +88,24 @@ var mockServiceAuthTypes = map[common.Location]ExplicitCredentialTypes{
 	// todo GCP
 }
 
+var mockServiceDefaultAuthTypes = map[common.Location]ExplicitCredentialTypes{
+	common.ELocation.Blob():   (&BlobServiceResourceManager{}).DefaultAuthType(),
+	common.ELocation.File():   (&FileServiceResourceManager{}).DefaultAuthType(),
+	common.ELocation.BlobFS(): (&BlobFSServiceResourceManager{}).DefaultAuthType(),
+}
+
 type MockServiceResourceManager struct {
-	parent      *MockAccountResourceManager
-	serviceType common.Location
+	parent           *MockAccountResourceManager
+	specificAuthType *ExplicitCredentialTypes
+	serviceType      common.Location
+}
+
+func (m *MockServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return mockServiceDefaultAuthTypes[m.serviceType]
+}
+
+func (m *MockServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(m, cred, a)
 }
 
 func (m *MockServiceResourceManager) Canon() string {
@@ -127,6 +166,22 @@ type MockContainerResourceManager struct {
 	account          *MockAccountResourceManager
 	parent           *MockServiceResourceManager
 	containerName    string
+}
+
+func (m *MockContainerResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	return mockServiceAuthTypes[m.Location()]
+}
+
+func (m *MockContainerResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return mockServiceDefaultAuthTypes[m.Location()]
+}
+
+func (m *MockContainerResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(m, cred, a)
+}
+
+func (m *MockContainerResourceManager) ResourceClient() any {
+	panic("Test code should only perform \"real\" actions during wet runs. Does not create an emulated resource client.")
 }
 
 func (m *MockContainerResourceManager) Canon() string {
@@ -195,10 +250,27 @@ func (m *MockContainerResourceManager) GetResourceTarget(a Asserter) string {
 }
 
 type MockObjectResourceManager struct {
-	parent     *MockContainerResourceManager
-	account    *MockAccountResourceManager
-	entityType common.EntityType
-	path       string
+	overrideLocation common.Location // If there is no parent, e.g. this is a lone file, it needs to be overridden
+	parent           *MockContainerResourceManager
+	account          *MockAccountResourceManager
+	entityType       common.EntityType
+	path             string
+}
+
+func (m *MockObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	return mockServiceAuthTypes[m.Location()]
+}
+
+func (m *MockObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return mockServiceDefaultAuthTypes[m.Location()]
+}
+
+func (m *MockObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(m, cred, a)
+}
+
+func (m *MockObjectResourceManager) ResourceClient() any {
+	panic("Test code should only perform \"real\" actions during wet runs. Does not create an emulated resource client.")
 }
 
 func (m *MockObjectResourceManager) Canon() string {
@@ -222,6 +294,10 @@ func (m *MockObjectResourceManager) mockSignature() {
 }
 
 func (m *MockObjectResourceManager) Location() common.Location {
+	if m.overrideLocation != common.ELocation.Unknown() || m.parent != nil {
+		return m.overrideLocation
+	}
+
 	return m.parent.Location()
 }
 

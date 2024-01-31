@@ -18,21 +18,19 @@ import (
 	"runtime"
 )
 
-// check that everything aligns with interfaces
+// check that everything complies with interfaces
 func init() {
 	void := func(_ ...any) {} // prevent go from erroring from unused vars
 
-	var sm ServiceResourceManager = &FileServiceResourceManager{}
-	var cm ContainerResourceManager = &FileShareResourceManager{}
-	var om ObjectResourceManager = &FileObjectResourceManager{}
+	void(
+		ServiceResourceManager(&FileServiceResourceManager{}),
+		ContainerResourceManager(&FileShareResourceManager{}),
+		ObjectResourceManager(&FileObjectResourceManager{}),
 
-	var rrm RemoteResourceManager
-
-	rrm = &FileServiceResourceManager{}
-	rrm = &FileShareResourceManager{}
-	rrm = &FileObjectResourceManager{}
-
-	void(rrm, sm, cm, om)
+		RemoteResourceManager(&FileServiceResourceManager{}),
+		RemoteResourceManager(&FileShareResourceManager{}),
+		RemoteResourceManager(&FileObjectResourceManager{}),
+	)
 }
 
 func fileStripSAS(uri string) string {
@@ -49,6 +47,19 @@ func fileStripSAS(uri string) string {
 type FileServiceResourceManager struct {
 	internalAccount *AzureAccountResourceManager
 	internalClient  *service.Client
+}
+
+func (s *FileServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return EExplicitCredentialType.SASToken()
+}
+
+func (s *FileServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	// OAuth isn't supported *quite yet* in azcopy!
+	return EExplicitCredentialType.With(EExplicitCredentialType.SASToken())
+}
+
+func (s *FileServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(s, cred, a)
 }
 
 func (s *FileServiceResourceManager) Canon() string {
@@ -79,10 +90,6 @@ func (s *FileServiceResourceManager) URI(a Asserter, withSas bool) string {
 	}
 
 	return base
-}
-
-func (s *FileServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	return EExplicitCredentialType.With(EExplicitCredentialType.SASToken())
 }
 
 func (s *FileServiceResourceManager) ResourceClient() any {
@@ -132,6 +139,18 @@ type FileShareResourceManager struct {
 	internalClient *share.Client
 }
 
+func (s *FileShareResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return (&FileServiceResourceManager{}).DefaultAuthType()
+}
+
+func (s *FileShareResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	return (&FileServiceResourceManager{}).ValidAuthTypes()
+}
+
+func (s *FileShareResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(s, cred, a)
+}
+
 func (s *FileShareResourceManager) Canon() string {
 	return buildCanonForAzureResourceManager(s)
 }
@@ -148,10 +167,6 @@ func (s *FileShareResourceManager) Parent() ResourceManager {
 
 func (s *FileShareResourceManager) Account() AccountResourceManager {
 	return s.internalAccount
-}
-
-func (s *FileShareResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	return s.Service.ValidAuthTypes()
 }
 
 func (s *FileShareResourceManager) ResourceClient() any {
@@ -345,6 +360,27 @@ type FileObjectResourceManager struct {
 	entityType common.EntityType
 }
 
+func (f *FileObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
+	return (&FileServiceResourceManager{}).DefaultAuthType()
+}
+
+func (f *FileObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+	return CreateAzCopyTarget(f, cred, a)
+}
+
+func (f *FileObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
+	return (&FileServiceResourceManager{}).ValidAuthTypes()
+}
+
+func (f *FileObjectResourceManager) ResourceClient() any {
+	switch f.entityType {
+	case common.EEntityType.Folder():
+		return f.getDirClient()
+	default: // For now, bundle up other entity types as files. That's how they should be implemented in AzCopy, at least.
+		return f.getFileClient()
+	}
+}
+
 func (f *FileObjectResourceManager) Canon() string {
 	return buildCanonForAzureResourceManager(f)
 }
@@ -355,19 +391,6 @@ func (f *FileObjectResourceManager) Parent() ResourceManager {
 
 func (f *FileObjectResourceManager) Account() AccountResourceManager {
 	return f.internalAccount
-}
-
-func (f *FileObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	return f.Service.ValidAuthTypes()
-}
-
-func (f *FileObjectResourceManager) ResourceClient() any {
-	switch f.entityType {
-	case common.EEntityType.Folder():
-		return f.getDirClient()
-	default: // For now, bundle up other entity types as files. That's how they should be implemented in AzCopy, at least.
-		return f.getFileClient()
-	}
 }
 
 func (f *FileObjectResourceManager) Location() common.Location {

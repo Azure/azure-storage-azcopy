@@ -105,13 +105,13 @@ func (svm *ScenarioVariationManager) Assert(comment string, assertion Assertion,
 	svm.t.Helper()
 
 	if !assertion.Assert(items...) {
-		svm.isInvalid = true // We've now failed, so we flip the shared bad flag
-
 		if fa, ok := assertion.(FormattedAssertion); ok {
-			svm.t.Logf("Assertion %s failed: %s (%s)", fa.Name(), fa.Format(items), comment)
+			svm.t.Logf("Assertion %s failed: %s (%s)", fa.Name(), fa.Format(items...), comment)
 		} else {
 			svm.t.Logf("Assertion %s failed with items %v (%s)", assertion.Name(), items, comment)
 		}
+
+		svm.isInvalid = true // We've now failed, so we flip the shared bad flag
 	}
 }
 
@@ -292,6 +292,17 @@ func (svm *ScenarioVariationManager) Invalid() bool {
 
 func (svm *ScenarioVariationManager) InvalidateScenario() {
 	svm.isInvalid = true
+}
+
+func (svm *ScenarioVariationManager) Cleanup(cleanupFunc func(a ScenarioAsserter)) {
+	if svm.Dryrun() {
+		svm.Error("Sanity check: svm.Cleanup should not be called during a dry run. No real actions should be taken during a dry run.")
+		return
+	}
+
+	svm.t.Cleanup(func() {
+		cleanupFunc(svm)
+	})
 }
 
 // ResolveVariation wraps ScenarioVariationManager.GetVariation, returning the variation as the user's requested type, and using the call stack as the ID

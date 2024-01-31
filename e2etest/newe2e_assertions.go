@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -107,6 +108,60 @@ func (n Not) MinArgs() int {
 
 func (n Not) Assert(items ...any) bool {
 	return !n.a.Assert(items...)
+}
+
+// ====== Empty =======
+
+// Empty checks that all parameters are equivalent to their zero-values
+type Empty struct {
+	// Invert is distinctly different from Not{Empty{}}, in that Not{Empty{}} states "if *any* object is not empty", but Empty{Invert: true} specifies that ALL objects are nonzero
+	Invert bool
+}
+
+func (e Empty) Name() string {
+	return "IsEmpty"
+}
+
+func (e Empty) MaxArgs() int {
+	return 0
+}
+
+func (e Empty) MinArgs() int {
+	return 0
+}
+
+func (e Empty) Assert(items ...any) bool {
+	for _, v := range items {
+		item := reflect.ValueOf(v)
+		// false (all objects are zero) == false (the object is not zero); failure
+		// true (all objects are nonzero) == true (the object is zero); failure
+		if e.Invert == item.IsZero() {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (e Empty) Format(items ...any) string {
+	failed := make([]uint, 0)
+
+	for idx, v := range items {
+		item := reflect.ValueOf(v)
+		// false (all objects are zero) == false (the object is not zero); failure
+		// true (all objects are nonzero) == true (the object is zero); failure
+		if e.Invert == item.IsZero() {
+			failed = append(failed, uint(idx))
+		}
+	}
+
+	if len(failed) == 0 {
+		return "all items were " + common.Iff(e.Invert, "nonzero", "zero")
+	}
+
+	trait := common.Iff(e.Invert, "zero, expected nonzero values", "nonzero, expected zero values")
+
+	return fmt.Sprintf("items %v were %s", failed, trait)
 }
 
 // ====== Equal =======

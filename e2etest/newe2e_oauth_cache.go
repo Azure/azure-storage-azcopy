@@ -50,6 +50,7 @@ type OAuthCache struct {
 func NewOAuthCache(cred azcore.TokenCredential, tenant string) *OAuthCache {
 	return &OAuthCache{
 		tc:     cred,
+		tenant: tenant,
 		tokens: make(map[string]*azcore.AccessToken),
 		mut:    &sync.RWMutex{},
 	}
