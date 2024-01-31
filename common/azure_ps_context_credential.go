@@ -118,6 +118,8 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 		defer cancel()
 	}
 
+	r := regexp.MustCompile("(?s){.*Token.*ExpiresOn.*}")
+
 	if tenantID != "" {
 		tenantID += " -TenantId" + tenantID
 	}
@@ -138,8 +140,9 @@ var defaultAzdTokenProvider PSTokenProvider = func(ctx context.Context, _ string
 		return nil, errors.New(credNamePSContext + msg)
 	}
 
-	if !strings.Contains(string(output), "Token") || !strings.Contains(string(output), "ExpiresOn") {
-		invalidTokenMsg := " Invalid output received while retriving token with Powershell. Run command \" + cmd + \"" +
+	output = []byte(r.FindString(string(output)))
+	if string(output) == "" {
+		invalidTokenMsg := " Invalid output received while retrieving token with Powershell. Run command \"" + cmd + "\"" +
 		" on powershell and verify that the output is indeed a valid token."
 		return nil, errors.New(credNamePSContext + invalidTokenMsg)
 	}
@@ -152,9 +155,9 @@ func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.Acces
 		ExpiresOn   string `json:"ExpiresOn"`
 	}{}
 
-	err := json.Unmarshal(tk, &t)
+	err := json.Unmarshal([]byte(strings.TrimSpace(string(tk))), &t)
 	if err != nil {
-		return azcore.AccessToken{}, errors.New(err.Error())
+		return azcore.AccessToken{}, errors.New(err.Error() + string(tk))
 	}
 	
 	parseErr := "error parsing token expiration time %q: %v"
