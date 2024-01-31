@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"net/url"
 	"strings"
@@ -49,12 +50,19 @@ func (sa *ARMStorageAccount) GetResourceManager() (*AzureAccountResourceManager,
 
 	var acctType AccountType
 	switch {
+	case strings.EqualFold(props.Sku.Tier, "Premium"):
+		switch props.Kind {
+		case service.AccountKindBlockBlobStorage: // both use the same kind
+			acctType = common.Iff(props.Properties.IsHNSEnabled, EAccountType.PremiumHNSEnabled(), EAccountType.PremiumBlockBlobs())
+		case service.AccountKindFileStorage:
+			acctType = EAccountType.PremiumFileShares()
+		case service.AccountKindStorageV2:
+			acctType = EAccountType.PremiumPageBlobs()
+		}
 	case props.Properties.IsHNSEnabled:
 		acctType = EAccountType.HierarchicalNamespaceEnabled()
 	case strings.EqualFold(props.Sku.Tier, "Standard"):
 		acctType = EAccountType.Standard()
-	//case strings.EqualFold(props.Sku.Tier, "Premium"):
-	//	acctType = EAccountType()
 	//	// Classic comes from Microsoft.ClassicStorage/storageAccounts, so, not possible here.
 	//	// Managed Disks also won't appear here.
 	default:
