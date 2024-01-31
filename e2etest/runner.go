@@ -107,6 +107,7 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 	set("exclude-pattern", p.excludePattern, "")
 	set("cap-mbps", p.capMbps, float32(0))
 	set("block-size-mb", p.blockSizeMB, float32(0))
+	set("put-blob-size-mb", p.putBlobSizeMB, float32(0))
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
 	set("cancel-from-stdin", p.cancelFromStdin, false)
