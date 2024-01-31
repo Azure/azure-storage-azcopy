@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -155,9 +154,9 @@ func (c *PowershellContextCredential) createAccessToken(tk []byte) (azcore.Acces
 		ExpiresOn   string `json:"ExpiresOn"`
 	}{}
 
-	err := json.Unmarshal([]byte(strings.TrimSpace(string(tk))), &t)
+	err := json.Unmarshal(tk, &t)
 	if err != nil {
-		return azcore.AccessToken{}, errors.New(err.Error() + string(tk))
+		return azcore.AccessToken{}, errors.New(err.Error())
 	}
 	
 	parseErr := "error parsing token expiration time %q: %v"
