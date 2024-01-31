@@ -159,9 +159,9 @@ var errNoHash = errors.New("no hash computed")
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-func getNumChunks(fileSize int64, chunkSize int64) uint32 {
+func getNumChunks(fileSize int64, chunkSize int64, putBlobSize int64) uint32 {
 	numChunks := uint32(1) // we always map zero-size source files to ONE (empty) chunk
-	if fileSize > 0 {
+	if fileSize > 0 && fileSize > putBlobSize {
 		chunkSizeI := chunkSize
 		numChunks = common.Iff(
 			fileSize%chunkSizeI == 0,

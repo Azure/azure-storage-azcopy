@@ -107,6 +107,7 @@ type IJobPartTransferMgr interface {
 type TransferInfo struct {
 	JobID                   common.JobID
 	BlockSize               int64
+	PutBlobSize             int64
 	Source                  string
 	SourceSize              int64
 	Destination             string
@@ -382,6 +383,13 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	}
 	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
+	// If the putBlobSize is 0, then the user didn't provide any putBlobSize, default to DefaultPutBlobSize
+	putBlobSize := dstBlobData.PutBlobSize
+	if putBlobSize == 0 {
+		putBlobSize = blockSize
+	}
+	putBlobSize = common.Iff(putBlobSize > common.MaxPutBlobSize, common.MaxPutBlobSize, putBlobSize)
+
 	var srcBlobTags common.BlobTags
 	if blobTags != nil {
 		srcBlobTags = common.BlobTags{}
@@ -395,6 +403,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	return &TransferInfo{
 		JobID:                          plan.JobID,
 		BlockSize:                      blockSize,
+		PutBlobSize:                    putBlobSize,
 		Source:                         srcURI,
 		SourceSize:                     sourceSize,
 		Destination:                    dstURI,

@@ -181,10 +181,10 @@ type CopyJobPartOrderRequest struct {
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType           CredentialType
-	OAuthTokenInfo           OAuthTokenInfo
-	S3CredentialInfo         S3CredentialInfo
-	GCPCredentialInfo        GCPCredentialInfo
+	CredentialType    CredentialType
+	OAuthTokenInfo    OAuthTokenInfo
+	S3CredentialInfo  S3CredentialInfo
+	GCPCredentialInfo GCPCredentialInfo
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
@@ -238,6 +238,7 @@ type BlobTransferAttributes struct {
 	PutMd5                           bool                  // when uploading, should we create and PUT Content-MD5 hashes
 	MD5ValidationOption              HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
 	BlockSizeInBytes                 int64                 // when uploading/downloading/copying, specify the size of each chunk
+	PutBlobSizeInBytes               int64                 // when uploading, specify the threshold to determine if the blob should be uploaded in a single PUT request
 	DeleteSnapshotsOption            DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
 	BlobTagsString                   string                // when user explicitly provides blob tags
 	PermanentDeleteOption            PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
