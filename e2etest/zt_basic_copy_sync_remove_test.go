@@ -1188,7 +1188,7 @@ func TestBasic_PutBlobSizeSingleShot(t *testing.T) {
 func TestBasic_PutBlobSizeMultiPart(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:     true,
-		putBlobSizeMB: 50, // 256 MB
+		putBlobSizeMB: 50, // 50 MB
 	}, &hooks{
 		afterValidation: func(h hookHelper) {
 			props := h.GetDestination().getAllProperties(h.GetAsserter())
