@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -40,7 +41,11 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 		AzCopyCommand{
 			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy}),
 			Targets: []ResourceManager{
-				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.OAuth(), svm),
+				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						Permissions: (&blobsas.BlobPermissions{Read: true, List: true}).String(),
+					},
+				}),
 				dstObj,
 			},
 			Flags: CopyFlags{

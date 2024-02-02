@@ -58,8 +58,8 @@ func (s *FileServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
 	return EExplicitCredentialType.With(EExplicitCredentialType.SASToken())
 }
 
-func (s *FileServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(s, cred, a)
+func (s *FileServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(s, cred, a, opts...)
 }
 
 func (s *FileServiceResourceManager) Canon() string {
@@ -82,12 +82,9 @@ func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Service()
 }
 
-func (s *FileServiceResourceManager) URI(a Asserter, withSas bool) string {
+func (s *FileServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(s.internalClient.URL())
-
-	if withSas {
-		base = s.internalAccount.ApplySAS(a, base, s.Location())
-	}
+	base = s.internalAccount.ApplySAS(base, s.Location(), opts...)
 
 	return base
 }
@@ -147,8 +144,8 @@ func (s *FileShareResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
 	return (&FileServiceResourceManager{}).ValidAuthTypes()
 }
 
-func (s *FileShareResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(s, cred, a)
+func (s *FileShareResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(s, cred, a, opts...)
 }
 
 func (s *FileShareResourceManager) Canon() string {
@@ -181,12 +178,9 @@ func (s *FileShareResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
 
-func (s *FileShareResourceManager) URI(a Asserter, withSas bool) string {
+func (s *FileShareResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(s.internalClient.URL())
-
-	if withSas {
-		base = s.internalAccount.ApplySAS(a, base, s.Location())
-	}
+	base = s.internalAccount.ApplySAS(base, s.Location(), opts...)
 
 	return base
 }
@@ -364,8 +358,8 @@ func (f *FileObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 	return (&FileServiceResourceManager{}).DefaultAuthType()
 }
 
-func (f *FileObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(f, cred, a)
+func (f *FileObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(f, cred, a, opts...)
 }
 
 func (f *FileObjectResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -401,12 +395,9 @@ func (f *FileObjectResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Object()
 }
 
-func (f *FileObjectResourceManager) URI(a Asserter, withSas bool) string {
+func (f *FileObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(f.getFileClient().URL()) // restype doesn't matter here, same URL under the hood
-
-	if withSas {
-		base = f.internalAccount.ApplySAS(a, base, f.Location())
-	}
+	base = f.internalAccount.ApplySAS(base, f.Location(), opts...)
 
 	return base
 }

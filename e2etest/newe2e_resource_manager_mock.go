@@ -104,15 +104,15 @@ func (m *MockServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 	return mockServiceDefaultAuthTypes[m.serviceType]
 }
 
-func (m *MockServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(m, cred, a)
+func (m *MockServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(m, cred, a, opts...)
 }
 
 func (m *MockServiceResourceManager) Canon() string {
 	return fmt.Sprintf("%s/%s", m.parent.accountName, m.serviceType.String())
 }
 
-func (m *MockServiceResourceManager) URI(a Asserter, withSas bool) string {
+func (m *MockServiceResourceManager) URI(opts ...GetURIOptions) string {
 	return ""
 }
 
@@ -176,8 +176,8 @@ func (m *MockContainerResourceManager) DefaultAuthType() ExplicitCredentialTypes
 	return mockServiceDefaultAuthTypes[m.Location()]
 }
 
-func (m *MockContainerResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(m, cred, a)
+func (m *MockContainerResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(m, cred, a, opts...)
 }
 
 func (m *MockContainerResourceManager) ResourceClient() any {
@@ -192,7 +192,7 @@ func (m *MockContainerResourceManager) Exists() bool {
 	return true
 }
 
-func (m *MockContainerResourceManager) URI(a Asserter, withSas bool) string {
+func (m *MockContainerResourceManager) URI(opts ...GetURIOptions) string {
 	return ""
 }
 
@@ -265,8 +265,8 @@ func (m *MockObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 	return mockServiceDefaultAuthTypes[m.Location()]
 }
 
-func (m *MockObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(m, cred, a)
+func (m *MockObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(m, cred, a, opts...)
 }
 
 func (m *MockObjectResourceManager) ResourceClient() any {
@@ -277,7 +277,7 @@ func (m *MockObjectResourceManager) Canon() string {
 	return m.parent.Canon() + "/" + m.path
 }
 
-func (m *MockObjectResourceManager) URI(a Asserter, withSas bool) string {
+func (m *MockObjectResourceManager) URI(opts ...GetURIOptions) string {
 	return ""
 }
 

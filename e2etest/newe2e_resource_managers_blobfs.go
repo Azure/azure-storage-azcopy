@@ -51,8 +51,8 @@ func (b *BlobFSServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes
 	return EExplicitCredentialType.SASToken()
 }
 
-func (b *BlobFSServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(b, cred, a)
+func (b *BlobFSServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
 func (b *BlobFSServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -79,12 +79,9 @@ func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Service()
 }
 
-func (b *BlobFSServiceResourceManager) URI(a Asserter, withSas bool) string {
+func (b *BlobFSServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.internalClient.DFSURL())
-
-	if withSas {
-		base = b.internalAccount.ApplySAS(a, base, b.Location())
-	}
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
@@ -138,8 +135,8 @@ func (b *BlobFSFileSystemResourceManager) DefaultAuthType() ExplicitCredentialTy
 	return (&BlobFSServiceResourceManager{}).DefaultAuthType()
 }
 
-func (b *BlobFSFileSystemResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(b, cred, a)
+func (b *BlobFSFileSystemResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
 func (b *BlobFSFileSystemResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
@@ -176,12 +173,9 @@ func (b *BlobFSFileSystemResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
 
-func (b *BlobFSFileSystemResourceManager) URI(a Asserter, withSas bool) string {
+func (b *BlobFSFileSystemResourceManager) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.internalClient.DFSURL())
-
-	if withSas {
-		base = b.internalAccount.ApplySAS(a, base, b.Location())
-	}
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
@@ -276,8 +270,8 @@ func (b *BlobFSPathResourceProvider) DefaultAuthType() ExplicitCredentialTypes {
 	return (&BlobFSServiceResourceManager{}).DefaultAuthType()
 }
 
-func (b *BlobFSPathResourceProvider) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(b, cred, a)
+func (b *BlobFSPathResourceProvider) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
 func (b *BlobFSPathResourceProvider) ValidAuthTypes() ExplicitCredentialTypes {
@@ -313,12 +307,9 @@ func (b *BlobFSPathResourceProvider) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Object()
 }
 
-func (b *BlobFSPathResourceProvider) URI(a Asserter, withSas bool) string {
+func (b *BlobFSPathResourceProvider) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.getFileClient().DFSURL()) // obj type doesn't matter here, URL is the same under the hood
-
-	if withSas {
-		base = b.internalAccount.ApplySAS(a, base, b.Location())
-	}
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }

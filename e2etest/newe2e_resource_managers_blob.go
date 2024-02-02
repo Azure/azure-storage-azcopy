@@ -53,12 +53,13 @@ func blobStripSAS(uri string) string {
 func buildCanonForAzureResourceManager(manager ResourceManager) string {
 	// None of the Azure resource managers rely upon Asserter at this moment.
 	// This is *OK* for the time being, but also, mentally prepare yourself for the footgun down the line.
-	uri := manager.URI(nil, false)
+	uri := manager.URI()
 	// Similarly, the err is ignored.
 	// BlobSAS can be used here (for now, again, prepare for the footgun) because
 	// we're really interested in extracting details that are shared across all Azure services
 	// e.g. acct name, container name, object name
-	parsedURI, _ := blobsas.ParseURL(uri)
+	parsedURI, err := blobsas.ParseURL(uri)
+	common.PanicIfErr(err)
 
 	out := ""
 	// First, try to extract the account name.
@@ -91,7 +92,7 @@ type BlobServiceResourceManager struct {
 
 func (b *BlobServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
 	// Technically AcctKey is valid because of backwards compat integrated for dfs
-	// But we don't want to
+	// But we don't want to support that, so we won't test for it.
 	return EExplicitCredentialType.With(EExplicitCredentialType.PublicAuth(), EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth())
 }
 
@@ -99,8 +100,8 @@ func (b *BlobServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 	return EExplicitCredentialType.SASToken()
 }
 
-func (b *BlobServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(b, cred, a)
+func (b *BlobServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
 func (b *BlobServiceResourceManager) Parent() ResourceManager {
@@ -131,12 +132,9 @@ func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
 	return out
 }
 
-func (b *BlobServiceResourceManager) URI(a Asserter, withSas bool) string {
+func (b *BlobServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
-
-	if withSas {
-		base = b.internalAccount.ApplySAS(a, base, b.Location())
-	}
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
@@ -184,8 +182,8 @@ func (b *BlobContainerResourceManager) DefaultAuthType() ExplicitCredentialTypes
 	return (&BlobServiceResourceManager{}).DefaultAuthType()
 }
 
-func (b *BlobContainerResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(b, cred, a)
+func (b *BlobContainerResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
 func (b *BlobContainerResourceManager) Canon() string {
@@ -342,12 +340,9 @@ func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
 
-func (b *BlobContainerResourceManager) URI(a Asserter, withSas bool) string {
+func (b *BlobContainerResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
-
-	if withSas {
-		base = b.internalAccount.ApplySAS(a, base, b.Location())
-	}
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
@@ -401,8 +396,8 @@ func (b *BlobObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 	return (&BlobServiceResourceManager{}).ValidAuthTypes()
 }
 
-func (b *BlobObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget {
-	return CreateAzCopyTarget(b, cred, a)
+func (b *BlobObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
 func (b *BlobObjectResourceManager) Canon() string {
@@ -669,12 +664,9 @@ func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Object()
 }
 
-func (b *BlobObjectResourceManager) URI(a Asserter, withSas bool) string {
+func (b *BlobObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
-
-	if withSas {
-		base = b.internalAccount.ApplySAS(a, base, b.Location())
-	}
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }

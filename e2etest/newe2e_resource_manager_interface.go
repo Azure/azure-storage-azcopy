@@ -11,15 +11,30 @@ import (
 	"time"
 )
 
+type GetURIOptions struct {
+	RemoteOpts RemoteURIOpts
+	AzureOpts  AzureURIOpts
+}
+
+type RemoteURIOpts struct {
+	// Defaults as https
+	Scheme string
+}
+
+type AzureURIOpts struct {
+	// Must be manually specified
+	WithSAS bool
+	// Defaults to a resource-level specific minimally permissioned SAS token.
+	SASValues GenericSignatureValues
+}
+
 type ResourceManager interface {
 	Location() common.Location
 	Level() cmd.LocationLevel
 
 	// URI gets the resource "URI", either a local path or a remote URL.
-	// withSas is a debatably included flag, but can either be ignored or asserted against.
-	// for our primary Azure resources, it's always applicable. Doesn't make sense for GCP/S3/Local though.
-	// SAS tokens will automagically be generated for the next 24 hours, I (Adele) don't think the test suite should be running for longer.
-	URI(a Asserter, withSas bool) string
+	// This should panic if things fail or make no sense, as a sanity check to the test author.
+	URI(opts ...GetURIOptions) string
 
 	// Parent specifies the parent resource manager, for the purposes of building a tree.
 	// Can return nil, indicating this is the root of the tree.
@@ -50,7 +65,7 @@ type RemoteResourceManager interface {
 	// DefaultAuthType should return the resource's logical default auth type (e.g. SAS)
 	DefaultAuthType() ExplicitCredentialTypes
 	// WithSpecificAuthType should return a copy of itself with a specific auth type, intended for RunAzCopy
-	WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter) AzCopyTarget
+	WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget
 	// ResourceClient attempts to return the native resource client, and should be wrangled by a caller knowing what they're expecting.
 	ResourceClient() any
 }

@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	blobfscommon "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
@@ -11,7 +10,6 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"time"
 )
 
 type AzureAccountResourceManager struct {
@@ -22,109 +20,65 @@ type AzureAccountResourceManager struct {
 	armClient *ARMStorageAccount
 }
 
-func (acct *AzureAccountResourceManager) ApplySAS(a Asserter, URI string, loc common.Location) string {
-	a.AssertNow("account must not be nil", Not{IsNil{}}, acct)
+func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Location, optList ...GetURIOptions) string {
+	if acct == nil {
+		panic("Account must not be nil to generate a SAS token.")
+	}
+	opts := FirstOrZero(optList)
+
+	if !opts.AzureOpts.WithSAS {
+		return URI
+	}
+
+	sasVals := opts.AzureOpts.SASValues
+	if sasVals == nil {
+
+		sasVals = GenericServiceSignatureValues{}
+	}
+
 	switch loc {
 	case common.ELocation.Blob():
-		skc, err := blob.NewSharedKeyCredential(acct.accountName, acct.accountKey)
-		a.NoError("Create shared key", err)
+		skc, err := blobservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
+		common.PanicIfErr(err)
 
-		p, err := blobsas.AccountSignatureValues{ // todo: currently this generates a "god SAS", granting all permissions. This is bad! Let's not do this in prod.
-			Protocol:   blobsas.ProtocolHTTPS,
-			StartTime:  time.Now().Add(-time.Hour),
-			ExpiryTime: time.Now().Add(time.Hour * 24),
-			Permissions: (&blobsas.AccountPermissions{
-				Read:                  true,
-				Write:                 true,
-				Delete:                true,
-				DeletePreviousVersion: true,
-				PermanentDelete:       true,
-				List:                  true,
-				Add:                   true,
-				Create:                true,
-				Update:                true,
-				Process:               true,
-				FilterByTags:          true,
-				Tag:                   true,
-				SetImmutabilityPolicy: true,
-			}).String(),
-			ResourceTypes: (&blobsas.AccountResourceTypes{
-				Service:   true,
-				Container: true,
-				Object:    true,
-			}).String(),
-		}.SignWithSharedKey(skc)
-		a.NoError("Generate SAS token", err)
+		p, err := sasVals.AsBlob().SignWithSharedKey(skc)
+		common.PanicIfErr(err)
 
 		parts, err := blobsas.ParseURL(URI)
-		a.NoError("Parse URI", err)
+		common.PanicIfErr(err)
+
 		parts.SAS = p
+		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.File():
 		skc, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
-		a.NoError("Create shared key", err)
+		common.PanicIfErr(err)
 
-		p, err := filesas.AccountSignatureValues{ // todo: currently this generates a "god SAS", granting all permissions. This is bad! Let's not do this in prod.
-			Protocol:   filesas.ProtocolHTTPS,
-			StartTime:  time.Now().Add(-time.Hour),
-			ExpiryTime: time.Now().Add(time.Hour * 24),
-			Permissions: (&filesas.AccountPermissions{
-				Read:   true,
-				Write:  true,
-				Delete: true,
-				List:   true,
-				Create: true,
-			}).String(),
-			ResourceTypes: (&filesas.AccountResourceTypes{
-				Service:   true,
-				Container: true,
-				Object:    true,
-			}).String(),
-		}.SignWithSharedKey(skc)
-		a.NoError("Generate SAS token", err)
+		p, err := sasVals.AsFile().SignWithSharedKey(skc)
+		common.PanicIfErr(err)
 
 		parts, err := filesas.ParseURL(URI)
-		a.NoError("Parse URI", err)
+		common.PanicIfErr(err)
+
 		parts.SAS = p
+		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.BlobFS():
 		skc, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
-		a.NoError("Create shared key", err)
+		common.PanicIfErr(err)
 
-		p, err := datalakeSAS.AccountSignatureValues{ // todo: currently this generates a "god SAS", granting all permissions. This is bad! Let's not do this in prod.
-			Protocol:   datalakeSAS.ProtocolHTTPS,
-			StartTime:  time.Now().Add(-time.Hour),
-			ExpiryTime: time.Now().Add(time.Hour * 24),
-			Permissions: (&datalakeSAS.AccountPermissions{
-				Read:                  true,
-				Write:                 true,
-				Delete:                true,
-				DeletePreviousVersion: true,
-				PermanentDelete:       true,
-				List:                  true,
-				Add:                   true,
-				Create:                true,
-				Update:                true,
-				Process:               true,
-				FilterByTags:          true,
-				Tag:                   true,
-				SetImmutabilityPolicy: true,
-			}).String(),
-			ResourceTypes: (&datalakeSAS.AccountResourceTypes{
-				Service:   true,
-				Container: true,
-				Object:    true,
-			}).String(),
-		}.SignWithSharedKey(skc)
-		a.NoError("Generate SAS token", err)
+		p, err := sasVals.AsDatalake().SignWithSharedKey(skc)
+		common.PanicIfErr(err)
 
 		parts, err := datalakeSAS.ParseURL(URI)
-		a.NoError("Parse URI", err)
+		common.PanicIfErr(err)
+
 		parts.SAS = p
+		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	default:
-		a.Error(fmt.Sprintf("location %s unsupported", loc))
-		return "" // won't reach
+		panic("Unsupported location " + loc.String())
+		return URI
 	}
 }
 

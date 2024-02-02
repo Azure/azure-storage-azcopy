@@ -41,18 +41,25 @@ const ( // initially supporting a limited set of verbs
 type AzCopyTarget struct {
 	RemoteResourceManager
 	AuthType ExplicitCredentialTypes // Expects *one* credential type that the Resource supports. Assumes SAS (or GCP/S3) if not present.
+	Opts     CreateAzCopyTargetOptions
 
 	// todo: SAS permissions
 	// todo: specific OAuth types (e.g. MSI, etc.)
 }
 
-func CreateAzCopyTarget(rm RemoteResourceManager, authType ExplicitCredentialTypes, a Asserter) AzCopyTarget {
+type CreateAzCopyTargetOptions struct {
+	// SASTokenOptions expects a GenericSignatureValues, which can contain account signatures, or a service signature.
+	SASTokenOptions GenericSignatureValues
+	Scheme          string
+}
+
+func CreateAzCopyTarget(rm RemoteResourceManager, authType ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
 	validTypes := rm.ValidAuthTypes()
 
 	a.AssertNow(fmt.Sprintf("expected only one auth type, got %s", authType), Equal{}, authType.Count(), 1)
 	a.AssertNow(fmt.Sprintf("expected authType to be contained within valid types (got %s, needed %s)", authType, validTypes), Equal{}, validTypes.Includes(authType), true)
 
-	return AzCopyTarget{rm, authType}
+	return AzCopyTarget{rm, authType, FirstOrZero(opts)}
 }
 
 type AzCopyCommand struct {
@@ -113,12 +120,16 @@ func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter) string {
 
 func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) string {
 	intendedAuthType := EExplicitCredentialType.SASToken()
+	var opts GetURIOptions
 	if tgt, ok := target.(AzCopyTarget); ok {
 		count := tgt.AuthType.Count()
 		a.AssertNow("target auth type must be single", Equal{}, count <= 1, true)
 		if count == 1 {
 			intendedAuthType = tgt.AuthType
 		}
+
+		opts.AzureOpts.SASValues = tgt.Opts.SASTokenOptions
+		opts.RemoteOpts.Scheme = tgt.Opts.Scheme
 	} else if target.Location() == common.ELocation.S3() {
 		intendedAuthType = EExplicitCredentialType.S3()
 	} else if target.Location() == common.ELocation.GCP() {
@@ -127,9 +138,10 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 	switch intendedAuthType {
 	case EExplicitCredentialType.PublicAuth(), EExplicitCredentialType.None():
-		return target.URI(a, false)
+		return target.URI() // no SAS, no nothing.
 	case EExplicitCredentialType.SASToken():
-		return target.URI(a, true)
+		opts.AzureOpts.WithSAS = true
+		return target.URI(opts)
 	case EExplicitCredentialType.OAuth():
 		// Only set it if it wasn't already configured. If it was manually configured,
 		// special testing may be occurring, and this may be indicated to just get a SAS-less URI.
@@ -153,10 +165,10 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 			}
 		}
 
-		return target.URI(a, false)
+		return target.URI() // Generate like public
 	default:
 		a.Error("unsupported credential type")
-		return target.URI(a, true)
+		return target.URI()
 	}
 }
 

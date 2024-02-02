@@ -5,6 +5,32 @@ import (
 	"reflect"
 )
 
+func FirstOrZero[T any](list []T) T {
+	if len(list) != 0 {
+		return list[0]
+	}
+
+	var zero T
+	return zero
+}
+
+func FirstOrNil[T any](list []T) *T {
+	if len(list) != 0 {
+		return &list[0]
+	}
+
+	return nil
+}
+
+func SetIfZero[T comparable](target *T, result T) {
+	var zero T
+	if target == nil || *target != zero {
+		return
+	}
+
+	*target = result
+}
+
 func GetTypeOrZero[T any](in any) (out T) {
 	if out, ok := in.(T); ok {
 		return out
