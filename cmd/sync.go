@@ -31,8 +31,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
@@ -92,8 +90,11 @@ type rawSyncCmdArgs struct {
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
 	// dry run mode bool
-	dryrun bool
+	dryrun      bool
 	trailingDot string
+
+	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
+	deleteDestinationFileIfNecessary bool
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -153,10 +154,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	switch cooked.fromTo {
 	case common.EFromTo.Unknown():
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
-	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
+	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.LocalBlobFS():
 		cooked.destination, err = SplitResourceString(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
-	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal():
+	case common.EFromTo.BlobLocal(), common.EFromTo.FileLocal(), common.EFromTo.BlobFSLocal():
 		cooked.source, err = SplitResourceString(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileFile(), common.EFromTo.BlobFile(), common.EFromTo.FileBlob(), common.EFromTo.BlobFSBlobFS(), common.EFromTo.BlobFSBlob(), common.EFromTo.BlobFSFile(), common.EFromTo.BlobBlobFS(), common.EFromTo.FileBlobFS():
@@ -346,6 +347,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
+	cooked.deleteDestinationFileIfNecessary = raw.deleteDestinationFileIfNecessary
+
 	return cooked, nil
 }
 
@@ -430,8 +433,10 @@ type cookedSyncCmdArgs struct {
 
 	mirrorMode bool
 
-	dryrunMode bool
+	dryrunMode  bool
 	trailingDot common.TrailingDotOption
+
+	deleteDestinationFileIfNecessary bool
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
@@ -641,7 +646,7 @@ Final Job Status: %v%s%s
 
 			jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 			if exists {
-				jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
+				jobMan.Log(common.LogInfo, logStats+"\n"+output)
 			}
 
 			return output
@@ -670,17 +675,15 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
 	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)
-
 	if err != nil {
 		return err
 	}
 
 	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
-
 	if err != nil {
 		return err
 	}
-
+	cca.s2sSourceCredentialType = srcCredInfo.CredentialType
 	// Download is the only time our primary credential type will be based on source
 	if cca.fromTo.IsDownload() {
 		cca.credentialInfo = srcCredInfo
@@ -690,13 +693,13 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() || srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.credentialInfo.CredentialType.IsAzureOAuth() || srcCredInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
-		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+		} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
+			return err
 		}
 	}
 
@@ -803,8 +806,8 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
-	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. " +
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation." +
+	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. "+
+		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
@@ -825,4 +828,8 @@ func init() {
 	// Deprecate the old persist-smb-permissions flag
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
 	syncCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For Hierarchical Namespace accounts, you will need a container SAS or OAuth token with Modify Ownership and Modify Permissions permissions. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+
+	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
+	syncCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
+	_ = syncCmd.PersistentFlags().MarkHidden("delete-destination-file")
 }

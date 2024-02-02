@@ -28,8 +28,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -51,9 +49,7 @@ type copyTransferProcessor struct {
 	dryrunMode             bool
 }
 
-func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source, destination common.ResourceString,
-	reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier bool, dryrunMode bool) *copyTransferProcessor {
+func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int, source, destination common.ResourceString, reportFirstPartDispatched func(bool), reportFinalPartDispatched func(), preserveAccessTier, dryrunMode bool) *copyTransferProcessor {
 	return &copyTransferProcessor{
 		numOfTransfersPerPart:     numOfTransfersPerPart,
 		copyJobTemplate:           copyJobTemplate,
@@ -74,7 +70,12 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	// And re-encode them where the characters are valid.
 	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
 	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
-
+	if srcRelativePath != "" {
+		srcRelativePath = "/" + srcRelativePath
+	}
+	if dstRelativePath != "" {
+		dstRelativePath = "/" + dstRelativePath
+	}
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
@@ -202,7 +203,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	}
 
 	if jobsAdmin.JobsAdmin != nil {
-		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(FinalPartCreatedMessage, common.LogInfo)
 	}
 
 	if s.reportFinalPartDispatched != nil {

@@ -1,6 +1,139 @@
 
 # Change Log
 
+## Version 10.23.0
+
+### New Features
+
+1. Added support to ignore the error and output a summary if a cancelled job has already completed through the use of the --ignore-error-if-completed flag. ([#2519](https://github.com/Azure/azure-storage-azcopy/pull/2519))
+2. Added support for high throughput append blob. Append blob block size can now be set to up to 100 MB. ([#2480](https://github.com/Azure/azure-storage-azcopy/pull/2480))
+3. Added support to exclude containers when transferring from account to account through the use of the --exclude-container flag. ([#2504](https://github.com/Azure/azure-storage-azcopy/pull/2504))
+
+### Bug Fixes
+
+1. Fixed an issue where specifying AZCOPY_AUTO_LOGIN_TYPE in any form other than uppercase would be incorrectly parsed. ([#2499](https://github.com/Azure/azure-storage-azcopy/pull/2499))
+2. Fixed an issue where a failure to rename a file from the temporary prefix to the file name would not be considered to be a failed transfer. ([#2481](https://github.com/Azure/azure-storage-azcopy/pull/2481))
+3. Fixed an issue where closing the log would panic for benchmark jobs. ([#2537](https://github.com/Azure/azure-storage-azcopy/issues/2537))
+4. Fixed an issue where --preserve-posix-properties would not work on download. ([#2497](https://github.com/Azure/azure-storage-azcopy/issues/2497))
+5. Fixed an issue where --decompress would not be honored in Linux. ([#2392](https://github.com/Azure/azure-storage-azcopy/issues/2392))
+6. Fixed an issue where log files would miss the .log extension. ([#2529](https://github.com/Azure/azure-storage-azcopy/issues/2529))
+7. Fixed an issue where AzCopy would fail to set metadata properties on a read only directory when using the --force-if-read-only flag. ([#2515](https://github.com/Azure/azure-storage-azcopy/pull/2515))
+8. Fixed an issue where the AzCopy log location on resumed jobs would be reported incorrectly. ([#2466](https://github.com/Azure/azure-storage-azcopy/issues/2466))
+9. Fixed an issue with preserving SMB properties in Linux. ([#2530](https://github.com/Azure/azure-storage-azcopy/pull/2530))
+10. Fixed an issue where long-running service to service copies using OAuth at the source would result in the token expiring too early. ([#2513](https://github.com/Azure/azure-storage-azcopy/pull/2513))
+11. Fixed an issue where AzCopy would try to create folders that already existed, resulting in many unnecessary requests. ([#2511](https://github.com/Azure/azure-storage-azcopy/pull/2511))
+
+### Documentation
+
+1. Updated --include-directory-stub inline help to match public documentation. ([#2488](https://github.com/Azure/azure-storage-azcopy/pull/2488))
+
+
+## Version 10.22.2
+
+### Bug Fixes
+
+1. Fixed an issue where AzCopy operations pointed at a snapshot or version object would operation on the base object instead. 
+2. Fixed an issue where AzCopy would download only the base blob when the --list-of-versions flag was used.
+
+## Version 10.22.1
+
+### Bug Fixes
+
+1. Fixed a regression with Azurite support. ([#2485](https://github.com/Azure/azure-storage-azcopy/issues/2485))
+2. Fixed an issue where AZCOPY_OAUTH_TOKEN_INFO would be refreshed too often. ([#2503](https://github.com/Azure/azure-storage-azcopy/pull/2503))
+3. Fixed an issue where commands would lag for multiple seconds. ([#2482](https://github.com/Azure/azure-storage-azcopy/issues/2482))
+4. Fixed an issue where azcopy version would crash. ([#2483](https://github.com/Azure/azure-storage-azcopy/issues/2483))
+
+### Documentation
+
+1. Updated documentation to include AZCLI and PSCRED auto login types. ([#2494](https://github.com/Azure/azure-storage-azcopy/pull/2494))
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
+## Version 10.22.0
+
+### New Features
+
+1. Migrated to the latest [azdatalake SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake).
+2. Added support for OAuth when performing File -> File and Blob -> File copy/sync and File make/list/remove ([#2302](https://github.com/Azure/azure-storage-azcopy/issues/2302)).
+3. Added support to set tier on premium block blob accounts. ([#2337](https://github.com/Azure/azure-storage-azcopy/issues/2337))
+4. Added support to cache latest AzCopy version and check the remote version every 24 hours instead of every run. ([#2426](https://github.com/Azure/azure-storage-azcopy/pull/2426))
+5. Updated all SDK dependencies to their latest version and the default service version to `2023-08-03` for all services. ([#2402](https://github.com/Azure/azure-storage-azcopy/pull/2402))
+6. Added support to rotate AzCopy logs. ([#2213](https://github.com/Azure/azure-storage-azcopy/issues/2213))
+7. Added support to authenticate with Powershell and Azure CLI credentials. ([#2433](https://github.com/Azure/azure-storage-azcopy/pull/2433))
+
+### Bug Fixes
+
+1. Fixed an issue where http headers and access tier would sometimes be sent as empty headers.
+2. Fixed an issue where AzCopy would panic when passing an un-parseable URL. ([#2404](https://github.com/Azure/azure-storage-azcopy/issues/2404))
+3. Fixed an issue where Object ID would be set as Resource ID when using MSI. ([#2395](https://github.com/Azure/azure-storage-azcopy/issues/2395))
+4. Fixed an issue where the percent complete stat could round incorrectly. ([#1078](https://github.com/Azure/azure-storage-azcopy/issues/1078))
+5. Fixed an issue where `no transfers were scheduled` would be logged as an error, it is now logged as a warning. ([#874](https://github.com/Azure/azure-storage-azcopy/issues/874))
+6. Fixed an issue where non canonicalized headers would not be printed in the log. ([#2454](https://github.com/Azure/azure-storage-azcopy/pull/2454))
+7. Fixed an issue where cold tier would not be recognized as an allowed tier. ([#2447](https://github.com/Azure/azure-storage-azcopy/issues/2447))
+8. Fixed an issue where s2s append blob copies would fail with `AppendPositionConditionNotMet` error on retry after first experiencing a service timeout error. ([#2430](https://github.com/Azure/azure-storage-azcopy/pull/2430))
+9. Fixed an issue where AZCOPY_OAUTH_TOKEN_INFO would not be refreshed. ([#2434](https://github.com/Azure/azure-storage-azcopy/issues/2434))
+
+### Documentation
+
+1. Updated `--preserve-permissions` documentation to indicate the correct roles necessary to perform the operation. ([#2440](https://github.com/Azure/azure-storage-azcopy/pull/2440))
+2. Updated help message for `sync` and `copy` to include all ADLS Gen2 supported auth methods. ([#2440](https://github.com/Azure/azure-storage-azcopy/pull/2440))
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
+## Version 10.22.0-Preview
+
+### New Features
+
+1. Migrated to the latest [azdatalake SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake).
+
+### Bug Fixes
+
+1. Fixed an issue where http headers and access tier would sometimes be sent as empty headers.
+2. Fixed an issue where AzCopy would panic when passing an un-parseable URL. ([#2404](https://github.com/Azure/azure-storage-azcopy/issues/2404))
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
+## Version 10.21.2
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
+## Version 10.21.1
+
+### Bug Fixes
+
+1. Fixed an issue where validating destination length would fail a job instead of logging the error if read permissions are not provided.
+
+## Version 10.21.0
+
+### New Features
+
+1. Migrated to the latest [azblob SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob).
+2. Migrated to the latest [azfile SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azfile).
+3. Migrated from deprecated ADAL to MSAL through the latest [azidentity SDK](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity).
+4. Added support for sync with Azure Data Lake Storage Gen2. ([#2376](https://github.com/Azure/azure-storage-azcopy/pull/2376))
+
+### Bug Fixes
+
+1. Fixed an issue where ACL data would not copy when specifying `*.dfs.core.windows.net` endpoints ([#2347](https://github.com/Azure/azure-storage-azcopy/pull/2347)).
+2. Fixed an issue where Sync would incorrectly log that _all_ files, even those that didn't get overwritten, would be overwritten. ([#2372](https://github.com/Azure/azure-storage-azcopy/pull/2372))
+
+### Documentation
+
+1. Updated `--dry-run` documentation to indicate the effects of `--overwrite` are ignored. ([#2325](https://github.com/Azure/azure-storage-azcopy/pull/2325))
+
+### Special notes
+
+1. Due to the migration from ADAL to MSAL, tenant ID must now be set when authorizing with single tenant applications created after 10/15/2018.
+
 ## Version 10.21.0-Preview
 
 ### New Features

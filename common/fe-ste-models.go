@@ -25,20 +25,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"os"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -333,17 +332,41 @@ func (ExitCode) Error() ExitCode   { return ExitCode(1) }
 // NoExit is used as a marker, to suppress the normal exit behaviour
 func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
 
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 type LogLevel uint8
 
-var ELogLevel = LogLevel(pipeline.LogNone)
+const (
+	// LogNone tells a logger not to log any entries passed to it.
+	LogNone LogLevel = iota
 
-func (LogLevel) None() LogLevel    { return LogLevel(pipeline.LogNone) }
-func (LogLevel) Fatal() LogLevel   { return LogLevel(pipeline.LogFatal) }
-func (LogLevel) Panic() LogLevel   { return LogLevel(pipeline.LogPanic) }
-func (LogLevel) Error() LogLevel   { return LogLevel(pipeline.LogError) }
-func (LogLevel) Warning() LogLevel { return LogLevel(pipeline.LogWarning) }
-func (LogLevel) Info() LogLevel    { return LogLevel(pipeline.LogInfo) }
-func (LogLevel) Debug() LogLevel   { return LogLevel(pipeline.LogDebug) }
+	// LogFatal tells a logger to log all LogFatal entries passed to it.
+	LogFatal
+
+	// LogPanic tells a logger to log all LogPanic and LogFatal entries passed to it.
+	LogPanic
+
+	// LogError tells a logger to log all LogError, LogPanic and LogFatal entries passed to it.
+	LogError
+
+	// LogWarning tells a logger to log all LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogWarning
+
+	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogInfo
+
+	// LogDebug tells a logger to log all LogDebug, LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogDebug
+)
+
+var ELogLevel = LogLevel(LogNone)
+
+func (LogLevel) None() LogLevel    { return LogLevel(LogNone) }
+func (LogLevel) Fatal() LogLevel   { return LogLevel(LogFatal) }
+func (LogLevel) Panic() LogLevel   { return LogLevel(LogPanic) }
+func (LogLevel) Error() LogLevel   { return LogLevel(LogError) }
+func (LogLevel) Warning() LogLevel { return LogLevel(LogWarning) }
+func (LogLevel) Info() LogLevel    { return LogLevel(LogInfo) }
+func (LogLevel) Debug() LogLevel   { return LogLevel(LogDebug) }
 
 func (ll *LogLevel) Parse(s string) error {
 	val, err := enum.ParseInt(reflect.TypeOf(ll), s, true, true)
@@ -374,13 +397,15 @@ func (ll LogLevel) String() string {
 	}
 }
 
-func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
-	// This assumes that pipeline's LogLevel values can fit in a byte (which they can)
-	return pipeline.LogLevel(ll)
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// LogSanitizer can be implemented to clean secrets from lines logged by ForceLog
+// By default no implementation is provided here, because pipeline may be used in many different
+// contexts, so the correct implementation is context-dependent
+type LogSanitizer interface {
+	SanitizeLogMessage(raw string) string
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var EJobPriority = JobPriority(0)
 
 // JobPriority defines the transfer priorities supported by the Storage Transfer Engine's channels
@@ -542,7 +567,19 @@ func (l Location) IsFolderAware() bool {
 }
 
 func (l Location) CanForwardOAuthTokens() bool {
+	return l == ELocation.Blob() || l == ELocation.BlobFS() || l == ELocation.File()
+}
+
+func (l Location) SupportsHnsACLs() bool {
 	return l == ELocation.Blob() || l == ELocation.BlobFS()
+}
+
+func (l Location) SupportsTrailingDot() bool {
+	if (l == ELocation.File()) || (l == ELocation.Local() && runtime.GOOS != "windows") {
+		return true
+	}
+
+	return false
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -648,6 +685,10 @@ func (ft FromTo) IsSetProperties() bool {
 
 func (ft FromTo) AreBothFolderAware() bool {
 	return ft.From().IsFolderAware() && ft.To().IsFolderAware()
+}
+
+func (ft FromTo) BothSupportTrailingDot() bool {
+	return ft.From().SupportsTrailingDot() && ft.To().SupportsTrailingDot()
 }
 
 func (ft FromTo) IsPropertyOnlyTransfer() bool {
@@ -897,6 +938,10 @@ func (ct CredentialType) IsAzureOAuth() bool {
 	return ct == ct.OAuthToken() || ct == ct.MDOAuthToken()
 }
 
+func (ct CredentialType) IsSharedKey() bool {
+	return ct == ct.SharedKey()
+}
+
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
 }
@@ -1030,12 +1075,14 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 const (
 	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
-	MaxAppendBlobBlockSize         = 4 * 1024 * 1024
+	MaxAppendBlobBlockSize         = 100 * 1024 * 1024
 	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
+	MaxRangeGetSize                = 4 * 1024 * 1024
 	MaxNumberOfBlocksPerBlob       = 50000
 	BlockSizeThreshold             = 256 * 1024 * 1024
 	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */
+	MegaByte                       = 1024 * 1024
 )
 
 // This struct represent a single transfer entry with source and destination details
@@ -1317,36 +1364,36 @@ type ResourceHTTPHeaders struct {
 // ToBlobHTTPHeaders converts ResourceHTTPHeaders to blob's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToBlobHTTPHeaders() blob.HTTPHeaders {
 	return blob.HTTPHeaders{
-		BlobContentType:        &h.ContentType,
+		BlobContentType:        IffNotEmpty(h.ContentType),
 		BlobContentMD5:         h.ContentMD5,
-		BlobContentEncoding:    &h.ContentEncoding,
-		BlobContentLanguage:    &h.ContentLanguage,
-		BlobContentDisposition: &h.ContentDisposition,
-		BlobCacheControl:       &h.CacheControl,
+		BlobContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		BlobContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		BlobContentDisposition: IffNotEmpty(h.ContentDisposition),
+		BlobCacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToFileHTTPHeaders converts ResourceHTTPHeaders to sharefile's HTTPHeaders.
 func (h ResourceHTTPHeaders) ToFileHTTPHeaders() sharefile.HTTPHeaders {
 	return sharefile.HTTPHeaders{
-		ContentType:        &h.ContentType,
+		ContentType:        IffNotEmpty(h.ContentType),
 		ContentMD5:         h.ContentMD5,
-		ContentEncoding:    &h.ContentEncoding,
-		ContentLanguage:    &h.ContentLanguage,
-		ContentDisposition: &h.ContentDisposition,
-		CacheControl:       &h.CacheControl,
+		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: IffNotEmpty(h.ContentDisposition),
+		CacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 
 // ToBlobFSHTTPHeaders converts ResourceHTTPHeaders to BlobFS Headers.
-func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() azbfs.BlobFSHTTPHeaders {
-	return azbfs.BlobFSHTTPHeaders{
-		ContentType: h.ContentType,
-		// ContentMD5 isn't in these headers. ContentMD5 is handled separately for BlobFS
-		ContentEncoding:    h.ContentEncoding,
-		ContentLanguage:    h.ContentLanguage,
-		ContentDisposition: h.ContentDisposition,
-		CacheControl:       h.CacheControl,
+func (h ResourceHTTPHeaders) ToBlobFSHTTPHeaders() datalakefile.HTTPHeaders {
+	return datalakefile.HTTPHeaders{
+		ContentType:        IffNotEmpty(h.ContentType),
+		ContentMD5:         h.ContentMD5,
+		ContentEncoding:    IffNotEmpty(h.ContentEncoding),
+		ContentLanguage:    IffNotEmpty(h.ContentLanguage),
+		ContentDisposition: IffNotEmpty(h.ContentDisposition),
+		CacheControl:       IffNotEmpty(h.CacheControl),
 	}
 }
 

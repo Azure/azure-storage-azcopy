@@ -23,50 +23,47 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type URLHolderV1 interface {
-	String() string
-	URL() url.URL
+type DatalakeClientStub interface {
+	DFSURL() string
+	BlobURL() string
 }
 
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
-	sip          ISourceInfoProvider
-	fileOrDirURL URLHolderV1
-	chunkSize    int64
+	sip             ISourceInfoProvider
+	blobClient		blockblob.Client
+	fileOrDirClient DatalakeClientStub
+	parentDirClient *directory.Client
+	chunkSize       int64
 	numChunks           uint32
-	pipeline            pipeline.Pipeline
 	pacer               pacer
-	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
+	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
 }
 
-func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
-
+func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
 	info := jptm.Info()
 
 	// compute chunk size and number of chunks
 	chunkSize := info.BlockSize
 	numChunks := getNumChunks(info.SourceSize, chunkSize)
-
-	// make sure URL is parsable
-	destURL, err := url.Parse(destination)
-	if err != nil {
-		return nil, err
-	}
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -74,35 +71,55 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 	headers := props.SrcHTTPHeaders.ToBlobFSHTTPHeaders()
 
-	var h URLHolderV1
-	if info.IsFolderPropertiesTransfer() {
-		h = azbfs.NewDirectoryURL(*destURL, p)
-	} else {
-		h = azbfs.NewFileURL(*destURL, p)
+	s, err := jptm.DstServiceClient().DatalakeServiceClient()
+	if err != nil {
+		return nil, err
 	}
+
+	datalakeURLParts, err := azdatalake.ParseURL(destination)
+	if err != nil {
+		return nil, err
+	}
+	fsc := s.NewFileSystemClient(datalakeURLParts.FileSystemName)
+	directoryOrFilePath := datalakeURLParts.PathName
+	parentPath := ""
+	if strings.LastIndex(directoryOrFilePath, "/") != -1 {
+		parentPath = directoryOrFilePath[:strings.LastIndex(directoryOrFilePath, "/")]
+	}
+
+	var destClient DatalakeClientStub
+	if info.IsFolderPropertiesTransfer() {
+		destClient = fsc.NewDirectoryClient(directoryOrFilePath)
+	} else {
+		destClient = fsc.NewFileClient(directoryOrFilePath)
+	}
+
+	bsc, _ := jptm.DstServiceClient().BlobServiceClient()
+
 	return &blobFSSenderBase{
 		jptm:                jptm,
-		sip: 				 sip,
-		fileOrDirURL:        h,
+		sip:                 sip,
+		blobClient: *bsc.NewContainerClient(info.DstContainer).NewBlockBlobClient(info.DstFilePath),
+		fileOrDirClient:     destClient,
+		parentDirClient:     fsc.NewDirectoryClient(parentPath),
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
-		pipeline:            p,
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
 	}, nil
 }
 
-func (u *blobFSSenderBase) fileURL() azbfs.FileURL {
-	return u.fileOrDirURL.(azbfs.FileURL)
+func (u *blobFSSenderBase) getFileClient() *file.Client {
+	return u.fileOrDirClient.(*file.Client)
 }
 
-func (u *blobFSSenderBase) dirURL() azbfs.DirectoryURL {
-	return u.fileOrDirURL.(azbfs.DirectoryURL)
+func (u *blobFSSenderBase) getDirectoryClient() *directory.Client {
+	return u.fileOrDirClient.(*directory.Client)
 }
 
 func (u *blobFSSenderBase) SendableEntityType() common.EntityType {
-	if _, ok := u.fileOrDirURL.(azbfs.DirectoryURL); ok {
+	if _, ok := u.fileOrDirClient.(*directory.Client); ok {
 		return common.EEntityType.Folder()
 	} else {
 		return common.EEntityType.File()
@@ -117,32 +134,9 @@ func (u *blobFSSenderBase) NumChunks() uint32 {
 	return u.numChunks
 }
 
-// simply provides the parse lmt from the path properties
-// TODO it's not the best solution as usually the SDK should provide the time in parsed format already
-type blobFSLastModifiedTimeProvider struct {
-	lmt time.Time
-}
-
-func (b blobFSLastModifiedTimeProvider) LastModified() time.Time {
-	return b.lmt
-}
-
-func newBlobFSLastModifiedTimeProvider(props *azbfs.PathGetPropertiesResponse) blobFSLastModifiedTimeProvider {
-	var lmt time.Time
-	// parse the lmt if the props is not empty
-	if props != nil {
-		parsedLmt, err := time.Parse(time.RFC1123, props.LastModified())
-		if err == nil {
-			lmt = parsedLmt
-		}
-	}
-
-	return blobFSLastModifiedTimeProvider{lmt: lmt}
-}
-
 func (u *blobFSSenderBase) RemoteFileExists() (bool, time.Time, error) {
-	props, err := u.fileURL().GetProperties(u.jptm.Context())
-	return remoteObjectExists(newBlobFSLastModifiedTimeProvider(props), err)
+	props, err := u.getFileClient().GetProperties(u.jptm.Context(), nil)
+	return remoteObjectExists(datalakePropertiesResponseAdapter{props}, err)
 }
 
 func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModified bool) {
@@ -155,19 +149,14 @@ func (u *blobFSSenderBase) Prologue(state common.PrologueState) (destinationModi
 	// (Even tho there's not much in the way of properties to set in ADLS Gen 2 on folders, at least, not
 	// that we support right now, we still run the same folder logic here to be consistent with our other
 	// folder-aware sources).
-	parentDir, err := u.fileURL().GetParentDir()
-	if err != nil {
-		u.jptm.FailActiveUpload("Getting parent directory URL", err)
-		return
-	}
-	err = u.doEnsureDirExists(parentDir)
+	err := u.doEnsureDirExists(u.parentDirClient)
 	if err != nil {
 		u.jptm.FailActiveUpload("Ensuring parent directory exists", err)
 		return
 	}
 
 	// Create file with the source size
-	_, err = u.fileURL().Create(u.jptm.Context(), *u.creationTimeHeaders, azbfs.BlobFSAccessControl{}) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
+	_, err = u.getFileClient().Create(u.jptm.Context(), &file.CreateOptions{HTTPHeaders: u.creationTimeHeaders}) // "create" actually calls "create path", so if we didn't need to track folder creation, we could just let this call create the folder as needed
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
@@ -185,54 +174,59 @@ func (u *blobFSSenderBase) Cleanup() {
 		// contents will be at an unknown stage of partial completeness
 		deletionContext, cancelFn := context.WithTimeout(context.WithValue(context.Background(), ServiceAPIVersionOverride, DefaultServiceApiVersion), 2*time.Minute)
 		defer cancelFn()
-		_, err := u.fileURL().Delete(deletionContext)
+		_, err := u.getFileClient().Delete(deletionContext, nil)
 		if err != nil {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL().String(), err.Error()))
+			jptm.Log(common.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.getFileClient().DFSURL(), err.Error()))
 		}
 	}
 }
 
 func (u *blobFSSenderBase) GetDestinationLength() (int64, error) {
-	prop, err := u.fileURL().GetProperties(u.jptm.Context())
+	prop, err := u.getFileClient().GetProperties(u.jptm.Context(), nil)
 
 	if err != nil {
 		return -1, err
 	}
 
-	return prop.ContentLength(), nil
+	if prop.ContentLength == nil {
+		return -1, fmt.Errorf("destination content length not returned")
+	}
+	return *prop.ContentLength, nil
 }
 
 func (u *blobFSSenderBase) EnsureFolderExists() error {
-	return u.doEnsureDirExists(u.dirURL())
+	return u.doEnsureDirExists(u.getDirectoryClient())
 }
 
-func (u *blobFSSenderBase) doEnsureDirExists(d azbfs.DirectoryURL) error {
-	if d.IsFileSystemRoot() {
+func isFilesystemRoot(directoryClient *directory.Client) (bool, error) {
+	datalakeURLParts, err := azdatalake.ParseURL(directoryClient.DFSURL())
+	if err != nil {
+		return false, err
+	}
+	return datalakeURLParts.PathName == "", nil
+}
+
+func (u *blobFSSenderBase) doEnsureDirExists(directoryClient *directory.Client) error {
+	isFSRoot, err := isFilesystemRoot(directoryClient)
+	if err != nil {
+		return err
+	}
+	if isFSRoot {
 		return nil // nothing to do, there's no directory component to create
 	}
 	// must always do this, regardless of whether we are called in a file-centric code path
 	// or a folder-centric one, since with the parallelism we use, we don't actually
 	// know which will happen first
-	dirUrl := d.URL()
-	err := u.jptm.GetFolderCreationTracker().CreateFolder(dirUrl.String(), func() error {
-		_, err := d.Create(u.jptm.Context(), false)
+	err = u.jptm.GetFolderCreationTracker().CreateFolder(directoryClient.DFSURL(), func() error {
+		_, err := directoryClient.Create(u.jptm.Context(), &directory.CreateOptions{AccessConditions:
+			&directory.AccessConditions{ModifiedAccessConditions:
+				&directory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 		return err
 	})
-	if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.ServiceCode() == azbfs.ServiceCodePathAlreadyExists {
+	if datalakeerror.HasCode(err, datalakeerror.PathAlreadyExists) {
 		return nil // not a error as far as we are concerned. It just already exists
 	}
 	return err
-}
-
-func (u *blobFSSenderBase) GetBlobURL() (*blockblob.Client, error) {
-	blobURLParts, err := blob.ParseURL(u.fileOrDirURL.String())
-	if err != nil {
-		return nil, err
-	}
-	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".dfs", ".blob") // switch back to blob
-
-	client := common.CreateBlockBlobClient(blobURLParts.String(), u.jptm.CredentialInfo(), u.jptm.CredentialOpOptions(), u.jptm.ClientOptions())
-	return client, nil
 }
 
 func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, error) {
@@ -260,11 +254,7 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 	common.AddStatToBlobMetadata(adapter, meta)
 	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
-	client, err := u.GetBlobURL()
-	if err != nil {
-		return err
-	}
-	_, err = client.SetMetadata(u.jptm.Context(), meta, nil)
+	_, err = u.blobClient.SetMetadata(u.jptm.Context(), meta, nil)
 	return err
 }
 
@@ -273,12 +263,14 @@ func (u *blobFSSenderBase) SetFolderProperties() error {
 }
 
 func (u *blobFSSenderBase) DirUrlToString() string {
-	dirUrl := u.dirURL().URL()
+	directoryURL := u.getDirectoryClient().DFSURL()
+	rawURL, err := url.Parse(directoryURL)
+	common.PanicIfErr(err)
 	// To avoid encoding/decoding
-	dirUrl.RawPath = ""
+	rawURL.RawPath = ""
 	// To avoid SAS token
-	dirUrl.RawQuery = ""
-	return dirUrl.String()
+	rawURL.RawQuery = ""
+	return rawURL.String()
 }
 
 func (u *blobFSSenderBase) SendSymlink(linkData string) error {
@@ -293,17 +285,14 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 	common.AddStatToBlobMetadata(adapter, meta)
 	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
 	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
-		BlobContentType: &u.creationTimeHeaders.ContentType,
-		BlobContentEncoding: &u.creationTimeHeaders.ContentEncoding,
-		BlobContentLanguage: &u.creationTimeHeaders.ContentLanguage,
-		BlobContentDisposition: &u.creationTimeHeaders.ContentDisposition,
-		BlobCacheControl: &u.creationTimeHeaders.CacheControl,
+		BlobContentType: u.creationTimeHeaders.ContentType,
+		BlobContentEncoding: u.creationTimeHeaders.ContentEncoding,
+		BlobContentLanguage: u.creationTimeHeaders.ContentLanguage,
+		BlobContentDisposition: u.creationTimeHeaders.ContentDisposition,
+		BlobCacheControl: u.creationTimeHeaders.CacheControl,
+		BlobContentMD5: u.creationTimeHeaders.ContentMD5,
 	}
-	client, err := u.GetBlobURL()
-	if err != nil {
-		return err
-	}
-	_, err = client.Upload(
+	_, err = u.blobClient.Upload(
 		u.jptm.Context(),
 		streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{

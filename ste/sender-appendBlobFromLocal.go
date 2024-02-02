@@ -68,14 +68,18 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
 		offset := id.OffsetInFile()
-		_, err := u.destAppendBlobClient.AppendBlock(u.jptm.Context(), body,
+		var timeoutFromCtx bool
+		ctx := withTimeoutNotification(u.jptm.Context(), &timeoutFromCtx)
+		_, err := u.destAppendBlobClient.AppendBlock(ctx, body,
 			&appendblob.AppendBlockOptions{
 				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
-				CPKInfo: u.jptm.CpkInfo(),
-				CPKScopeInfo: u.jptm.CpkScopeInfo(),
+				CPKInfo:                        u.jptm.CpkInfo(),
+				CPKScopeInfo:                   u.jptm.CpkScopeInfo(),
 			})
+		errString, err := u.transformAppendConditionMismatchError(timeoutFromCtx, offset, reader.Length(), err)
 		if err != nil {
-			u.jptm.FailActiveUpload("Appending block", err)
+			errString = "Appending block" + errString
+			u.jptm.FailActiveUpload(errString, err)
 			return
 		}
 	}

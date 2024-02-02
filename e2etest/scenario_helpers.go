@@ -24,24 +24,11 @@ package e2etest
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
-	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
-	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/google/uuid"
 	"io"
 	"net/url"
 	"os"
@@ -52,7 +39,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
+	datalakefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	sharefile "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/google/uuid"
+
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"github.com/minio/minio-go"
 
@@ -301,15 +308,15 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c asserter, containerC
 	return
 }
 
-func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c asserter, fsc *filesystem.Client, prefix string) (pathList []string) {
 	pathList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
-		_, pathName1 := createNewBfsFile(c, filesystemURL, prefix+"top")
-		_, pathName2 := createNewBfsFile(c, filesystemURL, prefix+"sub1/")
-		_, pathName3 := createNewBfsFile(c, filesystemURL, prefix+"sub2/")
-		_, pathName4 := createNewBfsFile(c, filesystemURL, prefix+"sub1/sub3/sub5")
-		_, pathName5 := createNewBfsFile(c, filesystemURL, prefix+specialNames[i])
+		_, pathName1 := createNewBfsFile(c, fsc, prefix+"top")
+		_, pathName2 := createNewBfsFile(c, fsc, prefix+"sub1/")
+		_, pathName3 := createNewBfsFile(c, fsc, prefix+"sub2/")
+		_, pathName4 := createNewBfsFile(c, fsc, prefix+"sub1/sub3/sub5")
+		_, pathName5 := createNewBfsFile(c, fsc, prefix+specialNames[i])
 
 		pathList[5*i] = pathName1
 		pathList[5*i+1] = pathName2
@@ -374,13 +381,13 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c asserter, serviceC
 	}
 }
 
-func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
+func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c asserter, dsc *datalakeservice.Client, fsList []string, fileList []string, data string) {
 	for _, filesystemName := range fsList {
-		fsURL := serviceURL.NewFileSystemURL(filesystemName)
-		_, err := fsURL.Create(ctx)
+		fsc := dsc.NewFileSystemClient(filesystemName)
+		_, err := fsc.Create(ctx, nil)
 		c.AssertNoErr(err)
 
-		s.generateBFSPathsFromList(c, fsURL, fileList)
+		s.generateBFSPathsFromList(c, fsc, fileList)
 	}
 }
 
@@ -406,6 +413,7 @@ type generateBlobFromListOptions struct {
 	cpkInfo         *blob.CPKInfo
 	cpkScopeInfo    *blob.CPKScopeInfo
 	accessTier      *blob.AccessTier
+	compressToGZ    bool
 	generateFromListOptions
 }
 
@@ -453,145 +461,175 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 				}
 			}
 		}
-		ad := blobResourceAdapter{b}
-		var reader io.ReadSeekCloser
-		var size int
-		var sourceData []byte
-		if b.body != nil {
-			reader = streaming.NopCloser(bytes.NewReader(b.body))
-			sourceData = b.body
-			size = len(b.body)
-		} else {
-			reader, sourceData = getRandomDataAndReader(b.creationProperties.sizeBytes(c, options.defaultSize))
-			b.body = sourceData // set body
-			size = len(b.body)
-		}
 
-		// Setting content MD5
-		if ad.obj.creationProperties.contentHeaders == nil {
-			b.creationProperties.contentHeaders = &contentHeaders{}
-		}
-		if ad.obj.creationProperties.contentHeaders.contentMD5 == nil {
-			contentMD5 := md5.Sum(sourceData)
-			ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
-		}
+		blobHadBody := b.body != nil
+		versionsRequested := common.IffNotNil[uint](b.creationProperties.blobVersions, 1)
+		versionsCreated := uint(0)
 
-		tags := ad.obj.creationProperties.blobTags
-		metadata := ad.obj.creationProperties.nameValueMetadata
+		for versionsCreated < versionsRequested {
+			versionsCreated++
 
-		if options.accountType == EAccountType.HierarchicalNamespaceEnabled() {
-			tags = nil
-		}
+			ad := blobResourceAdapter{b}
+			var reader io.ReadSeekCloser
+			var size int
+			var sourceData []byte
+			if b.body != nil && blobHadBody {
+				reader = streaming.NopCloser(bytes.NewReader(b.body))
+				sourceData = b.body
+				size = len(b.body)
+			} else {
+				reader, sourceData = getRandomDataAndReader(b.creationProperties.sizeBytes(c, options.defaultSize))
+				b.body = sourceData // set body
+				size = len(b.body)
+			}
 
-		headers := ad.toHeaders()
+			if options.compressToGZ {
+				var buff bytes.Buffer
+				gz := gzip.NewWriter(&buff)
+				if _, err := gz.Write([]byte(sourceData)); err != nil {
+					c.AssertNoErr(err)
+				}
+				if err := gz.Close(); err != nil {
+					c.AssertNoErr(err)
+				}
+				if ad.obj.creationProperties.contentHeaders == nil {
+					ad.obj.creationProperties.contentHeaders = &contentHeaders{}
+				}
+				contentEncoding := "gzip"
+				ad.obj.creationProperties.contentHeaders.contentEncoding = &contentEncoding
+				b.body = buff.Bytes()
+				b.name += ".gz"
+			}
 
-		var err error
+			// Setting content MD5
+			if ad.obj.creationProperties.contentHeaders == nil {
+				b.creationProperties.contentHeaders = &contentHeaders{}
+			}
+			// only set MD5 when we're on the last version
+			if ad.obj.creationProperties.contentHeaders.contentMD5 == nil && versionsCreated == versionsRequested {
+				contentMD5 := md5.Sum(sourceData)
+				ad.obj.creationProperties.contentHeaders.contentMD5 = contentMD5[:]
+			}
 
-		switch b.creationProperties.blobType {
-		case common.EBlobType.BlockBlob(), common.EBlobType.Detect():
-			bb := options.containerClient.NewBlockBlobClient(b.name)
+			tags := ad.obj.creationProperties.blobTags
+			metadata := ad.obj.creationProperties.nameValueMetadata
 
-			if size > 0 {
-				// to prevent the service from erroring out with an improper MD5, we opt to commit a block, then the list.
-				blockID := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
-				_, err = bb.StageBlock(ctx, blockID, reader,
-					&blockblob.StageBlockOptions{
+			if options.accountType == EAccountType.HierarchicalNamespaceEnabled() {
+				tags = nil
+			}
+
+			headers := ad.toHeaders()
+
+			var err error
+
+			switch b.creationProperties.blobType {
+			case common.EBlobType.BlockBlob(), common.EBlobType.Detect():
+				bb := options.containerClient.NewBlockBlobClient(b.name)
+
+				if size > 0 {
+					// to prevent the service from erroring out with an improper MD5, we opt to commit a block, then the list.
+					blockID := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
+					_, err = bb.StageBlock(ctx, blockID, reader,
+						&blockblob.StageBlockOptions{
+							CPKInfo:      options.cpkInfo,
+							CPKScopeInfo: options.cpkScopeInfo,
+						})
+
+					c.AssertNoErr(err)
+
+					// Commit block list will generate a new version.
+					_, err = bb.CommitBlockList(ctx,
+						[]string{blockID},
+						&blockblob.CommitBlockListOptions{
+							HTTPHeaders:  headers,
+							Metadata:     metadata,
+							Tier:         options.accessTier,
+							Tags:         tags,
+							CPKInfo:      options.cpkInfo,
+							CPKScopeInfo: options.cpkScopeInfo,
+						})
+
+					c.AssertNoErr(err)
+				} else { // todo: invalid MD5 on empty blob is impossible like this, but it's doubtful we'll need to support it.
+					// handle empty blobs
+					_, err := bb.Upload(ctx, reader,
+						&blockblob.UploadOptions{
+							HTTPHeaders:  headers,
+							Metadata:     metadata,
+							Tier:         options.accessTier,
+							Tags:         tags,
+							CPKInfo:      options.cpkInfo,
+							CPKScopeInfo: options.cpkScopeInfo,
+						})
+
+					c.AssertNoErr(err)
+				}
+			case common.EBlobType.PageBlob():
+				// A create call will generate a new version
+				pb := options.containerClient.NewPageBlobClient(b.name)
+				_, err := pb.Create(ctx, int64(size),
+					&pageblob.CreateOptions{
+						SequenceNumber: to.Ptr(int64(0)),
+						HTTPHeaders:    headers,
+						Metadata:       metadata,
+						Tags:           tags,
+						CPKInfo:        options.cpkInfo,
+						CPKScopeInfo:   options.cpkScopeInfo,
+					})
+				c.AssertNoErr(err)
+
+				_, err = pb.UploadPages(ctx, reader, blob.HTTPRange{Offset: 0, Count: int64(size)},
+					&pageblob.UploadPagesOptions{
 						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
-
 				c.AssertNoErr(err)
-
-				_, err = bb.CommitBlockList(ctx,
-					[]string{blockID},
-					&blockblob.CommitBlockListOptions{
+			case common.EBlobType.AppendBlob():
+				// A create call will generate a new version
+				ab := options.containerClient.NewAppendBlobClient(b.name)
+				_, err := ab.Create(ctx,
+					&appendblob.CreateOptions{
 						HTTPHeaders:  headers,
 						Metadata:     metadata,
-						Tier:         options.accessTier,
 						Tags:         tags,
 						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
-
 				c.AssertNoErr(err)
-			} else { // todo: invalid MD5 on empty blob is impossible like this, but it's doubtful we'll need to support it.
-				// handle empty blobs
-				_, err := bb.Upload(ctx, reader,
-					&blockblob.UploadOptions{
-						HTTPHeaders:  headers,
-						Metadata:     metadata,
-						Tier:         options.accessTier,
-						Tags:         tags,
+
+				_, err = ab.AppendBlock(ctx, reader,
+					&appendblob.AppendBlockOptions{
 						CPKInfo:      options.cpkInfo,
 						CPKScopeInfo: options.cpkScopeInfo,
 					})
-
 				c.AssertNoErr(err)
 			}
-		case common.EBlobType.PageBlob():
-			pb := options.containerClient.NewPageBlobClient(b.name)
-			_, err := pb.Create(ctx, int64(size),
-				&pageblob.CreateOptions{
-					SequenceNumber: to.Ptr(int64(0)),
-					HTTPHeaders:    headers,
-					Metadata:       metadata,
-					Tags:           tags,
-					CPKInfo:        options.cpkInfo,
-					CPKScopeInfo:   options.cpkScopeInfo,
-				})
-			c.AssertNoErr(err)
-
-			_, err = pb.UploadPages(ctx, reader, blob.HTTPRange{Offset: 0, Count: int64(size)},
-				&pageblob.UploadPagesOptions{
-					CPKInfo:      options.cpkInfo,
-					CPKScopeInfo: options.cpkScopeInfo,
-				})
-			c.AssertNoErr(err)
-		case common.EBlobType.AppendBlob():
-			ab := options.containerClient.NewAppendBlobClient(b.name)
-			_, err := ab.Create(ctx,
-				&appendblob.CreateOptions{
-					HTTPHeaders:  headers,
-					Metadata:     metadata,
-					Tags:         tags,
-					CPKInfo:      options.cpkInfo,
-					CPKScopeInfo: options.cpkScopeInfo,
-				})
-			c.AssertNoErr(err)
-
-			_, err = ab.AppendBlock(ctx, reader,
-				&appendblob.AppendBlockOptions{
-					CPKInfo:      options.cpkInfo,
-					CPKScopeInfo: options.cpkScopeInfo,
-				})
-			c.AssertNoErr(err)
 		}
 
 		if b.creationProperties.adlsPermissionsACL != nil {
-			bfsURLParts := azbfs.NewBfsURLParts(options.rawSASURL)
+			bfsURLParts, err := azdatalake.ParseURL(options.rawSASURL.String())
+			c.AssertNoErr(err)
 			bfsURLParts.Host = strings.Replace(bfsURLParts.Host, ".blob", ".dfs", 1)
 
-			bfsContainer := azbfs.NewFileSystemURL(bfsURLParts.URL(), azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+			fsc, err := filesystem.NewClientWithNoCredential(bfsURLParts.String(), nil)
+			c.AssertNoErr(err)
 
-			var updateResp *azbfs.PathUpdateResponse
 			if b.isFolder() {
-				dirURL := bfsContainer.NewDirectoryURL(b.name)
+				dc := fsc.NewDirectoryClient(b.name)
 
-				updateResp, err = dirURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
-					ACL: *b.creationProperties.adlsPermissionsACL,
-				})
+				_, err = dc.SetAccessControl(ctx,
+					&datalakedirectory.SetAccessControlOptions{ACL: b.creationProperties.adlsPermissionsACL})
 			} else {
 				d, f := path.Split(b.name)
-				dirURL := bfsContainer.NewDirectoryURL(d)
-				fileURL := dirURL.NewFileURL(f)
+				dc := fsc.NewDirectoryClient(d)
+				fc, err := dc.NewFileClient(f)
+				c.AssertNoErr(err)
 
-				updateResp, err = fileURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
-					ACL: *b.creationProperties.adlsPermissionsACL,
-				})
+				_, err = fc.SetAccessControl(ctx,
+					&datalakefile.SetAccessControlOptions{ACL: b.creationProperties.adlsPermissionsACL})
 			}
 
 			c.AssertNoErr(err)
-			c.Assert(updateResp.StatusCode(), equals(), 200)
 		}
 	}
 
@@ -600,7 +638,7 @@ func (scenarioHelper) generateBlobsFromList(c asserter, options *generateBlobFro
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerClient *container.Client) map[string]*objectProperties {
+func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerClient *container.Client, fileSystemURL *filesystem.Client) map[string]*objectProperties {
 	result := make(map[string]*objectProperties)
 
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Include: container.ListBlobsInclude{Metadata: true, Tags: true}})
@@ -623,6 +661,20 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerCl
 			}
 			md := blobInfo.Metadata
 
+			var acl *string
+			if fileSystemURL != nil {
+				fURL := fileSystemURL.NewFileClient(*relativePath)
+				accessControl, err := fURL.GetAccessControl(ctx, nil)
+
+				if datalakeerror.HasCode(err, "FilesystemNotFound") {
+					err = nil
+					acl = nil
+				} else {
+					a.AssertNoErr(err, "getting ACLs")
+					acl = accessControl.ACL
+				}
+			}
+
 			props := objectProperties{
 				entityType:        common.EEntityType.File(), // todo: posix properties includes folders
 				size:              bp.ContentLength,
@@ -633,7 +685,7 @@ func (s scenarioHelper) enumerateContainerBlobProperties(a asserter, containerCl
 				cpkInfo:           &blob.CPKInfo{EncryptionKeySHA256: bp.CustomerProvidedKeySHA256},
 				cpkScopeInfo:      &blob.CPKScopeInfo{EncryptionScope: bp.EncryptionScope},
 				// TODO : Return ACL in list
-				//adlsPermissionsACL: bp.ACL,
+				adlsPermissionsACL: acl,
 				// smbAttributes and smbPermissions don't exist in blob
 			}
 
@@ -798,7 +850,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 		if f.isFolder() {
 			// make sure the dir exists
 			file := options.shareClient.NewRootDirectoryClient().NewFileClient(path.Join(f.name, "dummyChild"))
-			generateParentsForAzureFile(c, file)
+			generateParentsForAzureFile(c, file, options.shareClient)
 
 			dir := options.shareClient.NewRootDirectoryClient().NewSubdirectoryClient(f.name)
 
@@ -842,7 +894,7 @@ func (scenarioHelper) generateAzureFilesFromList(c asserter, options *generateAz
 			fileClient := options.shareClient.NewRootDirectoryClient().NewFileClient(f.name)
 
 			// create parents first
-			generateParentsForAzureFile(c, fileClient)
+			generateParentsForAzureFile(c, fileClient, options.shareClient)
 
 			// create the file itself
 			fileSize := int64(f.creationProperties.sizeBytes(c, options.defaultSize))
@@ -1050,22 +1102,19 @@ func (s scenarioHelper) downloadFileContent(a asserter, options downloadContentO
 	return destData
 }
 
-func (scenarioHelper) generateBFSPathsFromList(c asserter, filesystemURL azbfs.FileSystemURL, fileList []string) {
+func (scenarioHelper) generateBFSPathsFromList(c asserter, fsc *filesystem.Client, fileList []string) {
 	for _, bfsPath := range fileList {
-		file := filesystemURL.NewRootDirectoryURL().NewFileURL(bfsPath)
+		fc := fsc.NewFileClient(bfsPath)
 
 		// Create the file
-		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{}, azbfs.BlobFSAccessControl{})
+		_, err := fc.Create(ctx, nil)
 		c.AssertNoErr(err)
-		c.Assert(cResp.StatusCode(), equals(), 201)
 
-		aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
+		_, err = fc.AppendData(ctx, 0, streaming.NopCloser(strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes)))), nil)
 		c.AssertNoErr(err)
-		c.Assert(aResp.StatusCode(), equals(), 202)
 
-		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+		_, err = fc.FlushData(ctx, defaultBlobFSFileSizeInBytes, &datalakefile.FlushDataOptions{Close: to.Ptr(true)})
 		c.AssertNoErr(err)
-		c.Assert(fResp.StatusCode(), equals(), 200)
 
 	}
 }
@@ -1130,11 +1179,12 @@ func (scenarioHelper) getRawFileServiceURLWithSAS(c asserter) string {
 	return getFileServiceURLWithSAS(c, credential).URL()
 }
 
-func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) azbfs.ServiceURL {
+func (scenarioHelper) getRawAdlsServiceURLWithSAS(c asserter) *datalakeservice.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(EAccountType.Standard())
-	credential := azbfs.NewSharedKeyCredential(accountName, accountKey)
+	credential, err := azdatalake.NewSharedKeyCredential(accountName, accountKey)
+	c.AssertNoErr(err)
 
-	return getAdlsServiceURLWithSAS(c, *credential)
+	return getAdlsServiceURLWithSAS(c, credential)
 }
 
 func (scenarioHelper) getBlobServiceURL(c asserter) *blobservice.Client {

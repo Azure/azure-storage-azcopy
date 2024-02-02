@@ -1,12 +1,11 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 )
 
-func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+func remoteToLocal_symlink(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
 	info := jptm.Info()
 
 	// Perform initial checks
@@ -38,7 +37,7 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer 
 
 			if !shouldOverwrite {
 				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "File already exists, so will be skipped")
 				jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists())
 				jptm.ReportTransferDone()
 				return
@@ -60,7 +59,15 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer 
 		}
 	}
 
-	dl, ok := df().(symlinkDownloader)
+	d, err := df(jptm)
+	if err != nil {
+		jptm.LogDownloadError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	dl, ok := d.(symlinkDownloader)
 	if !ok {
 		jptm.LogDownloadError(info.Source, info.Destination, "downloader implementation does not support symlinks", 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -68,7 +75,7 @@ func remoteToLocal_symlink(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer 
 		return
 	}
 
-	err := dl.CreateSymlink(jptm)
+	err = dl.CreateSymlink(jptm)
 	if err != nil {
 		jptm.FailActiveSend("creating destination symlink", err)
 	}

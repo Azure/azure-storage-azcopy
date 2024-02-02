@@ -32,7 +32,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -90,14 +89,11 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	directoryClient, err := createDirectoryClientFromServiceClient(fileURLParts, t.serviceClient)
-	if err != nil {
-		return false, err
-	}
+	directoryClient := t.serviceClient.NewShareClient(fileURLParts.ShareName).NewDirectoryClient(fileURLParts.DirectoryOrFilePath)
 	_, err = directoryClient.GetProperties(t.ctx, nil)
 	if err != nil {
 		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err))
+			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err))
 		}
 		return false, nil
 	}
@@ -150,7 +146,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			return common.EAzError.InvalidBlobOrWindowsName()
 		}
 		if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
-			azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
+			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
 		// check if the url points to a single file
 		fileProperties, isFile, err := t.getPropertiesIfSingleFile()
@@ -159,7 +155,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 		if isFile {
 			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a file.")
+				azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a file.")
 			}
 
 			storedObject := newStoredObject(
@@ -293,7 +289,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					continue
 				} else {
 					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(*fileInfo.Name, ".") {
-						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
+						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
 					}
 				}
 				enqueueOutput(newAzFileFileEntity(currentDirectoryClient, fileInfo), nil)
@@ -306,7 +302,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					continue
 				} else {
 					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(*dirInfo.Name, ".") {
-						azcopyScanningLogger.Log(pipeline.LogWarning, fmt.Sprintf(trailingDotErrMsg, *dirInfo.Name))
+						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *dirInfo.Name))
 					}
 				}
 				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, *dirInfo.Name), nil)
@@ -318,7 +314,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 
 			// if debug mode is on, note down the result, this is not going to be fast
-			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
+			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(common.LogDebug) {
 				tokenValue := "NONE"
 				if marker != nil {
 					tokenValue = *marker
@@ -340,7 +336,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				directoryName := fileURLParts.DirectoryOrFilePath
 				msg := fmt.Sprintf("Enumerating %s with token %s. Sub-dirs:%s Files:%s", directoryName,
 					tokenValue, dirListBuilder.String(), fileListBuilder.String())
-				azcopyScanningLogger.Log(pipeline.LogDebug, msg)
+				azcopyScanningLogger.Log(common.LogDebug, msg)
 			}
 
 			marker = lResp.NextMarker
@@ -368,7 +364,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			}
 			glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
 			if azcopyScanningLogger != nil {
-				azcopyScanningLogger.Log(pipeline.LogWarning, workerError.Error())
+				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
 			}
 			continue
 		}

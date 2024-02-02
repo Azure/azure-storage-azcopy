@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/stretchr/testify/assert"
@@ -98,7 +97,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 		false,
 		common.ESyncHashType.None(),
 		common.EPreservePermissionsOption.None(),
-		pipeline.LogInfo,
+		common.LogInfo,
 		common.CpkOptions{},
 		nil,
 		true,
@@ -117,7 +116,7 @@ func TestLocalWildcardOverlap(t *testing.T) {
 	a.Nil(err)
 
 	a.Equal(map[string]bool{
-		"test.txt": true,
+		"test.txt":  true,
 		"tes*t.txt": true,
 	}, seenFiles)
 }
@@ -529,7 +528,7 @@ func TestTraverserWithSingleObject(t *testing.T) {
 	sc, shareName := createNewShare(a, fsc)
 	defer deleteShare(a, sc)
 
-	bfsu := GetBFSSU()
+	bfsu := getDatalakeServiceClient()
 	filesystemURL, _ := createNewFilesystem(a, bfsu)
 	defer deleteFilesystem(a, filesystemURL)
 
@@ -659,7 +658,7 @@ func TestTraverserContainerAndLocalDirectory(t *testing.T) {
 	sc, shareName := createNewShare(a, fsc)
 	defer deleteShare(a, sc)
 
-	bfsu := GetBFSSU()
+	bfsu := getDatalakeServiceClient()
 	filesystemURL, _ := createNewFilesystem(a, bfsu)
 	defer deleteFilesystem(a, filesystemURL)
 
@@ -805,7 +804,7 @@ func TestTraverserWithVirtualAndLocalDirectory(t *testing.T) {
 	sc, shareName := createNewShare(a, fsc)
 	defer deleteShare(a, sc)
 
-	bfsu := GetBFSSU()
+	bfsu := getDatalakeServiceClient()
 	filesystemURL, _ := createNewFilesystem(a, bfsu)
 	defer deleteFilesystem(a, filesystemURL)
 

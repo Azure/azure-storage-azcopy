@@ -3,20 +3,20 @@ package ste
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"net/http"
 	"strings"
 	"sync"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 var explainedSkippedRemoveOnce sync.Once
 
-func DeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
+func DeleteBlob(jptm IJobPartTransferMgr, pacer pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
@@ -27,16 +27,13 @@ func DeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 	// schedule the work as a chunk, so it will run on the main goroutine pool, instead of the
 	// smaller "transfer initiation pool", where this code runs.
 	id := common.NewChunkID(jptm.Info().Source, 0, 0)
-	cf := createChunkFunc(true, jptm, id, func() { doDeleteBlob(jptm, p) })
+	cf := createChunkFunc(true, jptm, id, func() { doDeleteBlob(jptm) })
 	jptm.ScheduleChunks(cf)
 }
 
-func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
+func doDeleteBlob(jptm IJobPartTransferMgr) {
 
 	info := jptm.Info()
-	// Get the source blob url of blob to delete
-	blobClient := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
-
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
@@ -49,18 +46,40 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 			})
 
 			// log at error level so that it's clear why the transfer was skipped even when the log level is set to error
-			jptm.Log(pipeline.LogError, fmt.Sprintf("DELETE SKIPPED(blob has snapshots): %s", strings.Split(info.Destination, "?")[0]))
+			jptm.Log(common.LogError, fmt.Sprintf("DELETE SKIPPED(blob has snapshots): %s", strings.Split(info.Destination, "?")[0]))
 		} else {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+			jptm.Log(common.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 		}
 
 		jptm.SetStatus(status)
 		jptm.ReportTransferDone()
 	}
 
+	s, err := jptm.SrcServiceClient().BlobServiceClient()
+	if err != nil {
+		transferDone(common.ETransferStatus.Failed(), err)
+		return
+	}
 	// note: if deleteSnapshotsOption is 'only', which means deleting all the snapshots but keep the root blob
 	// we still count this delete operation as successful since we accomplished the desired outcome
-	_, err := blobClient.Delete(jptm.Context(), &blob.DeleteOptions{
+
+	blobClient := s.NewContainerClient(jptm.Info().SrcContainer).NewBlobClient(jptm.Info().SrcFilePath)
+
+	if jptm.Info().VersionID != "" {
+		blobClient, err = blobClient.WithVersionID(jptm.Info().VersionID)
+		if err != nil {
+			transferDone(common.ETransferStatus.Failed(), err)
+			return
+		}
+	} else if jptm.Info().SnapshotID != "" {
+		blobClient, err = blobClient.WithSnapshot(jptm.Info().SnapshotID)
+		if err != nil {
+			transferDone(common.ETransferStatus.Failed(), err)
+			return
+		}
+	}
+
+	_, err = blobClient.Delete(jptm.Context(), &blob.DeleteOptions{
 		DeleteSnapshots: jptm.DeleteSnapshotsOption().ToDeleteSnapshotsOptionType(),
 		BlobDeleteType:  jptm.PermanentDeleteOption().ToPermanentDeleteOptionType(),
 	})
@@ -81,7 +100,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline) {
 			// User can resume the job if completely ordered with a new sas.
 			if respErr.StatusCode == http.StatusForbidden {
 				errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
-				jptm.Log(pipeline.LogError, errMsg)
+				jptm.Log(common.LogError, errMsg)
 				common.GetLifecycleMgr().Error(errMsg)
 			}
 		}

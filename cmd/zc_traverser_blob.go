@@ -34,7 +34,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -111,7 +110,7 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	if err != nil {
 		if azcopyScanningLogger != nil {
 			msg := fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err)
-			azcopyScanningLogger.Log(pipeline.LogError, msg)
+			azcopyScanningLogger.Log(common.LogError, msg)
 		}
 		return false, nil
 	}
@@ -220,8 +219,8 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 
 		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a blob.")
-			azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Root entity type: %s", getEntityType(blobProperties.Metadata)))
+			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a blob.")
+			azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Root entity type: %s", getEntityType(blobProperties.Metadata)))
 		}
 
 		storedObject := newStoredObject(
@@ -260,7 +259,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	} else if blobURLParts.BlobName == "" && t.preservePermissions.IsTruthy() {
 		// if the root is a container and we're copying "folders", we should persist the ACLs there too.
 		if azcopyScanningLogger != nil {
-			azcopyScanningLogger.Log(pipeline.LogDebug, "Detected the root as a container.")
+			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a container.")
 		}
 
 		storedObject := newStoredObject(
@@ -333,7 +332,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
 					enqueueDir(*virtualDir.Name)
 					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
+						azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
 					}
 
 					if t.includeDirectoryStubs {
@@ -395,7 +394,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			}
 
 			// if debug mode is on, note down the result, this is not going to be fast
-			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(pipeline.LogDebug) {
+			if azcopyScanningLogger != nil && azcopyScanningLogger.ShouldLog(common.LogDebug) {
 				tokenValue := "NONE"
 				if marker != nil {
 					tokenValue = *marker
@@ -411,7 +410,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 				}
 				msg := fmt.Sprintf("Enumerating %s with token %s. Sub-dirs:%s Files:%s", currentDirPath,
 					tokenValue, vdirListBuilder.String(), fileListBuilder.String())
-				azcopyScanningLogger.Log(pipeline.LogDebug, msg)
+				azcopyScanningLogger.Log(common.LogDebug, msg)
 			}
 			marker = lResp.NextMarker
 		}
@@ -446,16 +445,11 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 func getEntityType(metadata map[string]*string) common.EntityType {
 	// Note: We are just checking keys here, not their corresponding values. Is that safe?
-	if _, isfolder := metadata["hdi_isfolder"]; isfolder {
+	if folderValue, isFolder := common.TryReadMetadata(metadata, common.POSIXFolderMeta); isFolder && folderValue != nil && strings.ToLower(*folderValue) == "true" {
 		return common.EEntityType.Folder()
-	} else if _, isfolder := metadata["Hdi_isfolder"]; isfolder {
-		return common.EEntityType.Folder()
-	} else if _, isSymlink := metadata["is_symlink"]; isSymlink {
-		return common.EEntityType.Symlink()
-	} else if _, isSymlink := metadata["Is_symlink"]; isSymlink {
+	} else if symlinkValue, isSymlink := common.TryReadMetadata(metadata, common.POSIXSymlinkMeta); isSymlink && symlinkValue != nil && strings.ToLower(*symlinkValue) == "true" {
 		return common.EEntityType.Symlink()
 	}
-
 	return common.EEntityType.File()
 }
 
@@ -463,7 +457,7 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	adapter := blobPropertiesAdapter{blobInfo.Properties}
 
 	if azcopyScanningLogger != nil {
-		azcopyScanningLogger.Log(pipeline.LogDebug, fmt.Sprintf("Blob %s entity type: %s", relativePath, getEntityType(blobInfo.Metadata)))
+		azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Blob %s entity type: %s", relativePath, getEntityType(blobInfo.Metadata)))
 	}
 
 	object := newStoredObject(
@@ -561,8 +555,8 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		includeDeleted:              includeDeleted,
 		includeSnapshot:             includeSnapshot,
 		includeVersion:              includeVersion,
-		preservePermissions: 		 preservePermissions,
-		isDFS:			     	     isDFS,
+		preservePermissions:         preservePermissions,
+		isDFS:                       isDFS,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

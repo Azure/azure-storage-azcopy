@@ -28,8 +28,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-
 	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -44,7 +42,7 @@ type rawListCmdArgs struct {
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
-	trailingDot 	string
+	trailingDot     string
 }
 
 type validProperty string
@@ -118,7 +116,7 @@ type cookedListCmdArgs struct {
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
-	trailingDot 	common.TrailingDotOption
+	trailingDot     common.TrailingDotOption
 }
 
 var raw rawListCmdArgs
@@ -164,8 +162,8 @@ func init() {
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
 	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "delimiter (;) separated values of properties required in list output.")
-	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. " +
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation." +
+	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. "+
+		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	rootCmd.AddCommand(listContainerCmd)
@@ -239,7 +237,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), pipeline.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil)
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())

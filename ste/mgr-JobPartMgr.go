@@ -3,11 +3,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
 	"net/http"
@@ -18,8 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"golang.org/x/sync/semaphore"
 )
@@ -42,6 +40,7 @@ type IJobPartMgr interface {
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	ShouldPutMd5() bool
+	DeleteDestinationFileIfNecessary() bool
 	SAS() (string, string)
 	// CancelJob()
 	Close()
@@ -56,13 +55,13 @@ type IJobPartMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 
-	CredentialInfo() common.CredentialInfo
-	ClientOptions() azcore.ClientOptions
-	S2SSourceCredentialInfo() common.CredentialInfo
-	S2SSourceClientOptions() azcore.ClientOptions
-	CredentialOpOptions() *common.CredentialOpOptions
+	// These functions return Container/fileshare clients.
+	// They must be type asserted before use. In cases where they dont
+	// make sense (say SrcServiceClient for upload) they are il
+	SrcServiceClient() *common.ServiceClient
+	DstServiceClient() *common.ServiceClient
+	SourceIsOAuth() bool
 
-	SourceProviderPipeline() pipeline.Pipeline
 	getOverwritePrompter() *overwritePrompter
 	getFolderCreationTracker() FolderCreationTracker
 	SecurityInfoPersistenceManager() *securityInfoPersistenceManager
@@ -76,7 +75,7 @@ type IJobPartMgr interface {
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
-// We must minimize use of this, and instead maximize re-use of the returned client object.
+// We must minimize use of this, and instead maximize reuse of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
@@ -130,27 +129,16 @@ func (d *dialRateLimiter) DialContext(ctx context.Context, network, address stri
 	return d.dialer.DialContext(ctx, network, address)
 }
 
-// newAzcopyHTTPClientFactory creates a HTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.
-func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factory {
-	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			r, err := pipelineHTTPClient.Do(request.WithContext(ctx))
-			if err != nil {
-				err = pipeline.NewError(err, "HTTP request failed")
-			}
-			return pipeline.NewHTTPResponse(r), err
-		}
-	})
-}
-
-func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, trailingDot *common.TrailingDotOption, from *common.Location) azcore.ClientOptions {
+func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptions, transport policy.Transporter, statsAcc *PipelineNetworkStats, log LogOptions, srcCred *common.ScopedCredential) azcore.ClientOptions {
 	// Pipeline will look like
 	// [includeResponsePolicy, newAPIVersionPolicy (ignored), NewTelemetryPolicy, perCall, NewRetryPolicy, perRetry, NewLogPolicy, httpHeaderPolicy, bodyDownloadPolicy]
-	// TODO (gapra): Does this have to happen this happen here?
-	log.RequestLogOptions.SyslogDisabled = common.IsForceLoggingDisabled()
-	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy()}
+	perCallPolicies := []policy.Policy{azruntime.NewRequestIDPolicy(), NewVersionPolicy(), newFileUploadRangeFromURLFixPolicy()}
 	// TODO : Default logging policy is not equivalent to old one. tracing HTTP request
-	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newVersionPolicy(), newColdTierPolicy(), NewTrailingDotPolicy(trailingDot, from), newLogPolicy(log), newStatsPolicy(statsAcc)}
+	perRetryPolicies := []policy.Policy{newRetryNotificationPolicy(), newLogPolicy(log), newStatsPolicy(statsAcc)}
+	if srcCred != nil {
+		perRetryPolicies = append(perRetryPolicies, NewSourceAuthPolicy(srcCred))
+	}
+	retry.ShouldRetry = getShouldRetry()
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
@@ -163,33 +151,6 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 		PerCallPolicies:  perCallPolicies,
 		PerRetryPolicies: perRetryPolicies,
 	}
-}
-
-// NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
-// The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *PipelineNetworkStats) pipeline.Pipeline {
-	if c == nil {
-		panic("c can't be nil")
-	}
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
-		azbfs.NewUniqueRequestIDPolicyFactory(),
-		NewBFSXferRetryPolicyFactory(r),       // actually retry the operation
-		newV1RetryNotificationPolicyFactory(), // record that a retry status was returned
-	}
-
-	f = append(f, c)
-
-	f = append(f,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewRequestLogPolicyFactory(RequestLogOptions{
-			LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold,
-			SyslogDisabled:               common.IsForceLoggingDisabled(),
-		}),
-		newXferStatsPolicyFactory(statsAcc))
-
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -216,12 +177,17 @@ type jobPartMgr struct {
 	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
-	credInfo               common.CredentialInfo
-	clientOptions          azcore.ClientOptions
-	s2sSourceCredInfo      common.CredentialInfo
-	s2sSourceClientOptions azcore.ClientOptions
-	credOption             *common.CredentialOpOptions
+	// These fields hold the container/fileshare client of this jobPart,
+	// whatever is appropriate for this scenario. Ex. For BlobFile, we
+	// will have BlobService client in srcServiceClient and Fileservice in
+	// dstServiceClient. For upload, srcService is nil, and likewise.
+	srcServiceClient *common.ServiceClient
+	dstServiceClient *common.ServiceClient
 
+
+	credInfo               common.CredentialInfo
+	srcIsOAuth			   bool // true if source is authenticated via oauth
+	credOption             *common.CredentialOpOptions
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
@@ -236,6 +202,8 @@ type jobPartMgr struct {
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	putMd5 bool
+
+	deleteDestinationFileIfNecessary bool
 
 	metadata common.Metadata
 
@@ -256,17 +224,6 @@ type jobPartMgr struct {
 	cacheLimiter            common.CacheLimiter
 	fileCountLimiter        common.CacheLimiter
 	exclusiveDestinationMap *common.ExclusiveStringMap
-
-	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
-	// Currently, this only sees use in ADLSG2->ADLSG2 ACL transfers. TODO: Remove it when we can reliably get/set ACLs on blob.
-	secondaryPipeline pipeline.Pipeline
-
-	sourceProviderPipeline pipeline.Pipeline
-	// TODO: Ditto
-	secondarySourceProviderPipeline pipeline.Pipeline
-
-	// used defensively to protect double init
-	atomicPipelinesInitedIndicator uint32
 
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
@@ -334,6 +291,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.putMd5 = dstData.PutMd5
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
+	jpm.deleteDestinationFileIfNecessary = dstData.DeleteDestinationFileIfNecessary
 
 	// For this job part, split the metadata string apart and create an common.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
@@ -373,7 +331,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.priority = plan.Priority
 
 	jpm.clientInfo()
-	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -417,7 +374,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			// TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}
-		jpm.Log(pipeline.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
+
+		//build transferInfo after we've set transferIndex
+		jptm.transferInfo = jptm.Info()
+		jpm.Log(common.LogDebug, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 
 		// ===== TEST KNOB
 		relSrc, relDst := plan.TransferSrcDstRelatives(t)
@@ -437,16 +397,16 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		_, srcOk := DebugSkipFiles[relSrc]
 		_, dstOk := DebugSkipFiles[relDst]
 		if srcOk || dstOk {
-			if jpm.ShouldLog(pipeline.LogInfo) {
-				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
+			if jpm.ShouldLog(common.LogInfo) {
+				jpm.Log(common.LogInfo, fmt.Sprintf("Transfer %d cancelled: %s", jptm.transferIndex, relSrc))
 			}
 
 			// cancel the transfer
 			jptm.Cancel()
 			jptm.SetStatus(common.ETransferStatus.Cancelled())
 		} else {
-			if len(DebugSkipFiles) != 0 && jpm.ShouldLog(pipeline.LogInfo) {
-				jpm.Log(pipeline.LogInfo, fmt.Sprintf("Did not exclude: src: %s dst: %s", relSrc, relDst))
+			if len(DebugSkipFiles) != 0 && jpm.ShouldLog(common.LogInfo) {
+				jpm.Log(common.LogInfo, fmt.Sprintf("Did not exclude: src: %s dst: %s", relSrc, relDst))
 			}
 		}
 		// ===== TEST KNOB
@@ -462,7 +422,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	}
 
 	if plan.IsFinalPart {
-		jpm.Log(pipeline.LogInfo, "Final job part has been scheduled")
+		jpm.Log(common.LogInfo, "Final job part has been scheduled")
 	}
 }
 
@@ -481,174 +441,15 @@ func (jpm *jobPartMgr) clientInfo() {
 	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
 		jpm.credInfo = jobState.CredentialInfo
 	}
-	fromTo := jpm.planMMF.Plan().FromTo
-
-	// S2S source credential
-	// Default credential type assumed to be SAS
-	s2sSourceCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	// For Blob and BlobFS, there are other options for the source credential
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
-		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
-				s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
-			}
-		} else if fromTo.IsDownload() && (jobState.CredentialInfo.CredentialType.IsAzureOAuth() || jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
-			s2sSourceCredInfo = jobState.CredentialInfo
-		}
-	}
-	jpm.s2sSourceCredInfo = s2sSourceCredInfo
 
 	jpm.credOption = &common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		LogInfo:  func(str string) { jpm.Log(common.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(common.LogError, str) },
 		Panic:    jpm.Panic,
 		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
 		Cancel:   jpm.jobMgr.Cancel,
 	}
 
-	retryOptions := policy.RetryOptions{
-		MaxRetries:    UploadMaxTries,
-		TryTimeout:    UploadTryTimeout,
-		RetryDelay:    UploadRetryDelay,
-		MaxRetryDelay: UploadMaxRetryDelay,
-	}
-
-	var userAgent string
-	if fromTo.From() == common.ELocation.S3() {
-		userAgent = common.S3ImportUserAgent
-	} else if fromTo.From() == common.ELocation.GCP() {
-		userAgent = common.GCPImportUserAgent
-	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
-		userAgent = common.BenchmarkUserAgent
-	} else {
-		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
-	}
-	telemetryOptions := policy.TelemetryOptions{ApplicationID: userAgent}
-
-	httpClient := jpm.jobMgr.HttpClient()
-	networkStats := jpm.jobMgr.PipelineNetworkStats()
-	logOptions := LogOptions{LogOptions: jpm.jobMgr.PipelineLogInfo()}
-
-	var sourceTrailingDot *common.TrailingDotOption
-	var trailingDot *common.TrailingDotOption
-	var from *common.Location
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.File()) {
-		sourceTrailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-	}
-	if fromTo.IsS2S() && fromTo.To() == common.ELocation.File() ||
-		fromTo.IsUpload() && fromTo.To() == common.ELocation.File() ||
-		fromTo.IsDownload() && fromTo.From() == common.ELocation.File() ||
-		fromTo.IsSetProperties() && fromTo.From() == common.ELocation.File() ||
-		fromTo.IsDelete() && fromTo.From() == common.ELocation.File() {
-		trailingDot = &jpm.planMMF.Plan().DstFileData.TrailingDot
-		if fromTo.IsS2S() {
-			from = to.Ptr(fromTo.From())
-		}
-	}
-	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, sourceTrailingDot, nil)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)}
-
-func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
-	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
-		panic("init client and pipelines for same jobPartMgr twice")
-	}
-	fromTo := jpm.planMMF.Plan().FromTo
-	credInfo := jpm.credInfo
-	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
-		credInfo = jpm.jobMgr.getInMemoryTransitJobState().CredentialInfo
-	}
-	var userAgent string
-	if fromTo.From() == common.ELocation.S3() {
-		userAgent = common.S3ImportUserAgent
-	} else if fromTo.From() == common.ELocation.GCP() {
-		userAgent = common.GCPImportUserAgent
-	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
-		userAgent = common.BenchmarkUserAgent
-	} else {
-		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
-	}
-
-	credOption := common.CredentialOpOptions{
-		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-		Panic:    jpm.Panic,
-		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-		Cancel:   jpm.jobMgr.Cancel,
-	}
-	// TODO: Consider to remove XferRetryPolicy and Options?
-	xferRetryOption := XferRetryOptions{
-		Policy:        0,
-		MaxTries:      UploadMaxTries, // TODO: Consider to unify options.
-		TryTimeout:    UploadTryTimeout,
-		RetryDelay:    UploadRetryDelay,
-		MaxRetryDelay: UploadMaxRetryDelay}
-
-	var statsAccForSip *PipelineNetworkStats = nil // we don't accumulate stats on the source info provider
-
-	// Create source info provider's pipeline for S2S copy or download (in some cases).
-	// BlobFS and Blob will utilize the Blob source info provider, as they are the "same" resource, but provide different details on both endpoints
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
-		// Prepare to pull dfs properties if we're working with BlobFS
-		if fromTo.From() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
-			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
-			jpm.secondarySourceProviderPipeline = NewBlobFSPipeline(
-				credential,
-				azbfs.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azbfs.TelemetryOptions{
-						Value: userAgent,
-					},
-				},
-				xferRetryOption,
-				jpm.pacer,
-				jpm.jobMgr.HttpClient(),
-				statsAccForSip)
-		}
-	}
-
-	switch {
-	case fromTo.IsS2S() && (fromTo.To() == common.ELocation.Blob() || fromTo.To() == common.ELocation.BlobFS()), // destination determines pipeline for S2S, blobfs uses blob for S2S
-		 fromTo.IsUpload() && fromTo.To() == common.ELocation.Blob(), // destination determines pipeline for upload
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.Blob(), // source determines pipeline for download
-		 fromTo.IsSetProperties() && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()), // source determines pipeline for set properties, blobfs uses blob for set properties
-		 fromTo.IsDelete() && fromTo.From() == common.ELocation.Blob(): // ditto for delete
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
-
-		// If we need to write specifically to the gen2 endpoint, we should have this available.
-		if fromTo.To() == common.ELocation.BlobFS() || jpm.Plan().PreservePermissions.IsTruthy() || jpm.Plan().PreservePOSIXProperties {
-			credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
-			jpm.secondaryPipeline = NewBlobFSPipeline(
-				credential,
-				azbfs.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azbfs.TelemetryOptions{
-						Value: userAgent,
-					},
-				},
-				xferRetryOption,
-				jpm.pacer,
-				jpm.jobMgr.HttpClient(),
-				statsAccForSip)
-		}
-	case fromTo.IsUpload() && fromTo.To() == common.ELocation.BlobFS(), // Blobfs up/down/delete use the dfs endpoint
-		 fromTo.IsDownload() && fromTo.From() == common.ELocation.BlobFS(),
-		 fromTo.IsDelete() && fromTo.From() == common.ELocation.BlobFS():
-		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
-
-		jpm.pipeline = NewBlobFSPipeline(
-			credential,
-			azbfs.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azbfs.TelemetryOptions{
-					Value: userAgent,
-				},
-			},
-			xferRetryOption,
-			jpm.pacer,
-			jpm.jobMgr.HttpClient(),
-			jpm.jobMgr.PipelineNetworkStats())
-	}
 }
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
@@ -668,7 +469,7 @@ func (jpm *jobPartMgr) ExclusiveDestinationMap() *common.ExclusiveStringMap {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
-	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
+	jpm.newJobXfer(jptm, jpm.pacer)
 }
 
 func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
@@ -770,6 +571,10 @@ func (jpm *jobPartMgr) ShouldPutMd5() bool {
 	return jpm.putMd5
 }
 
+func (jpm *jobPartMgr) DeleteDestinationFileIfNecessary() bool {
+	return jpm.deleteDestinationFileIfNecessary
+}
+
 func (jpm *jobPartMgr) SAS() (string, string) {
 	return jpm.sourceSAS, jpm.destinationSAS
 }
@@ -812,7 +617,7 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
 	case common.ETransferStatus.Cancelled():
 	default:
-		jpm.Log(pipeline.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
+		jpm.Log(common.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
 	}
 }
 
@@ -831,7 +636,7 @@ func (jpm *jobPartMgr) ReportTransferDone(status common.TransferStatus) (transfe
 		jpm.Plan().SetJobPartStatus(common.EJobStatus.EnhanceJobStatusInfo(jppi.transfersSkipped > 0,
 			jppi.transfersFailed > 0, jppi.transfersCompleted > 0))
 		jpm.jobMgr.ReportJobPartDone(jppi)
-		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
+		jpm.Log(common.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d",
 			jpm.planMMF.Plan().JobID, jpm.planMMF.Plan().PartNum, transfersDone,
 			jpm.planMMF.Plan().NumTransfers))
 	}
@@ -845,17 +650,6 @@ func (jpm *jobPartMgr) Close() {
 	jpm.httpHeaders = common.ResourceHTTPHeaders{}
 	jpm.metadata = common.Metadata{}
 	jpm.preserveLastModifiedTime = false
-
-	/*
-	 * Set pipeline to nil, so that jpm/JobMgr can be GC'ed.
-	 *
-	 * TODO: We should not need to explicitly set this to nil but today we have a yet-unknown ref on pipeline which
-	 *       is leaking JobMgr memory, so we cause that to be freed by force dropping this ref.
-	 *
-	 * Note: Force setting this to nil can technically result in crashes since the containing object is still around,
-	 *       but we should be protected against that since we do this Close in a deferred manner, at least few minutes after the job completes.
-	 */
-	jpm.pipeline = nil
 
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
@@ -875,35 +669,23 @@ func (jpm *jobPartMgr) ReleaseAConnection() {
 	jpm.jobMgr.ReleaseAConnection()
 }
 
-func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
-func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
-func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
+func (jpm *jobPartMgr) ShouldLog(level common.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
+func (jpm *jobPartMgr) Log(level common.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
+func (jpm *jobPartMgr) Panic(err error)                       { jpm.jobMgr.Panic(err) }
 func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jpm.jobMgr.ChunkStatusLogger()
 }
 
-func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
-	return jpm.credInfo
+func (jpm *jobPartMgr) SrcServiceClient() *common.ServiceClient {
+	return jpm.srcServiceClient
 }
 
-func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {
-	return jpm.s2sSourceCredInfo
+func (jpm *jobPartMgr) DstServiceClient() *common.ServiceClient {
+	return jpm.dstServiceClient
 }
 
-func (jpm *jobPartMgr) ClientOptions() azcore.ClientOptions {
-	return jpm.clientOptions
-}
-
-func (jpm *jobPartMgr) S2SSourceClientOptions() azcore.ClientOptions {
-	return jpm.s2sSourceClientOptions
-}
-
-func (jpm *jobPartMgr) CredentialOpOptions() *common.CredentialOpOptions {
-	return jpm.credOption
-}
-
-func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
-	return jpm.sourceProviderPipeline
+func (jpm *jobPartMgr) SourceIsOAuth() bool {
+	return jpm.srcIsOAuth
 }
 
 /* Status update messages should not fail */

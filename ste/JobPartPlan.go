@@ -34,6 +34,18 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type IJobPartPlanHeader interface {
+	CommandString() string
+	GetRelativeSrcDstStrings(transferIndex uint32) (source string, destination string)
+	JobPartStatus() common.JobStatus
+	JobStatus() common.JobStatus
+	SetJobPartStatus(newJobStatus common.JobStatus)
+	SetJobStatus(newJobStatus common.JobStatus)
+	Transfer(transferIndex uint32) *JobPartPlanTransfer
+	TransferSrcDstRelatives(transferIndex uint32) (relSource string, relDest string)
+	TransferSrcDstStrings(transferIndex uint32) (source string, destination string, isFolder bool)
+	TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier, s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags)
+}
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
@@ -62,7 +74,7 @@ type JobPartPlanHeader struct {
 	LogLevel               common.LogLevel     // This Job Part's minimal log level
 	DstBlobData            JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData           JobPartPlanDstLocal // Additional data for local destinations
-	DstFileData			   JobPartPlanDstFile  // Additional data for file destinations
+	DstFileData            JobPartPlanDstFile  // Additional data for file destinations
 
 	PreservePermissions     common.PreservePermissionsOption
 	PreserveSMBInfo         bool
@@ -340,6 +352,8 @@ type JobPartPlanDstBlob struct {
 	BlockSize int64
 
 	SetPropertiesFlags common.SetPropertiesFlags
+
+	DeleteDestinationFileIfNecessary bool
 }
 
 // JobPartPlanDstFile holds additional settings required when the destination is a file

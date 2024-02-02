@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 )
 
 // ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -66,8 +64,8 @@ func (u URLExtension) RedactSecretQueryParamForLogging() string {
 	return u.String()
 }
 
-const SigAzure = azbfs.SigAzure
-const SigXAmzForAws = azbfs.SigXAmzForAws
+const SigAzure = "sig"
+const SigXAmzForAws = "x-amz-signature"
 
 func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
 	values, _ := url.ParseQuery(rawQuery)

@@ -108,7 +108,7 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 			argUrl, err := url.Parse(arg)
 			// If there is an error parsing the url, then throw the error
 			if err != nil {
-				panic(fmt.Errorf("error parsing the url %s. Failed with error %s", argUrl.String(), err.Error()))
+				panic(fmt.Errorf("error parsing the url %s. Failed with error %s", arg, err.Error()))
 			}
 			// Check for the signature query parameter
 			_, rawQuery := util.redactSigQueryParam(argUrl.RawQuery)
@@ -130,7 +130,8 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(metadata map[string]*string
 	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
 	// The empty directory has meta-data 'hdi_isfolder = true'
 	// Note: GoLang sometimes sets metadata keys with the first letter capitalized
-	return (metadata["hdi_isfolder"] != nil && strings.ToLower(*metadata["hdi_isfolder"]) == "true") || (metadata["Hdi_isfolder"] != nil && strings.ToLower(*metadata["Hdi_isfolder"]) == "true")
+	v, ok := common.TryReadMetadata(metadata, common.POSIXFolderMeta)
+	return ok && v != nil && strings.ToLower(*v) == "true"
 }
 
 func startsWith(s string, t string) bool {

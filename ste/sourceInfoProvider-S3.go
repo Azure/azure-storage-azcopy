@@ -21,12 +21,13 @@
 package ste
 
 import (
+	"crypto/md5"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	minio "github.com/minio/minio-go"
 )
@@ -34,7 +35,7 @@ import (
 // Source info provider for S3
 type s3SourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 
 	rawSourceURL *url.URL
 
@@ -75,8 +76,8 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 			Region:   p.s3URLPart.Region,
 		},
 	}, common.CredentialOpOptions{
-		LogInfo:  func(str string) { p.jptm.Log(pipeline.LogInfo, str) },
-		LogError: func(str string) { p.jptm.Log(pipeline.LogError, str) },
+		LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
+		LogError: func(str string) { p.jptm.Log(common.LogError, str) },
 		Panic:    func(err error) { panic(err) },
 	}, jptm)
 	if err != nil {
@@ -145,8 +146,8 @@ func (p *s3SourceInfoProvider) handleInvalidMetadataKeys(m common.Metadata) (com
 	switch p.transferInfo.S2SInvalidMetadataHandleOption {
 	case common.EInvalidMetadataHandleOption.ExcludeIfInvalid():
 		retainedMetadata, excludedMetadata, invalidKeyExists := m.ExcludeInvalidKey()
-		if invalidKeyExists && p.jptm.ShouldLog(pipeline.LogWarning) {
-			p.jptm.Log(pipeline.LogWarning,
+		if invalidKeyExists && p.jptm.ShouldLog(common.LogWarning) {
+			p.jptm.Log(common.LogWarning,
 				fmt.Sprintf("METADATAWARNING: For source %q, invalid metadata with keys %s are excluded", p.transferInfo.Source, excludedMetadata.ConcatenatedKeys()))
 		}
 		return retainedMetadata, nil
@@ -187,4 +188,25 @@ func (p *s3SourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error)
 
 func (p *s3SourceInfoProvider) EntityType() common.EntityType {
 	return common.EEntityType.File() // no real folders exist in S3
+}
+
+func (p *s3SourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	options := minio.GetObjectOptions{}
+	r := formatHTTPRange(offset, count)
+	if r != nil {
+		options.Set("Range", *r)
+	}
+
+	// s3 does not support getting range md5
+	body, err := p.s3Client.GetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, options)
+	if err != nil {
+		return nil, err
+	}
+	// compute md5
+	defer body.Close() //nolint:staticcheck
+	h := md5.New()
+	if _, err = io.Copy(h, body); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }

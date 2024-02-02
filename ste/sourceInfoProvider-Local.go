@@ -21,6 +21,10 @@
 package ste
 
 import (
+	"bytes"
+	"crypto/md5"
+	"errors"
+	"io"
 	"os"
 	"time"
 
@@ -30,7 +34,7 @@ import (
 // Source info provider for local files
 type localFileSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 }
 
 func (f localFileSourceInfoProvider) ReadLink() (string, error) {
@@ -100,4 +104,25 @@ func (f localFileSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, 
 
 func (f localFileSourceInfoProvider) EntityType() common.EntityType {
 	return f.transferInfo.EntityType
+}
+
+func (f localFileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
+	localFile, err := f.OpenSourceFile()
+	if err != nil {
+		return nil, err
+	}
+	defer localFile.Close()
+	data := make([]byte, count)
+	size, err := localFile.ReadAt(data, offset)
+	if err != nil {
+		return nil, err
+	}
+	if int64(size) != count {
+		return nil, errors.New("failed to read the full range of the local file")
+	}
+	h := md5.New()
+	if _, err = io.Copy(h, bytes.NewReader(data)); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }

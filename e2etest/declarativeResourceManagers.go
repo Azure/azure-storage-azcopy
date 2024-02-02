@@ -21,16 +21,21 @@
 package e2etest
 
 import (
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"net/url"
 	"os"
 	"path"
 	"runtime"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -84,7 +89,7 @@ type resourceManager interface {
 	cleanup(a asserter)
 
 	// gets the azCopy command line param that represents the resource.  withSas is ignored when not applicable
-	getParam(stripTopDir bool, withSas bool, withFile string) string
+	getParam(a asserter, stripTopDir, withSas bool, withFile objectTarget) string
 
 	getSAS() string
 
@@ -154,14 +159,14 @@ func (r *resourceLocal) cleanup(_ asserter) {
 	}
 }
 
-func (r *resourceLocal) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceLocal) getParam(a asserter, stripTopDir, withSas bool, withFile objectTarget) string {
 	if r.dirPath == common.Dev_Null {
 		return common.Dev_Null
 	}
 
 	if !stripTopDir {
-		if withFile != "" {
-			p := path.Join(r.dirPath, withFile)
+		if withFile.objectName != "" {
+			p := path.Join(r.dirPath, withFile.objectName)
 
 			if runtime.GOOS == "windows" {
 				p = strings.ReplaceAll(p, "/", "\\")
@@ -239,6 +244,7 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 	if isSource {
 		options.accessTier = s.p.accessTier
 	}
+	options.compressToGZ = isSource && s.fromTo.IsDownload() && s.p.decompress
 	scenarioHelper{}.generateBlobsFromList(a, options)
 
 	// set root ACL
@@ -252,11 +258,10 @@ func (r *resourceBlobContainer) createFiles(a asserter, s *scenario, isSource bo
 					break
 				}
 
-				rootURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(containerURLParts.ContainerName).NewDirectoryURL("/")
+				rootURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(containerURLParts.ContainerName).NewDirectoryClient("/")
 
-				_, err := rootURL.SetAccessControl(ctx, azbfs.BlobFSAccessControl{
-					ACL: *v.creationProperties.adlsPermissionsACL,
-				})
+				_, err := rootURL.SetAccessControl(ctx,
+					&datalakedirectory.SetAccessControlOptions{ACL: v.creationProperties.adlsPermissionsACL})
 				a.AssertNoErr(err)
 
 				break
@@ -278,6 +283,7 @@ func (r *resourceBlobContainer) createFile(a asserter, o *testObject, s *scenari
 		options.cpkInfo = common.GetCpkInfo(s.p.cpkByValue)
 		options.cpkScopeInfo = common.GetCpkScopeInfo(s.p.cpkByName)
 	}
+	options.compressToGZ = isSource && s.fromTo.IsDownload() && s.p.decompress
 
 	scenarioHelper{}.generateBlobsFromList(a, options)
 }
@@ -288,7 +294,64 @@ func (r *resourceBlobContainer) cleanup(a asserter) {
 	}
 }
 
-func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFile string) string {
+type timestampSortable struct {
+	timestamps []string
+	format     string
+	a          asserter
+}
+
+func (t *timestampSortable) Len() int {
+	return len(t.timestamps)
+}
+
+func (t *timestampSortable) Less(i, j int) bool {
+	it, err := time.Parse(t.format, t.timestamps[i])
+	t.a.AssertNoErr(err, "failed to parse timestamp "+t.timestamps[i])
+
+	jt, err := time.Parse(t.format, t.timestamps[j])
+	t.a.AssertNoErr(err, "failed to parse timestamp "+t.timestamps[j])
+
+	return it.Before(jt)
+}
+
+func (t *timestampSortable) Swap(i, j int) {
+	t.timestamps[i], t.timestamps[j] = t.timestamps[j], t.timestamps[i]
+}
+
+// getVersions returns an ordered list of versions
+func (r *resourceBlobContainer) getVersions(a asserter, objectName string) []string {
+	p := r.containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Include: container.ListBlobsInclude{Versions: true},
+		Prefix:  &objectName,
+	})
+
+	versions := &timestampSortable{
+		timestamps: make([]string, 0),
+		format:     cmd.ISO8601,
+		a:          a,
+	}
+
+	for p.More() {
+		page, err := p.NextPage(ctx)
+		a.AssertNoErr(err, "listing versions")
+
+		for _, v := range page.Segment.BlobItems {
+			if v.Name != nil && *v.Name == objectName && v.VersionID != nil {
+				_, err := time.Parse(cmd.ISO8601, *v.VersionID) // Make sure we can parse it
+				a.AssertNoErr(err, "parsing timestamp "+*v.VersionID)
+
+				versions.timestamps = append(versions.timestamps, *v.VersionID)
+			}
+		}
+	}
+
+	// Sort it
+	sort.Sort(versions)
+
+	return versions.timestamps
+}
+
+func (r *resourceBlobContainer) getParam(a asserter, stripTopDir, withSas bool, withFile objectTarget) string {
 	var uri string
 	if withSas {
 		uri = r.rawSasURL.String()
@@ -296,10 +359,26 @@ func (r *resourceBlobContainer) getParam(stripTopDir bool, withSas bool, withFil
 		uri = r.containerClient.URL()
 	}
 
-	if withFile != "" {
+	if withFile.objectName != "" {
 		bURLParts, _ := blob.ParseURL(uri)
 
-		bURLParts.BlobName = withFile
+		bURLParts.BlobName = withFile.objectName
+
+		bURLParts.BlobName = withFile.objectName
+
+		if !withFile.singleVersionList && len(withFile.versions) == 1 {
+			versions := r.getVersions(a, withFile.objectName)
+			a.Assert(len(versions) > 0, equals(), true, "blob was expected to have versions!")
+			a.Assert(int(withFile.versions[0]) < len(versions), equals(), true, fmt.Sprintf("Not enough versions are present! (needed version %d of %d)", withFile.versions[0], len(versions)))
+
+			bURLParts.VersionID = versions[withFile.versions[0]]
+		} else if withFile.snapshotid {
+			// Get latest snapshot
+			blobClient := r.containerClient.NewBlobClient(withFile.objectName)
+			resp, err := blobClient.CreateSnapshot(ctx, nil)
+			a.AssertNoErr(err, "creating snapshot")
+			bURLParts.Snapshot = *resp.Snapshot
+		}
 
 		uri = bURLParts.String()
 	}
@@ -326,28 +405,26 @@ func (r *resourceBlobContainer) appendSourcePath(filePath string, useSas bool) {
 }
 
 func (r *resourceBlobContainer) getAllProperties(a asserter) map[string]*objectProperties {
-	objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient)
-
 	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
 		urlParts, err := blob.ParseURL(r.containerClient.URL())
 		a.AssertNoErr(err)
-		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemURL(urlParts.ContainerName).NewDirectoryURL("/")
+		fsURL := TestResourceFactory{}.GetDatalakeServiceURL(r.accountType).NewFileSystemClient(urlParts.ContainerName)
+		objects := scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient, fsURL)
 
-		ACL, err := fsURL.GetAccessControl(ctx)
-		if stgErr, ok := err.(azbfs.StorageError); ok {
-			if stgErr.ServiceCode() == "FilesystemNotFound" { // skip grabbing ACLs
-				return objects
-			}
+		resp, err := fsURL.NewDirectoryClient("/").GetAccessControl(ctx, nil)
+		if datalakeerror.HasCode(err, "FilesystemNotFound") {
+			return objects
 		}
 		a.AssertNoErr(err)
 
 		objects[""] = &objectProperties{
 			entityType:         common.EEntityType.Folder(),
-			adlsPermissionsACL: &ACL.ACL,
+			adlsPermissionsACL: resp.ACL,
 		}
-	}
 
-	return objects
+		return objects
+	}
+	return scenarioHelper{}.enumerateContainerBlobProperties(a, r.containerClient, nil)
 }
 
 func (r *resourceBlobContainer) downloadContent(a asserter, options downloadContentOptions) []byte {
@@ -401,7 +478,7 @@ func (r *resourceAzureFileShare) cleanup(a asserter) {
 	}
 }
 
-func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceAzureFileShare) getParam(a asserter, stripTopDir, withSas bool, withFile objectTarget) string {
 	assertNoStripTopDir(stripTopDir)
 	var uri string
 	if withSas {
@@ -411,14 +488,14 @@ func (r *resourceAzureFileShare) getParam(stripTopDir bool, withSas bool, withFi
 	}
 
 	// append the snapshot ID if present
-	if r.snapshotID != "" || withFile != "" {
+	if r.snapshotID != "" || withFile.objectName != "" {
 		parts, _ := file.ParseURL(uri)
 		if r.snapshotID != "" {
 			parts.ShareSnapshot = r.snapshotID
 		}
 
-		if withFile != "" {
-			parts.DirectoryOrFilePath = withFile
+		if withFile.objectName != "" {
+			parts.DirectoryOrFilePath = withFile.objectName
 		}
 		uri = parts.String()
 	}
@@ -497,7 +574,7 @@ func (r *resourceManagedDisk) cleanup(a asserter) {
 }
 
 // getParam works functionally different because resourceManagerDisk inherently only targets a single file.
-func (r *resourceManagedDisk) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceManagedDisk) getParam(a asserter, stripTopDir, withSas bool, withFile objectTarget) string {
 	out := *r.accessURI // clone the URI
 
 	if !withSas {
@@ -544,7 +621,7 @@ func (r *resourceDummy) createFile(a asserter, o *testObject, s *scenario, isSou
 func (r *resourceDummy) cleanup(_ asserter) {
 }
 
-func (r *resourceDummy) getParam(stripTopDir bool, withSas bool, withFile string) string {
+func (r *resourceDummy) getParam(a asserter, stripTopDir, withSas bool, withFile objectTarget) string {
 	assertNoStripTopDir(stripTopDir)
 	return ""
 }
@@ -558,7 +635,7 @@ func (r *resourceDummy) isContainerLike() bool {
 }
 
 func (r *resourceDummy) getAllProperties(a asserter) map[string]*objectProperties {
-	panic("not impelmented")
+	panic("not implemented")
 }
 
 func (r *resourceDummy) downloadContent(a asserter, options downloadContentOptions) []byte {

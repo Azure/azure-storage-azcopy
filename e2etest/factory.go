@@ -23,29 +23,24 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	datalakeservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"net/url"
+	"github.com/google/uuid"
 	"os"
 	"path"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
-	"github.com/google/uuid"
 )
 
 // provide convenient methods to get access to test resources such as accounts, containers/shares, directories
@@ -53,7 +48,12 @@ type TestResourceFactory struct{}
 
 func (TestResourceFactory) GetBlobServiceURL(accountType AccountType) *blobservice.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
-	resourceURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
+	var resourceURL string
+	if accountName != "devstoreaccount1" {
+		resourceURL = fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
+	} else {
+		resourceURL = fmt.Sprintf("http://127.0.0.1:10000/%s/", accountName)
+	}
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
@@ -74,24 +74,26 @@ func (TestResourceFactory) GetFileServiceURL(accountType AccountType) *fileservi
 	if err != nil {
 		panic(err)
 	}
-	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(to.Ptr(common.ETrailingDotOption.Enable()), nil)}
-	clientOptions := azcore.ClientOptions{
-		PerRetryPolicies: perRetryPolicies,
-	}
-	fsc, err := fileservice.NewClientWithSharedKeyCredential(resourceURL, credential, &fileservice.ClientOptions{ClientOptions: clientOptions})
+	fsc, err := fileservice.NewClientWithSharedKeyCredential(resourceURL, credential, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
 	if err != nil {
 		panic(err)
 	}
 	return fsc
 }
 
-func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) azbfs.ServiceURL {
+func (TestResourceFactory) GetDatalakeServiceURL(accountType AccountType) *datalakeservice.Client {
 	accountName, accountKey := GlobalInputManager{}.GetAccountAndKey(accountType)
-	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", accountName))
+	resourceURL := fmt.Sprintf("https://%s.dfs.core.windows.net/", accountName)
 
-	cred := azbfs.NewSharedKeyCredential(accountName, accountKey)
-	pipeline := azbfs.NewPipeline(cred, azbfs.PipelineOptions{})
-	return azbfs.NewServiceURL(*u, pipeline)
+	credential, err := azdatalake.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	dsc, err := datalakeservice.NewClientWithSharedKeyCredential(resourceURL, credential, nil)
+	if err != nil {
+		panic(err)
+	}
+	return dsc
 }
 
 func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType AccountType) *blobservice.Client {
@@ -105,7 +107,7 @@ func (TestResourceFactory) GetBlobServiceURLWithSAS(c asserter, accountType Acco
 	sasURL, err := client.GetSASURL(
 		blobsas.AccountResourceTypes{Service: true, Container: true, Object: true},
 		blobsas.AccountPermissions{Read: true, List: true, Write: true, Delete: true, DeletePreviousVersion: true, Add: true, Create: true, Update: true, Process: true, Tag: true, FilterByTags: true},
-		time.Now().Add(48 * time.Hour),
+		time.Now().Add(48*time.Hour),
 		nil)
 	c.AssertNoErr(err)
 
@@ -120,16 +122,24 @@ func (TestResourceFactory) GetContainerURLWithSAS(c asserter, accountType Accoun
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	c.AssertNoErr(err)
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s", credential.AccountName(), containerName)
-	client, err := container.NewClientWithSharedKeyCredential(rawURL, credential, nil)
+	if accountName == "devstoreaccount1" {
+		rawURL = fmt.Sprintf("http://127.0.0.1:10000/%s/%s", credential.AccountName(), containerName)
+	}
+
+	permissions := blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, ModifyOwnership: true, ModifyPermissions: true, Tag: true}
+	qps, err := blobsas.BlobSignatureValues{
+		Version:       blobsas.Version,
+		Protocol:      blobsas.ProtocolHTTPSandHTTP,
+		ContainerName: containerName,
+		Permissions:   permissions.String(),
+		StartTime:     time.Time{},
+		ExpiryTime:    time.Now().Add(48 * time.Hour).UTC(),
+	}.SignWithSharedKey(credential)
 	c.AssertNoErr(err)
 
-	sasURL, err := client.GetSASURL(
-		blobsas.ContainerPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, DeletePreviousVersion: true, List: true, ModifyOwnership: true, ModifyPermissions: true, Tag: true},
-		time.Now().Add(48 * time.Hour),
-		nil)
-	c.AssertNoErr(err)
+	sasURL := rawURL + "?" + qps.Encode()
 
-	client, err = container.NewClientWithNoCredential(sasURL, nil)
+	client, err := container.NewClientWithNoCredential(sasURL, nil)
 	c.AssertNoErr(err)
 
 	return client
@@ -145,14 +155,10 @@ func (TestResourceFactory) GetFileShareURLWithSAS(c asserter, accountType Accoun
 
 	sasURL, err := client.GetSASURL(
 		filesas.SharePermissions{Read: true, Write: true, Create: true, Delete: true, List: true},
-		time.Now().Add(48 * time.Hour),
+		time.Now().Add(48*time.Hour),
 		nil)
 	c.AssertNoErr(err)
-	perRetryPolicies := []policy.Policy{ste.NewTrailingDotPolicy(to.Ptr(common.ETrailingDotOption.Enable()), nil)}
-	clientOptions := azcore.ClientOptions{
-		PerRetryPolicies: perRetryPolicies,
-	}
-	client, err = share.NewClientWithNoCredential(sasURL, &share.ClientOptions{ClientOptions: clientOptions})
+	client, err = share.NewClientWithNoCredential(sasURL, &share.ClientOptions{AllowTrailingDot: to.Ptr(true)})
 	c.AssertNoErr(err)
 
 	return client

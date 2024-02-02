@@ -21,14 +21,19 @@
 package ste
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
+	"strings"
 	"testing"
 )
 
 func TestGetVerifiedChunkParams(t *testing.T) {
 	a := assert.New(t)
 	// Mock required params
-	transferInfo := TransferInfo{
+	transferInfo := &TransferInfo{
 		BlockSize:  4195352576, // 4001MiB
 		Source:     "tmpSrc",
 		SourceSize: 8389656576, // 8001MiB
@@ -52,4 +57,111 @@ func TestGetVerifiedChunkParams(t *testing.T) {
 	expectedErr = "Block size 2048 for source of size 2147483648 is not correct. Number of blocks will exceed the limit"
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
 	a.Equal(expectedErr, err.Error())
+}
+
+func TestDeleteDstBlob(t *testing.T) {
+	a := assert.New(t)
+	bsc := GetBlobServiceClient()
+	dstContainerClient, _ := CreateNewContainer(t, a, bsc)
+	defer DeleteContainer(a, dstContainerClient)
+
+	// set up the destination container with a single blob with uncommitted block
+	dstBlobClient := dstContainerClient.NewBlockBlobClient("foo")
+	blockIDs := GenerateBlockIDsList(1)
+	_, err := dstBlobClient.StageBlock(ctxSender, blockIDs[0], streaming.NopCloser(strings.NewReader(BlockBlobDefaultData)), nil)
+	a.NoError(err)
+	_, err = dstBlobClient.CommitBlockList(ctxSender, blockIDs, nil)
+	a.NoError(err)
+	_, err = dstBlobClient.StageBlock(ctxSender, "0001", streaming.NopCloser(strings.NewReader(BlockBlobDefaultData)), nil)
+	a.NoError(err)
+
+	// check if dst blob was set up with one uncommitted block
+	resp, err := dstBlobClient.GetBlockList(ctxSender, blockblob.BlockListTypeUncommitted, nil)
+	a.NoError(err)
+	a.Equal(len(resp.UncommittedBlocks), 1)
+
+	// set up job part manager
+	jpm := jobPartMgr{
+		deleteDestinationFileIfNecessary: true,
+	}
+
+	ti := TransferInfo{
+		Destination: dstBlobClient.URL(),
+	}
+
+	jp := testJobPartTransferManager{
+		info:       &ti,
+		fromTo:     0,
+		jobPartMgr: jpm,
+		ctx:        ctxSender,
+	}
+
+	bbSender := &blockBlobSenderBase{
+		jptm:                &jp,
+		destBlockBlobClient: dstBlobClient,
+	}
+
+	ps := common.PrologueState{
+		LeadingBytes: []byte(BlockBlobDefaultData),
+	}
+
+	bbSender.Prologue(ps)
+
+	// check if dst blob was deleted
+	_, err = dstBlobClient.GetProperties(ctxSender, nil)
+	a.Error(err)
+	a.True(bloberror.HasCode(err, bloberror.BlobNotFound))
+}
+
+func TestDeleteDstBlobNegative(t *testing.T) {
+	a := assert.New(t)
+	bsc := GetBlobServiceClient()
+	dstContainerClient, _ := CreateNewContainer(t, a, bsc)
+	defer DeleteContainer(a, dstContainerClient)
+
+	// set up the destination container with a single blob with uncommitted block
+	dstBlobClient := dstContainerClient.NewBlockBlobClient("foo")
+	blockIDs := GenerateBlockIDsList(1)
+	_, err := dstBlobClient.StageBlock(ctxSender, blockIDs[0], streaming.NopCloser(strings.NewReader(BlockBlobDefaultData)), nil)
+	a.NoError(err)
+	_, err = dstBlobClient.CommitBlockList(ctxSender, blockIDs, nil)
+	a.NoError(err)
+	_, err = dstBlobClient.StageBlock(ctxSender, "0001", streaming.NopCloser(strings.NewReader(BlockBlobDefaultData)), nil)
+	a.NoError(err)
+
+	// check if dst blob was set up with one uncommitted block
+	resp, err := dstBlobClient.GetBlockList(ctxSender, blockblob.BlockListTypeUncommitted, nil)
+	a.NoError(err)
+	a.Equal(len(resp.UncommittedBlocks), 1)
+
+	// set up job part manager
+	jpm := jobPartMgr{
+		deleteDestinationFileIfNecessary: false,
+	}
+
+	ti := TransferInfo{
+		Destination: dstBlobClient.URL(),
+	}
+
+	jp := testJobPartTransferManager{
+		info:       &ti,
+		fromTo:     0,
+		jobPartMgr: jpm,
+		ctx:        ctxSender,
+	}
+
+	bbSender := &blockBlobSenderBase{
+		jptm:                &jp,
+		destBlockBlobClient: dstBlobClient,
+	}
+
+	ps := common.PrologueState{
+		LeadingBytes: []byte(BlockBlobDefaultData),
+	}
+
+	bbSender.Prologue(ps)
+
+	// check dst blob was not deleted
+	_, err = dstBlobClient.GetProperties(ctxSender, nil)
+	a.NoError(err)
 }

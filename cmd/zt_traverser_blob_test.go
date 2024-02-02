@@ -22,6 +22,9 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
@@ -109,16 +112,16 @@ func TestIsDestDirWithBlobEP(t *testing.T) {
 
 func TestIsDestDirWithDFSEP(t *testing.T) {
 	a := assert.New(t)
-	bfsu := GetBFSSU()
+	bfsClient := getDatalakeServiceClient()
 
 	// Generate source container and blobs
-	fileSystemURL, fileSystemName := createNewFilesystem(a, bfsu)
+	fileSystemURL, fileSystemName := createNewFilesystem(a, bfsClient)
 	defer deleteFilesystem(a, fileSystemURL)
 	a.NotNil(fileSystemURL)
 
 	parentDirName := "dest_dir"
-	parentDirURL := fileSystemURL.NewDirectoryURL(parentDirName)
-	_, err := parentDirURL.Create(ctx, true)
+	parentDirClient := fileSystemURL.NewDirectoryClient(parentDirName)
+	_, err := parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
@@ -218,4 +221,71 @@ func TestIsSourceFileDoesNotExist(t *testing.T) {
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.False(isDir)
 	a.Equal(common.FILE_NOT_FOUND, err.Error())
+}
+
+func TestGetEntityType(t *testing.T) {
+	a := assert.New(t)
+
+	// Test case 1: metadata is file
+	metadata := make(common.Metadata)
+	entityType := getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["key"] = to.Ptr("value")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["hdi_isfolder"] = to.Ptr("false")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["Hdi_isfolder"] = to.Ptr("false")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["is_symlink"] = to.Ptr("false")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["Is_symlink"] = to.Ptr("false")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.File(), entityType)
+
+	// Test case 2: metadata is a folder
+	metadata = make(common.Metadata)
+	metadata["hdi_isfolder"] = to.Ptr("true")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Folder(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["hdi_isfolder"] = to.Ptr("True")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Folder(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["Hdi_isfolder"] = to.Ptr("true")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Folder(), entityType)
+
+	// Test case 2: metadata is a symlink
+	metadata = make(common.Metadata)
+	metadata["is_symlink"] = to.Ptr("true")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Symlink(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["is_symlink"] = to.Ptr("True")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Symlink(), entityType)
+
+	metadata = make(common.Metadata)
+	metadata["Is_symlink"] = to.Ptr("true")
+	entityType = getEntityType(metadata)
+	a.Equal(common.EEntityType.Symlink(), entityType)
+
 }

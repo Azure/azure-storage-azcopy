@@ -272,7 +272,7 @@ func (t *autoConcurrencyTuner) setConcurrency(mbps float32, reason string) strin
 }
 
 func (t *autoConcurrencyTuner) getCurrentSpeed() (mbps float32, isHighCpu bool) {
-	// assume that any necessary time delays, to measure or to wait for stablization,
+	// assume that any necessary time delays, to measure or to wait for stabilization,
 	// are done by the caller of GetRecommendedConcurrency
 	ob := <-t.observations
 	return float32(ob.mbps), ob.isHighCpu

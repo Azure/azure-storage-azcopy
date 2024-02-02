@@ -21,9 +21,11 @@
 package ste
 
 import (
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -41,6 +43,8 @@ type ISourceInfoProvider interface {
 	IsLocal() bool
 
 	EntityType() common.EntityType
+
+	GetMD5(offset, count int64) ([]byte, error)
 }
 
 type ILocalSourceInfoProvider interface {
@@ -69,7 +73,7 @@ type IBlobSourceInfoProvider interface {
 	IRemoteSourceInfoProvider
 
 	// BlobTier returns source's blob tier.
-	BlobTier() blob.AccessTier
+	BlobTier() *blob.AccessTier
 
 	// BlobType returns source's blob type.
 	BlobType() blob.BlobType
@@ -115,15 +119,11 @@ type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvid
 // return FRESH (up to date) data.
 type defaultRemoteSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
-	transferInfo TransferInfo
+	transferInfo *TransferInfo
 }
 
 func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (*defaultRemoteSourceInfoProvider, error) {
 	return &defaultRemoteSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
-}
-
-func (p *defaultRemoteSourceInfoProvider) PreSignedSourceURL() (string, error) {
-	return p.transferInfo.Source, nil
 }
 
 func (p *defaultRemoteSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -142,10 +142,19 @@ func (p *defaultRemoteSourceInfoProvider) SourceSize() int64 {
 	return p.transferInfo.SourceSize
 }
 
-func (p *defaultRemoteSourceInfoProvider) RawSource() string {
-	return p.transferInfo.Source
-}
-
 func (p *defaultRemoteSourceInfoProvider) EntityType() common.EntityType {
 	return p.transferInfo.EntityType
+}
+
+// formatHTTPRange converts an offset and count to its header format.
+func formatHTTPRange(offset, count int64) *string {
+	if offset == 0 && count == 0 {
+		return nil // No specified range
+	}
+	endOffset := "" // if count == CountToEnd (0)
+	if count > 0 {
+		endOffset = strconv.FormatInt((offset+count)-1, 10)
+	}
+	dataRange := fmt.Sprintf("bytes=%v-%s", offset, endOffset)
+	return &dataRange
 }

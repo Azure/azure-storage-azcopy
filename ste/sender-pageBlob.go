@@ -24,15 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -53,7 +52,7 @@ type pageBlobSenderBase struct {
 	metadataToApply common.Metadata
 	blobTagsToApply common.BlobTags
 
-	destBlobTier blob.AccessTier
+	destBlobTier *blob.AccessTier
 	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
@@ -80,7 +79,7 @@ var (
 	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
 )
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType blob.AccessTier) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -95,7 +94,12 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	destPageBlobClient := common.CreatePageBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	bsc, err := jptm.DstServiceClient().BlobServiceClient()
+	if err != nil {
+		return nil, err
+	}
+
+	destPageBlobClient := bsc.NewContainerClient(jptm.Info().DstContainer).NewPageBlobClient(jptm.Info().DstFilePath)
 
 	// This is only necessary if our destination is a managed disk impexp account.
 	// Read the in struct explanation if necessary.
@@ -114,7 +118,8 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 	destBlobTier := inferredAccessTierType
 	_, pageBlobTierOverride := jptm.BlobTiers()
 	if pageBlobTierOverride != common.EPageBlobTier.None() {
-		destBlobTier = pageBlobTierOverride.ToAccessTierType()
+		t := pageBlobTierOverride.ToAccessTierType()
+		destBlobTier = &t
 	}
 
 	s := &pageBlobSenderBase{
@@ -216,7 +221,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		// Next, grab the page ranges on the destination.
 		s.destPageRangeOptimizer.fetchPages()
 
-		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
+		s.jptm.Log(common.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
 		return
 	}
 
@@ -226,8 +231,10 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 		s.headersToApply.BlobContentType = ps.GetInferredContentType(s.jptm)
 	}
 
-	t := pageblob.PremiumPageBlobAccessTier(s.destBlobTier)
-	destBlobTier := &t
+	var destBlobTier *pageblob.PremiumPageBlobAccessTier
+	if s.destBlobTier != nil {
+		destBlobTier = to.Ptr(pageblob.PremiumPageBlobAccessTier(*s.destBlobTier))
+	}
 	if !ValidateTier(s.jptm, s.destBlobTier, s.destPageBlobClient, s.jptm.Context(), false) {
 		destBlobTier = nil
 	}
@@ -245,12 +252,12 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 	_, err := s.destPageBlobClient.Create(s.jptm.Context(), s.srcSize,
 		&pageblob.CreateOptions{
 			SequenceNumber: to.Ptr(int64(0)),
-			HTTPHeaders: &s.headersToApply,
-			Metadata: s.metadataToApply,
-			Tier: destBlobTier,
-			Tags: blobTags,
-			CPKInfo: s.jptm.CpkInfo(),
-			CPKScopeInfo: s.jptm.CpkScopeInfo(),
+			HTTPHeaders:    &s.headersToApply,
+			Metadata:       s.metadataToApply,
+			Tier:           destBlobTier,
+			Tags:           blobTags,
+			CPKInfo:        s.jptm.CpkInfo(),
+			CPKScopeInfo:   s.jptm.CpkScopeInfo(),
 		})
 	if err != nil {
 		s.jptm.FailActiveSend("Creating blob", err)
@@ -261,7 +268,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 
 	if setTags {
 		if _, err := s.destPageBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil); err != nil {
-			s.jptm.Log(pipeline.LogWarning, err.Error())
+			s.jptm.Log(common.LogWarning, err.Error())
 		}
 	}
 

@@ -25,11 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/go-autorest/autorest/date"
 	"net"
 	"net/http"
 	"net/url"
@@ -37,7 +32,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/go-autorest/autorest/date"
 
 	"github.com/Azure/go-autorest/autorest/adal"
 )
@@ -82,7 +84,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial,                   /*Context*/
+			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -160,6 +162,24 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	return nil
 }
 
+func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
+	oAuthTokenInfo := &OAuthTokenInfo{
+		AzCLICred: true,
+		Tenant:    tenantID,
+	}
+
+	// CLI creds will not be persisted. AzCLI would have already persistd that
+	return uotm.validateAndPersistLogin(oAuthTokenInfo, false)
+}
+
+func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string) error {
+	oAuthTokenInfo := &OAuthTokenInfo {
+		PSCred: true,
+		Tenant: tenantID,
+	}
+
+	return uotm.validateAndPersistLogin(oAuthTokenInfo, false)
+}
 // MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
 func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist bool) error {
 	if err := identityInfo.Validate(); err != nil {
@@ -175,12 +195,12 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 }
 
 // SecretLogin is a UOTM shell for secretLoginNoUOTM.
-func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) (error) {
+func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		ServicePrincipalName: true,
+		ServicePrincipalName:    true,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
-		ApplicationID: applicationID,
+		ApplicationID:           applicationID,
 		SPNInfo: SPNInfo{
 			Secret:   secret,
 			CertPath: "",
@@ -201,10 +221,10 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 	}
 	absCertPath, _ := filepath.Abs(certPath)
 	oAuthTokenInfo := &OAuthTokenInfo{
-		ServicePrincipalName: true,
+		ServicePrincipalName:    true,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
-		ApplicationID: applicationID,
+		ApplicationID:           applicationID,
 		SPNInfo: SPNInfo{
 			Secret:   certPass,
 			CertPath: absCertPath,
@@ -262,7 +282,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		Token:                   *token,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
-		ApplicationID: ApplicationID,
+		ApplicationID:           ApplicationID,
 	}
 	uotm.stashedInfo = &oAuthTokenInfo
 
@@ -404,6 +424,8 @@ type OAuthTokenInfo struct {
 	IdentityInfo            IdentityInfo
 	ServicePrincipalName    bool `json:"_spn"`
 	SPNInfo                 SPNInfo
+	AzCLICred               bool
+	PSCred					bool
 	// Note: ClientID should be only used for internal integrations through env var with refresh token.
 	// It indicates the Application ID assigned to your app when you registered it with Azure AD.
 	// In this case AzCopy refresh token on behalf of caller.
@@ -461,8 +483,8 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 			return nil, err
 		}
 		return &adal.Token{
-			AccessToken:  t.Token,
-			ExpiresOn: json.Number(strconv.FormatInt(int64(t.ExpiresOn.Sub(date.UnixEpoch())/time.Second), 10)),
+			AccessToken: t.Token,
+			ExpiresOn:   json.Number(strconv.FormatInt(int64(t.ExpiresOn.Sub(date.UnixEpoch())/time.Second), 10)),
 		}, nil
 	} else {
 		if dcc, ok := tc.(*DeviceCodeCredential); ok {
@@ -501,10 +523,39 @@ func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error)
 	return u.Parse(tenantID)
 }
 
+const minimumTokenValidDuration = time.Minute * 5
 type TokenStoreCredential struct {
+	token *azcore.AccessToken
+	lock  sync.RWMutex
 }
 
+// globalTokenStoreCredential is created to make sure that all
+// service clients share same cred object. This is required so that
+// we do not make repeated GetToken calls.
+// This is a temporary fix for issue where we would request a
+// new token from Stg Exp even while they've not yet populated the
+// tokenstore. 
+//
+// This is okay because we use same credential on both source and
+// destination. If we move to a case where the credentials are
+// different, this should be removed.
+//
+// We should move to a method where the token is always read  from
+// tokenstore, and azcopy is invoked after tokenstore is populated.
+//
+var globalTokenStoreCredential *TokenStoreCredential
+var globalTsc sync.Once
+
 func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	// if the token we've has not expired, return the same.
+	tsc.lock.RLock()
+	if time.Until(tsc.token.ExpiresOn) > minimumTokenValidDuration {
+		return *tsc.token, nil
+	}
+	tsc.lock.RUnlock()
+
+	tsc.lock.Lock()
+	defer tsc.lock.Unlock()
 	hasToken, err := tokenStoreCredCache.HasCachedToken()
 	if err != nil || !hasToken {
 		return azcore.AccessToken{}, fmt.Errorf("no cached token found in Token Store Mode(SE), %v", err)
@@ -515,20 +566,32 @@ func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenReque
 		return azcore.AccessToken{}, fmt.Errorf("get cached token failed in Token Store Mode(SE), %v", err)
 	}
 
-	return azcore.AccessToken{
-		Token: tokenInfo.AccessToken,
+	tsc.token = &azcore.AccessToken{
+		Token:     tokenInfo.AccessToken,
 		ExpiresOn: tokenInfo.Expires(),
-	}, nil
+	}
 
+	return *tsc.token, nil
 
 }
 
 // GetNewTokenFromTokenStore gets token from token store. (Credential Manager in Windows, keyring in Linux and keychain in MacOS.)
 // Note: This approach should only be used in internal integrations.
+func GetTokenStoreCredential(accessToken string, expiresOn time.Time) (azcore.TokenCredential) {
+	globalTsc.Do(func() {
+		globalTokenStoreCredential = &TokenStoreCredential{
+			token: &azcore.AccessToken{
+				Token:     accessToken,
+				ExpiresOn: expiresOn,
+			},
+		}
+	})
+	return globalTokenStoreCredential
+}
+
 func (credInfo *OAuthTokenInfo) GetTokenStoreCredential() (azcore.TokenCredential, error) {
-	tc := &TokenStoreCredential{}
-	credInfo.TokenCredential = tc
-	return tc, nil
+	credInfo.TokenCredential = GetTokenStoreCredential(credInfo.AccessToken, credInfo.Expires())
+	return credInfo.TokenCredential, nil
 }
 
 func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCredential, error) {
@@ -536,7 +599,7 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 	if credInfo.IdentityInfo.ClientID != "" {
 		id = azidentity.ClientID(credInfo.IdentityInfo.ClientID)
 	} else if credInfo.IdentityInfo.MSIResID != "" {
-		id = azidentity.ResourceID(credInfo.IdentityInfo.ObjectID)
+		id = azidentity.ResourceID(credInfo.IdentityInfo.MSIResID)
 	} else if credInfo.IdentityInfo.ObjectID != "" {
 		return nil, fmt.Errorf("object ID is deprecated and no longer supported for managed identity. Please use client ID or resource ID instead")
 	}
@@ -598,11 +661,29 @@ func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredent
 	return tc, nil
 }
 
+func (credInfo *OAuthTokenInfo) GetAzCliCredential() (azcore.TokenCredential, error) {
+	tc, err := azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{TenantID: credInfo.Tenant})
+	if err != nil {
+		return nil, err
+	}
+	credInfo.TokenCredential = tc
+	return tc, nil
+}
+
+func (credInfo *OAuthTokenInfo) GetPSContextCredential() (azcore.TokenCredential, error) {
+	tc, err := NewPowershellContextCredential(nil)
+	if err != nil {
+		return nil, err
+	}
+	credInfo.TokenCredential = tc
+	return tc, nil
+}
+
 type DeviceCodeCredential struct {
-	token adal.Token
+	token       adal.Token
 	aadEndpoint string
-	tenantID string
-	clientID string
+	tenantID    string
+	clientID    string
 }
 
 func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
@@ -677,6 +758,13 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 		}
 	}
 
+	if credInfo.AzCLICred {
+		return credInfo.GetAzCliCredential()
+	}
+
+	if credInfo.PSCred {
+		return credInfo.GetPSContextCredential()
+	}
 	return credInfo.GetDeviceCodeCredential()
 }
 
@@ -685,6 +773,9 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	var OAuthTokenInfo OAuthTokenInfo
 	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
 		return nil, err
+	}
+	if OAuthTokenInfo.TokenRefreshSource == TokenRefreshSourceTokenStore {
+		_, _ = OAuthTokenInfo.GetTokenStoreCredential()
 	}
 	return &OAuthTokenInfo, nil
 }

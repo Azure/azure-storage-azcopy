@@ -31,8 +31,8 @@ import (
 
 var loginCmdArg = loginCmdArgs{tenantID: common.DefaultTenantID}
 
-var loginNotice = "'azcopy %s' command will be deprecated starting release 10.22. " +
-				  "Use auto-login instead. Visit %s to know more."
+var loginNotice = "We recommend all customers migrate off of using the 'azcopy %s' command. " +
+	"Use auto-login instead. Visit %s to know more."
 var autoLoginURL = "https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-authorize-azure-active-directory#authorize-without-a-secret-store "
 
 var lgCmd = &cobra.Command{
@@ -85,7 +85,7 @@ func init() {
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.certPath, "certificate-path", "", "Path to certificate for SPN authentication. Required for certificate-based service principal auth.")
 
 	// Deprecate the identity-object-id flag
-	_ = lgCmd.PersistentFlags().MarkHidden("identity-object-id")	// Object ID of user-assigned identity.
+	_ = lgCmd.PersistentFlags().MarkHidden("identity-object-id") // Object ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityObjectID, "identity-object-id", "", "Object ID of user-assigned identity. This parameter is deprecated. Please use client id or resource id")
 
 }
@@ -97,6 +97,8 @@ type loginCmdArgs struct {
 
 	identity         bool // Whether to use MSI.
 	servicePrincipal bool
+	azCliCred        bool
+	psCred           bool
 
 	// Info of VM's user assigned identity, client or object ids of the service identity are required if
 	// your VM has multiple user-assigned managed identities.
@@ -191,6 +193,16 @@ func (lca loginCmdArgs) process() error {
 		}
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
+	case lca.azCliCred:
+		if err := uotm.AzCliLogin(lca.tenantID); err != nil {
+			return err
+		}
+		glcm.Info("Login with AzCliCreds succeeded")
+	case lca.psCred:
+		if err := uotm.PSContextToken(lca.tenantID); err != nil {
+			return err
+		}
+		glcm.Info("Login with Powershell context succeeded")
 	default:
 		if err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
 			return err

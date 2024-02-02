@@ -21,12 +21,11 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // general-purpose "any remote persistence location" to local, for folders
-func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
+func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
 
 	info := jptm.Info()
 
@@ -39,7 +38,15 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 		return
 	}
 
-	dl, ok := df().(folderDownloader)
+	d, err := df(jptm)
+	if err != nil {
+		jptm.LogDownloadError(info.Source, info.Destination, "failed to create downloader", 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	dl, ok := d.(folderDownloader)
 	if !ok {
 		jptm.LogDownloadError(info.Source, info.Destination, "downloader implementation does not support folders", 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -51,13 +58,13 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer p
 	t := jptm.GetFolderCreationTracker()
 	defer t.StopTracking(info.Destination) // don't need it after this routine
 
-	err := common.CreateDirectoryIfNotExist(info.Destination, t) // we may create it here, or possible there's already a file transfer for the folder that has created it, or maybe it already existed before this job
+	err = common.CreateDirectoryIfNotExist(info.Destination, t) // we may create it here, or possible there's already a file transfer for the folder that has created it, or maybe it already existed before this job
 	if err != nil {
 		jptm.FailActiveDownload("ensuring destination folder exists", err)
 	} else {
 		shouldSetProps := t.ShouldSetProperties(info.Destination, jptm.GetOverwriteOption(), jptm.GetOverwritePrompter())
 		if !shouldSetProps {
-			jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")
+			jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")
 			jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists()) // using same status for both files and folders, for simplicity
 			jptm.ReportTransferDone()
 			return

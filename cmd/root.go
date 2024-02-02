@@ -21,18 +21,19 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
+	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -56,6 +57,7 @@ var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
 var azcopySkipVersionCheck bool
+var retryStatusCodes string
 
 type jobLoggerInfo struct {
 	jobID         common.JobID
@@ -84,6 +86,16 @@ var rootCmd = &cobra.Command{
 				ste.UploadTryTimeout = timeout
 			}
 		}
+
+		if retryStatusCodes != "" {
+			retryStatusCodes = retryStatusCodes + ";408;429;500;502;503;504"
+			rsc, err := ste.ParseRetryCodes(retryStatusCodes)
+			if err != nil {
+				return err
+			}
+			ste.RetryStatusCodes = rsc
+		}
+
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
 		if azcopyAwaitContinue {
 			glcm.E2EAwaitContinue()
@@ -107,6 +119,23 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		// If the command is for resuming a job with a specific JobID,
+		// use the provided JobID to resume the job; otherwise, create a new JobID.
+		if cmd.Use == "resume [jobID]" {
+			// If no argument is passed then it is not valid
+			if len(args) != 1 {
+				return errors.New("this command requires jobId to be passed as argument")
+			}
+
+			loggerInfo.jobID, err = common.ParseJobID(args[0])
+
+			if err != nil {
+				return err
+			}
+
+		}
+
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
 
@@ -149,7 +178,7 @@ var rootCmd = &cobra.Command{
 		startTimeMessage := fmt.Sprintf("ISO 8601 START TIME: to copy files that changed before or after this job started, use the parameter --%s=%s or --%s=%s",
 			common.IncludeBeforeFlagName, IncludeBeforeDateFilter{}.FormatAsUTC(adjustedTime),
 			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
-		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, pipeline.LogInfo)
+		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
 		if !azcopySkipVersionCheck {
 			// spawn a routine to fetch and compare the local application's version against the latest version available
@@ -230,6 +259,10 @@ func init() {
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 
+	// special flags to be used in case of unexpected service errors.
+	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "", "Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")
+	_ = rootCmd.PersistentFlags().MarkHidden("retry-status-codes")
+
 	// debug-only
 	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
 	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
@@ -246,54 +279,57 @@ func beginDetectNewVersion() chan struct{} {
 	go func() {
 		const versionMetadataUrl = "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
 
-		// step 0: check the Stderr before checking version
+		// step 0: check the Stderr, check local version
 		_, err := os.Stderr.Stat()
 		if err != nil {
 			return
 		}
 
-		// step 1: initialize pipeline
-		options := createClientOptions(pipeline.LogNone, nil, nil)
-
-		// step 2: start download
-		blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
+		localVersion, err := NewVersion(common.AzcopyVersion)
 		if err != nil {
 			return
 		}
 
-		blobStream, err := blobClient.DownloadStream(context.TODO(), nil)
-		if err != nil {
-			return
-		}
+		// step 1: fetch & validate cached version and if it is updated, return without making API calls
+		filePath := filepath.Join(azcopyLogPathFolder, "latest_version.txt")
+		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
+		if err == nil {
+			PrintOlderVersion(*cachedVersion, *localVersion)
+		} else {
+			// step 2: initialize pipeline
+			options := createClientOptions(nil, nil)
 
-		blobBody := blobStream.NewRetryReader(context.TODO(), &blob.RetryReaderOptions{MaxRetries: ste.MaxRetryPerDownloadBody})
-		defer blobBody.Close()
+			// step 3: start download
+			blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
+			if err != nil {
+				return
+			}
 
-		// step 4: read newest version str
-		buf := new(bytes.Buffer)
-		n, err := buf.ReadFrom(blobBody)
-		if n == 0 || err != nil {
-			return
-		}
-		// only take the first line, in case the version metadata file is upgraded in the future
-		remoteVersion := strings.Split(buf.String(), "\n")[0]
+			downloadBlobResp, err := blobClient.DownloadStream(context.TODO(), nil)
+			if err != nil {
+				return
+			}
 
-		// step 5: compare remote version to local version to see if there's a newer AzCopy
-		v1, err := NewVersion(common.AzcopyVersion)
-		if err != nil {
-			return
-		}
-		v2, err := NewVersion(remoteVersion)
-		if err != nil {
-			return
-		}
+			// step 4: read newest version str
+			data := make([]byte, *downloadBlobResp.ContentLength)
+			_, err = downloadBlobResp.Body.Read(data)
+			defer downloadBlobResp.Body.Close()
+			if err != nil && err != io.EOF {
+				return
+			}
 
-		if v1.OlderThan(*v2) {
-			executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
-			executableName := executablePathSegments[len(executablePathSegments)-1]
+			remoteVersion, err := NewVersion(string(data))
+			if err != nil {
+				return
+			}
 
-			// output in info mode instead of stderr, as it was crashing CI jobs of some people
-			glcm.Info(executableName + " " + common.AzcopyVersion + ": A newer version " + remoteVersion + " is available to download\n")
+			PrintOlderVersion(*remoteVersion, *localVersion)
+
+			// step 5: persist remote version in local
+			err = localVersion.CacheRemoteVersion(*remoteVersion, filePath)
+			if err != nil {
+				return
+			}
 		}
 
 		// let caller know we have finished, if they want to know

@@ -14,8 +14,6 @@ import (
 	"syscall"
 	"time"
 	"unicode"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // only one instance of the formatter should exist
@@ -93,7 +91,7 @@ type lifecycleMgr struct {
 	e2eAllowOpenChannel   chan struct{}
 	waitEverCalled        int32
 	outputFormat          OutputFormat
-	logSanitizer          pipeline.LogSanitizer
+	logSanitizer          LogSanitizer
 	inputQueue            chan userInput // msgs from the user
 	allowWatchInput       bool           // accept user inputs and place then in the inputQueue
 	allowCancelFromStdIn  bool           // allow user to send in 'cancel' from the stdin to stop the current job
@@ -372,6 +370,10 @@ func (lcm *lifecycleMgr) Exit(o OutputBuilder, applicationExitCode ExitCode) {
 		msgContent: messageContent,
 		msgType:    eOutputMessageType.EndOfJob(),
 		exitCode:   applicationExitCode,
+	}
+
+	if AzcopyCurrentJobLogger != nil && applicationExitCode != EExitCode.NoExit() {
+		AzcopyCurrentJobLogger.CloseLog()
 	}
 
 	if applicationExitCode != EExitCode.NoExit() {

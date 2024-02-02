@@ -27,18 +27,18 @@ import (
 	"testing"
 )
 
-//func TestTier_UploadCold(t *testing.T) {
-//	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-//		recursive:             true,
-//		accessTier:            common.EBlockBlobTier.Cold().ToAccessTierType(), // this is not valid yet on the service, so this test is disabled.
-//	}, nil, testFiles{
-//		defaultSize: "4M",
-//		shouldTransfer: []interface{}{
-//			folder(""), // root folder
-//			f("filea"),
-//		},
-//	}, EAccountType.Classic(), EAccountType.Standard(), "")
-//}
+func TestTier_UploadCold(t *testing.T) {
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		accessTier: to.Ptr(blob.AccessTierCold),
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.Classic(), EAccountType.Standard(), "")
+}
 
 func TestTier_V2ToClassicAccount(t *testing.T) {
 
@@ -99,3 +99,36 @@ func TestTier_V2ToClassicAccountNoPreserveCool(t *testing.T) {
 		},
 	}, EAccountType.Classic(), EAccountType.Standard(), "")
 }
+
+// Set Tier on Premium Block Blob account is a private preview feature that requires a whitelisted subscription
+// and is only available in certain regions. The service version must be 2021-04-10 or above. To test this feature,
+// uncomment TestTier_V2ToPremiumBBAccountCool and TestTier_V2ToPremiumBBAccountHot.
+/*func TestTier_V2ToPremiumBBAccountCool(t *testing.T) {
+	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2021-04-10")
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		accessTier: to.Ptr(blob.AccessTierCool),
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.PremiumBlockBlob(), EAccountType.Standard(), "")
+	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2020-10-02")
+}
+
+func TestTier_V2ToPremiumBBAccountHot(t *testing.T) {
+	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2021-04-10")
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:  true,
+		accessTier: to.Ptr(blob.AccessTierHot),
+	}, nil, testFiles{
+		defaultSize: "4M",
+		shouldTransfer: []interface{}{
+			folder(""), // root folder
+			f("filea"),
+		},
+	}, EAccountType.PremiumBlockBlob(), EAccountType.Standard(), "")
+	os.Setenv(common.EEnvironmentVariable.DefaultServiceApiVersion().Name, "2020-10-02")
+}*/

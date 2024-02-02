@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/v10/azbfs"
 	"github.com/spf13/cobra"
 )
 
@@ -69,42 +72,49 @@ func (tbfsc TestBlobFSCommand) processTest() {
 
 // verifyRemoteFile verifies the local file (object) against the file on remote fileSystem (subject)
 func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
-	// parse the subject url.
-	subjectUrl, err := url.Parse(tbfsc.Subject)
+	// Get BFS url parts to test SAS
+	datalakeURLParts, err := azdatalake.ParseURL(tbfsc.Subject)
 	if err != nil {
-		fmt.Println("error parsing the container sas ", tbfsc.Subject)
+		fmt.Println("error parsing the datalake sas ", tbfsc.Subject)
 		os.Exit(1)
 	}
-
-	// Get BFS url parts to test SAS
-	bfsURLParts := azbfs.NewBfsURLParts(*subjectUrl)
 
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
 	// If ACCOUNT_NAME or ACCOUNT_KEY is not supplied AND a SAS is not supplied
-	if (name == "" && key == "") && bfsURLParts.SAS.Encode() == "" {
+	if (name == "" && key == "") && datalakeURLParts.SAS.Encode() == "" {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test, OR a SAS token should be supplied in the subject URL.")
 		os.Exit(1)
 	}
-	// create the blob fs pipeline
-	var p pipeline.Pipeline
-	if bfsURLParts.SAS.Encode() != "" {
-		p = azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
+	var fc *file.Client
+	ctx := context.Background()
+	if datalakeURLParts.SAS.Encode() != "" {
+		fc, err = file.NewClientWithNoCredential(datalakeURLParts.String(), nil)
 	} else {
-		c := azbfs.NewSharedKeyCredential(name, key)
-		p = azbfs.NewPipeline(c, azbfs.PipelineOptions{})
+		var cred *azdatalake.SharedKeyCredential
+		cred, err = azdatalake.NewSharedKeyCredential(name, key)
+		if err != nil {
+			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
+			os.Exit(1)
+		}
+		perCallPolicies := []policy.Policy{ste.NewVersionPolicy()}
+		fc, err = file.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, &file.ClientOptions{ClientOptions: azcore.ClientOptions{PerCallPolicies: perCallPolicies}})
+		ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	}
+	if err != nil {
+		fmt.Printf("error creating client. failed with error %s\n", err.Error())
+		os.Exit(1)
 	}
 
 	// create the file url and download the file Url
-	fileUrl := azbfs.NewFileURL(*subjectUrl, p)
-	dResp, err := fileUrl.Download(context.Background(), 0, 0)
+	dResp, err := fc.DownloadStream(ctx, nil)
 	if err != nil {
-		fmt.Printf("error downloading the subject %s. Failed with error %s\n", fileUrl.String(), err.Error())
+		fmt.Printf("error downloading the subject %s. Failed with error %s\n", datalakeURLParts.String(), err.Error())
 		os.Exit(1)
 	}
 	// get the size of the downloaded file
-	downloadedLength := dResp.ContentLength()
+	downloadedLength := *dResp.ContentLength
 
 	// open the local file
 	f, err := os.Open(tbfsc.Object)
@@ -134,8 +144,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 
 	// read the downloaded content into the buffer
 	downloadedBuffer := make([]byte, downloadedLength)
-	retryReader := dResp.Body(azbfs.RetryReaderOptions{MaxRetryRequests: 5})
-	_, err = io.ReadFull(retryReader, downloadedBuffer)
+	_, err = io.ReadFull(dResp.Body, downloadedBuffer)
 	if err != nil {
 		fmt.Println("error reading the downloaded body ", err.Error())
 		os.Exit(1)
@@ -162,31 +171,43 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 // verifyRemoteDir validates the local directory (object) against the directory
 // on filesystem (subject)
 func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
-	// parse the subject url.
-	subjectUrl, err := url.Parse(tbfsc.Subject)
+	// Get BFS url parts to test SAS
+	datalakeURLParts, err := azdatalake.ParseURL(tbfsc.Subject)
 	if err != nil {
-		fmt.Println("error parsing the container sas ", tbfsc.Subject)
+		fmt.Println("error parsing the datalake sas ", tbfsc.Subject)
 		os.Exit(1)
 	}
-
-	//Get BFS url parts to test SAS
-	bfsURLParts := azbfs.NewBfsURLParts(*subjectUrl)
+	// break the remote Url into parts
+	// and save the directory path
+	currentDirectoryPath := datalakeURLParts.PathName
+	datalakeURLParts.PathName = ""
 
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
 	// If ACCOUNT_NAME or ACCOUNT_KEY is not supplied AND a SAS is not supplied
-	if (name == "" && key == "") && bfsURLParts.SAS.Encode() == "" {
+	if (name == "" && key == "") && datalakeURLParts.SAS.Encode() == "" {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test, OR a SAS token should be supplied in the subject URL.")
 		os.Exit(1)
 	}
-	// create the blob fs pipeline
-	var p pipeline.Pipeline
-	if bfsURLParts.SAS.Encode() != "" {
-		p = azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
+	var fsc *filesystem.Client
+	ctx := context.Background()
+	if datalakeURLParts.SAS.Encode() != "" {
+		fsc, err = filesystem.NewClientWithNoCredential(datalakeURLParts.String(), nil)
 	} else {
-		c := azbfs.NewSharedKeyCredential(name, key)
-		p = azbfs.NewPipeline(c, azbfs.PipelineOptions{})
+		var cred *azdatalake.SharedKeyCredential
+		cred, err = azdatalake.NewSharedKeyCredential(name, key)
+		if err != nil {
+			fmt.Printf("error creating shared key cred. failed with error %s\n", err.Error())
+			os.Exit(1)
+		}
+		perCallPolicies := []policy.Policy{ste.NewVersionPolicy()}
+		fsc, err = filesystem.NewClientWithSharedKeyCredential(datalakeURLParts.String(), cred, &filesystem.ClientOptions{ClientOptions: azcore.ClientOptions{PerCallPolicies: perCallPolicies}})
+		ctx = context.WithValue(ctx, ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	}
+	if err != nil {
+		fmt.Printf("error creating client. failed with error %s\n", err.Error())
+		os.Exit(1)
 	}
 	// Get the object Info and If the object is not a directory
 	// validation fails since validation has two be done between directories
@@ -200,32 +221,24 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Printf("the source provided %s is not a directory path\n", tbfsc.Object)
 		os.Exit(1)
 	}
-	// break the remote Url into parts
-	// and save the directory path
-	urlParts := azbfs.NewBfsURLParts(*subjectUrl)
-	currentDirectoryPath := urlParts.DirectoryOrFilePath
 
 	// List the directory
-	dirUrl := azbfs.NewDirectoryURL(*subjectUrl, p)
-	continuationMarker := ""
-	var firstListing bool = true
-	dResp, err := dirUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
-	if err != nil {
-		fmt.Printf("error listing the directory path defined by url %s. Failed with error %s\n", dirUrl.String(), err.Error())
-		os.Exit(1)
-	}
+	pager := fsc.NewListPathsPager(true, &filesystem.ListPathsOptions{Prefix: &currentDirectoryPath})
 	// numberOfFilesinSubject keeps the count of number of files of at the destination
 	numberOfFilesinSubject := int(0)
-	for continuationMarker != "" || firstListing {
-		firstListing = false
-		continuationMarker = dResp.XMsContinuation()
-		files := dResp.Files()
-		numberOfFilesinSubject += len(files)
-		for _, file := range files {
+	for pager.More() {
+		resp, err := pager.NextPage(ctx)
+		if err != nil {
+			fmt.Printf("error listing the directory path defined by url %s. Failed with error %s\n", datalakeURLParts.String(), err.Error())
+			os.Exit(1)
+		}
+		paths := resp.PathList.Paths
+		numberOfFilesinSubject += len(paths)
+		for _, p := range paths {
 			// Get the file path
 			// remove the directory path from the file path
 			// to get the relative path
-			filePath := *file.Name
+			filePath := *p.Name
 			filePath = strings.Replace(filePath, currentDirectoryPath, "", 1)
 			relativefilepath := strings.Trim(filePath, "/")
 			// replace the "/" with os path separator
@@ -246,7 +259,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			}
 			// Check the size of file
 			// If the size of file doesn't matches, then exit with error
-			if fpLocalInfo.Size() != *file.ContentLength {
+			if fpLocalInfo.Size() != *p.ContentLength {
 				fmt.Println("the size of local file does not match the remote file")
 				os.Exit(1)
 			}
@@ -269,17 +282,16 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			// calculated the source md5
 			objMd5 := md5.Sum(fpMMf)
 			// Download the remote file and calculate md5
-			tempUrlParts := urlParts
-			tempUrlParts.DirectoryOrFilePath = *file.Name
-			fileUrl := azbfs.NewFileURL(tempUrlParts.URL(), p)
-			fResp, err := fileUrl.Download(context.Background(), 0, 0)
+			tempUrlParts := datalakeURLParts
+			tempUrlParts.PathName = *p.Name
+			fc := fsc.NewFileClient(tempUrlParts.PathName)
+			fResp, err := fc.DownloadStream(ctx, nil)
 			if err != nil {
-				fmt.Printf("error downloading the file %s. failed with error %s\n", fileUrl.String(), err.Error())
+				fmt.Printf("error downloading the file %s. failed with error %s\n", fc.DFSURL(), err.Error())
 				os.Exit(1)
 			}
-			downloadedBuffer := make([]byte, *file.ContentLength) // byte buffer in which file will be downloaded to
-			retryReader := fResp.Body(azbfs.RetryReaderOptions{MaxRetryRequests: 5})
-			_, err = io.ReadFull(retryReader, downloadedBuffer)
+			downloadedBuffer := make([]byte, *p.ContentLength) // byte buffer in which file will be downloaded to
+			_, err = io.ReadFull(fResp.Body, downloadedBuffer)
 			if err != nil {
 				fmt.Println("error reading the downloaded body ", err.Error())
 				os.Exit(1)
@@ -287,7 +299,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			// calculate the downloaded file Md5
 			subjMd5 := md5.Sum(downloadedBuffer)
 			if objMd5 != subjMd5 {
-				fmt.Printf("source file %s doesn't match the remote file %s\n", filepathLocal, fileUrl.String())
+				fmt.Printf("source file %s doesn't match the remote file %s\n", filepathLocal, fc.DFSURL())
 				os.Exit(1)
 			}
 		}

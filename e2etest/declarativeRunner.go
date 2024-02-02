@@ -35,7 +35,7 @@ import (
 
 var validCredTypesPerLocation = map[common.Location][]common.CredentialType{
 	common.ELocation.Unknown(): {common.ECredentialType.Unknown(), common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // Delete!
-	common.ELocation.File():    {common.ECredentialType.Anonymous()},
+	common.ELocation.File():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
 	common.ELocation.Blob():    {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken(), common.ECredentialType.MDOAuthToken()},
 	common.ELocation.BlobFS():  {common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()}, // todo: currently, account key auth isn't even supported in e2e tests.
 	common.ELocation.Local():   {common.ECredentialType.Anonymous()},
@@ -73,7 +73,7 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 
 	// determine source types
 	var sourceTypes []common.CredentialType
-	if fromTo.IsS2S() && fromTo != common.EFromTo.BlobBlob() {
+	if fromTo.IsS2S() && (fromTo != common.EFromTo.BlobBlob() && fromTo != common.EFromTo.BlobFile() && fromTo != common.EFromTo.FileFile()) {
 		// source must always be anonymous-- no exceptions until OAuth over S2S is introduced.
 		sourceTypes = []common.CredentialType{common.ECredentialType.Anonymous()}
 	} else {
@@ -111,16 +111,16 @@ func RunScenarios(
 	validate Validate, // TODO: do we really want the test author to have to nominate which validation should happen?  Pros: better perf of tests. Cons: they have to tell us, and if they tell us wrong test may not test what they think it tests
 	// _ interface{}, // TODO if we want it??, blockBlobsOnly or specific/all blob types
 
-	// It would be a pain to list out every combo by hand,
-	// In addition to the fact that not every credential type is sensible.
-	// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
-	// This allows you to make tests use OAuth only, SAS only, etc.
+// It would be a pain to list out every combo by hand,
+// In addition to the fact that not every credential type is sensible.
+// Thus, the E2E framework takes in a requested set of credential types, and applies them where sensible.
+// This allows you to make tests use OAuth only, SAS only, etc.
 	requestedCredentialTypesSrc []common.CredentialType,
 	requestedCredentialTypesDst []common.CredentialType,
 	p params,
 	hs *hooks,
 	fs testFiles,
-	// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
+// TODO: do we need something here to explicitly say that we expect success or failure? For now, we are just inferring that from the elements of sourceFiles
 	destAccountType AccountType,
 	srcAccountType AccountType,
 	scenarioSuffix string) {
@@ -135,7 +135,7 @@ func RunScenarios(
 	// construct all the scenarios
 	scenarios := make([]scenario, 0)
 	for _, op := range operations.getValues() {
-		if op == eOperation.Resume() {
+		if op == eOperation.Resume() || op == eOperation.Cancel() {
 			continue
 		}
 
@@ -153,7 +153,7 @@ func RunScenarios(
 			for _, credTypes := range credentialTypes {
 				// Create unique name for generating container names
 				compactScenarioName := fmt.Sprintf("%.4s-%s-%c-%c%c", suiteName, testName, op.String()[0], fromTo.From().String()[0], fromTo.To().String()[0])
-				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s", suiteName, testName, op.String(), fromTo.String())
+				fullScenarioName := fmt.Sprintf("%s.%s.%s-%s%s", suiteName, testName, op.String(), fromTo.From().String(), fromTo.To().String())
 				// Sub-test name is not globally unique (it doesn't need to be) but it is more human-readable
 				subtestName := fmt.Sprintf("%s-%s", op, fromTo)
 
@@ -180,6 +180,7 @@ func RunScenarios(
 					hs:                  hsToUse,
 					fs:                  fs.DeepCopy(),
 					needResume:          operations&eOperation.Resume() != 0,
+					needCancel:          operations&eOperation.Cancel() != 0,
 					stripTopDir:         p.stripTopDir,
 				}
 

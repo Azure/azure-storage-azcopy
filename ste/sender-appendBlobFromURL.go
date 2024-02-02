@@ -62,16 +62,20 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 			c.jptm.FailActiveS2SCopy("Getting source token credential", err)
 			return
 		}
-		_, err = c.destAppendBlobClient.AppendBlockFromURL(c.jptm.Context(), c.srcURL,
+		var timeoutFromCtx bool
+		ctx := withTimeoutNotification(c.jptm.Context(), &timeoutFromCtx)
+		_, err = c.destAppendBlobClient.AppendBlockFromURL(ctx, c.srcURL,
 			&appendblob.AppendBlockFromURLOptions{
-				Range: blob.HTTPRange{Offset: offset, Count: adjustedChunkSize},
+				Range:                          blob.HTTPRange{Offset: offset, Count: adjustedChunkSize},
 				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{AppendPosition: &offset},
-				CPKInfo: c.jptm.CpkInfo(),
-				CPKScopeInfo: c.jptm.CpkScopeInfo(),
-				CopySourceAuthorization: token,
+				CPKInfo:                        c.jptm.CpkInfo(),
+				CPKScopeInfo:                   c.jptm.CpkScopeInfo(),
+				CopySourceAuthorization:        token,
 			})
+		errString, err := c.transformAppendConditionMismatchError(timeoutFromCtx, offset, adjustedChunkSize, err)
 		if err != nil {
-			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
+			errString = "Appending block from URL" + errString
+			c.jptm.FailActiveS2SCopy(errString, err)
 			return
 		}
 	}

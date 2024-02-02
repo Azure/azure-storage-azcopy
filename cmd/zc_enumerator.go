@@ -24,10 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"net/url"
 	"path/filepath"
 	"runtime"
@@ -35,7 +31,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -335,7 +334,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 // If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
 // To avoid slowdowns, use a buffered channel of enough capacity.
-func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel pipeline.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, p pipeline.Pipeline, destination *common.Location) (ResourceTraverser, error) {
+func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel common.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, destination *common.Location, excludeContainerNames []string) (ResourceTraverser, error) {
 	var output ResourceTraverser
 
 	var includeDeleted bool
@@ -359,16 +358,6 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
 	}
 
-	// Initialize the pipeline if creds and ctx is provided
-	if p == nil && ctx != nil && credential != nil {
-		tmppipe, err := InitPipeline(*ctx, location, *credential, logLevel, trailingDot, location)
-		if err != nil {
-			return nil, err
-		}
-
-		p = tmppipe
-	}
-
 	// Feed list of files channel into new list traverser
 	if listOfFilesChannel != nil {
 		if location.IsLocal() {
@@ -382,9 +371,11 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		}
 
 		output = newListTraverser(resource, location, credential, ctx, recursive, symlinkHandling, getProperties,
-			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, p, destination)
+			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
 		return output, nil
 	}
+
+	options := createClientOptions(azcopyScanningLogger, nil)
 
 	switch location {
 	case common.ELocation.Local():
@@ -410,7 +401,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
 			output = newListTraverser(baseResource, location, nil, nil, recursive, symlinkHandling, getProperties,
-				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, p, destination)
+				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
 		} else {
 			if ctx != nil {
 				output, _ = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
@@ -449,13 +440,20 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, nil, nil))
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		if err != nil {
+			return nil, err
+		}
+		bsc, err := c.BlobServiceClient()
+		if err != nil {
+			return nil, err
+		}
 
 		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, false)
+			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, false, excludeContainerNames)
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
@@ -484,7 +482,17 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		fileURLParts.ShareName = ""
 		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
-		fsc := common.CreateFileServiceClient(fileURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, to.Ptr(trailingDot), destination))
+		fileOptions := &common.FileClientOptions{
+			AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
+		}
+		c, err := common.GetServiceClientForLocation(common.ELocation.File(), fileURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+		if err != nil {
+			return nil, err
+		}
+		fsc, err := c.FileServiceClient()
+		if err != nil {
+			return nil, err
+		}
 
 		if shareName == "" || strings.Contains(shareName, "*") {
 			if !recursive {
@@ -517,14 +525,22 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		bsc := common.CreateBlobServiceClient(blobURLParts.String(), *credential, &common.CredentialOpOptions{LogError: glcm.Info}, createClientOptions(logLevel, nil, nil))
+
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		if err != nil {
+			return nil, err
+		}
+		bsc, err := c.BlobServiceClient()
+		if err != nil {
+			return nil, err
+		}
 
 		includeDirectoryStubs = true // DFS is supposed to feed folders in
 		if containerName == "" || strings.Contains(containerName, "*") {
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
-			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, true)
+			output = newBlobAccountTraverser(bsc, containerName, *ctx, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, cpkOptions, preservePermissions, true, excludeContainerNames)
 		} else if listOfVersionIds != nil {
 			output = newBlobVersionsTraverser(r, bsc, *ctx, includeDirectoryStubs, incrementEnumerationCounter, listOfVersionIds, cpkOptions)
 		} else {
@@ -617,7 +633,7 @@ type objectProcessor func(storedObject StoredObject) error
 //
 //	Might be easier to debug
 //
-// modifies a StoredObject, but does NOT process it.  Used for modifications, such as pre-pending a parent path
+// modifies a StoredObject, but does NOT process it.  Used for modifications, such as prepending a parent path
 type objectMorpher func(storedObject *StoredObject)
 
 // FollowedBy returns a new objectMorpher, which performs the action of existing followed by the action of additional.
@@ -742,7 +758,7 @@ func WarnStdoutAndScanningLog(toLog string) {
 	glcm.Info(toLog)
 	if azcopyScanningLogger != nil {
 		// ste.JobsAdmin.LogToJobLog(toLog, pipeline.LogWarning)
-		azcopyScanningLogger.Log(pipeline.LogWarning, toLog)
+		azcopyScanningLogger.Log(common.LogWarning, toLog)
 	}
 }
 

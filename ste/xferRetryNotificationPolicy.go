@@ -22,22 +22,29 @@ package ste
 
 import (
 	"context"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"net/http"
 )
 
 // retryNotificationReceiver should be implemented by code that wishes to be notified when a retry
 // happens. Such code must register itself into the context, using withRetryNotification,
-// so that the v1RetryNotificationPolicy can invoke the callback when necessary.
+// so that the RetryNotificationPolicy can invoke the callback when necessary.
 type retryNotificationReceiver interface {
 	RetryCallback()
 }
 
-// withRetryNotifier returns a context that contains a retry notifier.  The v1RetryNotificationPolicy
+// withRetryNotifier returns a context that contains a retry notifier. The retryNotificationPolicy
 // will then invoke the callback when a retry happens
 func withRetryNotification(ctx context.Context, r retryNotificationReceiver) context.Context {
 	return context.WithValue(ctx, retryNotifyContextKey, r)
+}
+
+var timeoutNotifyContextKey = contextKey{"timeoutNotify"}
+
+// withTimeoutNotification returns a context that contains indication of a timeout. The retryNotificationPolicy
+// will then set the timeout flag when a timeout happens
+func withTimeoutNotification(ctx context.Context, timeout *bool) context.Context {
+	return context.WithValue(ctx, timeoutNotifyContextKey, timeout)
 }
 
 type contextKey struct {
@@ -45,39 +52,6 @@ type contextKey struct {
 }
 
 var retryNotifyContextKey = contextKey{"retryNotify"}
-
-type v1RetryNotificationPolicy struct {
-	next pipeline.Policy
-}
-
-// Do invokes the registered notification callback if there's a retry (503) status.
-// This is to notify any interested party that a retry status has been returned in an HTTP response.
-// (We can't just let the top-level caller look at the status of the HTTP response, because by that
-// time our RetryPolicy will have actually DONE the retry, so the status will be successful. That's why, if the
-// top level caller wants to be informed, they have to get informed by this callback mechanism.)
-func (r *v1RetryNotificationPolicy) Do(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-
-	resp, err := r.next.Do(ctx, request)
-
-	if resp != nil {
-		if rr := resp.Response(); rr != nil && rr.StatusCode == http.StatusServiceUnavailable {
-			// Grab the notification callback out of the context and, if its there, call it
-			notifier, ok := ctx.Value(retryNotifyContextKey).(retryNotificationReceiver)
-			if ok {
-				notifier.RetryCallback()
-			}
-		}
-	}
-
-	return resp, err
-}
-
-func newV1RetryNotificationPolicyFactory() pipeline.Factory {
-	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
-		r := v1RetryNotificationPolicy{next: next}
-		return r.Do
-	})
-}
 
 type retryNotificationPolicy struct {
 }
@@ -89,11 +63,18 @@ func newRetryNotificationPolicy() policy.Policy {
 func (r *retryNotificationPolicy) Do(req *policy.Request) (*http.Response, error) {
 	response, err := req.Next() // Make the request
 
-	if response != nil && response.StatusCode == http.StatusServiceUnavailable {
-		// Grab the notification callback out of the context and, if its there, call it
-		notifier, ok := req.Raw().Context().Value(retryNotifyContextKey).(retryNotificationReceiver)
-		if ok {
-			notifier.RetryCallback()
+	if response != nil {
+		if response.StatusCode == http.StatusServiceUnavailable {
+			// Grab the notification callback out of the context and, if its there, call it
+			notifier, ok := req.Raw().Context().Value(retryNotifyContextKey).(retryNotificationReceiver)
+			if ok {
+				notifier.RetryCallback()
+			}
+		}
+		if timeout, ok := req.Raw().Context().Value(timeoutNotifyContextKey).(*bool); ok {
+			if response.StatusCode == http.StatusInternalServerError && ((response.Header["x-ms-error-code"] != nil && response.Header["x-ms-error-code"][0] == "OperationTimedOut") || (response.Header["X-Ms-Error-Code"] != nil && response.Header["X-Ms-Error-Code"][0] == "OperationTimedOut")) { //nolint:staticcheck
+				*timeout = true
+			}
 		}
 	}
 

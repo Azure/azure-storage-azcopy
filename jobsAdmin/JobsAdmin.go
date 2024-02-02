@@ -36,7 +36,6 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -79,7 +78,7 @@ var JobsAdmin interface {
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool
+	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
 
 	ResurrectJobParts()
 
@@ -90,7 +89,7 @@ var JobsAdmin interface {
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
 
-	LogToJobLog(msg string, level pipeline.LogLevel)
+	LogToJobLog(msg string, level common.LogLevel)
 
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
@@ -166,7 +165,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, 
 // Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
 // There's no measure of physical RAM in the STD library, so we guesstimate conservatively, based on  CPU count (logical, not physical CPUs)
 // Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
-// currently-unused, re-usable slices, that is not tracked by cacheLimiter.
+// currently-unused, reusable slices, that is not tracked by cacheLimiter.
 // Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
 // count 100 MB towards this limit, but actually consume 128 MB)
 func getMaxRamForChunks() int64 {
@@ -229,7 +228,7 @@ func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
 		}
 		common.GetLifecycleMgr().Info("")
-		ja.LogToJobLog(msg, pipeline.LogInfo)
+		ja.LogToJobLog(msg, common.LogInfo)
 	}
 }
 
@@ -314,12 +313,12 @@ func (ja *jobsAdmin) JobMgrCleanUp(jobId common.JobID) {
 		 * Change log level to Info, so that we can capture these messages in job log file.
 		 * These log messages useful in debuggability and tells till what stage cleanup done.
 		 */
-		jm.Log(pipeline.LogInfo, "JobMgrCleanUp Enter")
+		jm.Log(common.LogInfo, "JobMgrCleanUp Enter")
 
 		// Delete the jobMgr from jobIDtoJobMgr map, so that next call will fail.
 		ja.DeleteJob(jobId)
 
-		jm.Log(pipeline.LogInfo, "Job deleted from jobMgr map")
+		jm.Log(common.LogInfo, "Job deleted from jobMgr map")
 
 		/*
 		 * Rest of jobMgr related cleanup done by DeferredCleanupJobMgr function.
@@ -359,7 +358,12 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 }
 */
 
-func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {
+func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
+								  sourceSAS string,
+								  destinationSAS string,
+								  srcServiceClient *common.ServiceClient,
+								  dstServiceClient *common.ServiceClient,
+								  srcIsOAuth bool) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
@@ -387,7 +391,17 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinat
 		}
 		mmf := planFile.Map()
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
-		jm.AddJobPart(partNum, planFile, mmf, sourceSAS, destinationSAS, false, nil)
+		args := &ste.AddJobPartArgs{
+			PartNum: partNum,
+			PlanFile: planFile,
+			ExistingPlanMMF: mmf,
+			SrcClient: srcServiceClient,
+			DstClient: dstServiceClient,
+			SrcIsOAuth: srcIsOAuth,
+			ScheduleTransfers: false,
+			CompletionChan: nil,
+		}
+		jm.AddJobPart2(args)
 	}
 
 	jm, _ := ja.JobMgr(jobId)
@@ -510,10 +524,10 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 	ja.DeleteJob(jobID)
 }
 */
-func (ja *jobsAdmin) ShouldLog(level pipeline.LogLevel) bool  { return ja.logger.ShouldLog(level) }
-func (ja *jobsAdmin) Log(level pipeline.LogLevel, msg string) { ja.logger.Log(level, msg) }
-func (ja *jobsAdmin) Panic(err error)                         { ja.logger.Panic(err) }
-func (ja *jobsAdmin) CloseLog()                               { ja.logger.CloseLog() }
+func (ja *jobsAdmin) ShouldLog(level common.LogLevel) bool  { return ja.logger.ShouldLog(level) }
+func (ja *jobsAdmin) Log(level common.LogLevel, msg string) { ja.logger.Log(level, msg) }
+func (ja *jobsAdmin) Panic(err error)                       { ja.logger.Panic(err) }
+func (ja *jobsAdmin) CloseLog()                             { ja.logger.CloseLog() }
 
 func (ja *jobsAdmin) CurrentMainPoolSize() int {
 	return int(atomic.LoadInt32(&ja.atomicCurrentMainPoolSize))
@@ -539,9 +553,9 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 // TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use individual job logs because there could
 // be several concurrent jobs running. That's not the case any more, so this is safe now, but it doesn't quite fit with the
 // architecture around it.
-func (ja *jobsAdmin) LogToJobLog(msg string, level pipeline.LogLevel) {
+func (ja *jobsAdmin) LogToJobLog(msg string, level common.LogLevel) {
 	prefix := ""
-	if level <= pipeline.LogWarning {
+	if level <= common.LogWarning {
 		prefix = fmt.Sprintf("%s: ", common.LogLevel(level)) // so readers can find serious ones, but information ones still look uncluttered without INFO:
 	}
 	ja.jobLogger.Log(level, prefix+msg)
