@@ -46,11 +46,11 @@ var once sync.Once
 var autoOAuth sync.Once
 
 var sharedKeyDeprecation sync.Once
-var sharedKeyDeprecationMessage = "*** Warning *** shared key authentication for datalake is deprecated and will be removed in a future release. Please use shared access signature (SAS) or OAuth for authentication."
+var sharedKeyDeprecationMessage = "*** WARNING *** shared key authentication for datalake is deprecated and will be removed in a future release. Please use shared access signature (SAS) or OAuth for authentication."
 
 func warnIfSharedKeyAuthForDatalake() {
 	sharedKeyDeprecation.Do(func() {
-		glcm.Info(sharedKeyDeprecationMessage)
+		glcm.Warn(sharedKeyDeprecationMessage)
 		jobsAdmin.JobsAdmin.LogToJobLog(sharedKeyDeprecationMessage, common.LogWarning)
 	})
 }
