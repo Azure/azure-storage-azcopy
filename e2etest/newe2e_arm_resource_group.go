@@ -30,7 +30,7 @@ type ARMResourceGroupProvisioningStateOutput struct {
 	ProvisioningState string `json:"provisioningState"`
 }
 
-func (rg *ARMResourceGroup) PerformRequest(baseURI url.URL, reqSettings ARMRequestSettings, target interface{}) (armResp *ARMAsyncResponse, err error) {
+func (rg *ARMResourceGroup) PrepareRequest(reqSettings *ARMRequestSettings) {
 	if reqSettings.Query == nil {
 		reqSettings.Query = make(url.Values)
 	}
@@ -38,16 +38,14 @@ func (rg *ARMResourceGroup) PerformRequest(baseURI url.URL, reqSettings ARMReque
 	if !reqSettings.Query.Has("api-version") {
 		reqSettings.Query.Add("api-version", "2021-04-01") // Attach default query
 	}
-
-	return rg.ARMClient.PerformRequest(baseURI, reqSettings, target)
 }
 
 func (rg *ARMResourceGroup) CreateOrUpdate(params ARMResourceGroupCreateParams) (*ARMResourceGroupProvisioningStateOutput, error) {
 	var out ARMResourceGroupProvisioningStateOutput
-	_, err := rg.PerformRequest(rg.ManagementURI(), ARMRequestSettings{
+	_, err := PerformRequest(rg, ARMRequestSettings{
 		Method: http.MethodPut,
 		Body:   params,
-	}, &out) // Shouldn't "officially" incur an async operation according to docs, and PerformRequest should catch an error state on that for us.
+	}, &out) // Shouldn't "officially" incur an async operation according to docs, and PrepareRequest should catch an error state on that for us.
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +59,7 @@ func (rg *ARMResourceGroup) Delete(forceDeletionTypes *string) error {
 		query.Add("forceDeletionTypes", *forceDeletionTypes)
 	}
 
-	_, err := rg.PerformRequest(rg.ManagementURI(), ARMRequestSettings{
+	_, err := PerformRequest[any](rg, ARMRequestSettings{
 		Method: http.MethodDelete,
 	}, nil) // No need to have a response
 	if err != nil {
@@ -73,7 +71,7 @@ func (rg *ARMResourceGroup) Delete(forceDeletionTypes *string) error {
 
 func (rg *ARMResourceGroup) GetProperties() (*ARMResourceGroupInfo, error) {
 	var out ARMResourceGroupInfo
-	_, err := rg.PerformRequest(rg.ManagementURI(), ARMRequestSettings{
+	_, err := PerformRequest(rg, ARMRequestSettings{
 		Method: http.MethodGet,
 	}, &out)
 	if err != nil {

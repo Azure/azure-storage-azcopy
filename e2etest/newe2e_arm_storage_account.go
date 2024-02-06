@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
@@ -77,7 +78,7 @@ func (sa *ARMStorageAccount) GetResourceManager() (*AzureAccountResourceManager,
 	}, nil
 }
 
-func (sa *ARMStorageAccount) PerformRequest(baseURI url.URL, reqSettings ARMRequestSettings, target interface{}) (armResp *ARMAsyncResponse, err error) {
+func (sa *ARMStorageAccount) PrepareRequest(reqSettings *ARMRequestSettings) {
 	if reqSettings.Query == nil {
 		reqSettings.Query = make(url.Values)
 	}
@@ -85,8 +86,6 @@ func (sa *ARMStorageAccount) PerformRequest(baseURI url.URL, reqSettings ARMRequ
 	if !reqSettings.Query.Has("api-version") {
 		reqSettings.Query.Add("api-version", "2023-01-01") // Attach default query
 	}
-
-	return sa.ARMClient.PerformRequest(baseURI, reqSettings, target)
 }
 
 // ARMStorageAccountCreateParams is the request body for https://learn.microsoft.com/en-us/rest/api/storagerp/storage-accounts/create?tabs=HTTP#storageaccount
@@ -101,36 +100,36 @@ type ARMStorageAccountCreateParams struct {
 
 // ARMStorageAccountCreateProperties implements a portion of ARMStorageAccountCreateParams.
 // https://learn.microsoft.com/en-us/rest/api/storagerp/storage-accounts/create?tabs=HTTP#storageaccount
-type ARMStorageAccountCreateProperties struct { // ARMUnimplementedStruct(s) are used as filler, if needed for one-offs
-	AccessTier                            *blob.AccessTier       `json:"accessTier,omitempty"`
-	AllowBlobPublicAccess                 *bool                  `json:"allowBlobPublicAccess,omitempty"`
-	AllowCrossTenantReplication           *bool                  `json:"allowCrossTenantReplication,omitempty"`
-	AllowSharedKeyAccess                  *bool                  `json:"allowSharedKeyAccess,omitempty"`
-	AllowedCopyScope                      ARMUnimplementedStruct `json:"allowedCopyScope,omitempty"`
-	AzureFilesIdentityBasedAuthentication ARMUnimplementedStruct `json:"azureFilesIdentityBasedAuthentication,omitempty"`
-	CustomDomain                          ARMUnimplementedStruct `json:"customDomain,omitempty"`
-	DefaultToOAuthAuthentication          *bool                  `json:"defaultToOAuthAuthentication,omitempty"`
-	DNSEndpointType                       ARMUnimplementedStruct `json:"dnsEndpointType,omitempty"`
-	Encryption                            ARMUnimplementedStruct `json:"encryption,omitempty"`                     // todo cpk?
-	ImmutableStorageWithVersioning        ARMUnimplementedStruct `json:"immutableStorageWithVersioning,omitempty"` // todo version level WORM
-	IsHnsEnabled                          *bool                  `json:"isHnsEnabled,omitempty"`
-	IsLocalUserEnabled                    *bool                  `json:"isLocalUserEnabled,omitempty"`
-	IsNfsV3Enabled                        *bool                  `json:"isNfsV3Enabled,omitempty"`
-	IsSftpEnabled                         *bool                  `json:"isSftpEnabled,omitempty"`
-	KeyPolicy                             ARMUnimplementedStruct `json:"keyPolicy,omitempty"`
-	LargeFileSharesState                  *string                `json:"largeFileSharesState,omitempty"` // "Enabled" or "Disabled"
-	MinimumTLSVersion                     *string                `json:"minimumTLSVersion,omitempty"`
-	NetworkACLs                           ARMUnimplementedStruct `json:"networkAcls,omitempty"`
-	PublicNetworkAccess                   *string                `json:"publicNetworkAccess,omitempty"` // "Enabled" or "Disabled"
-	RoutingPreference                     ARMUnimplementedStruct `json:"routingPreference,omitempty"`
-	SASPolicy                             ARMUnimplementedStruct `json:"sasPolicy,omitempty"`
-	SupportsHttpsOnly                     *bool                  `json:"supportsHttpsOnly,omitempty"`
-	Tags                                  map[string]string      `json:"tags"`
+type ARMStorageAccountCreateProperties struct { // json.RawMessage(s) are used as filler, if needed for one-offs
+	AccessTier                            *blob.AccessTier  `json:"accessTier,omitempty"`
+	AllowBlobPublicAccess                 *bool             `json:"allowBlobPublicAccess,omitempty"`
+	AllowCrossTenantReplication           *bool             `json:"allowCrossTenantReplication,omitempty"`
+	AllowSharedKeyAccess                  *bool             `json:"allowSharedKeyAccess,omitempty"`
+	AllowedCopyScope                      json.RawMessage   `json:"allowedCopyScope,omitempty"`
+	AzureFilesIdentityBasedAuthentication json.RawMessage   `json:"azureFilesIdentityBasedAuthentication,omitempty"`
+	CustomDomain                          json.RawMessage   `json:"customDomain,omitempty"`
+	DefaultToOAuthAuthentication          *bool             `json:"defaultToOAuthAuthentication,omitempty"`
+	DNSEndpointType                       json.RawMessage   `json:"dnsEndpointType,omitempty"`
+	Encryption                            json.RawMessage   `json:"encryption,omitempty"`                     // todo cpk?
+	ImmutableStorageWithVersioning        json.RawMessage   `json:"immutableStorageWithVersioning,omitempty"` // todo version level WORM
+	IsHnsEnabled                          *bool             `json:"isHnsEnabled,omitempty"`
+	IsLocalUserEnabled                    *bool             `json:"isLocalUserEnabled,omitempty"`
+	IsNfsV3Enabled                        *bool             `json:"isNfsV3Enabled,omitempty"`
+	IsSftpEnabled                         *bool             `json:"isSftpEnabled,omitempty"`
+	KeyPolicy                             json.RawMessage   `json:"keyPolicy,omitempty"`
+	LargeFileSharesState                  *string           `json:"largeFileSharesState,omitempty"` // "Enabled" or "Disabled"
+	MinimumTLSVersion                     *string           `json:"minimumTLSVersion,omitempty"`
+	NetworkACLs                           json.RawMessage   `json:"networkAcls,omitempty"`
+	PublicNetworkAccess                   *string           `json:"publicNetworkAccess,omitempty"` // "Enabled" or "Disabled"
+	RoutingPreference                     json.RawMessage   `json:"routingPreference,omitempty"`
+	SASPolicy                             json.RawMessage   `json:"sasPolicy,omitempty"`
+	SupportsHttpsOnly                     *bool             `json:"supportsHttpsOnly,omitempty"`
+	Tags                                  map[string]string `json:"tags"`
 }
 
 func (sa *ARMStorageAccount) Create(params ARMStorageAccountCreateParams) (*ARMStorageAccountProperties, error) {
 	var out ARMStorageAccountProperties
-	_, err := sa.PerformRequest(sa.ManagementURI(), ARMRequestSettings{
+	_, err := PerformRequest(sa, ARMRequestSettings{
 		Method: http.MethodPut,
 		Body:   params,
 	}, &out)
@@ -138,7 +137,7 @@ func (sa *ARMStorageAccount) Create(params ARMStorageAccountCreateParams) (*ARMS
 }
 
 func (sa *ARMStorageAccount) Delete() error {
-	_, err := sa.PerformRequest(sa.ManagementURI(), ARMRequestSettings{
+	_, err := PerformRequest[any](sa, ARMRequestSettings{
 		Method: http.MethodDelete,
 	}, nil)
 	return err
@@ -157,7 +156,7 @@ func (sa *ARMStorageAccount) GetProperties(expand []string) (*ARMStorageAccountP
 	}
 
 	var out ARMStorageAccountProperties
-	_, err := sa.PerformRequest(sa.ManagementURI(), ARMRequestSettings{
+	_, err := PerformRequest(sa, ARMRequestSettings{
 		Method: http.MethodGet,
 	}, &out)
 	return &out, err
@@ -166,7 +165,7 @@ func (sa *ARMStorageAccount) GetProperties(expand []string) (*ARMStorageAccountP
 func (sa *ARMStorageAccount) GetKeys() (*ARMStorageAccountListKeysResult, error) { // Kerberos keys can be listed, but AzCopy doesn't currently support this.
 	var resp ARMStorageAccountListKeysResult
 
-	_, err := sa.PerformRequest(sa.ManagementURI(), ARMRequestSettings{
+	_, err := PerformRequest(sa, ARMRequestSettings{
 		Method:        http.MethodPost,
 		PathExtension: "listKeys",
 	}, &resp)
@@ -183,46 +182,46 @@ type ARMStorageAccountProperties struct {
 	Location         string                    `json:"location"`
 	Name             string                    `json:"name"`
 	Properties       struct {
-		AccessTier                            blob.AccessTier          `json:"accessTier"`
-		AccountMigrationInProcess             bool                     `json:"accountMigrationInProcess"`
-		AllowBlobPublicAccess                 bool                     `json:"allowBlobPublicAccess"`
-		AllowCrossTenantReplication           bool                     `json:"allowCrossTenantReplication"`
-		AllowSharedKeyAccess                  bool                     `json:"allowSharedKeyAccess"`
-		AllowedCopyScope                      ARMUnimplementedStruct   `json:"allowedCopyScope"`
-		AzureFilesIdentityBasedAuthentication ARMUnimplementedStruct   `json:"azureFilesIdentityBasedAuthentication"`
-		BlobRestoreStatus                     ARMUnimplementedStruct   `json:"blobRestoreStatus"`
-		CreationTime                          string                   `json:"creationTime"`
-		CustomDomain                          ARMUnimplementedStruct   `json:"customDomain"`
-		DefaultToOAuthAuthentication          bool                     `json:"defaultToOAuthAuthentication"`
-		DNSEndpointType                       ARMUnimplementedStruct   `json:"dnsEndpointType"`
-		Encryption                            ARMUnimplementedStruct   `json:"encryption"` // todo: maybe needed for CPK?
-		FailoverInProgress                    bool                     `json:"failoverInProgress"`
-		GeoReplicationStats                   ARMUnimplementedStruct   `json:"geoReplicationStats"`
-		ImmutableStorageWithVersioning        ARMUnimplementedStruct   `json:"immutableStorageWithVersioning"` // todo: needed for testing version-level WORM
-		IsHNSEnabled                          bool                     `json:"isHNSEnabled"`
-		IsLocalUserEnabled                    bool                     `json:"isLocalUserEnabled"`
-		IsNFSV3Enabled                        bool                     `json:"isNfsV3Enabled"`
-		IsSFTPEnabled                         bool                     `json:"isSftpEnabled"`
-		IsSKUConversionBlocked                bool                     `json:"isSkuConversionBlocked"`
-		KeyCreationTime                       ARMUnimplementedStruct   `json:"keyCreationTime"`
-		KeyPolicy                             ARMUnimplementedStruct   `json:"keyPolicy"`            // todo: CPK?
-		LargeFileSharesState                  string                   `json:"largeFileSharesState"` // "Enabled" or "Disabled"
-		LastGeoFailoverTime                   string                   `json:"lastGeoFailoverTime"`
-		MinimumTLSVersion                     ARMUnimplementedStruct   `json:"minimumTLSVersion"`
-		NetworkACLs                           ARMUnimplementedStruct   `json:"networkAcls"`
-		PrimaryEndpoints                      ARMUnimplementedStruct   `json:"primaryEndpoints"`
-		PrimaryLocation                       string                   `json:"primaryLocation"`
-		PrivateEndpointConnections            []ARMUnimplementedStruct `json:"privateEndpointConnections"`
-		ProvisioningState                     string                   `json:"provisioningState"`
-		PublicNetworkAccess                   string                   `json:"publicNetworkAccess"` // "Enabled" or "Disabled"
-		RoutingPreference                     ARMUnimplementedStruct   `json:"routingPreference"`
-		SASPolicy                             ARMUnimplementedStruct   `json:"sasPolicy"`
-		SecondaryEndpoints                    ARMUnimplementedStruct   `json:"secondaryEndpoints"` // todo: could test azcopy's ability to fail over?
-		SecondaryLocation                     string                   `json:"secondaryLocation"`
-		StatusOfPrimary                       string                   `json:"statusOfPrimary"`
-		StatusOfSecondary                     string                   `json:"statusOfSecondary"`
-		StorageAccountSkuConversionStatus     ARMUnimplementedStruct   `json:"storageAccountSkuConversionStatus"`
-		SupportsHTTPSTrafficOnly              bool                     `json:"supportsHttpsTrafficOnly"`
+		AccessTier                            blob.AccessTier   `json:"accessTier"`
+		AccountMigrationInProcess             bool              `json:"accountMigrationInProcess"`
+		AllowBlobPublicAccess                 bool              `json:"allowBlobPublicAccess"`
+		AllowCrossTenantReplication           bool              `json:"allowCrossTenantReplication"`
+		AllowSharedKeyAccess                  bool              `json:"allowSharedKeyAccess"`
+		AllowedCopyScope                      json.RawMessage   `json:"allowedCopyScope"`
+		AzureFilesIdentityBasedAuthentication json.RawMessage   `json:"azureFilesIdentityBasedAuthentication"`
+		BlobRestoreStatus                     json.RawMessage   `json:"blobRestoreStatus"`
+		CreationTime                          string            `json:"creationTime"`
+		CustomDomain                          json.RawMessage   `json:"customDomain"`
+		DefaultToOAuthAuthentication          bool              `json:"defaultToOAuthAuthentication"`
+		DNSEndpointType                       json.RawMessage   `json:"dnsEndpointType"`
+		Encryption                            json.RawMessage   `json:"encryption"` // todo: maybe needed for CPK?
+		FailoverInProgress                    bool              `json:"failoverInProgress"`
+		GeoReplicationStats                   json.RawMessage   `json:"geoReplicationStats"`
+		ImmutableStorageWithVersioning        json.RawMessage   `json:"immutableStorageWithVersioning"` // todo: needed for testing version-level WORM
+		IsHNSEnabled                          bool              `json:"isHNSEnabled"`
+		IsLocalUserEnabled                    bool              `json:"isLocalUserEnabled"`
+		IsNFSV3Enabled                        bool              `json:"isNfsV3Enabled"`
+		IsSFTPEnabled                         bool              `json:"isSftpEnabled"`
+		IsSKUConversionBlocked                bool              `json:"isSkuConversionBlocked"`
+		KeyCreationTime                       json.RawMessage   `json:"keyCreationTime"`
+		KeyPolicy                             json.RawMessage   `json:"keyPolicy"`            // todo: CPK?
+		LargeFileSharesState                  string            `json:"largeFileSharesState"` // "Enabled" or "Disabled"
+		LastGeoFailoverTime                   string            `json:"lastGeoFailoverTime"`
+		MinimumTLSVersion                     json.RawMessage   `json:"minimumTLSVersion"`
+		NetworkACLs                           json.RawMessage   `json:"networkAcls"`
+		PrimaryEndpoints                      json.RawMessage   `json:"primaryEndpoints"`
+		PrimaryLocation                       string            `json:"primaryLocation"`
+		PrivateEndpointConnections            []json.RawMessage `json:"privateEndpointConnections"`
+		ProvisioningState                     string            `json:"provisioningState"`
+		PublicNetworkAccess                   string            `json:"publicNetworkAccess"` // "Enabled" or "Disabled"
+		RoutingPreference                     json.RawMessage   `json:"routingPreference"`
+		SASPolicy                             json.RawMessage   `json:"sasPolicy"`
+		SecondaryEndpoints                    json.RawMessage   `json:"secondaryEndpoints"` // todo: could test azcopy's ability to fail over?
+		SecondaryLocation                     string            `json:"secondaryLocation"`
+		StatusOfPrimary                       string            `json:"statusOfPrimary"`
+		StatusOfSecondary                     string            `json:"statusOfSecondary"`
+		StorageAccountSkuConversionStatus     json.RawMessage   `json:"storageAccountSkuConversionStatus"`
+		SupportsHTTPSTrafficOnly              bool              `json:"supportsHttpsTrafficOnly"`
 	} `json:"properties"`
 	Sku  ARMStorageAccountSKU `json:"sku"`
 	Tags map[string]string    `json:"tags"`

@@ -17,7 +17,7 @@ func (md *ARMManagedDisk) ManagementURI() url.URL {
 	return *newURI
 }
 
-func (md *ARMManagedDisk) PerformRequest(baseURI url.URL, reqSettings ARMRequestSettings, target interface{}) (armResp *ARMAsyncResponse, err error) {
+func (md *ARMManagedDisk) PrepareRequest(reqSettings *ARMRequestSettings) {
 	if reqSettings.Query == nil {
 		reqSettings.Query = make(url.Values)
 	}
@@ -25,8 +25,6 @@ func (md *ARMManagedDisk) PerformRequest(baseURI url.URL, reqSettings ARMRequest
 	if !reqSettings.Query.Has("api-version") {
 		reqSettings.Query.Add("api-version", "2021-12-01") // Attach default query
 	}
-
-	return md.ARMClient.PerformRequest(baseURI, reqSettings, target)
 }
 
 type ARMManagedDiskCreateOrUpdateParams struct { // https://learn.microsoft.com/en-us/rest/api/compute/disks/create-or-update?tabs=HTTP#request-body
@@ -88,25 +86,28 @@ const (
 
 func (md *ARMManagedDisk) CreateOrUpdate(params ARMManagedDiskCreateOrUpdateParams) (*ARMManagedDiskInfo, error) {
 	var out ARMManagedDiskInfo
-	_, err := md.PerformRequest(md.ManagementURI(), ARMRequestSettings{ // https://learn.microsoft.com/en-us/rest/api/compute/disks/create-or-update?tabs=HTTP
+	_, err := PerformRequest(md, ARMRequestSettings{ // https://learn.microsoft.com/en-us/rest/api/compute/disks/create-or-update?tabs=HTTP
 		Method: http.MethodPut,
 		Body:   params,
 	}, &out)
+
 	return &out, err
 }
 
 func (md *ARMManagedDisk) Delete() error {
-	_, err := md.PerformRequest(md.ManagementURI(), ARMRequestSettings{ // https://learn.microsoft.com/en-us/rest/api/compute/disks/delete?tabs=HTTP
+	_, err := PerformRequest[any](md, ARMRequestSettings{
 		Method: http.MethodDelete,
 	}, nil)
+
 	return err
 }
 
 func (md *ARMManagedDisk) Get() (*ARMManagedDiskInfo, error) { // https://learn.microsoft.com/en-us/rest/api/compute/disks/get?tabs=HTTP
 	var out ARMManagedDiskInfo
-	_, err := md.PerformRequest(md.ManagementURI(), ARMRequestSettings{
+	_, err := PerformRequest(md, ARMRequestSettings{
 		Method: http.MethodGet,
 	}, &out)
+
 	return &out, err
 }
 
@@ -123,19 +124,16 @@ type ARMManagedDiskAccessURI struct {
 
 func (md *ARMManagedDisk) GrantAccess(params ARMManagedDiskGrantAccessParams) (*ARMManagedDiskAccessURI, error) { // https://learn.microsoft.com/en-us/rest/api/compute/disks/grant-access?tabs=HTTP
 	var out ARMManagedDiskAccessURI
-	uri := md.ManagementURI()
-	uri = *uri.JoinPath("beginGetAccess")
-	_, err := md.PerformRequest(uri, ARMRequestSettings{
-		Method: http.MethodPost,
-		Body:   params,
+	_, err := PerformRequest(md, ARMRequestSettings{
+		Method:        http.MethodGet,
+		Body:          params,
+		PathExtension: "beginGetAccess",
 	}, &out)
 	return &out, err
 }
 
 func (md *ARMManagedDisk) RevokeAccess() error {
-	uri := md.ManagementURI()
-	uri = *uri.JoinPath("endGetAccess")
-	_, err := md.PerformRequest(uri, ARMRequestSettings{
+	_, err := PerformRequest[any](md, ARMRequestSettings{
 		Method: http.MethodPost,
 	}, nil)
 	return err

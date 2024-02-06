@@ -35,18 +35,23 @@ func Test(t *testing.T) {
 		for i := len(FrameworkHooks) - 1; i >= 0; i-- {
 			hook := FrameworkHooks[i]
 			if hook.Ran && hook.TeardownHook != nil {
+				t.Logf("Teardown hook %s running", hook.HookName)
 				hook.TeardownHook(a)
 			}
 		}
 	})
 
 	for i := 0; i < len(FrameworkHooks); i++ {
-		hook := FrameworkHooks[i]
+		hook := &FrameworkHooks[i]
 		hookName := hook.HookName
 
 		t.Logf("Setup hook %s running", hookName)
 		hook.SetupHook(a)
 		hook.Ran = true
+
+		if t.Failed() {
+			break
+		}
 	}
 
 	if !t.Failed() {

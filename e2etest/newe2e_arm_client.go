@@ -14,7 +14,12 @@ import (
 
 type ARMSubject interface {
 	Token() AccessToken
-	ManagementURI() url.URL // todo: URL?
+	Client() *ARMClient
+	ManagementURI() url.URL
+}
+
+type ARMRequestPreparer interface {
+	PrepareRequest(settings *ARMRequestSettings)
 }
 
 func CombineQuery(a, b url.Values) url.Values {
@@ -47,7 +52,7 @@ func (s ARMUnimplementedStruct) Get(Key []string, out interface{}) error {
 		dict := make(map[string]json.RawMessage)
 		err := json.Unmarshal(object, &dict)
 		if err != nil {
-
+			return err
 		}
 
 		object = ARMUnimplementedStruct(dict[Key[0]])
@@ -59,6 +64,10 @@ func (s ARMUnimplementedStruct) Get(Key []string, out interface{}) error {
 type ARMClient struct {
 	OAuth      AccessToken
 	HttpClient *http.Client
+}
+
+func (c *ARMClient) Client() *ARMClient {
+	return c
 }
 
 func (c *ARMClient) getHTTPClient() *http.Client {
@@ -113,20 +122,31 @@ func (s *ARMRequestSettings) CreateRequest(baseURI url.URL) (*http.Request, erro
 
 	newReq.Header = s.Headers
 
+	if s.PathExtension != "" {
+		newReq.URL = newReq.URL.JoinPath(s.PathExtension)
+	}
+
 	return newReq, nil
 }
 
 // PerformRequest will deserialize to target (which assumes the target is a pointer)
 // If an LRO is required, an *ARMAsyncResponse will be returned. Otherwise, both armResp and err will be nil, and target will be written to.
-func (c *ARMClient) PerformRequest(baseURI url.URL, reqSettings ARMRequestSettings, target interface{}) (armResp *ARMAsyncResponse, err error) {
+func PerformRequest[Props any](subject ARMSubject, reqSettings ARMRequestSettings, target *Props) (armResp *ARMAsyncResponse[Props], err error) {
+	c := subject.Client()
+	baseURI := subject.ManagementURI()
 	client := c.getHTTPClient()
+
+	if prep, ok := subject.(ARMRequestPreparer); ok {
+		prep.PrepareRequest(&reqSettings)
+	}
 
 	r, err := reqSettings.CreateRequest(baseURI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare request: %w", err)
 	}
 
-	oAuthToken, err := c.OAuth.FreshToken()
+	oAuthToken, err := subject.Token().FreshToken()
+	r.Header = make(http.Header)
 	r.Header["Authorization"] = []string{"Bearer " + oAuthToken}
 	r.Header["Content-Type"] = []string{"application/json; charset=utf-8"}
 	r.Header["Accept"] = []string{"application/json; charset=utf-8"}
@@ -137,6 +157,20 @@ func (c *ARMClient) PerformRequest(baseURI url.URL, reqSettings ARMRequestSettin
 	}
 
 	switch resp.StatusCode {
+	case 202: // LRO pattern; grab Azure-AsyncOperation and resolve it.
+		newTarget := resp.Header.Get("Azure-Asyncoperation")
+		if newTarget == "" {
+			newTarget = resp.Header.Get("Location")
+		}
+
+		if newTarget != "" {
+			return ResolveAzureAsyncOperation(c.OAuth, newTarget, target)
+		} else if resp.Header.Get("Content-Length") == "0" {
+			return nil, fmt.Errorf("failed to handle async operation: no response data, Azure-Asyncoperation and Location are not found")
+		}
+
+		// If we don't have an asyncop to check against, pull the body
+		fallthrough
 	case 200, 201: // immediate response
 		var buf []byte // Read the body
 		buf, err = io.ReadAll(resp.Body)
@@ -144,15 +178,14 @@ func (c *ARMClient) PerformRequest(baseURI url.URL, reqSettings ARMRequestSettin
 			return nil, fmt.Errorf("failed to read response body (resp code 200): %w", err)
 		}
 
-		err = json.Unmarshal(buf, target)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse response body: %w", err)
+		if len(buf) != 0 && target != nil {
+			err = json.Unmarshal(buf, target)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse response body: %w", err)
+			}
 		}
 
 		return nil, nil
-	case 202: // LRO pattern; grab Azure-AsyncOperation and resolve it.
-		newTarget := resp.Header.Get("Azure-Asyncoperation")
-		return ResolveAzureAsyncOperation(c.OAuth, newTarget, target)
 	default:
 		rBody, err := io.ReadAll(resp.Body)
 		if err != nil {

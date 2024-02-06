@@ -135,7 +135,7 @@ func (config *ManagedDiskConfig) RevokeAccess() error {
 	if resp.StatusCode != 200 {
 		if resp.StatusCode == 202 {
 			newTarget := resp.Header.Get("Azure-Asyncoperation")
-			_, err := ResolveAzureAsyncOperation(config.oauth, newTarget, nil)
+			_, err := ResolveAzureAsyncOperation[any](config.oauth, newTarget, nil)
 
 			return err
 		}

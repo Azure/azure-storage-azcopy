@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type ARMAsyncResponse struct {
+type ARMAsyncResponse[Props any] struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
 	Status          string  `json:"status"`
@@ -18,8 +18,16 @@ type ARMAsyncResponse struct {
 	EndTime         string  `json:"endTime"`
 	PercentComplete float64 `json:"percentComplete"`
 	// Set Properties to a pointer of your target struct, encoding/json will handle the magic.
-	Properties interface{}   `json:"properties"`
+	Properties *Props        `json:"properties"`
 	Error      ARMAsyncError `json:"error"`
+}
+
+func (a ARMAsyncResponse[Props]) Validate() bool {
+	return a.ID != "" &&
+		a.Name != "" &&
+		a.Status != "" &&
+		a.StartTime != "" &&
+		a.EndTime != "" // logical basic requirements
 }
 
 type ARMAsyncError struct {
@@ -33,7 +41,7 @@ const (
 	ARMStatusCanceled  = "Canceled"
 )
 
-func ResolveAzureAsyncOperation(OAuth AccessToken, uri string, properties interface{}) (armResp *ARMAsyncResponse, err error) {
+func ResolveAzureAsyncOperation[Props any](OAuth AccessToken, uri string, properties *Props) (armResp *ARMAsyncResponse[Props], err error) {
 	if properties != nil && reflect.TypeOf(properties).Kind() != reflect.Ptr {
 		return nil, fmt.Errorf("properties must be a pointer (or nil)")
 	}
@@ -58,47 +66,45 @@ func ResolveAzureAsyncOperation(OAuth AccessToken, uri string, properties interf
 		}
 
 		var buf []byte
-		buf, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response body (resp code 200): %w", err)
-		}
 
-		if resp.StatusCode != 200 {
-			rBody, err := io.ReadAll(resp.Body)
+		if resp.StatusCode != 200 && resp.StatusCode != 202 {
+			buf, err = io.ReadAll(resp.Body)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read response body (resp code %d): %w", resp.StatusCode, err)
 			}
 
-			return nil, fmt.Errorf("failed to get access (resp code %d): %s", resp.StatusCode, string(rBody))
-		}
+			return nil, fmt.Errorf("failed to get access (resp code %d): %s", resp.StatusCode, string(buf))
+		} else if resp.StatusCode == 200 {
+			buf, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read response body (resp code 200): %w", err)
+			}
 
-		armResp = &ARMAsyncResponse{
-			Properties: properties, // the user may have supplied a ptr to a struct, let encoding/json resolve that
-		}
+			if len(buf) == 0 {
+				return nil, nil
+			}
 
-		err = json.Unmarshal(buf, armResp)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse response body: %w", err)
-		}
+			armResp = &ARMAsyncResponse[Props]{
+				Properties: properties, // the user may have supplied a ptr to a struct, let encoding/json resolve that
+			}
 
-		if armResp.Status == ARMStatusSucceeded || armResp.Status == ARMStatusCanceled || armResp.Status == ARMStatusFailed {
-			switch armResp.Status {
-			case ARMStatusFailed:
-				var code, message string
-				if armResp.Error.Code != "" {
-					code = fmt.Sprintf(" (code %s)", armResp.Error.Code)
+			err = json.Unmarshal(buf, armResp)
+			if err != nil || !armResp.Validate() {
+				if properties == nil {
+					return nil, nil
 				}
 
-				if armResp.Error.Message != "" {
-					message = fmt.Sprintf(": %s", armResp.Error.Message)
-				}
+				// try parsing against just properties?
+				err = json.Unmarshal(buf, properties)
 
-				return nil, fmt.Errorf("ARM job exited with failed status%s%s", code, message)
-			case ARMStatusCanceled:
-				return nil, fmt.Errorf("ARM async job was canceled")
-			default:
 				return nil, err
 			}
+
+			return armResp, err
+		}
+
+		if loc := resp.Header.Get("Location"); loc != "" {
+			uri = loc
 		}
 
 		retryAfter := resp.Header.Get("Retry-after")
