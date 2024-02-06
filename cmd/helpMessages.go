@@ -258,7 +258,7 @@ const cleanJobsCmdExample = "  azcopy jobs clean --with-status=completed"
 // ===================================== LIST COMMAND ===================================== //
 const listCmdShortDescription = "List the entities in a given resource"
 
-const listCmdLongDescription = `List the entities in a given resource. Blob, Files, and ADLS Gen 2 containers, folders, and accounts are supported. OAuth for Files is currently not supported, please use SAS to authenticate for Files.`
+const listCmdLongDescription = `This command lists accounts, containers, and directories. Blob Storage, Azure Data Lake Storage Gen2, and File Storage are supported. OAuth for Files is currently not supported; please use SAS to authenticate for Files.`
 
 const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) separated list of attributes " +
 	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, ContentMD5, LeaseState, LeaseDuration, LeaseStatus) " +
