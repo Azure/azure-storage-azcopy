@@ -95,11 +95,11 @@ func ParseEnvTag(tag string) EnvTag {
 		case strings.HasPrefix(v, "default="):
 			out.DefaultValue = strings.TrimPrefix(v+strings.Join(parts[i+1:], ","), "default=")
 		case strings.HasPrefix(v, "minimum_required="):
-			min, err := strconv.ParseUint(strings.TrimPrefix(v, "minimum_required="), 10, 64)
+			minimumReq, err := strconv.ParseUint(strings.TrimPrefix(v, "minimum_required="), 10, 32)
 			if err != nil {
 				panic("could not parse flag minimum_required: " + err.Error())
 			}
-			out.MinimumRequired = uint(min)
+			out.MinimumRequired = uint(minimumReq)
 		}
 	}
 
