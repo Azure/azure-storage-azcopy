@@ -293,13 +293,18 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		}
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 
 	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source+rca.SourceSAS, srcCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	var srcCred *common.ScopedCredential
+	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
+		srcCred = common.NewScopedCredential(tc, srcCredType)
+	}
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
 	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination+rca.DestinationSAS, dstCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
@@ -381,29 +386,6 @@ func (rca resumeCmdArgs) process() error {
 		destinationSAS: rca.DestinationSAS,
 	}, common.CpkOptions{}); err != nil {
 		return err
-	}
-
-	srcCredType, _, err := getCredentialTypeForLocation(ctx,
-		getJobFromToResponse.FromTo.From(),
-		getJobFromToResponse.Source,
-		rca.SourceSAS,
-		true,
-		common.CpkOptions{})
-	if err != nil {
-		return err
-	}
-
-	if (credentialInfo.CredentialType.IsAzureOAuth()) || srcCredType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
-			if rca.SourceSAS == "" {
-				credentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenInfo, []string{common.StorageScope})
-			}
-		}
 	}
 
 	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(

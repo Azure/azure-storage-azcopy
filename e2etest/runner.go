@@ -54,7 +54,10 @@ var isLaunchedByDebugger = func() bool {
 	return false
 }()
 
-func (t *TestRunner) SetAllFlags(p params, o Operation) {
+func (t *TestRunner) SetAllFlags(s *scenario) {
+	p := s.p
+	o := s.operation
+
 	set := func(key string, value interface{}, dflt interface{}, formats ...string) {
 		if value == dflt {
 			return // nothing to do. The flag is not supposed to be set
@@ -77,6 +80,18 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 		}
 
 		t.flags[key] = fmt.Sprintf(format, value)
+	}
+
+	if o == eOperation.Benchmark() {
+		set("mode", p.mode, "")
+		set("file-count", p.fileCount, 0)
+		set("size-per-file", p.sizePerFile, "")
+		return
+	}
+
+	if o == eOperation.Cancel() {
+		set("ignore-error-if-completed", p.ignoreErrorIfCompleted, "")
+		return
 	}
 
 	// TODO: TODO: nakulkar-msft there will be many more to add here
@@ -108,6 +123,7 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 	set("check-md5", p.checkMd5.String(), "FailIfDifferent")
 	set("trailing-dot", p.trailingDot.String(), "Enable")
 	set("force-if-read-only", p.forceIfReadOnly, false)
+	set("delete-destination-file", p.deleteDestinationFile, false)
 
 	if o == eOperation.Copy() {
 		set("s2s-preserve-access-tier", p.s2sPreserveAccessTier, true)
@@ -118,6 +134,33 @@ func (t *TestRunner) SetAllFlags(p params, o Operation) {
 			set("follow-symlinks", true, nil)
 		case common.ESymlinkHandlingType.Preserve():
 			set("preserve-symlinks", true, nil)
+		}
+
+		target := s.GetTestFiles().objectTarget
+		if s.fromTo.From() == common.ELocation.Blob() && s.fs.isListOfVersions() { // Otherwise, it must be a list.
+			s.a.Assert(s.fromTo.From(), equals(), common.ELocation.Blob(), "list of files can only be used in blob.")
+
+			versions := s.GetSource().(*resourceBlobContainer).getVersions(s.a, target.objectName)
+			s.a.Assert(len(versions) > 0, equals(), true, "blob was expected to have versions!")
+			listOfVersions := make([]string, len(target.versions))
+
+			for idx, val := range target.versions {
+				s.a.Assert(int(val) < len(versions), equals(), true, fmt.Sprintf("Not enough versions are present! (needed version %d of %d)", val, len(versions)))
+				listOfVersions[idx] = versions[val]
+			}
+
+			file, err := os.CreateTemp("", "listofversions*.json")
+			defer func(file *os.File) {
+				_ = file.Close()
+			}(file)
+			s.a.AssertNoErr(err, "create temp list of versions file")
+
+			for _, v := range listOfVersions {
+				_, err = file.WriteString(v + "\n")
+				s.a.AssertNoErr(err, "write to list of versions file")
+			}
+
+			set("list-of-versions", file.Name(), "")
 		}
 	} else if o == eOperation.Sync() {
 		set("delete-destination", p.deleteDestination.String(), "False")
@@ -231,15 +274,21 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		verb = "remove"
 	case eOperation.Resume():
 		verb = "jobs resume"
+	case eOperation.Cancel():
+		verb = "cancel"
+	case eOperation.Benchmark():
+		verb = "bench"
 	default:
 		panic("unsupported operation type")
 	}
 
 	args := append(strings.Split(verb, " "), src, dst)
-	if operation == eOperation.Remove() {
+	if operation == eOperation.Remove() || operation == eOperation.Benchmark() {
 		args = args[:2]
 	} else if operation == eOperation.Resume() {
 		args = args[:3]
+	} else if operation == eOperation.Cancel() {
+		args = args[:2]
 	}
 	args = append(args, t.computeArgs()...)
 	if needsFromTo {

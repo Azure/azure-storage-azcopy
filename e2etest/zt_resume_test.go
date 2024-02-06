@@ -89,7 +89,7 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 		testFiles{
 			defaultSize:  "1K",
 			sourcePublic: to.Ptr(container.PublicAccessTypeBlob),
-			objectTarget: "a.txt",
+			objectTarget: objectTarget{objectName: "a.txt"},
 
 			shouldTransfer: []interface{}{
 				f("a.txt"),

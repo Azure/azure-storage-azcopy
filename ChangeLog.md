@@ -1,6 +1,40 @@
 
 # Change Log
 
+## Version 10.23.0
+
+### New Features
+
+1. Added support to ignore the error and output a summary if a cancelled job has already completed through the use of the --ignore-error-if-completed flag. ([#2519](https://github.com/Azure/azure-storage-azcopy/pull/2519))
+2. Added support for high throughput append blob. Append blob block size can now be set to up to 100 MB. ([#2480](https://github.com/Azure/azure-storage-azcopy/pull/2480))
+3. Added support to exclude containers when transferring from account to account through the use of the --exclude-container flag. ([#2504](https://github.com/Azure/azure-storage-azcopy/pull/2504))
+
+### Bug Fixes
+
+1. Fixed an issue where specifying AZCOPY_AUTO_LOGIN_TYPE in any form other than uppercase would be incorrectly parsed. ([#2499](https://github.com/Azure/azure-storage-azcopy/pull/2499))
+2. Fixed an issue where a failure to rename a file from the temporary prefix to the file name would not be considered to be a failed transfer. ([#2481](https://github.com/Azure/azure-storage-azcopy/pull/2481))
+3. Fixed an issue where closing the log would panic for benchmark jobs. ([#2537](https://github.com/Azure/azure-storage-azcopy/issues/2537))
+4. Fixed an issue where --preserve-posix-properties would not work on download. ([#2497](https://github.com/Azure/azure-storage-azcopy/issues/2497))
+5. Fixed an issue where --decompress would not be honored in Linux. ([#2392](https://github.com/Azure/azure-storage-azcopy/issues/2392))
+6. Fixed an issue where log files would miss the .log extension. ([#2529](https://github.com/Azure/azure-storage-azcopy/issues/2529))
+7. Fixed an issue where AzCopy would fail to set metadata properties on a read only directory when using the --force-if-read-only flag. ([#2515](https://github.com/Azure/azure-storage-azcopy/pull/2515))
+8. Fixed an issue where the AzCopy log location on resumed jobs would be reported incorrectly. ([#2466](https://github.com/Azure/azure-storage-azcopy/issues/2466))
+9. Fixed an issue with preserving SMB properties in Linux. ([#2530](https://github.com/Azure/azure-storage-azcopy/pull/2530))
+10. Fixed an issue where long-running service to service copies using OAuth at the source would result in the token expiring too early. ([#2513](https://github.com/Azure/azure-storage-azcopy/pull/2513))
+11. Fixed an issue where AzCopy would try to create folders that already existed, resulting in many unnecessary requests. ([#2511](https://github.com/Azure/azure-storage-azcopy/pull/2511))
+
+### Documentation
+
+1. Updated --include-directory-stub inline help to match public documentation. ([#2488](https://github.com/Azure/azure-storage-azcopy/pull/2488))
+
+
+## Version 10.22.2
+
+### Bug Fixes
+
+1. Fixed an issue where AzCopy operations pointed at a snapshot or version object would operation on the base object instead. 
+2. Fixed an issue where AzCopy would download only the base blob when the --list-of-versions flag was used.
+
 ## Version 10.22.1
 
 ### Bug Fixes

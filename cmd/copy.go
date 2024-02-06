@@ -81,6 +81,7 @@ type rawCopyCmdArgs struct {
 	excludeRegex          string
 	includeFileAttributes string
 	excludeFileAttributes string
+	excludeContainer      string
 	includeBefore         string
 	includeAfter          string
 	legacyInclude         string // used only for warnings
@@ -360,9 +361,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// If the given blobType is AppendBlob, block-size-mb should not be greater than
-	// 4MB.
+	// common.MaxAppendBlobBlockSize.
 	if cookedSize, _ := blockSizeInBytes(raw.blockSizeMB); cooked.blobType == common.EBlobType.AppendBlob() && cookedSize > common.MaxAppendBlobBlockSize {
-		return cooked, fmt.Errorf("block size cannot be greater than 4MB for AppendBlob blob type")
+		return cooked, fmt.Errorf("block size cannot be greater than %dMB for AppendBlob blob type", common.MaxAppendBlobBlockSize/common.MegaByte)
 	}
 
 	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)
@@ -854,6 +855,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.IncludePatterns = raw.parsePatterns(raw.include)
 	cooked.ExcludePatterns = raw.parsePatterns(raw.exclude)
 	cooked.ExcludePathPatterns = raw.parsePatterns(raw.excludePath)
+	cooked.excludeContainer = raw.parsePatterns(raw.excludeContainer)
 
 	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.From() != common.ELocation.Local() {
 		return cooked, errors.New("cannot check file attributes on remote objects")
@@ -1097,6 +1099,7 @@ type CookedCopyCmdArgs struct {
 	IncludePatterns       []string
 	ExcludePatterns       []string
 	ExcludePathPatterns   []string
+	excludeContainer      []string
 	IncludeFileAttributes []string
 	ExcludeFileAttributes []string
 	IncludeBefore         *time.Time
@@ -1290,7 +1293,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1346,7 +1349,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// step 0: initialize pipeline
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger)}
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1435,18 +1438,10 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 			// get token from env var or cache
 			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 				return srcCredInfo, err
-			} else if tokenCred, err := tokenInfo.GetTokenCredential(); err != nil {
+			} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
+				// we just verified we can get a token credential
 				return srcCredInfo, err
-			} else {
-				scopes := []string{common.StorageScope}
-				if jpo.S2SSourceCredentialType == common.ECredentialType.MDOAuthToken() {
-					scopes = []string{common.ManagedDiskScope}
-				}
-				srcCredInfo.OAuthTokenInfo = *tokenInfo
-				jpo.CredentialInfo.S2SSourceTokenCredential = common.ScopedCredential(tokenCred, scopes)
 			}
-			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
-			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
 		}
 	}
 	return srcCredInfo, nil
@@ -1537,15 +1532,15 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
 		}
 	}
 
-	sourceCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
 		return err
 	}
@@ -1553,8 +1548,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		sourceURL,
-		sourceCredInfo.CredentialType,
-		sourceCredInfo.OAuthTokenInfo.TokenCredential,
+		srcCredInfo.CredentialType,
+		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)
@@ -1563,12 +1558,18 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	if cca.FromTo.To() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions {
+		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
 			AllowSourceTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File(),
 		}
 	}
 	dstURL, _ := cca.Destination.String()
+
+	var srcCred *common.ScopedCredential
+	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
+		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
+	}
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		dstURL,
@@ -1602,12 +1603,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
 		var e *CopyEnumerator
-		var srcCredInfo common.CredentialInfo
-		srcCredInfo, err = cca.getSrcCredential(ctx, &jobPartOrder)
-		if err != nil {
-			return fmt.Errorf("failed to discern source credential type: %w", err)
-		}
-
 		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
@@ -2078,6 +2073,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent')")
 	cpCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) Include files whose attributes match the attribute list. For example: A;S;R")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) Exclude files whose attributes match the attribute list. For example: A;S;R")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeContainer, "exclude-container", "", "Exclude these containers when transferring from Account to Account only.")
 	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "Preserve full properties during service to service copy. "+
 		"For AWS S3 and Azure File non-single file source, the list operation doesn't return full properties of objects and files. To preserve full properties, AzCopy needs to send one additional request per object or file.")
@@ -2089,7 +2085,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "Preserve index tags during service to service transfer from one blob storage to another")
-	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers.")
+	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers. Including this flag with no value defaults to true (e.g, azcopy copy --include-directory-stub is the same as azcopy copy --include-directory-stub=true).")
 	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. Can be set to true to disable automatic decoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the file paths that would be copied by this command. This flag does not copy the actual files. The --overwrite flag has no effect. If you set the --overwrite flag to false, files in the source directory are listed even if those files exist in the destination directory")
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or

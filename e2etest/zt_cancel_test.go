@@ -25,26 +25,37 @@ import (
 	"testing"
 )
 
-func TestBlobVersioning_ListOfVersions(t *testing.T) {
-	RunScenarios(t,
-		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal()),
-		eValidate.Auto(),
-		anonymousAuthOnly,
-		anonymousAuthOnly,
-		params{},
-		&hooks{},
-		testFiles{
-			defaultSize: "1k",
-			objectTarget: objectTarget{
-				objectName: "versioned",
-				versions:   []uint{0, 2},
-			},
-			shouldTransfer: []any{
-				f("versioned", with{
-					blobVersions: 3, // create 3 unique versions to read from
-				}),
-			},
+func TestCancel_CompletedJobCopySync(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync()|eOperation.Cancel(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:              true,
+		ignoreErrorIfCompleted: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
 		},
-		EAccountType.Standard(), EAccountType.Standard(), "")
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestCancel_CompletedJobRemove(t *testing.T) {
+	blobRemove := TestFromTo{
+		desc:      "BlobRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
+	RunScenarios(t, eOperation.Remove()|eOperation.Cancel(), blobRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		ignoreErrorIfCompleted: true,
+	}, nil, testFiles{
+		defaultSize: "1K",
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("file1.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

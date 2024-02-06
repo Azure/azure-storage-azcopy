@@ -185,7 +185,6 @@ type CredentialInfo struct {
 	OAuthTokenInfo           OAuthTokenInfo
 	S3CredentialInfo         S3CredentialInfo
 	GCPCredentialInfo        GCPCredentialInfo
-	S2SSourceTokenCredential AuthTokenFunction
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
@@ -339,14 +338,14 @@ type ListJobTransfersRequest struct {
 }
 
 type ResumeJobRequest struct {
-	JobID           JobID
-	SourceSAS       string
-	DestinationSAS  string
+	JobID            JobID
+	SourceSAS        string
+	DestinationSAS   string
 	SrcServiceClient *ServiceClient
 	DstServiceClient *ServiceClient
-	IncludeTransfer map[string]int
-	ExcludeTransfer map[string]int
-	CredentialInfo  CredentialInfo
+	IncludeTransfer  map[string]int
+	ExcludeTransfer  map[string]int
+	CredentialInfo   CredentialInfo
 }
 
 // represents the Details and details of a single transfer
@@ -362,6 +361,7 @@ type TransferDetail struct {
 type CancelPauseResumeResponse struct {
 	ErrorMsg              string
 	CancelledPauseResumed bool
+	JobStatus             JobStatus
 }
 
 // represents the list of Details and details of number of transfers

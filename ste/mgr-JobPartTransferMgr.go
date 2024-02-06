@@ -137,6 +137,9 @@ type TransferInfo struct {
 	S2SSrcBlobTier blob.AccessTier // AccessTierType (string) is used to accommodate service-side support matrix change.
 
 	RehydratePriority blob.RehydratePriority
+
+	VersionID  string
+	SnapshotID string
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -329,29 +332,27 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	}
 
 	if versionID != "" {
-		versionID = "versionId=" + versionID
 		sURL, e := url.Parse(srcURI)
 		if e != nil {
 			panic(e)
 		}
 		if len(sURL.RawQuery) > 0 {
-			sURL.RawQuery += "&" + versionID
+			sURL.RawQuery += "&versionId=" + versionID
 		} else {
-			sURL.RawQuery = versionID
+			sURL.RawQuery = "versionId=" + versionID
 		}
 		srcURI = sURL.String()
 	}
 
 	if snapshotID != "" {
-		snapshotID = "snapshot=" + snapshotID
 		sURL, e := url.Parse(srcURI)
 		if e != nil {
 			panic(e)
 		}
 		if len(sURL.RawQuery) > 0 {
-			sURL.RawQuery += "&" + snapshotID
+			sURL.RawQuery += "&snapshot=" + snapshotID
 		} else {
-			sURL.RawQuery = snapshotID
+			sURL.RawQuery = "snapshot=" + snapshotID
 		}
 		srcURI = sURL.String()
 	}
@@ -418,6 +419,8 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		SrcBlobType:       srcBlobType,
 		S2SSrcBlobTier:    srcBlobTier,
 		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
+		VersionID:         versionID,
+		SnapshotID:        snapshotID,
 	}
 }
 
@@ -983,7 +986,11 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 }
 
 func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {
-	return jptm.jobPartMgr.S2SSourceTokenCredential(ctx)
+	invalidToken := "InvalidToken" // This will be replaced by srcAuthPolicy with valid one
+	if jptm.jobPartMgr.SourceIsOAuth() {
+		return &invalidToken, nil
+	}
+	return nil, nil
 }
 
 func (jptm *jobPartTransferMgr) SrcServiceClient() *common.ServiceClient {
