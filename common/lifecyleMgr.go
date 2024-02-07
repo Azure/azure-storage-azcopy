@@ -53,6 +53,7 @@ type LifecycleMgr interface {
 	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
+	Warn(string)                                                 // simple print, allowed to float up
 	Dryrun(OutputBuilder)                                        // print files for dry run mode
 	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
@@ -281,6 +282,18 @@ func (lcm *lifecycleMgr) Info(msg string) {
 	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through Info, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
 
 	infoMsg := fmt.Sprintf("INFO: %v", msg)
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: infoMsg,
+		msgType:    eOutputMessageType.Info(),
+	}
+}
+
+func (lcm *lifecycleMgr) Warn(msg string) {
+
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through Info, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
+
+	infoMsg := fmt.Sprintf("WARN: %v", msg)
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: infoMsg,
