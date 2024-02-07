@@ -150,6 +150,7 @@ func TestPageRangeOptimizerSinglePage(t *testing.T) {
 	a.Equal(int64(1535), *pro.srcPageList.PageRange[1].End)
 	a.Equal(int64(512), *pro.srcPageList.ClearRange[0].Start)
 	a.Equal(int64(1023), *pro.srcPageList.ClearRange[0].End)
+	a.Equal(1, srv.Requests())
 }
 
 func TestPageRangeOptimizerSinglePageFail(t *testing.T) {
@@ -188,6 +189,7 @@ func TestPageRangeOptimizerSinglePageFail(t *testing.T) {
 	pro.fetchPages()
 
 	a.Nil(pro.srcPageList)
+	a.Equal(1, srv.Requests()) // On failure, no retries should be made
 }
 
 func TestPageRangeOptimizerMultiplePages(t *testing.T) {
@@ -248,6 +250,7 @@ func TestPageRangeOptimizerMultiplePages(t *testing.T) {
 	a.Equal(int64(2047), *pro.srcPageList.ClearRange[1].End)
 	a.Equal(int64(2048), *pro.srcPageList.PageRange[2].Start)
 	a.Equal(int64(2559), *pro.srcPageList.PageRange[2].End)
+	a.Equal(2, srv.Requests())
 }
 
 func TestPageRangeOptimizerMultiplePagesFail(t *testing.T) {
@@ -292,4 +295,5 @@ func TestPageRangeOptimizerMultiplePagesFail(t *testing.T) {
 	pro.fetchPages()
 
 	a.Nil(pro.srcPageList)
+	a.Equal(2, srv.Requests()) // On failure, no retries should be made
 }
