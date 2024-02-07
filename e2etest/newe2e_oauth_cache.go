@@ -1,10 +1,12 @@
 package e2etest
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"sync"
 	"time"
 )
@@ -22,12 +24,14 @@ func SetupOAuthCache(a Asserter) {
 		return // no-op, because there's no OAuth configured
 	}
 
-	loginInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
+	dynamicLoginInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
+	staticLoginInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
+	useStatic := GlobalConfig.StaticResources()
 
 	cred, err := azidentity.NewClientSecretCredential(
-		loginInfo.TenantID,
-		loginInfo.ApplicationID,
-		loginInfo.ClientSecret,
+		common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.TenantID),
+		common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.ApplicationID),
+		common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.ClientSecret),
 		nil, // Hopefully the defaults should be OK?
 	)
 	a.NoError("create credentials", err)
@@ -56,7 +60,13 @@ func NewOAuthCache(cred azcore.TokenCredential, tenant string) *OAuthCache {
 	}
 }
 
+var OAuthCacheDisabledError = errors.New("the OAuth cache is currently disabled")
+
 func (o *OAuthCache) GetAccessToken(scope string) (*AzCoreAccessToken, error) {
+	if o == nil {
+		return nil, OAuthCacheDisabledError
+	}
+
 	o.mut.RLock()
 	tok, ok := o.tokens[scope]
 	o.mut.RUnlock()

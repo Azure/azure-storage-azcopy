@@ -21,12 +21,10 @@
 package e2etest
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
@@ -146,6 +144,8 @@ type ManagedDiskConfig struct {
 	oauth             AccessToken
 }
 
+var ClassicE2EOAuthCache *OAuthCache
+
 func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDiskConfig, error) {
 	var mdConfigVar string
 
@@ -169,7 +169,12 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		return nil, fmt.Errorf("failed to parse config") // Outputting the error may reveal semi-sensitive info like subscription ID
 	}
 
-	out.oauth, err = PrimaryOAuthCache.GetAccessToken(AzureManagementResource)
+	err = gim.SetupClassicOAuthCache()
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup OAuth cache: %w", err)
+	}
+
+	out.oauth, err = ClassicE2EOAuthCache.GetAccessToken(AzureManagementResource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get access token: %w", err)
 	}
@@ -177,7 +182,7 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 	return &out, nil
 }
 
-func (gim GlobalInputManager) GetOAuthCredential(resource string) (*azcore.AccessToken, error) {
+func (gim GlobalInputManager) SetupClassicOAuthCache() error {
 	tenantID, applicationID, secret := gim.GetServicePrincipalAuth()
 	activeDirectoryEndpoint := "https://login.microsoftonline.com"
 
@@ -187,12 +192,10 @@ func (gim GlobalInputManager) GetOAuthCredential(resource string) (*azcore.Acces
 		},
 	})
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to create credential: %w", err)
 	}
 
-	scopes := []string{resource}
+	ClassicE2EOAuthCache = NewOAuthCache(spn, tenantID)
 
-	accessToken, err := spn.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes})
-
-	return &accessToken, nil
+	return nil
 }
