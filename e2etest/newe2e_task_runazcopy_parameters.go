@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"reflect"
@@ -213,8 +212,8 @@ type CommonFilterFlags struct {
 	LegacyInclude []string `flag:"include,serializer:SerializeStrings"`
 	LegacyExclude []string `flag:"exclude,serializer:SerializeStrings"`
 
-	IncludeAttributes []cmd.WindowsAttribute `flag:"include-attributes,serializer:SerializeAttributeList"`
-	ExcludeAttributes []cmd.WindowsAttribute `flag:"exclude-attributes,serializer:SerializeAttributeList"`
+	IncludeAttributes []WindowsAttribute `flag:"include-attributes,serializer:SerializeAttributeList"`
+	ExcludeAttributes []WindowsAttribute `flag:"exclude-attributes,serializer:SerializeAttributeList"`
 }
 
 func (CommonFilterFlags) SerializeTime(t any, a ScenarioAsserter) string {
@@ -226,7 +225,7 @@ func (CommonFilterFlags) SerializeStrings(list any, a ScenarioAsserter) string {
 }
 
 func (CommonFilterFlags) SerializeAttributeList(list any, a ScenarioAsserter) string {
-	attrs := GetTypeOrAssert[[]cmd.WindowsAttribute](a, list)
+	attrs := GetTypeOrAssert[[]WindowsAttribute](a, list)
 
 	out := ""
 	for _, v := range attrs {
@@ -234,7 +233,7 @@ func (CommonFilterFlags) SerializeAttributeList(list any, a ScenarioAsserter) st
 			out += ";"
 		}
 
-		out += cmd.WindowsAttributeStrings[v]
+		out += WindowsAttributeStrings[v]
 	}
 
 	return out
@@ -393,4 +392,52 @@ type RemoveFlags struct {
 
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter) {
 	CopyFlags{}.SerializeListingFile(in, scenarioAsserter)
+}
+
+type WindowsAttribute uint32
+
+const (
+	WindowsAttributeReadOnly WindowsAttribute = 1 << iota
+	WindowsAttributeHidden
+	WindowsAttributeSystemFile
+	_ // blanks to increment iota
+	_
+	WindowsAttributeArchiveReady
+	_ // blanks to increment iota
+	WindowsAttributeNormalFile
+	WindowsAttributeTemporaryFile
+	_ // blanks to increment iota
+	_
+	WindowsAttributeCompressedFile
+	WindowsAttributeOfflineFile
+	WindowsAttributeNonIndexedFile
+	WindowsAttributeEncryptedFile
+)
+
+var WindowsAttributeStrings = map[WindowsAttribute]string{
+	WindowsAttributeReadOnly:       "R",
+	WindowsAttributeHidden:         "H",
+	WindowsAttributeSystemFile:     "S",
+	WindowsAttributeArchiveReady:   "A",
+	WindowsAttributeNormalFile:     "N",
+	WindowsAttributeTemporaryFile:  "T",
+	WindowsAttributeCompressedFile: "C",
+	WindowsAttributeOfflineFile:    "O",
+	WindowsAttributeNonIndexedFile: "I",
+	WindowsAttributeEncryptedFile:  "E",
+}
+
+// Reference for File Attribute Constants:
+// https://docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+var WindowsAttributesByName = map[string]WindowsAttribute{
+	"R": WindowsAttributeReadOnly,
+	"H": WindowsAttributeHidden,
+	"S": WindowsAttributeSystemFile,
+	"A": WindowsAttributeArchiveReady,
+	"N": WindowsAttributeNormalFile,
+	"T": WindowsAttributeTemporaryFile,
+	"C": WindowsAttributeCompressedFile,
+	"O": WindowsAttributeOfflineFile,
+	"I": WindowsAttributeNonIndexedFile,
+	"E": WindowsAttributeEncryptedFile,
 }

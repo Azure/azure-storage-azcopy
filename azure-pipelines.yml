@@ -207,6 +207,11 @@ jobs:
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+          NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
+          NEW_E2E_APPLICATION_ID: $(AZCOPY_NEW_E2E_APPLICATION_ID)
+          NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
+          NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+          NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
         displayName: 'E2E Test $(display_name) - AMD64'
 
       - task: PublishBuildArtifacts@1

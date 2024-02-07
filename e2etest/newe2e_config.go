@@ -45,7 +45,6 @@ type NewE2EConfig struct {
 			}
 
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
-			// double todo: we should allow these to be missing.
 			Standard struct {
 				AccountName string `env:"NEW_E2E_STANDARD_ACCOUNT_NAME,required"`
 				AccountKey  string `env:"NEW_E2E_STANDARD_ACCOUNT_KEY,required"`
