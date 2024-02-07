@@ -286,7 +286,7 @@ func ReadConfig(config reflect.Value, fieldName string, tag EnvTag) *ConfigReade
 		sType := config.Type()
 
 		hasRequiredFlags := false
-		successfulSetCount := 0
+		successfulSetCount := uint(0)
 
 		baseError := NewConfigReaderError(fieldName)
 		for i := 0; i < fieldCt; i++ {
@@ -325,7 +325,7 @@ func ReadConfig(config reflect.Value, fieldName string, tag EnvTag) *ConfigReade
 
 				baseError = NewConfigReaderError(fieldName) // No error if only one got set
 			} else if tag.MinimumRequired != 0 {
-				if successfulSetCount < int(tag.MinimumRequired) {
+				if successfulSetCount < tag.MinimumRequired {
 					baseError.CoreError = fmt.Errorf("required struct fails to fulfill at least %d conditions", tag.MinimumRequired)
 					return baseError.Finalize()
 				}
