@@ -1851,7 +1851,8 @@ Final Job Status: %v%s%s
 				// log to job log
 				jobMan, exists := jobsAdmin.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
-					jobMan.Log(common.LogInfo, logStats+"\n"+output)
+					// Passing this as LogError ensures the stats are always logged.
+					jobMan.Log(common.LogError, logStats+"\n"+output)
 				}
 				return output
 			}
