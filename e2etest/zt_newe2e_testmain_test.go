@@ -28,7 +28,7 @@ type TestFrameworkHook struct {
 	Ran          bool
 }
 
-func Test(t *testing.T) {
+func TestNewE2E(t *testing.T) {
 	a := &FrameworkAsserter{t: t}
 
 	t.Cleanup(func() {
