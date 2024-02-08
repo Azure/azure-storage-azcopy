@@ -179,9 +179,9 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
-	deleteDestinationFile bool
-	trailingDot common.TrailingDotOption
-	decompress  bool
+	deleteDestinationFile  bool
+	trailingDot            common.TrailingDotOption
+	decompress             bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -227,7 +227,7 @@ func (o Operation) String() string {
 }
 
 func (o Operation) NeedsDst() bool {
-	return !(o == eOperation.Remove() || o == eOperation.List() || o == eOperation.Resume())
+	return !(o == eOperation.Remove() || o == eOperation.List() || o == eOperation.Resume() || o == eOperation.Benchmark())
 }
 
 // getValues chops up composite values into their parts
