@@ -36,7 +36,8 @@ import (
 
 type rawListCmdArgs struct {
 	// obtained from argument
-	sourcePath string
+	src    string
+	fromTo string
 
 	Properties      string
 	MachineReadable bool
@@ -86,17 +87,21 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
-	location := InferArgumentLocation(raw.sourcePath)
+	fromTo, err := ValidateFromTo(raw.src, "", raw.fromTo)
+	if err != nil {
+		return cooked, err
+	}
+	location := fromTo.From()
 	// Only support listing for Azure locations
 	if location != location.Blob() && location != location.File() && location != location.BlobFS() {
 		return cooked, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
 	}
-	cooked.sourcePath = raw.sourcePath
+	cooked.sourcePath = raw.src
 	cooked.MachineReadable = raw.MachineReadable
 	cooked.RunningTally = raw.RunningTally
 	cooked.MegaUnits = raw.MegaUnits
 	cooked.location = location
-	err := cooked.trailingDot.Parse(raw.trailingDot)
+	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
 		return cooked, err
 	}
@@ -137,10 +142,29 @@ func init() {
 
 			// If no argument is passed then it is not valid
 			// lsc expects the container path / virtual directory
-			if len(args) == 0 || len(args) > 2 {
+			if len(args) != 1 {
 				return errors.New("this command only requires container destination")
 			}
-			raw.sourcePath = args[0]
+			raw.src = args[0]
+
+			if raw.fromTo == "" {
+				srcLocationType := InferArgumentLocation(raw.src)
+				switch srcLocationType {
+				case common.ELocation.Blob():
+					raw.fromTo = common.EFromTo.BlobList().String()
+				case common.ELocation.File():
+					raw.fromTo = common.EFromTo.FileList().String()
+				case common.ELocation.BlobFS():
+					raw.fromTo = common.EFromTo.BlobFSList().String()
+				default:
+					return fmt.Errorf("invalid source type %s to list. azcopy support listing blobs/files/adls gen2", srcLocationType.String())
+				}
+			} else if raw.fromTo != "" {
+				err := strings.Contains(raw.fromTo, "List")
+				if !err {
+					return fmt.Errorf("invalid destination. please enter a valid destination, i.e. BlobList, FileList, BlobFSList")
+				}
+			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -158,6 +182,7 @@ func init() {
 		},
 	}
 
+	listContainerCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: BlobList, FileList, BlobFSList")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "Lists file sizes in bytes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
@@ -213,7 +238,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		return err
 	}
 
-	if err := common.VerifyIsURLResolvable(raw.sourcePath); cooked.location.IsRemote() && err != nil {
+	if err := common.VerifyIsURLResolvable(raw.src); cooked.location.IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 

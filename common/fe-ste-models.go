@@ -601,6 +601,9 @@ func (FromTo) PipeFile() FromTo     { return fromToValue(ELocation.Pipe(), ELoca
 func (FromTo) BlobTrash() FromTo    { return fromToValue(ELocation.Blob(), ELocation.Unknown()) }
 func (FromTo) FileTrash() FromTo    { return fromToValue(ELocation.File(), ELocation.Unknown()) }
 func (FromTo) BlobFSTrash() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
+func (FromTo) BlobList() FromTo     { return fromToValue(ELocation.Blob(), ELocation.Unknown()) }
+func (FromTo) FileList() FromTo     { return fromToValue(ELocation.File(), ELocation.Unknown()) }
+func (FromTo) BlobFSList() FromTo   { return fromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
 func (FromTo) LocalBlobFS() FromTo  { return fromToValue(ELocation.Local(), ELocation.BlobFS()) }
 func (FromTo) BlobFSLocal() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.Local()) }
 func (FromTo) BlobFSBlobFS() FromTo { return fromToValue(ELocation.BlobFS(), ELocation.BlobFS()) }
