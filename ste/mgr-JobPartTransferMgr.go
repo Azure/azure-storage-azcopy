@@ -382,7 +382,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		}
 	}
 	if blockSize > common.MaxBlockBlobBlockSize {
-		jptm.Log(common.LogWarning, fmt.Sprintf("block-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", blockSize, common.MaxBlockBlobBlockSize))
+		jptm.Log(common.LogWarning, fmt.Sprintf("block-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", blockSize, int64(common.MaxBlockBlobBlockSize)))
 	}
 	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
@@ -392,7 +392,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		putBlobSize = blockSize
 	}
 	if putBlobSize > common.MaxPutBlobSize {
-		jptm.Log(common.LogWarning, fmt.Sprintf("put-blob-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", putBlobSize, common.MaxPutBlobSize))
+		jptm.Log(common.LogWarning, fmt.Sprintf("put-blob-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", putBlobSize, int64(common.MaxPutBlobSize)))
 	}
 	putBlobSize = common.Iff(putBlobSize > common.MaxPutBlobSize, common.MaxPutBlobSize, putBlobSize)
 
