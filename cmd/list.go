@@ -305,16 +305,19 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 
 					// if new vid came after the current vid, then it is the latest version
 					// update the objectVer with the latest version
+					// we will also remove sizeCount and fileCount of current object, allowing
+					// the updated sizeCount and fileCount to be added at line 320
 					if newVid.After(currentVid) {
+						sizeCount -= currentVersionId.fileSize // remove size of current object
+						fileCount--                            // remove current object file count
 						objectVer[object.relativePath] = updatedVersionId
 					}
 				} else {
 					objectVer[object.relativePath] = updatedVersionId
 				}
-			} else {
-				fileCount++
-				sizeCount += object.size
 			}
+			fileCount++
+			sizeCount += object.size
 		}
 
 		glcm.Info(objectSummary)
@@ -330,15 +333,6 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	if cooked.RunningTally {
-		if shouldGetVersionId {
-			// get file count by getting length of objectVer
-			fileCount = int64(len(objectVer))
-
-			// get size count by incrementing through objectVer and adding all values of versionIdObject.fileSize
-			for _, val := range objectVer {
-				sizeCount += val.fileSize
-			}
-		}
 		glcm.Info("")
 		glcm.Info("File count: " + strconv.Itoa(int(fileCount)))
 
