@@ -22,11 +22,20 @@ package ste
 
 import (
 	"bytes"
-	gcpUtils "cloud.google.com/go/storage"
 	"context"
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"hash/crc64"
+	"io"
+	"math/rand"
+	"os"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	gcpUtils "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -38,14 +47,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/minio/minio-go"
 	"github.com/stretchr/testify/assert"
-	"hash/crc64"
-	"io"
-	"math/rand"
-	"os"
-	"runtime"
-	"strings"
-	"testing"
-	"time"
 )
 
 // This file covers testing of the GetMD5() method in the various sourceInfoProvider implementations
@@ -174,7 +175,7 @@ func TestBenchmark(t *testing.T) {
 		info:   nil,
 		fromTo: common.EFromTo.BenchmarkBlob(),
 	}
-	benchSIP, err := newBenchmarkSourceInfoProvider(jptm)
+	benchSIP, err := newBenchmarkSourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	_, err = benchSIP.GetMD5(0, 1)
@@ -220,7 +221,7 @@ func TestBlockBlob(t *testing.T) {
 		}),
 		fromTo: common.EFromTo.BlobBlob(),
 	}
-	blobSIP, err := newBlobSourceInfoProvider(jptm)
+	blobSIP, err := newBlobSourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	// Get MD5 range within service calculation
@@ -288,7 +289,7 @@ func TestShareFile(t *testing.T) {
 		}),
 		fromTo: common.EFromTo.FileBlob(),
 	}
-	fileSIP, err := newFileSourceInfoProvider(jptm)
+	fileSIP, err := newFileSourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	// Get MD5 range within service calculation
@@ -357,7 +358,7 @@ func TestShareDirectory(t *testing.T) {
 		}),
 		fromTo: common.EFromTo.FileBlob(),
 	}
-	fileSIP, err := newFileSourceInfoProvider(jptm)
+	fileSIP, err := newFileSourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	_, err = fileSIP.GetMD5(0, 1)
@@ -398,7 +399,7 @@ func TestGCP(t *testing.T) {
 		}),
 		fromTo: common.EFromTo.GCPBlob(),
 	}
-	gcpSIP, err := newGCPSourceInfoProvider(jptm)
+	gcpSIP, err := newGCPSourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	// Get MD5 range within service calculation
@@ -448,7 +449,7 @@ func TestLocal(t *testing.T) {
 		}),
 		fromTo: common.EFromTo.LocalBlob(),
 	}
-	localSIP, err := newLocalSourceInfoProvider(jptm)
+	localSIP, err := newLocalSourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	// Get MD5 range within service calculation
@@ -504,7 +505,7 @@ func TestS3(t *testing.T) {
 		}),
 		fromTo: common.EFromTo.S3Blob(),
 	}
-	s3SIP, err := newS3SourceInfoProvider(jptm)
+	s3SIP, err := newS3SourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	// Get MD5 range within service calculation

@@ -31,7 +31,7 @@ import (
 
 var loginCmdArg = loginCmdArgs{tenantID: common.DefaultTenantID}
 
-var loginNotice = "'azcopy %s' command will be deprecated starting release 10.22. " +
+var loginNotice = "We recommend all customers migrate off of using the 'azcopy %s' command. " +
 	"Use auto-login instead. Visit %s to know more."
 var autoLoginURL = "https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-authorize-azure-active-directory#authorize-without-a-secret-store "
 
