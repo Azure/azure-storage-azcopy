@@ -18,7 +18,7 @@ type securityInfoPersistenceManager struct {
 }
 
 // Files supports SDDLs up to and equal to 8kb. Because this isn't KiB, We're going to infer that it's 8x1000, not 8x1024.
-var filesServiceMaxSDDLSize = 8000
+var FilesServiceMaxSDDLSize = 8000
 
 func newSecurityInfoPersistenceManager(ctx context.Context) *securityInfoPersistenceManager {
 	return &securityInfoPersistenceManager{

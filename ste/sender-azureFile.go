@@ -275,7 +275,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destUR
 		}
 	}
 
-	if u.permissionsToApply.Permission != nil && len(*u.permissionsToApply.Permission) > filesServiceMaxSDDLSize {
+	if u.permissionsToApply.Permission != nil && len(*u.permissionsToApply.Permission) > FilesServiceMaxSDDLSize {
 		sipm := u.jptm.SecurityInfoPersistenceManager()
 		pkey, err := sipm.PutSDDL(*u.permissionsToApply.Permission, u.shareClient)
 		u.permissionsToApply.PermissionKey = &pkey
