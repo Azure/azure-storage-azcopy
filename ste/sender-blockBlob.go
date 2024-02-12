@@ -102,6 +102,7 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 		return
 	}
 
+	// sanity check
 	if chunkSize > common.MaxBlockBlobBlockSize {
 		// mercy, please
 		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed block size for a BlockBlob",
@@ -121,6 +122,7 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 		return
 	}
 
+	// sanity check
 	if putBlobSize > common.MaxPutBlobSize {
 		// mercy, please
 		err = fmt.Errorf("put blob size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed put blob size for a BlockBlob",

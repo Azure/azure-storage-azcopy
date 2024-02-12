@@ -381,12 +381,18 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 			}
 		}
 	}
+	if blockSize > common.MaxBlockBlobBlockSize {
+		jptm.Log(common.LogWarning, fmt.Sprintf("block-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", blockSize, common.MaxBlockBlobBlockSize))
+	}
 	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
-	// If the putBlobSize is 0, then the user didn't provide any putBlobSize, default to DefaultPutBlobSize
+	// If the putBlobSize is 0, then the user didn't provide any putBlobSize, default to block size to default to no breaking changes (prior to this feature, we would use blockSize to determine the put blob size).
 	putBlobSize := dstBlobData.PutBlobSize
 	if putBlobSize == 0 {
 		putBlobSize = blockSize
+	}
+	if putBlobSize > common.MaxPutBlobSize {
+		jptm.Log(common.LogWarning, fmt.Sprintf("put-blob-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", putBlobSize, common.MaxPutBlobSize))
 	}
 	putBlobSize = common.Iff(putBlobSize > common.MaxPutBlobSize, common.MaxPutBlobSize, putBlobSize)
 

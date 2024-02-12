@@ -1074,7 +1074,6 @@ const (
 	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
 	MaxPutBlobSize                 = 5000 * 1024 * 1024
-	DefaultPutBlobSize             = 256 * 1024 * 1024
 	MaxAppendBlobBlockSize         = 100 * 1024 * 1024
 	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
