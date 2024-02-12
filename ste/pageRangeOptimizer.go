@@ -63,7 +63,7 @@ func (p *pageRangeOptimizer) fetchPages() {
 	// TODO follow up with the service folks to confirm the scale at which the timeouts occur
 	// TODO perhaps we need to add more logic here to optimize for more cases
 	limitedContext := withNoRetryForBlob(p.ctx) // we don't want retries here. If it doesn't work the first time, we don't want to chew up (lots) time retrying
-	pager := p.srcPageBlobClient.NewGetPageRangesPager(&pageblob.GetPageRangesOptions{})
+	pager := p.srcPageBlobClient.NewGetPageRangesPager(nil)
 
 	for pager.More() {
 		pageList, err := pager.NextPage(limitedContext)
