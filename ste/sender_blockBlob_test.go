@@ -45,9 +45,15 @@ func TestGetVerifiedChunkParams(t *testing.T) {
 	_, _, err := getVerifiedChunkParams(transferInfo, memLimit, memLimit)
 	a.Equal(expectedErr, err.Error())
 
-	// Verify large block Size
+	// Verify large block Size, should pass with 2 chunks
 	memLimit = int64(8388608000) // 8000MiB
-	expectedErr = "block size of 3.91GiB for file tmpSrc of size 7.81GiB exceeds maximum allowed block size for a BlockBlob"
+	_, numChunks, err := getVerifiedChunkParams(transferInfo, memLimit, memLimit)
+	a.NoError(err)
+	a.Equal(numChunks, uint32(2))
+
+	// Verify max block size, should fail
+	transferInfo.BlockSize = 5243928576 // 5001MiB
+	expectedErr = "block size of 4.88GiB for file tmpSrc of size 7.81GiB exceeds maximum allowed block size for a BlockBlob"
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
 	a.Equal(expectedErr, err.Error())
 
