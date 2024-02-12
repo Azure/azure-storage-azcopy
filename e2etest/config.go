@@ -21,12 +21,10 @@
 package e2etest
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
@@ -112,12 +110,17 @@ var EAccountType = AccountType(0)
 type AccountType uint8
 
 func (AccountType) Standard() AccountType                     { return AccountType(0) }
-func (AccountType) Premium() AccountType                      { return AccountType(1) }
+func (AccountType) PremiumBlockBlobs() AccountType            { return AccountType(1) }
+func (AccountType) PremiumPageBlobs() AccountType             { return AccountType(8) }
+func (AccountType) PremiumFileShares() AccountType            { return AccountType(9) }
+func (AccountType) PremiumHNSEnabled() AccountType            { return AccountType(10) }
 func (AccountType) HierarchicalNamespaceEnabled() AccountType { return AccountType(2) }
 func (AccountType) Classic() AccountType                      { return AccountType(3) }
 func (AccountType) StdManagedDisk() AccountType               { return AccountType(4) }
 func (AccountType) OAuthManagedDisk() AccountType             { return AccountType(5) }
-func (AccountType) Azurite() AccountType                      { return AccountType(6) }
+func (AccountType) S3() AccountType                           { return AccountType(6) } // Stub, for future testing use
+func (AccountType) GCP() AccountType                          { return AccountType(7) } // Stub, for future testing use
+func (AccountType) Azurite() AccountType                      { return AccountType(8) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
@@ -132,14 +135,16 @@ func (o AccountType) IsBlobOnly() bool {
 }
 
 /*
-	{"SubscriptionID":"","ResourceGroupName":"","DiskName":""}
+{"SubscriptionID":"","ResourceGroupName":"","DiskName":""}
 */
 type ManagedDiskConfig struct {
 	SubscriptionID    string
 	ResourceGroupName string
 	DiskName          string
-	oauth             *azcore.AccessToken
+	oauth             AccessToken
 }
+
+var ClassicE2EOAuthCache *OAuthCache
 
 func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDiskConfig, error) {
 	var mdConfigVar string
@@ -164,15 +169,20 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		return nil, fmt.Errorf("failed to parse config") // Outputting the error may reveal semi-sensitive info like subscription ID
 	}
 
-	out.oauth, err = gim.GetOAuthCredential("https://management.core.windows.net/.default")
+	err = gim.SetupClassicOAuthCache()
 	if err != nil {
-		return nil, fmt.Errorf("failed to refresh oauth token: %w", err)
+		return nil, fmt.Errorf("failed to setup OAuth cache: %w", err)
+	}
+
+	out.oauth, err = ClassicE2EOAuthCache.GetAccessToken(AzureManagementResource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get access token: %w", err)
 	}
 
 	return &out, nil
 }
 
-func (gim GlobalInputManager) GetOAuthCredential(resource string) (*azcore.AccessToken, error) {
+func (gim GlobalInputManager) SetupClassicOAuthCache() error {
 	tenantID, applicationID, secret := gim.GetServicePrincipalAuth()
 	activeDirectoryEndpoint := "https://login.microsoftonline.com"
 
@@ -182,12 +192,10 @@ func (gim GlobalInputManager) GetOAuthCredential(resource string) (*azcore.Acces
 		},
 	})
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to create credential: %w", err)
 	}
 
-	scopes := []string{resource}
+	ClassicE2EOAuthCache = NewOAuthCache(spn, tenantID)
 
-	accessToken, err := spn.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes})
-
-	return &accessToken, nil
+	return nil
 }

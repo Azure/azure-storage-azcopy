@@ -39,7 +39,7 @@ import (
 )
 
 // E.g. if we have enumerationSuite/TestFooBar/Copy-LocalBlob the scenario is "Copy-LocalBlob"
-// A scenario is treated as a sub-test by our declarative test runner
+// A scenario is treated as a subtest by our declarative test runner
 type scenario struct {
 	// scenario config properties
 	srcAccountType      AccountType
