@@ -255,7 +255,10 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, containsProperty(cooked.properties, versionId))
+	// check if user wants to get version id
+	shouldGetVersionId := containsProperty(cooked.properties, versionId)
+
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, shouldGetVersionId)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
@@ -285,7 +288,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 
 		if cooked.RunningTally {
-			if containsProperty(cooked.properties, versionId) {
+			if shouldGetVersionId {
 				// get new version id object
 				updatedVersionId := versionIdObject{
 					versionId: object.blobVersionID,
@@ -327,7 +330,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	if cooked.RunningTally {
-		if containsProperty(cooked.properties, versionId) {
+		if shouldGetVersionId {
 			// get file count by getting length of objectVer
 			fileCount = int64(len(objectVer))
 
