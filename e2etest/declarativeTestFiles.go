@@ -26,6 +26,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	bfsfile "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"math"
 	"reflect"
 	"strconv"
@@ -64,6 +66,51 @@ func (h *contentHeaders) DeepCopy() *contentHeaders {
 	}
 
 	return &ret
+}
+
+func (h *contentHeaders) ToBlob() *blob.HTTPHeaders {
+	if h == nil {
+		return nil
+	}
+
+	return &blob.HTTPHeaders{
+		BlobContentType:        h.contentType,
+		BlobContentDisposition: h.contentDisposition,
+		BlobContentEncoding:    h.contentEncoding,
+		BlobContentLanguage:    h.contentLanguage,
+		BlobCacheControl:       h.cacheControl,
+		BlobContentMD5:         h.contentMD5,
+	}
+}
+
+func (h *contentHeaders) ToFile() *file.HTTPHeaders {
+	if h == nil {
+		return nil
+	}
+
+	return &file.HTTPHeaders{
+		ContentType:        h.contentType,
+		ContentDisposition: h.contentDisposition,
+		ContentEncoding:    h.contentEncoding,
+		ContentLanguage:    h.contentLanguage,
+		CacheControl:       h.cacheControl,
+		ContentMD5:         h.contentMD5,
+	}
+}
+
+func (h *contentHeaders) ToBlobFS() *bfsfile.HTTPHeaders {
+	if h == nil {
+		return nil
+	}
+
+	return &bfsfile.HTTPHeaders{
+		ContentMD5:         h.contentMD5,
+		ContentType:        h.contentType,
+		ContentDisposition: h.contentDisposition,
+		ContentEncoding:    h.contentEncoding,
+		ContentLanguage:    h.contentLanguage,
+		CacheControl:       h.cacheControl,
+	}
 }
 
 func (h *contentHeaders) String() string {
