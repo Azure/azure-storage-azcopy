@@ -164,6 +164,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	//		panic(errors.New("unrecognized blob type"))
 	//	}*/
 	// }
+	putBlobSize := order.BlobAttributes.PutBlobSizeInBytes
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
 		Version:                DataSchemaVersion,
@@ -198,6 +199,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			PageBlobTier:                     order.BlobAttributes.PageBlobTier,
 			MetadataLength:                   uint16(len(order.BlobAttributes.Metadata)),
 			BlockSize:                        blockSize,
+			PutBlobSize:                      putBlobSize,
 			BlobTagsLength:                   uint16(len(order.BlobAttributes.BlobTagsString)),
 			CpkInfo:                          order.CpkOptions.CpkInfo,
 			CpkScopeInfoLength:               uint16(len(order.CpkOptions.CpkScopeInfo)),

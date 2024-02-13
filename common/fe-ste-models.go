@@ -509,6 +509,8 @@ func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
 func (Location) None() Location      { return Location(9) } // None is used in case we're transferring properties
 
+func (Location) AzureAccount() Location { return Location(100) } // AzureAccount is never used within AzCopy, and won't be detected, (for now)
+
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
 }
@@ -1073,6 +1075,7 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 const (
 	DefaultBlockBlobBlockSize      = 256 * 1024 * 1024
 	MaxBlockBlobBlockSize          = 5000 * 1024 * 1024
+	MaxPutBlobSize                 = 5000 * 1024 * 1024
 	MaxAppendBlobBlockSize         = 100 * 1024 * 1024
 	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize      = 4 * 1024 * 1024

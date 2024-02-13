@@ -1150,6 +1150,77 @@ func TestCopySync_DeleteDestinationFileFlag(t *testing.T) {
 	)
 }
 
+func TestBasic_PutBlobSizeSingleShot(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:     true,
+		putBlobSizeMB: 256, // 256 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for key, _ := range props {
+				// we try to match the test.txt substring because local test files have randomizing prefix to file names
+				if strings.Contains(key, "test.txt") {
+					client := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(key)
+					list, err := client.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					if err != nil {
+						t.Errorf("error getting block list %s", err)
+					}
+					if len(list.CommittedBlocks) != 0 {
+						t.Errorf("expected 0 committed blocks, got %d", len(list.CommittedBlocks))
+					}
+					if len(list.UncommittedBlocks) != 0 {
+						t.Errorf("expected 0 uncommitted blocks, got %d", len(list.UncommittedBlocks))
+					}
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "101M",
+
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("test.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_PutBlobSizeMultiPart(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:     true,
+		putBlobSizeMB: 50, // 50 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for key, _ := range props {
+				// we try to match the test.txt substring because local test files have randomizing prefix to file names
+				if strings.Contains(key, "test.txt") {
+					client := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(key)
+					list, err := client.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					if err != nil {
+						t.Errorf("error getting block list %s", err)
+					}
+					// default block size is 8mb
+					if len(list.CommittedBlocks) != 13 {
+						t.Errorf("expected 13 committed blocks, got %d", len(list.CommittedBlocks))
+					}
+					if len(list.UncommittedBlocks) != 0 {
+						t.Errorf("expected 0 uncommitted blocks, got %d", len(list.UncommittedBlocks))
+					}
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "101M",
+
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("test.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
 func TestBasic_MaxSingleChunkUpload(t *testing.T) {
 	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:   true,
