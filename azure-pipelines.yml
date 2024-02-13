@@ -173,10 +173,10 @@ jobs:
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
         displayName: 'Installing dependencies'
       - bash: |
-          dotnet dev-certs https --trust -ep $(System.DefaultWorkingDirectory)/cert.pfx -p devstoreaccount1
+          dotnet dev-certs https --trust -ep ./cert.pfx -p devstoreaccount1
           npm install -g azurite
           mkdir azurite
-          azurite --silent --location azurite --cert $(System.DefaultWorkingDirectory)/cert.pfx --pwd devstoreaccount1 --debug azurite\debug.log &
+          azurite --silent --location azurite --cert ./cert.pfx --pwd devstoreaccount1 --debug azurite\debug.log &
         displayName: 'Generate PFX Certificate, Install and Run Azurite'
       # Running E2E Tests on AMD64
       - script: |
