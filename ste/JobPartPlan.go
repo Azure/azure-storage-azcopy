@@ -46,6 +46,7 @@ type IJobPartPlanHeader interface {
 	TransferSrcDstStrings(transferIndex uint32) (source string, destination string, isFolder bool)
 	TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier, s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags)
 }
+
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
@@ -350,6 +351,9 @@ type JobPartPlanDstBlob struct {
 
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize int64
+
+	// Specifies the maximum size of a blob which can be uploaded by a single PUT request.
+	PutBlobSize int64
 
 	SetPropertiesFlags common.SetPropertiesFlags
 

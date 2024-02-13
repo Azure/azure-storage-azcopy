@@ -107,6 +107,7 @@ func (t *TestRunner) SetAllFlags(s *scenario) {
 	set("exclude-pattern", p.excludePattern, "")
 	set("cap-mbps", p.capMbps, float32(0))
 	set("block-size-mb", p.blockSizeMB, float32(0))
+	set("put-blob-size-mb", p.putBlobSizeMB, float32(0))
 	set("s2s-detect-source-changed", p.s2sSourceChangeValidation, false)
 	set("metadata", p.metadata, "")
 	set("cancel-from-stdin", p.cancelFromStdin, false)
@@ -282,13 +283,10 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		panic("unsupported operation type")
 	}
 
-	args := append(strings.Split(verb, " "), src, dst)
-	if operation == eOperation.Remove() || operation == eOperation.Benchmark() {
-		args = args[:2]
-	} else if operation == eOperation.Resume() {
-		args = args[:3]
-	} else if operation == eOperation.Cancel() {
-		args = args[:2]
+	args := strings.Split(verb, " ")
+	args = append(args, src)
+	if operation.NeedsDst() {
+		args = append(args, dst)
 	}
 	args = append(args, t.computeArgs()...)
 	if needsFromTo {

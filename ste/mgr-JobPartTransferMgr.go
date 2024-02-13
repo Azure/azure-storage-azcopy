@@ -107,6 +107,7 @@ type IJobPartTransferMgr interface {
 type TransferInfo struct {
 	JobID                   common.JobID
 	BlockSize               int64
+	PutBlobSize             int64
 	Source                  string
 	SourceSize              int64
 	Destination             string
@@ -380,7 +381,20 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 			}
 		}
 	}
+	if blockSize > common.MaxBlockBlobBlockSize {
+		jptm.Log(common.LogWarning, fmt.Sprintf("block-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", blockSize, int64(common.MaxBlockBlobBlockSize)))
+	}
 	blockSize = common.Iff(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+
+	// If the putBlobSize is 0, then the user didn't provide any putBlobSize, default to block size to default to no breaking changes (prior to this feature, we would use blockSize to determine the put blob size).
+	putBlobSize := dstBlobData.PutBlobSize
+	if putBlobSize == 0 {
+		putBlobSize = blockSize
+	}
+	if putBlobSize > common.MaxPutBlobSize {
+		jptm.Log(common.LogWarning, fmt.Sprintf("put-blob-size %d is greater than maximum allowed size %d, setting it to maximum allowed size", putBlobSize, int64(common.MaxPutBlobSize)))
+	}
+	putBlobSize = common.Iff(putBlobSize > common.MaxPutBlobSize, common.MaxPutBlobSize, putBlobSize)
 
 	var srcBlobTags common.BlobTags
 	if blobTags != nil {
@@ -395,6 +409,7 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 	return &TransferInfo{
 		JobID:                          plan.JobID,
 		BlockSize:                      blockSize,
+		PutBlobSize:                    putBlobSize,
 		Source:                         srcURI,
 		SourceSize:                     sourceSize,
 		Destination:                    dstURI,

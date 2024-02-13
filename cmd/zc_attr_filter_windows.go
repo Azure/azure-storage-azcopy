@@ -29,7 +29,7 @@ import (
 )
 
 type attrFilter struct {
-	fileAttributes  uint32
+	fileAttributes  WindowsAttribute
 	filePath        string
 	isIncludeFilter bool
 }
@@ -67,44 +67,67 @@ func (f *attrFilter) DoesPass(storedObject StoredObject) bool {
 	// if a file shares one or more attributes with the ones provided by the filter,
 	// it's a match. Return the appropriate boolean value if there's a match.
 	// Otherwise return the opposite value.
-	if attributes&f.fileAttributes > 0 {
+	if attributes&uint32(f.fileAttributes) > 0 {
 		return f.isIncludeFilter
 	}
 
 	return !f.isIncludeFilter
 }
 
+type WindowsAttribute uint32
+
+const (
+	WindowsAttributeReadOnly WindowsAttribute = 1 << iota
+	WindowsAttributeHidden
+	WindowsAttributeSystemFile
+	_ // blanks to increment iota
+	_
+	WindowsAttributeArchiveReady
+	_ // blanks to increment iota
+	WindowsAttributeNormalFile
+	WindowsAttributeTemporaryFile
+	_ // blanks to increment iota
+	_
+	WindowsAttributeCompressedFile
+	WindowsAttributeOfflineFile
+	WindowsAttributeNonIndexedFile
+	WindowsAttributeEncryptedFile
+)
+
+var WindowsAttributeStrings = map[WindowsAttribute]string{
+	WindowsAttributeReadOnly:       "R",
+	WindowsAttributeHidden:         "H",
+	WindowsAttributeSystemFile:     "S",
+	WindowsAttributeArchiveReady:   "A",
+	WindowsAttributeNormalFile:     "N",
+	WindowsAttributeTemporaryFile:  "T",
+	WindowsAttributeCompressedFile: "C",
+	WindowsAttributeOfflineFile:    "O",
+	WindowsAttributeNonIndexedFile: "I",
+	WindowsAttributeEncryptedFile:  "E",
+}
+
+// Reference for File Attribute Constants:
+// https://docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
+var WindowsAttributesByName = map[string]WindowsAttribute{
+	"R": WindowsAttributeReadOnly,
+	"H": WindowsAttributeHidden,
+	"S": WindowsAttributeSystemFile,
+	"A": WindowsAttributeArchiveReady,
+	"N": WindowsAttributeNormalFile,
+	"T": WindowsAttributeTemporaryFile,
+	"C": WindowsAttributeCompressedFile,
+	"O": WindowsAttributeOfflineFile,
+	"I": WindowsAttributeNonIndexedFile,
+	"E": WindowsAttributeEncryptedFile,
+}
+
 func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []ObjectFilter {
-	var fileAttributes uint32
+	var fileAttributes WindowsAttribute
 	filters := make([]ObjectFilter, 0)
-	// Available attributes (SMB) include:
-	// R = Read-only files
-	// A = Files ready for archiving
-	// S = System files
-	// H = Hidden files
-	// C = Compressed files
-	// N = Normal files
-	// E = Encrypted files
-	// T = Temporary files
-	// O = Offline files
-	// I = Non-indexed files
-	// Reference for File Attribute Constants:
-	// https://docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
-	fileAttributeMap := map[string]uint32{
-		"R": 1,
-		"A": 32,
-		"S": 4,
-		"H": 2,
-		"C": 2048,
-		"N": 128,
-		"E": 16384,
-		"T": 256,
-		"O": 4096,
-		"I": 8192,
-	}
 
 	for _, attribute := range attributes {
-		fileAttributes |= fileAttributeMap[strings.ToUpper(attribute)]
+		fileAttributes |= WindowsAttributesByName[strings.ToUpper(attribute)]
 	}
 
 	// Don't append the filter if there is no attributes given

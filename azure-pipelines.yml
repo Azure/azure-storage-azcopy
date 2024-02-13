@@ -128,6 +128,7 @@ jobs:
           go_path: '$(go env GOPATH)/bin/'
           suffix: ''
           run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
+          output_test_logs: ''
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
         Windows:
@@ -138,6 +139,7 @@ jobs:
           go_path: 'C:\Users\VssAdministrator\go\bin\'
           suffix: '.exe'
           run_e2e: 'go test -timeout=1h -v ./e2etest > test.txt'
+          output_test_logs: 'cat test.txt'
           save_exit_code: 'set exit_code=%errorlevel%'
           return_exit_code: 'exit %exit_code%'
         MacOS:
@@ -147,6 +149,7 @@ jobs:
           go_path: '$(go env GOPATH)/bin/'
           suffix: ''
           run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
+          output_test_logs: ''
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
     pool:
@@ -154,10 +157,10 @@ jobs:
 
     steps:
       - task: PowerShell@2
-        condition: eq(variables.type, 'windows' )
         inputs: 
           targetType: 'inline'
           script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+          pwsh: 'true'
         displayName: 'Install Powershell Az Module'
       - task: GoTool@0
         inputs:
@@ -185,6 +188,7 @@ jobs:
           cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
           echo 'Formatting coverage directory to legacy txt format'
           go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
+          $(output_test_logs)
           echo 'Formatting coverage to json format'
           $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
           echo 'Formatting coverage to xml format'
@@ -207,6 +211,11 @@ jobs:
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+          NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
+          NEW_E2E_APPLICATION_ID: $(AZCOPY_NEW_E2E_APPLICATION_ID)
+          NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
+          NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+          NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
         displayName: 'E2E Test $(display_name) - AMD64'
 
       - task: PublishBuildArtifacts@1

@@ -45,6 +45,16 @@ import (
 var once sync.Once
 var autoOAuth sync.Once
 
+var sharedKeyDeprecation sync.Once
+var sharedKeyDeprecationMessage = "*** WARNING *** shared key authentication for datalake is deprecated and will be removed in a future release. Please use shared access signature (SAS) or OAuth for authentication."
+
+func warnIfSharedKeyAuthForDatalake() {
+	sharedKeyDeprecation.Do(func() {
+		glcm.Warn(sharedKeyDeprecationMessage)
+		jobsAdmin.JobsAdmin.LogToJobLog(sharedKeyDeprecationMessage, common.LogWarning)
+	})
+}
+
 // only one UserOAuthTokenManager should exists in azcopy-v2 process in cmd(FE) module for current user.
 // (given appAppPathFolder is mapped to current user)
 var currentUserOAuthTokenManager *common.UserOAuthTokenManager
@@ -352,7 +362,7 @@ var authMessagesAlreadyLogged = &sync.Map{}
 func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) (isPublicResource bool) {
 	bURLParts, err := blob.ParseURL(blobResourceURL)
 	if err != nil {
-		return false;
+		return false
 	}
 
 	if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
@@ -414,7 +424,7 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 		if respErr.StatusCode == 401 || respErr.StatusCode == 403 { // *sometimes* the service can return 403s.
 			challenge := respErr.RawResponse.Header.Get("WWW-Authenticate")
 			if strings.Contains(challenge, common.MDResource) {
-				return true;
+				return true
 			}
 		}
 	}
@@ -433,9 +443,9 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	case common.ELocation.Local(), common.ELocation.Benchmark(), common.ELocation.None(), common.ELocation.Pipe():
 		return common.ECredentialType.Anonymous(), false, nil
 	}
-	
-	defer func() { 
-		logAuthType(credType, location, isSource) 
+
+	defer func() {
+		logAuthType(credType, location, isSource)
 	}()
 
 	// caution: If auth-type is unsafe, below defer statement will change the return value credType
@@ -451,11 +461,11 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	}()
 
 	if getForcedCredType() != common.ECredentialType.Unknown() &&
-			location != common.ELocation.S3() && location != common.ELocation.GCP() {
-				credType = getForcedCredType()
-				return
+		location != common.ELocation.S3() && location != common.ELocation.GCP() {
+		credType = getForcedCredType()
+		return
 	}
-	
+
 	if location == common.ELocation.S3() {
 		accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
 		secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
@@ -468,7 +478,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		credType = common.ECredentialType.S3AccessKey()
 		return
 	}
-	
+
 	if location == common.ELocation.GCP() {
 		googleAppCredentials := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
 		if googleAppCredentials == "" {
@@ -515,6 +525,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		key := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey())
 		if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
 			credType = common.ECredentialType.SharedKey()
+			warnIfSharedKeyAuthForDatalake()
 		}
 	}
 

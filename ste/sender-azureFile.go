@@ -87,7 +87,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	}
 
 	// compute num chunks (irrelevant but harmless for folders)
-	numChunks := getNumChunks(info.SourceSize, chunkSize)
+	numChunks := getNumChunks(info.SourceSize, chunkSize, chunkSize)
 
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
@@ -275,7 +275,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destUR
 		}
 	}
 
-	if u.permissionsToApply.Permission != nil && len(*u.permissionsToApply.Permission) > filesServiceMaxSDDLSize {
+	if u.permissionsToApply.Permission != nil && len(*u.permissionsToApply.Permission) > FilesServiceMaxSDDLSize {
 		sipm := u.jptm.SecurityInfoPersistenceManager()
 		pkey, err := sipm.PutSDDL(*u.permissionsToApply.Permission, u.shareClient)
 		u.permissionsToApply.PermissionKey = &pkey

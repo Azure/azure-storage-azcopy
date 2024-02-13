@@ -17,9 +17,10 @@ type LocationLevel uint8
 
 var ELocationLevel LocationLevel = 0
 
-func (LocationLevel) Service() LocationLevel   { return 0 }
-func (LocationLevel) Container() LocationLevel { return 1 }
-func (LocationLevel) Object() LocationLevel    { return 2 } // An Object can be a directory or object.
+func (LocationLevel) Account() LocationLevel   { return 0 } // Account is never used in AzCopy, but is in testing to understand resource management.
+func (LocationLevel) Service() LocationLevel   { return 1 }
+func (LocationLevel) Container() LocationLevel { return 2 }
+func (LocationLevel) Object() LocationLevel    { return 3 } // An Object can be a directory or object.
 
 // Uses syntax to assume the "level" of a location.
 // This is typically used to

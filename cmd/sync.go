@@ -45,6 +45,7 @@ type rawSyncCmdArgs struct {
 
 	// options from flags
 	blockSizeMB           float64
+	putBlobSizeMB         float64
 	include               string
 	exclude               string
 	excludePath           string
@@ -196,6 +197,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.jobID = azcopyCurrentJobID
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
+	if err != nil {
+		return cooked, err
+	}
+	cooked.putBlobSize, err = blockSizeInBytes(raw.putBlobSizeMB)
 	if err != nil {
 		return cooked, err
 	}
@@ -396,6 +401,7 @@ type cookedSyncCmdArgs struct {
 	putMd5                  bool
 	md5ValidationOption     common.HashValidationOption
 	blockSize               int64
+	putBlobSize             int64
 	forceIfReadOnly         bool
 	backupMode              bool
 
@@ -782,6 +788,7 @@ func init() {
 	// syncCmd.PersistentFlags().BoolVar(&raw.backupMode, common.BackupModeFlagName, false, "Activates Windows' SeBackupPrivilege for uploads, or SeRestorePrivilege for downloads, to allow AzCopy to see read all files, regardless of their file system permissions, and to restore all permissions. Requires that the account running AzCopy already has these permissions (e.g. has Administrator rights or is a member of the 'Backup Operators' group). All this flag does is activate privileges that the account already has")
 
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage or downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
+	syncCmd.PersistentFlags().Float64Var(&raw.putBlobSizeMB, "put-blob-size-mb", 0, "Use this size (specified in MiB) as a threshold to determine whether to upload a blob as a single PUT request when uploading to Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "Exclude files where the name matches the pattern list. For example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when comparing the source against the destination. "+

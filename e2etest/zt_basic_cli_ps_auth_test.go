@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -111,9 +110,6 @@ func TestBasic_PSAuth(t *testing.T) {
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
-			if runtime.GOOS != "windows" {
-				h.SkipTest()
-			}
 			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 			cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
 				$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList %s, $secret;
@@ -123,7 +119,7 @@ func TestBasic_PSAuth(t *testing.T) {
 			}
 
 			script := fmt.Sprintf(cmd, clientSecret, appId)
-			out, err := exec.Command("powershell", script).Output()
+			out, err := exec.Command("pwsh", "-Command", script).Output()
 			if err != nil {
 				e := err.(*exec.ExitError)
 				t.Logf(string(e.Stderr))
@@ -149,9 +145,6 @@ func TestBasic_PSAuthCamelCase(t *testing.T) {
 		recursive: true,
 	}, &hooks{
 		beforeTestRun: func(h hookHelper) {
-			if runtime.GOOS != "windows" {
-				h.SkipTest()
-			}
 			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 			cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
 				$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList %s, $secret;
@@ -161,7 +154,7 @@ func TestBasic_PSAuthCamelCase(t *testing.T) {
 			}
 
 			script := fmt.Sprintf(cmd, clientSecret, appId)
-			out, err := exec.Command("powershell", script).Output()
+			out, err := exec.Command("pwsh", "-Command", script).Output()
 			if err != nil {
 				e := err.(*exec.ExitError)
 				t.Logf(string(e.Stderr))

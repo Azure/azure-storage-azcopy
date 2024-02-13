@@ -156,6 +156,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			PutMd5:                           cca.putMd5,
 			MD5ValidationOption:              cca.md5ValidationOption,
 			BlockSizeInBytes:                 cca.blockSize,
+			PutBlobSizeInBytes:               cca.putBlobSize,
 			DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
 		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
@@ -177,9 +178,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 	}
 
-
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
-	
+
 	// Create Source Client. 
 	var azureFileSpecificOptions any
 	if cca.fromTo.From() == common.ELocation.File() {
@@ -213,7 +213,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	
+
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred)
 	dstURL, _ := cca.destination.String()
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
