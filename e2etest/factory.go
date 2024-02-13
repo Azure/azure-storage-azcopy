@@ -52,7 +52,7 @@ func (TestResourceFactory) GetBlobServiceURL(accountType AccountType) *blobservi
 	if accountName != "devstoreaccount1" {
 		resourceURL = fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 	} else {
-		resourceURL = fmt.Sprintf("http://127.0.0.1:10000/%s/", accountName)
+		resourceURL = fmt.Sprintf("https://127.0.0.1:10000/%s/", accountName)
 	}
 
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
