@@ -46,12 +46,13 @@ type rawBenchmarkCmdArgs struct {
 	numOfFolders   uint
 
 	// options from flags
-	blockSizeMB float64
-	putMd5      bool
-	checkLength bool
-	blobType    string
-	output      string
-	mode        string
+	blockSizeMB   float64
+	putBlobSizeMB float64
+	putMd5        bool
+	checkLength   bool
+	blobType      string
+	output        string
+	mode          string
 }
 
 const (
@@ -147,6 +148,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	c.forceWrite = common.EOverwriteOption.True().String() // don't want the extra round trip (for overwrite check) when benchmarking
 
 	c.blockSizeMB = raw.blockSizeMB
+	c.putBlobSizeMB = raw.putBlobSizeMB
 	c.putMd5 = raw.putMd5
 	c.CheckLength = raw.checkLength
 	c.blobType = raw.blobType
@@ -337,6 +339,7 @@ func init() {
 	benchCmd.PersistentFlags().BoolVar(&raw.deleteTestData, "delete-test-data", true, "if true, the benchmark data will be deleted at the end of the benchmark run.  Set it to false if you want to keep the data at the destination - e.g. to use it for manual tests outside benchmark mode")
 
 	benchCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB). Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25. Identical to the same-named parameter in the copy command")
+	benchCmd.PersistentFlags().Float64Var(&raw.putBlobSizeMB, "put-blob-size-mb", 0, "Use this size (specified in MiB) as a threshold to determine whether to upload a blob as a single PUT request when uploading to Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. Used to allow benchmarking different blob types. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().BoolVar(&raw.checkLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, the transfer is marked as failed.")

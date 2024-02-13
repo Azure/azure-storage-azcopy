@@ -103,6 +103,7 @@ type rawCopyCmdArgs struct {
 
 	// options from flags
 	blockSizeMB              float64
+	putBlobSizeMB            float64
 	metadata                 string
 	contentType              string
 	contentEncoding          string
@@ -350,6 +351,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
+	if err != nil {
+		return cooked, err
+	}
+
+	cooked.putBlobSize, err = blockSizeInBytes(raw.putBlobSizeMB)
 	if err != nil {
 		return cooked, err
 	}
@@ -1123,7 +1129,8 @@ type CookedCopyCmdArgs struct {
 	autoDecompress bool
 
 	// options from flags
-	blockSize int64
+	blockSize   int64
+	putBlobSize int64
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType []blob.BlobType
 	blobType        common.BlobType
@@ -1508,6 +1515,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
 			BlockSizeInBytes:         cca.blockSize,
+			PutBlobSizeInBytes:       cca.putBlobSize,
 			ContentType:              cca.contentType,
 			ContentEncoding:          cca.contentEncoding,
 			ContentLanguage:          cca.contentLanguage,
@@ -2050,6 +2058,7 @@ func init() {
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25)."+
 		" When uploading or downloading, maximum allowed block size is 0.75 * AZCOPY_BUFFER_GB. Please refer https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#optimize-memory-use.")
+	cpCmd.PersistentFlags().Float64Var(&raw.putBlobSizeMB, "put-blob-size-mb", 0, "Use this size (specified in MiB) as a threshold to determine whether to upload a blob as a single PUT request when uploading to Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
 		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier. (default 'None'). Valid options are Hot, Cold, Cool, Archive")
