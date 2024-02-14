@@ -151,6 +151,7 @@ type params struct {
 	forceIfReadOnly           bool
 	capMbps                   float32
 	blockSizeMB               float32
+	putBlobSizeMB             float32
 	deleteDestination         common.DeleteDestination // Manual validation is needed.
 	s2sSourceChangeValidation bool
 	metadata                  string
@@ -179,9 +180,9 @@ type params struct {
 	destNull bool
 
 	disableParallelTesting bool
-	deleteDestinationFile bool
-	trailingDot common.TrailingDotOption
-	decompress  bool
+	deleteDestinationFile  bool
+	trailingDot            common.TrailingDotOption
+	decompress             bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -217,12 +218,17 @@ func (Operation) Copy() Operation        { return Operation(1) }
 func (Operation) Sync() Operation        { return Operation(1 << 1) }
 func (Operation) CopyAndSync() Operation { return eOperation.Copy() | eOperation.Sync() }
 func (Operation) Remove() Operation      { return Operation(1 << 2) }
+func (Operation) List() Operation        { return Operation(1 << 3) }
 func (Operation) Resume() Operation      { return Operation(1 << 7) } // Resume should only ever be combined with Copy or Sync, and is a mid-job cancel/resume.
 func (Operation) Cancel() Operation      { return Operation(1 << 3) }
 func (Operation) Benchmark() Operation   { return Operation(1 << 4) }
 
 func (o Operation) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
+}
+
+func (o Operation) NeedsDst() bool {
+	return !(o == eOperation.Remove() || o == eOperation.List() || o == eOperation.Resume() || o == eOperation.Benchmark())
 }
 
 // getValues chops up composite values into their parts

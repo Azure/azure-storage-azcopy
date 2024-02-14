@@ -67,8 +67,13 @@ type blockBlobSenderBase struct {
 
 func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMemLimit int64) (chunkSize int64, numChunks uint32, err error) {
 	chunkSize = transferInfo.BlockSize
+	putBlobSize := transferInfo.PutBlobSize
 	srcSize := transferInfo.SourceSize
-	numChunks = getNumChunks(srcSize, chunkSize)
+	numChunks = getNumChunks(srcSize, chunkSize, putBlobSize)
+
+	if srcSize < putBlobSize {
+		chunkSize = putBlobSize
+	}
 
 	toGiB := func(bytes int64) float64 {
 		return float64(bytes) / float64(1024*1024*1024)
@@ -97,10 +102,31 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 		return
 	}
 
+	// sanity check
 	if chunkSize > common.MaxBlockBlobBlockSize {
 		// mercy, please
 		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed block size for a BlockBlob",
 			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
+		return
+	}
+
+	if putBlobSize >= memLimit {
+		err = fmt.Errorf("Cannot use a put blob size of %.2fGiB. AzCopy is limited to use only %.2fGiB of memory",
+			toGiB(putBlobSize), toGiB(memLimit))
+		return
+	}
+
+	if putBlobSize >= strictMemLimit {
+		err = fmt.Errorf("Cannot use a put blob size of %.2fGiB. AzCopy is limited to use only %.2fGiB of memory, and only %.2fGiB of these are available for chunks.",
+			toGiB(putBlobSize), toGiB(memLimit), toGiB(strictMemLimit))
+		return
+	}
+
+	// sanity check
+	if putBlobSize > common.MaxPutBlobSize {
+		// mercy, please
+		err = fmt.Errorf("put blob size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed put blob size for a BlockBlob",
+			toGiB(putBlobSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
 		return
 	}
 
@@ -123,14 +149,14 @@ func getBlockNamePrefix(jobID common.JobID, partNum uint32, transferIndex uint32
 	return fmt.Sprintf("%s%s%05d%05d", placeHolderPrefix, jobIdStr, partNum, transferIndex)
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*blockBlobSenderBase, error) {
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType *blob.AccessTier) (*blockBlobSenderBase, error) {
 	// compute chunk count
 	chunkSize, numChunks, err := getVerifiedChunkParams(jptm.Info(), jptm.CacheLimiter().Limit(), jptm.CacheLimiter().StrictLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	c, err:= jptm.DstServiceClient().BlobServiceClient()
+	c, err := jptm.DstServiceClient().BlobServiceClient()
 	if err != nil {
 		return nil, err
 	}
@@ -273,11 +299,10 @@ func (s *blockBlobSenderBase) Epilogue() {
 		dsc, err := jptm.DstServiceClient().DatalakeServiceClient()
 		if err != nil {
 			jptm.FailActiveSend("Getting source client", err)
-			return 
+			return
 		}
 		dstDatalakeClient := dsc.NewFileSystemClient(jptm.Info().DstContainer).NewFileClient(jptm.Info().DstFilePath)
-	
-		
+
 		_, err = dstDatalakeClient.SetAccessControl(jptm.Context(), &file.SetAccessControlOptions{ACL: acl})
 		if err != nil {
 			jptm.FailActiveSend("Putting ACLs", err)

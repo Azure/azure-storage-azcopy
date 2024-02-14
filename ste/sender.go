@@ -159,9 +159,9 @@ var errNoHash = errors.New("no hash computed")
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-func getNumChunks(fileSize int64, chunkSize int64) uint32 {
+func getNumChunks(fileSize int64, chunkSize int64, putBlobSize int64) uint32 {
 	numChunks := uint32(1) // we always map zero-size source files to ONE (empty) chunk
-	if fileSize > 0 {
+	if fileSize > 0 && fileSize > putBlobSize {
 		chunkSizeI := chunkSize
 		numChunks = common.Iff(
 			fileSize%chunkSizeI == 0,
@@ -228,13 +228,13 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, 
 
 	switch intendedType {
 	case blob.BlobTypeBlockBlob:
-		return newBlockBlobUploader(jptm, destination, pacer, sip)
+		return newBlockBlobUploader(jptm, pacer, sip)
 	case blob.BlobTypePageBlob:
 		return newPageBlobUploader(jptm, destination, pacer, sip)
 	case blob.BlobTypeAppendBlob:
 		return newAppendBlobUploader(jptm, destination, pacer, sip)
 	default:
-		return newBlockBlobUploader(jptm, destination, pacer, sip) // If no blob type was inferred, assume block blob.
+		return newBlockBlobUploader(jptm, pacer, sip) // If no blob type was inferred, assume block blob.
 	}
 }
 

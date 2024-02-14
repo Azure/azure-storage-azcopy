@@ -22,32 +22,34 @@ package ste
 
 import (
 	"context"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"time"
 )
 
-var _ IJobPartTransferMgr = testJobPartTransferManager{}
+var _ IJobPartTransferMgr = &testJobPartTransferManager{}
 
 type testJobPartTransferManager struct {
 	info       *TransferInfo
 	fromTo     common.FromTo
 	jobPartMgr jobPartMgr
 	ctx        context.Context
+	status     common.TransferStatus
 }
 
-func (t testJobPartTransferManager) DeleteDestinationFileIfNecessary() bool {
+func (t *testJobPartTransferManager) DeleteDestinationFileIfNecessary() bool {
 	return t.jobPartMgr.DeleteDestinationFileIfNecessary()
 }
 
-func (t testJobPartTransferManager) Info() *TransferInfo {
+func (t *testJobPartTransferManager) Info() *TransferInfo {
 	return t.info
 }
 
-func (t testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
+func (t *testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 	options := t.S2SSourceClientOptions()
 	var azureFileSpecificOptions any
 	if t.fromTo.From() == common.ELocation.File() {
@@ -66,7 +68,7 @@ func (t testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 	return client
 }
 
-func (t testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
+func (t *testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 	options := t.ClientOptions()
 	var azureFileSpecificOptions any
 	if t.fromTo.To() == common.ELocation.File() {
@@ -86,186 +88,187 @@ func (t testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 	return client
 }
 
-func (t testJobPartTransferManager) SourceTrailingDot() *common.TrailingDotOption {
+func (t *testJobPartTransferManager) SourceTrailingDot() *common.TrailingDotOption {
 	if (t.fromTo.IsS2S() || t.fromTo.IsDownload()) && (t.fromTo.From() == common.ELocation.File()) {
 		return to.Ptr(common.ETrailingDotOption.Enable())
 	}
 	return nil
 }
 
-func (t testJobPartTransferManager) TrailingDot() *common.TrailingDotOption {
+func (t *testJobPartTransferManager) TrailingDot() *common.TrailingDotOption {
 	return to.Ptr(common.ETrailingDotOption.Enable())
 }
 
-func (t testJobPartTransferManager) From() *common.Location {
+func (t *testJobPartTransferManager) From() *common.Location {
 	return to.Ptr(t.fromTo.From())
 }
 
-func (t testJobPartTransferManager) FromTo() common.FromTo {
+func (t *testJobPartTransferManager) FromTo() common.FromTo {
 	return t.fromTo
 }
 
-func (t testJobPartTransferManager) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions) {
+func (t *testJobPartTransferManager) ResourceDstData(dataFileToXfer []byte) (headers common.ResourceHTTPHeaders, metadata common.Metadata, blobTags common.BlobTags, cpkOptions common.CpkOptions) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LastModifiedTime() time.Time {
+func (t *testJobPartTransferManager) LastModifiedTime() time.Time {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) PreserveLastModifiedTime() (time.Time, bool) {
+func (t *testJobPartTransferManager) PreserveLastModifiedTime() (time.Time, bool) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ShouldPutMd5() bool {
+func (t *testJobPartTransferManager) ShouldPutMd5() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) MD5ValidationOption() common.HashValidationOption {
+func (t *testJobPartTransferManager) MD5ValidationOption() common.HashValidationOption {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) BlobTypeOverride() common.BlobType {
+func (t *testJobPartTransferManager) BlobTypeOverride() common.BlobType {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
+func (t *testJobPartTransferManager) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) JobHasLowFileCount() bool {
+func (t *testJobPartTransferManager) JobHasLowFileCount() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) Context() context.Context {
+func (t *testJobPartTransferManager) Context() context.Context {
 	return context.Background()
 }
 
-func (t testJobPartTransferManager) SlicePool() common.ByteSlicePooler {
+func (t *testJobPartTransferManager) SlicePool() common.ByteSlicePooler {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) CacheLimiter() common.CacheLimiter {
+func (t *testJobPartTransferManager) CacheLimiter() common.CacheLimiter {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) WaitUntilLockDestination(ctx context.Context) error {
+func (t *testJobPartTransferManager) WaitUntilLockDestination(ctx context.Context) error {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) EnsureDestinationUnlocked() {
+func (t *testJobPartTransferManager) EnsureDestinationUnlocked() {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) HoldsDestinationLock() bool {
+func (t *testJobPartTransferManager) HoldsDestinationLock() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) StartJobXfer() {
+func (t *testJobPartTransferManager) StartJobXfer() {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) GetOverwriteOption() common.OverwriteOption {
+func (t *testJobPartTransferManager) GetOverwriteOption() common.OverwriteOption {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) GetForceIfReadOnly() bool {
+func (t *testJobPartTransferManager) GetForceIfReadOnly() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ShouldDecompress() bool {
+func (t *testJobPartTransferManager) ShouldDecompress() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) GetSourceCompressionType() (common.CompressionType, error) {
+func (t *testJobPartTransferManager) GetSourceCompressionType() (common.CompressionType, error) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32) {
+func (t *testJobPartTransferManager) ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) TransferStatusIgnoringCancellation() common.TransferStatus {
+func (t *testJobPartTransferManager) TransferStatusIgnoringCancellation() common.TransferStatus {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) SetStatus(status common.TransferStatus) {
+func (t *testJobPartTransferManager) SetStatus(status common.TransferStatus) {
+	t.status = status
+}
+
+func (t *testJobPartTransferManager) SetErrorCode(errorCode int32) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) SetErrorCode(errorCode int32) {
+func (t *testJobPartTransferManager) SetNumberOfChunks(numChunks uint32) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) SetNumberOfChunks(numChunks uint32) {
+func (t *testJobPartTransferManager) SetActionAfterLastChunk(f func()) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) SetActionAfterLastChunk(f func()) {
+func (t *testJobPartTransferManager) ReportTransferDone() uint32 {
+	// return value is the no of transfer's done for this job part.
+	return 1
+}
+
+func (t *testJobPartTransferManager) RescheduleTransfer() {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ReportTransferDone() uint32 {
+func (t *testJobPartTransferManager) ScheduleChunks(chunkFunc chunkFunc) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) RescheduleTransfer() {
+func (t *testJobPartTransferManager) SetDestinationIsModified() {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ScheduleChunks(chunkFunc chunkFunc) {
+func (t *testJobPartTransferManager) Cancel() {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) SetDestinationIsModified() {
+func (t *testJobPartTransferManager) WasCanceled() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) Cancel() {
+func (t *testJobPartTransferManager) IsLive() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) WasCanceled() bool {
+func (t *testJobPartTransferManager) IsDeadBeforeStart() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) IsLive() bool {
+func (t *testJobPartTransferManager) IsDeadInflight() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) IsDeadBeforeStart() bool {
+func (t *testJobPartTransferManager) OccupyAConnection() {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) IsDeadInflight() bool {
+func (t *testJobPartTransferManager) ReleaseAConnection() {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) OccupyAConnection() {
+func (t *testJobPartTransferManager) CredentialInfo() common.CredentialInfo {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ReleaseAConnection() {
+func (t *testJobPartTransferManager) ClientOptions() azcore.ClientOptions {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) CredentialInfo() common.CredentialInfo {
-	panic("implement me")
-}
-
-func (t testJobPartTransferManager) ClientOptions() azcore.ClientOptions {
-	panic("implement me")
-}
-
-func (t testJobPartTransferManager) S2SSourceCredentialInfo() common.CredentialInfo {
+func (t *testJobPartTransferManager) S2SSourceCredentialInfo() common.CredentialInfo {
 	return common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
 }
 
-func (t testJobPartTransferManager) GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error) {
+func (t *testJobPartTransferManager) GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) S2SSourceClientOptions() azcore.ClientOptions {
+func (t *testJobPartTransferManager) S2SSourceClientOptions() azcore.ClientOptions {
 	retryOptions := policy.RetryOptions{
 		MaxRetries:    UploadMaxTries,
 		TryTimeout:    UploadTryTimeout,
@@ -290,154 +293,150 @@ func (t testJobPartTransferManager) S2SSourceClientOptions() azcore.ClientOption
 	return NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, LogOptions{}, nil)
 }
 
-func (t testJobPartTransferManager) CredentialOpOptions() *common.CredentialOpOptions {
+func (t *testJobPartTransferManager) CredentialOpOptions() *common.CredentialOpOptions {
 	return nil
 }
 
-func (t testJobPartTransferManager) FailActiveUpload(where string, err error) {
+func (t *testJobPartTransferManager) FailActiveUpload(where string, err error) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) FailActiveDownload(where string, err error) {
+func (t *testJobPartTransferManager) FailActiveDownload(where string, err error) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus) {
+func (t *testJobPartTransferManager) FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus) {
+func (t *testJobPartTransferManager) FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) FailActiveS2SCopy(where string, err error) {
+func (t *testJobPartTransferManager) FailActiveS2SCopy(where string, err error) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) FailActiveS2SCopyWithStatus(where string, err error, failureStatus common.TransferStatus) {
+func (t *testJobPartTransferManager) FailActiveS2SCopyWithStatus(where string, err error, failureStatus common.TransferStatus) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) FailActiveSend(where string, err error) {
+func (t *testJobPartTransferManager) FailActiveSend(where string, err error) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
+func (t *testJobPartTransferManager) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogUploadError(source, destination, errorMsg string, status int) {
+func (t *testJobPartTransferManager) LogUploadError(source, destination, errorMsg string, status int) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogDownloadError(source, destination, errorMsg string, status int) {
+func (t *testJobPartTransferManager) LogDownloadError(source, destination, errorMsg string, status int) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogS2SCopyError(source, destination, errorMsg string, status int) {
+func (t *testJobPartTransferManager) LogS2SCopyError(source, destination, errorMsg string, status int) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogSendError(source, destination, errorMsg string, status int) {
+func (t *testJobPartTransferManager) LogSendError(source, destination, errorMsg string, status int) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogError(resource, context string, err error) {
+func (t *testJobPartTransferManager) LogError(_, _ string, _ error) {}
+
+func (t *testJobPartTransferManager) LogTransferInfo(_ common.LogLevel, _, _, _ string) {}
+
+func (t *testJobPartTransferManager) LogTransferStart(source, destination, description string) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogTransferInfo(level common.LogLevel, source, destination, msg string) {
+func (t *testJobPartTransferManager) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogTransferStart(source, destination, description string) {
+func (t *testJobPartTransferManager) ChunkStatusLogger() common.ChunkStatusLogger {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
+func (t *testJobPartTransferManager) LogAtLevelForCurrentTransfer(level common.LogLevel, msg string) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ChunkStatusLogger() common.ChunkStatusLogger {
+func (t *testJobPartTransferManager) GetOverwritePrompter() *overwritePrompter {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) LogAtLevelForCurrentTransfer(level common.LogLevel, msg string) {
+func (t *testJobPartTransferManager) GetFolderCreationTracker() FolderCreationTracker {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) GetOverwritePrompter() *overwritePrompter {
-	panic("implement me")
-}
-
-func (t testJobPartTransferManager) GetFolderCreationTracker() FolderCreationTracker {
-	panic("implement me")
-}
-
-func (t testJobPartTransferManager) ShouldLog(level common.LogLevel) bool {
+func (t *testJobPartTransferManager) ShouldLog(level common.LogLevel) bool {
 	return false
 }
 
-func (t testJobPartTransferManager) Log(level common.LogLevel, msg string) {
+func (t *testJobPartTransferManager) Log(level common.LogLevel, msg string) {
 }
 
-func (t testJobPartTransferManager) Panic(err error) {
+func (t *testJobPartTransferManager) Panic(err error) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) DeleteSnapshotsOption() common.DeleteSnapshotsOption {
+func (t *testJobPartTransferManager) DeleteSnapshotsOption() common.DeleteSnapshotsOption {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) PermanentDeleteOption() common.PermanentDeleteOption {
+func (t *testJobPartTransferManager) PermanentDeleteOption() common.PermanentDeleteOption {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
+func (t *testJobPartTransferManager) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) FolderDeletionManager() common.FolderDeletionManager {
+func (t *testJobPartTransferManager) FolderDeletionManager() common.FolderDeletionManager {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) GetDestinationRoot() string {
+func (t *testJobPartTransferManager) GetDestinationRoot() string {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ShouldInferContentType() bool {
+func (t *testJobPartTransferManager) ShouldInferContentType() bool {
 	fromTo := t.FromTo()
 	return fromTo.From() == common.ELocation.Local()
 }
 
-func (t testJobPartTransferManager) CpkInfo() *blob.CPKInfo {
+func (t *testJobPartTransferManager) CpkInfo() *blob.CPKInfo {
 	return nil
 }
 
-func (t testJobPartTransferManager) CpkScopeInfo() *blob.CPKScopeInfo {
+func (t *testJobPartTransferManager) CpkScopeInfo() *blob.CPKScopeInfo {
 	return nil
 }
 
-func (t testJobPartTransferManager) IsSourceEncrypted() bool {
+func (t *testJobPartTransferManager) IsSourceEncrypted() bool {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) PropertiesToTransfer() common.SetPropertiesFlags {
+func (t *testJobPartTransferManager) PropertiesToTransfer() common.SetPropertiesFlags {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) ResetSourceSize() {
+func (t *testJobPartTransferManager) ResetSourceSize() {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) SuccessfulBytesTransferred() int64 {
+func (t *testJobPartTransferManager) SuccessfulBytesTransferred() int64 {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) TransferIndex() (partNum, transferIndex uint32) {
+func (t *testJobPartTransferManager) TransferIndex() (partNum, transferIndex uint32) {
 	panic("implement me")
 }
 
-func (t testJobPartTransferManager) RestartedTransfer() bool {
+func (t *testJobPartTransferManager) RestartedTransfer() bool {
 	return false
 }

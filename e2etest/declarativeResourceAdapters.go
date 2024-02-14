@@ -28,13 +28,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
-func sval(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
 // Our resource adapters convert from objectProperties to the metadata and other objects for Blob/File etc
 // They don't share any common interface, because blob/file etc don't share a common interface.
 // The reverse conversion, from the remote format back to objectProperties, is in resourceManager.getAllProperties.
@@ -66,7 +59,7 @@ type filesResourceAdapter struct {
 
 func (a filesResourceAdapter) toSMBProperties(c asserter) *file.SMBProperties {
 	return &file.SMBProperties{
-		Attributes: a.toAttributes(c),
+		Attributes:    a.toAttributes(c),
 		LastWriteTime: a.obj.creationProperties.lastWriteTime,
 	}
 }

@@ -110,7 +110,7 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pace
 
 	switch targetBlobType {
 	case blob.BlobTypeBlockBlob:
-		return newURLToBlockBlobCopier(jptm, destination, pacer, srcInfoProvider)
+		return newURLToBlockBlobCopier(jptm, pacer, srcInfoProvider)
 	case blob.BlobTypeAppendBlob:
 		return newURLToAppendBlobCopier(jptm, destination, pacer, srcInfoProvider)
 	case blob.BlobTypePageBlob:
@@ -123,6 +123,6 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pace
 				destination,
 				fmt.Sprintf("BlobType %q is used for destination blob by default.", blob.BlobTypeBlockBlob))
 		}
-		return newURLToBlockBlobCopier(jptm, destination, pacer, srcInfoProvider)
+		return newURLToBlockBlobCopier(jptm, pacer, srcInfoProvider)
 	}
 }

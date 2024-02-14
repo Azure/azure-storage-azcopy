@@ -3,6 +3,10 @@ package ste
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -13,9 +17,6 @@ import (
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"net/http"
-	"testing"
-	"time"
 )
 
 type appendErrorInjectionPolicy struct {
@@ -81,7 +82,7 @@ func Test500FollowedBy412Logic(t *testing.T) {
 		}),
 		fromTo: common.EFromTo.BlobBlob(),
 	}
-	blobSIP, err := newBlobSourceInfoProvider(jptm)
+	blobSIP, err := newBlobSourceInfoProvider(&jptm)
 	a.Nil(err)
 
 	injectionPolicy := &appendErrorInjectionPolicy{timedOut: false}
@@ -92,7 +93,7 @@ func Test500FollowedBy412Logic(t *testing.T) {
 		},
 	})
 	a.Nil(err)
-	base := appendBlobSenderBase{jptm: jptm, destAppendBlobClient: destClient, sip: blobSIP}
+	base := appendBlobSenderBase{jptm: &jptm, destAppendBlobClient: destClient, sip: blobSIP}
 
 	// Get MD5 range within service calculation
 	offset := int64(0)

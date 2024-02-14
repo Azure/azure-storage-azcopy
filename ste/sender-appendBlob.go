@@ -71,7 +71,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 		chunkSize)
 
 	srcSize := transferInfo.SourceSize
-	numChunks := getNumChunks(srcSize, chunkSize)
+	numChunks := getNumChunks(srcSize, chunkSize, chunkSize)
 
 	bsc, err := jptm.DstServiceClient().BlobServiceClient()
 	if err != nil {

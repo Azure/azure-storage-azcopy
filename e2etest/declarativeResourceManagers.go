@@ -581,7 +581,10 @@ func (r *resourceManagedDisk) getParam(a asserter, stripTopDir, withSas bool, wi
 		out.RawQuery = ""
 	}
 
-	return out.String()
+	toReturn := out.String()
+	a.Assert(toReturn, notEquals(), "")
+
+	return toReturn
 }
 
 func (r *resourceManagedDisk) getSAS() string {
