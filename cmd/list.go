@@ -87,11 +87,8 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
-	if raw.location == "" {
-		srcLocationType := InferArgumentLocation(raw.src)
-		raw.location = srcLocationType.String()
-	}
-	err := cooked.location.Parse(raw.location)
+	var err error
+	cooked.location, err = ValidateArgumentLocation(raw.src, raw.location)
 	if err != nil {
 		return cooked, err
 	}
@@ -102,7 +99,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	case common.ELocation.BlobFS():
 		break
 	default:
-		return cooked, fmt.Errorf("invalid location. please enter a valid location. azcopy only supports Azure resources for listing i.e. Blob, File, BlobFS")
+		return cooked, fmt.Errorf("azcopy only supports Azure resources for listing i.e. Blob, File, BlobFS")
 	}
 	cooked.sourcePath = raw.src
 	cooked.MachineReadable = raw.MachineReadable
