@@ -36,8 +36,8 @@ import (
 
 type rawListCmdArgs struct {
 	// obtained from argument
-	src    string
-	fromTo string
+	src      string
+	location string
 
 	Properties      string
 	MachineReadable bool
@@ -87,20 +87,27 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
-	fromTo, err := ValidateFromTo(raw.src, "", raw.fromTo)
+	if raw.location == "" {
+		srcLocationType := InferArgumentLocation(raw.src)
+		raw.location = srcLocationType.String()
+	}
+	err := cooked.location.Parse(raw.location)
 	if err != nil {
 		return cooked, err
 	}
-	location := fromTo.From()
 	// Only support listing for Azure locations
-	if location != location.Blob() && location != location.File() && location != location.BlobFS() {
-		return cooked, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
+	switch cooked.location {
+	case common.ELocation.Blob():
+	case common.ELocation.File():
+	case common.ELocation.BlobFS():
+		break
+	default:
+		return cooked, fmt.Errorf("invalid location. please enter a valid location. azcopy only supports Azure resources for listing i.e. Blob, File, BlobFS")
 	}
 	cooked.sourcePath = raw.src
 	cooked.MachineReadable = raw.MachineReadable
 	cooked.RunningTally = raw.RunningTally
 	cooked.MegaUnits = raw.MegaUnits
-	cooked.location = location
 	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
 		return cooked, err
@@ -146,25 +153,6 @@ func init() {
 				return errors.New("this command only requires container destination")
 			}
 			raw.src = args[0]
-
-			if raw.fromTo == "" {
-				srcLocationType := InferArgumentLocation(raw.src)
-				switch srcLocationType {
-				case common.ELocation.Blob():
-					raw.fromTo = common.EFromTo.BlobList().String()
-				case common.ELocation.File():
-					raw.fromTo = common.EFromTo.FileList().String()
-				case common.ELocation.BlobFS():
-					raw.fromTo = common.EFromTo.BlobFSList().String()
-				default:
-					return fmt.Errorf("invalid source type %s to list. azcopy support listing blobs/files/adls gen2", srcLocationType.String())
-				}
-			} else if raw.fromTo != "" {
-				err := strings.Contains(raw.fromTo, "List")
-				if !err {
-					return fmt.Errorf("invalid destination. please enter a valid destination, i.e. BlobList, FileList, BlobFSList")
-				}
-			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -182,7 +170,7 @@ func init() {
 		},
 	}
 
-	listContainerCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: BlobList, FileList, BlobFSList")
+	listContainerCmd.PersistentFlags().StringVar(&raw.location, "location", "", "Optionally specifies the location. For Example: Blob, File, BlobFS")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "Lists file sizes in bytes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")

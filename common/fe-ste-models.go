@@ -515,6 +515,14 @@ func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
 }
 
+func (l *Location) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(l), s, true, true)
+	if err == nil {
+		*l = val.(Location)
+	}
+	return err
+}
+
 // AllStandardLocations returns all locations that are "normal" for testing purposes. Excludes the likes of Unknown, Benchmark and Pipe
 func (Location) AllStandardLocations() []Location {
 	return []Location{
@@ -603,9 +611,6 @@ func (FromTo) PipeFile() FromTo     { return fromToValue(ELocation.Pipe(), ELoca
 func (FromTo) BlobTrash() FromTo    { return fromToValue(ELocation.Blob(), ELocation.Unknown()) }
 func (FromTo) FileTrash() FromTo    { return fromToValue(ELocation.File(), ELocation.Unknown()) }
 func (FromTo) BlobFSTrash() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
-func (FromTo) BlobList() FromTo     { return fromToValue(ELocation.Blob(), ELocation.Unknown()) }
-func (FromTo) FileList() FromTo     { return fromToValue(ELocation.File(), ELocation.Unknown()) }
-func (FromTo) BlobFSList() FromTo   { return fromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
 func (FromTo) LocalBlobFS() FromTo  { return fromToValue(ELocation.Local(), ELocation.BlobFS()) }
 func (FromTo) BlobFSLocal() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.Local()) }
 func (FromTo) BlobFSBlobFS() FromTo { return fromToValue(ELocation.BlobFS(), ELocation.BlobFS()) }
