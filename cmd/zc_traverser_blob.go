@@ -476,7 +476,7 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)
 	if t.includeDeleted && t.includeSnapshot {
 		object.blobSnapshotID = common.IffNotNil(blobInfo.Snapshot, "")
-	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
+	} else if t.includeVersion && blobInfo.VersionID != nil {
 		object.blobVersionID = common.IffNotNil(blobInfo.VersionID, "")
 	}
 	return object
