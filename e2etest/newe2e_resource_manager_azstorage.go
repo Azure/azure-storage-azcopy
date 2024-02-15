@@ -87,6 +87,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		} else {
 			sasVals.ObjectName = parts.PathName
 		}
+
 		p, err := sasVals.AsDatalake().SignWithSharedKey(skc)
 		common.PanicIfErr(err)
 
