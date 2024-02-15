@@ -43,6 +43,7 @@ func TestListVersionIdWithNoAdditionalVersions(t *testing.T) {
 
 	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getSecondaryRawContainerURLWithSAS(a, containerName)
@@ -75,6 +76,7 @@ func TestListVersionIdWithNoAdditionalVersions(t *testing.T) {
 	// test json output
 	mockedLcm = mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+	glcm = &mockedLcm
 
 	runListAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -151,6 +153,7 @@ func TestListVersionsMultiVersions(t *testing.T) {
 
 	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getSecondaryRawContainerURLWithSAS(a, containerName)
@@ -183,6 +186,7 @@ func TestListVersionsMultiVersions(t *testing.T) {
 	// test json output
 	mockedLcm = mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+	glcm = &mockedLcm
 
 	runListAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -252,6 +256,7 @@ func TestListVersionsMultiVersionsNoPropFlag(t *testing.T) {
 
 	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
+	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getSecondaryRawContainerURLWithSAS(a, containerName)
@@ -282,6 +287,7 @@ func TestListVersionsMultiVersionsNoPropFlag(t *testing.T) {
 	// test json output
 	mockedLcm = mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+	glcm = &mockedLcm
 
 	runListAndVerify(a, raw, func(err error) {
 		a.Nil(err)
