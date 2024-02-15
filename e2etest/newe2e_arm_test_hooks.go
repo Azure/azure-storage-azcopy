@@ -39,5 +39,9 @@ func SetupArmClient(a Asserter) {
 }
 
 func TeardownArmClient(a Asserter) {
+	if GlobalConfig.StaticResources() {
+		return // no need to attempt cleanup
+	}
+
 	a.NoError("delete resource group", CommonARMResourceGroup.Delete(nil))
 }
