@@ -12,7 +12,7 @@ import (
 func TestListVersionIdWithNoAdditionalVersions(t *testing.T) {
 	a := assert.New(t)
 	bsc := getSecondaryBlobServiceClient()
-	// set up the container with single blob with 2 versions
+
 	containerClient, containerName := createNewContainer(a, bsc)
 	defer deleteContainer(a, containerClient)
 
@@ -43,7 +43,6 @@ func TestListVersionIdWithNoAdditionalVersions(t *testing.T) {
 
 	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
-	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getSecondaryRawContainerURLWithSAS(a, containerName)
@@ -73,12 +72,38 @@ func TestListVersionIdWithNoAdditionalVersions(t *testing.T) {
 		}
 	})
 
+	// test json output
+	mockedLcm = mockedLifecycleManager{infoLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+
+	runListAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+
+		// validate that the no transfers were scheduled
+		a.Nil(mockedRPC.transfers)
+
+		// check if info logs contain the correct version id for each blob
+		msg := mockedLcm.GatherAllLogs(mockedLcm.infoLog)
+		for i, m := range msg {
+			if i < 3 { // 0-2 will be blob names + version id
+				a.True(strings.Contains(m, blobsToInclude[i]))
+				a.True(strings.Contains(m, "VersionId: "+versions[blobsToInclude[i]]))
+			}
+			if i == 4 { // 4 will be file count
+				a.True(strings.Contains(m, "File count: 3"))
+			}
+			if i == 5 { // 5 will be file size
+				a.True(strings.Contains(m, "Total file size: 69.00 B"))
+			}
+		}
+	})
+
 }
 
 func TestListVersionsMultiVersions(t *testing.T) {
 	a := assert.New(t)
 	bsc := getSecondaryBlobServiceClient()
-	// set up the container with single blob with 2 versions
+
 	containerClient, containerName := createNewContainer(a, bsc)
 	defer deleteContainer(a, containerClient)
 
@@ -89,12 +114,13 @@ func TestListVersionsMultiVersions(t *testing.T) {
 
 	// make first two blobs have 1 additional version
 	blobsToVersion := []string{blobsToInclude[0], blobsToInclude[1]}
-	scenarioHelper{}.generateVersionsForBlobsFromList(a, containerClient, blobsToVersion)
+	randomStrings := []string{"random-1", "random-two"}
+	scenarioHelper{}.generateVersionsForBlobsFromList(a, containerClient, blobsToVersion, randomStrings)
 	a.NotNil(containerClient)
 
 	// make first blob have 2 versions in total
 	blobClient := containerClient.NewBlockBlobClient(blobsToInclude[0])
-	uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random")), nil)
+	uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader("random-three-3")), nil)
 	a.NoError(err)
 	a.NotNil(uploadResp.VersionID)
 	a.NotNil(containerClient)
@@ -125,7 +151,6 @@ func TestListVersionsMultiVersions(t *testing.T) {
 
 	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
-	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getSecondaryRawContainerURLWithSAS(a, containerName)
@@ -149,8 +174,34 @@ func TestListVersionsMultiVersions(t *testing.T) {
 			if i == 8 { // 8 will be file count
 				a.True(strings.Contains(m, "File count: 4"))
 			}
-			if i == 9 { // 9 will be file size of latest versions (should be 64)
-				a.True(strings.Contains(m, "Total file size: 64.00 B"))
+			if i == 9 { // 9 will be file size of latest versions (should be 70.00 B)
+				a.True(strings.Contains(m, "Total file size: 70.00 B"))
+			}
+		}
+	})
+
+	// test json output
+	mockedLcm = mockedLifecycleManager{infoLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+
+	runListAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+
+		// validate that the no transfers were scheduled
+		a.Nil(mockedRPC.transfers)
+
+		// check if info logs contain the correct version id for each blob
+		msg := mockedLcm.GatherAllLogs(mockedLcm.infoLog)
+		for i, m := range msg {
+			if i < 7 { // 0-6 will be blob names + version id
+				a.True(contains(blobs, m, true))
+				a.True(contains(versions, m, false))
+			}
+			if i == 8 { // 8 will be file count
+				a.True(strings.Contains(m, "File count: 4"))
+			}
+			if i == 9 { // 9 will be file size of latest versions (should be 70.00 B)
+				a.True(strings.Contains(m, "Total file size: 70.00 B"))
 			}
 		}
 	})
@@ -160,7 +211,7 @@ func TestListVersionsMultiVersions(t *testing.T) {
 func TestListVersionsMultiVersionsNoPropFlag(t *testing.T) {
 	a := assert.New(t)
 	bsc := getSecondaryBlobServiceClient()
-	// set up the container with single blob with 2 versions
+
 	containerClient, containerName := createNewContainer(a, bsc)
 	defer deleteContainer(a, containerClient)
 
@@ -171,12 +222,13 @@ func TestListVersionsMultiVersionsNoPropFlag(t *testing.T) {
 
 	// make first two blobs have 1 additional version
 	blobsToVersion := []string{blobsToInclude[0], blobsToInclude[1]}
-	scenarioHelper{}.generateVersionsForBlobsFromList(a, containerClient, blobsToVersion)
+	randomStrings := []string{"random-1", "random-two"}
+	scenarioHelper{}.generateVersionsForBlobsFromList(a, containerClient, blobsToVersion, randomStrings)
 	a.NotNil(containerClient)
 
 	// make first blob have 2 versions in total
 	blobClient := containerClient.NewBlockBlobClient(blobsToInclude[0])
-	uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random")), nil)
+	uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader("random-three-3")), nil)
 	a.NoError(err)
 	a.NotNil(uploadResp.VersionID)
 	a.NotNil(containerClient)
@@ -200,7 +252,6 @@ func TestListVersionsMultiVersionsNoPropFlag(t *testing.T) {
 
 	mockedLcm := mockedLifecycleManager{infoLog: make(chan string, 50)}
 	mockedLcm.SetOutputFormat(common.EOutputFormat.Text()) // text format
-	glcm = &mockedLcm
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getSecondaryRawContainerURLWithSAS(a, containerName)
@@ -222,12 +273,36 @@ func TestListVersionsMultiVersionsNoPropFlag(t *testing.T) {
 			if i == 5 { // 5 will be file count
 				a.True(strings.Contains(m, "File count: 4"))
 			}
-			if i == 6 { // 6 will be file size (should be 64)
-				a.True(strings.Contains(m, "Total file size: 64.00 B"))
+			if i == 6 { // 6 will be file size (should be 70 B)
+				a.True(strings.Contains(m, "Total file size: 70.00 B"))
 			}
 		}
 	})
 
+	// test json output
+	mockedLcm = mockedLifecycleManager{infoLog: make(chan string, 50)}
+	mockedLcm.SetOutputFormat(common.EOutputFormat.Json()) // json format
+
+	runListAndVerify(a, raw, func(err error) {
+		a.Nil(err)
+
+		// validate that the no transfers were scheduled
+		a.Nil(mockedRPC.transfers)
+
+		// check if info logs contain the correct version id for each blob
+		msg := mockedLcm.GatherAllLogs(mockedLcm.infoLog)
+		for i, m := range msg {
+			if i < 4 { // 0-3 is blob
+				a.True(contains(blobsToInclude, m, true))
+			}
+			if i == 5 { // 5 will be file count
+				a.True(strings.Contains(m, "File count: 4"))
+			}
+			if i == 6 { // 6 will be file size (should be 70 B)
+				a.True(strings.Contains(m, "Total file size: 70.00 B"))
+			}
+		}
+	})
 }
 
 func contains(arr []string, msg string, isBlob bool) bool {

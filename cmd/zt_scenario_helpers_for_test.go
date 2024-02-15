@@ -345,10 +345,10 @@ func (scenarioHelper) generateBlobsFromList(a *assert.Assertions, containerClien
 	time.Sleep(time.Millisecond * 1050)
 }
 
-func (scenarioHelper) generateVersionsForBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string) {
-	for _, blobName := range blobList {
+func (scenarioHelper) generateVersionsForBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string, randomData []string) {
+	for i, blobName := range blobList {
 		blobClient := containerClient.NewBlockBlobClient(blobName)
-		uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader("Random data ")), nil)
+		uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader(randomData[i])), nil)
 		a.NoError(err)
 		a.NotNil(uploadResp.VersionID)
 	}

@@ -64,11 +64,6 @@ const (
 	versionIdTimeFormat = "2006-01-02T15:04:05.9999999Z"
 )
 
-type versionIdObject struct {
-	versionId string
-	fileSize  int64
-}
-
 // containsProperty checks if the property array contains a valid property
 func containsProperty(properties []validProperty, prop validProperty) bool {
 	for _, item := range properties {
@@ -266,6 +261,11 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 
 	var fileCount int64 = 0
 	var sizeCount int64 = 0
+
+	type versionIdObject struct {
+		versionId string
+		fileSize  int64
+	}
 	objectVer := make(map[string]versionIdObject)
 
 	processor := func(object StoredObject) error {
