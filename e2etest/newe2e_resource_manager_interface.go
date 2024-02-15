@@ -24,6 +24,8 @@ type RemoteURIOpts struct {
 type AzureURIOpts struct {
 	// Must be manually specified
 	WithSAS bool
+	// As DirectoryPath in SASValues
+	AsDirectory bool
 	// Defaults to a resource-level specific minimally permissioned SAS token.
 	SASValues GenericSignatureValues
 }

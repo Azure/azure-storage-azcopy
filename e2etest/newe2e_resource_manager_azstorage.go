@@ -20,7 +20,7 @@ type AzureAccountResourceManager struct {
 	armClient *ARMStorageAccount
 }
 
-func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Location, optList ...GetURIOptions) string {
+func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Location, et common.EntityType, optList ...GetURIOptions) string {
 	if acct == nil {
 		panic("Account must not be nil to generate a SAS token.")
 	}
@@ -30,47 +30,64 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		return URI
 	}
 
-	sasVals := opts.AzureOpts.SASValues
-	if sasVals == nil {
-
+	var sasVals GenericServiceSignatureValues
+	if opts.AzureOpts.SASValues == nil {
 		sasVals = GenericServiceSignatureValues{}
+	} else {
+		sasVals = opts.AzureOpts.SASValues.(GenericServiceSignatureValues)
 	}
 
 	switch loc {
 	case common.ELocation.Blob():
+		parts, err := blobsas.ParseURL(URI)
+		common.PanicIfErr(err)
+
 		skc, err := blobservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
-		p, err := sasVals.AsBlob().SignWithSharedKey(skc)
-		common.PanicIfErr(err)
+		sasVals.ContainerName = parts.ContainerName
+		sasVals.ObjectName = parts.BlobName
 
-		parts, err := blobsas.ParseURL(URI)
+		p, err := sasVals.AsBlob().SignWithSharedKey(skc)
 		common.PanicIfErr(err)
 
 		parts.SAS = p
 		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.File():
+		parts, err := filesas.ParseURL(URI)
+		common.PanicIfErr(err)
+
 		skc, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
-		p, err := sasVals.AsFile().SignWithSharedKey(skc)
-		common.PanicIfErr(err)
+		sasVals.ContainerName = parts.ShareName
+		if et == common.EEntityType.Folder() {
+			sasVals.DirectoryPath = parts.DirectoryOrFilePath
+		} else {
+			sasVals.ObjectName = parts.DirectoryOrFilePath
+		}
 
-		parts, err := filesas.ParseURL(URI)
+		p, err := sasVals.AsFile().SignWithSharedKey(skc)
 		common.PanicIfErr(err)
 
 		parts.SAS = p
 		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.BlobFS():
+		parts, err := datalakeSAS.ParseURL(URI)
+		common.PanicIfErr(err)
+
 		skc, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
+		sasVals.ContainerName = parts.FileSystemName
+		if et == common.EEntityType.Folder() {
+			sasVals.DirectoryPath = parts.PathName
+		} else {
+			sasVals.ObjectName = parts.PathName
+		}
 		p, err := sasVals.AsDatalake().SignWithSharedKey(skc)
-		common.PanicIfErr(err)
-
-		parts, err := datalakeSAS.ParseURL(URI)
 		common.PanicIfErr(err)
 
 		parts.SAS = p
