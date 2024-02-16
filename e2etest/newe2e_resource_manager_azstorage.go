@@ -2,13 +2,15 @@ package e2etest
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	blobfscommon "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	datalakeSAS "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	blobfsservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -20,7 +22,7 @@ type AzureAccountResourceManager struct {
 	armClient *ARMStorageAccount
 }
 
-func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Location, et common.EntityType, optList ...GetURIOptions) string {
+func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Location, lev cmd.LocationLevel, et common.EntityType, optList ...GetURIOptions) string {
 	if acct == nil {
 		panic("Account must not be nil to generate a SAS token.")
 	}
@@ -30,11 +32,13 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		return URI
 	}
 
-	var sasVals GenericServiceSignatureValues
+	var sasVals GenericSignatureValues
 	if opts.AzureOpts.SASValues == nil {
-		sasVals = GenericServiceSignatureValues{}
+		// Default to account level SAS to cover all our bases
+		sasVals = GenericAccountSignatureValues{}
 	} else {
-		sasVals = opts.AzureOpts.SASValues.(GenericServiceSignatureValues)
+		sasVals = opts.AzureOpts.SASValues
+
 	}
 
 	switch loc {
@@ -45,10 +49,17 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		skc, err := blobservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
-		sasVals.ContainerName = parts.ContainerName
-		sasVals.ObjectName = parts.BlobName
+		var p blobsas.QueryParameters
+		if _, ok := sasVals.(GenericServiceSignatureValues); ok {
+			v := sasVals.(GenericServiceSignatureValues)
+			v.Level = common.Iff(v.Level == nil, to.Ptr(lev), v.Level)
+			v.ContainerName = parts.ContainerName
+			v.ObjectName = parts.BlobName
 
-		p, err := sasVals.AsBlob().SignWithSharedKey(skc)
+			p, err = v.AsBlob().SignWithSharedKey(skc)
+		} else {
+			p, err = sasVals.AsBlob().SignWithSharedKey(skc)
+		}
 		common.PanicIfErr(err)
 
 		parts.SAS = p
@@ -61,34 +72,48 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		skc, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
-		sasVals.ContainerName = parts.ShareName
-		if et == common.EEntityType.Folder() {
-			sasVals.DirectoryPath = parts.DirectoryOrFilePath
-		} else {
-			sasVals.ObjectName = parts.DirectoryOrFilePath
-		}
+		var p filesas.QueryParameters
+		if _, ok := sasVals.(GenericServiceSignatureValues); ok {
+			v := sasVals.(GenericServiceSignatureValues)
+			v.Level = common.Iff(v.Level == nil, to.Ptr(lev), v.Level)
+			v.ContainerName = parts.ShareName
+			if et == common.EEntityType.Folder() {
+				v.DirectoryPath = parts.DirectoryOrFilePath
+			} else {
+				v.ObjectName = parts.DirectoryOrFilePath
+			}
 
-		p, err := sasVals.AsFile().SignWithSharedKey(skc)
+			p, err = v.AsFile().SignWithSharedKey(skc)
+		} else {
+			p, err = sasVals.AsFile().SignWithSharedKey(skc)
+		}
 		common.PanicIfErr(err)
 
 		parts.SAS = p
 		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.BlobFS():
-		parts, err := datalakeSAS.ParseURL(URI)
+		parts, err := datalakesas.ParseURL(URI)
 		common.PanicIfErr(err)
 
 		skc, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
-		sasVals.ContainerName = parts.FileSystemName
-		if et == common.EEntityType.Folder() {
-			sasVals.DirectoryPath = parts.PathName
-		} else {
-			sasVals.ObjectName = parts.PathName
-		}
+		var p datalakesas.QueryParameters
+		if _, ok := sasVals.(GenericServiceSignatureValues); ok {
+			v := sasVals.(GenericServiceSignatureValues)
+			v.Level = common.Iff(v.Level == nil, to.Ptr(lev), v.Level)
+			v.ContainerName = parts.FileSystemName
+			if et == common.EEntityType.Folder() {
+				v.DirectoryPath = parts.PathName
+			} else {
+				v.ObjectName = parts.PathName
+			}
 
-		p, err := sasVals.AsDatalake().SignWithSharedKey(skc)
+			p, err = v.AsDatalake().SignWithSharedKey(skc)
+		} else {
+			p, err = sasVals.AsDatalake().SignWithSharedKey(skc)
+		}
 		common.PanicIfErr(err)
 
 		parts.SAS = p

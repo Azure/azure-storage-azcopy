@@ -24,6 +24,8 @@ type RemoteURIOpts struct {
 type AzureURIOpts struct {
 	// Must be manually specified
 	WithSAS bool
+	// Location level for SAS token, defaults to the resource's location level.
+	Level cmd.LocationLevel
 	// Defaults to a resource-level specific minimally permissioned SAS token.
 	SASValues GenericSignatureValues
 }
