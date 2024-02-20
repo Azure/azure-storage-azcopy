@@ -41,7 +41,6 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 
 	switch loc {
 	case common.ELocation.Blob():
-
 		skc, err := blobservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
