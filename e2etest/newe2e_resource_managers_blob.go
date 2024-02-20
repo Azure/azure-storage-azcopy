@@ -134,7 +134,7 @@ func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
 
 func (b *BlobServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), b.Level(), common.EEntityType, opts...)
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
@@ -342,7 +342,7 @@ func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
 
 func (b *BlobContainerResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), b.Level(), common.EEntityType, opts...)
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
@@ -414,6 +414,14 @@ func (b *BlobObjectResourceManager) Parent() ResourceManager {
 
 func (b *BlobObjectResourceManager) EntityType() common.EntityType {
 	return b.entityType
+}
+
+func (b *BlobObjectResourceManager) ContainerName() string {
+	return b.Container.ContainerName()
+}
+
+func (b *BlobObjectResourceManager) ObjectName() string {
+	return b.Path
 }
 
 // Create defaults to Block Blob. For implementation-specific options, GetTypeOrZero[T] / GetTypeOrAssert[T] to BlobObjectResourceManager and call CreateWithOptions
@@ -666,7 +674,7 @@ func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
 
 func (b *BlobObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), b.Level(), b.EntityType(), opts...)
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }

@@ -4,7 +4,6 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
 )
@@ -70,8 +69,6 @@ type GenericServiceSignatureValues struct {
 	UnauthorizedObjectID string
 	// CorrelationID is used on Blob & Datalake
 	CorrelationID string
-
-	Level *cmd.LocationLevel
 }
 
 // withDefaults will never have to be called by
@@ -91,13 +88,6 @@ func (vals GenericServiceSignatureValues) withDefaults() GenericServiceSignature
 func (vals GenericServiceSignatureValues) AsBlob() BlobSignatureValues {
 	s := vals.withDefaults()
 
-	blobName := s.ObjectName
-	directoryName := s.DirectoryPath
-	if s.Level != nil && *s.Level != cmd.ELocationLevel.Object() {
-		blobName = ""
-		directoryName = ""
-	}
-
 	return &blobsas.BlobSignatureValues{
 		Version:              s.Version,
 		Protocol:             s.Protocol,
@@ -108,8 +98,8 @@ func (vals GenericServiceSignatureValues) AsBlob() BlobSignatureValues {
 		IPRange:              s.IPRange,
 		Identifier:           s.Identifier,
 		ContainerName:        s.ContainerName,
-		BlobName:             blobName,
-		Directory:            directoryName,
+		BlobName:             s.ObjectName,
+		Directory:            s.DirectoryPath,
 		CacheControl:         s.CacheControl,
 		ContentDisposition:   s.ContentDisposition,
 		ContentEncoding:      s.ContentEncoding,
@@ -125,11 +115,6 @@ func (vals GenericServiceSignatureValues) AsBlob() BlobSignatureValues {
 func (vals GenericServiceSignatureValues) AsFile() FileSignatureValues {
 	s := vals.withDefaults()
 
-	filePath := common.Iff(s.DirectoryPath != "", s.DirectoryPath, s.ObjectName)
-	if s.Level != nil && *s.Level != cmd.ELocationLevel.Object() {
-		filePath = ""
-	}
-
 	return &filesas.SignatureValues{
 		Version:            s.Version,
 		Protocol:           filesas.Protocol(s.Protocol),
@@ -140,7 +125,7 @@ func (vals GenericServiceSignatureValues) AsFile() FileSignatureValues {
 		IPRange:            filesas.IPRange(s.IPRange),
 		Identifier:         s.Identifier,
 		ShareName:          s.ContainerName,
-		FilePath:           filePath,
+		FilePath:           common.Iff(s.DirectoryPath != "", s.DirectoryPath, s.ObjectName),
 		CacheControl:       s.CacheControl,
 		ContentDisposition: s.ContentDisposition,
 		ContentEncoding:    s.ContentEncoding,
@@ -152,13 +137,6 @@ func (vals GenericServiceSignatureValues) AsFile() FileSignatureValues {
 func (vals GenericServiceSignatureValues) AsDatalake() DatalakeSignatureValues {
 	s := vals.withDefaults()
 
-	filePath := s.ObjectName
-	directoryPath := s.DirectoryPath
-	if s.Level != nil && *s.Level != cmd.ELocationLevel.Object() {
-		filePath = ""
-		directoryPath = ""
-	}
-
 	return &datalakesas.DatalakeSignatureValues{
 		Version:              s.Version,
 		Protocol:             datalakesas.Protocol(s.Protocol),
@@ -168,8 +146,8 @@ func (vals GenericServiceSignatureValues) AsDatalake() DatalakeSignatureValues {
 		IPRange:              datalakesas.IPRange(s.IPRange),
 		Identifier:           s.Identifier,
 		FileSystemName:       s.ContainerName,
-		FilePath:             filePath,
-		DirectoryPath:        directoryPath,
+		FilePath:             s.ObjectName,
+		DirectoryPath:        s.DirectoryPath,
 		CacheControl:         s.CacheControl,
 		ContentDisposition:   s.ContentDisposition,
 		ContentEncoding:      s.ContentEncoding,

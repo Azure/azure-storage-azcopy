@@ -24,8 +24,6 @@ type RemoteURIOpts struct {
 type AzureURIOpts struct {
 	// Must be manually specified
 	WithSAS bool
-	// Location level for SAS token, defaults to the resource's location level.
-	Level cmd.LocationLevel
 	// Defaults to a resource-level specific minimally permissioned SAS token.
 	SASValues GenericSignatureValues
 }
@@ -231,6 +229,8 @@ type ObjectResourceManager interface {
 	ResourceManager
 
 	EntityType() common.EntityType
+	ContainerName() string
+	ObjectName() string
 	// Create attempts to create an object. Should overwrite objects if they already exist. It is expected to attempt to track object creation.
 	Create(a Asserter, body ObjectContentContainer, properties ObjectProperties)
 	// Delete attempts to delete an object. NotFound type errors are ignored.

@@ -81,7 +81,7 @@ func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
 
 func (b *BlobFSServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.internalClient.DFSURL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), b.Level(), common.EEntityType, opts...)
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
@@ -175,7 +175,7 @@ func (b *BlobFSFileSystemResourceManager) Level() cmd.LocationLevel {
 
 func (b *BlobFSFileSystemResourceManager) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.internalClient.DFSURL())
-	base = b.internalAccount.ApplySAS(base, b.Location(), b.Level(), common.EEntityType, opts...)
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
@@ -309,13 +309,21 @@ func (b *BlobFSPathResourceProvider) Level() cmd.LocationLevel {
 
 func (b *BlobFSPathResourceProvider) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.getFileClient().DFSURL()) // obj type doesn't matter here, URL is the same under the hood
-	base = b.internalAccount.ApplySAS(base, b.Location(), b.Level(), b.EntityType(), opts...)
+	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
 
 	return base
 }
 
 func (b *BlobFSPathResourceProvider) EntityType() common.EntityType {
 	return b.entityType
+}
+
+func (b *BlobFSPathResourceProvider) ContainerName() string {
+	return b.Container.ContainerName()
+}
+
+func (b *BlobFSPathResourceProvider) ObjectName() string {
+	return b.objectPath
 }
 
 func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {

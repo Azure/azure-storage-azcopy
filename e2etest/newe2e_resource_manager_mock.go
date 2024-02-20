@@ -309,6 +309,14 @@ func (m *MockObjectResourceManager) EntityType() common.EntityType {
 	return m.entityType
 }
 
+func (m *MockObjectResourceManager) ContainerName() string {
+	return m.parent.ContainerName()
+}
+
+func (m *MockObjectResourceManager) ObjectName() string {
+	return m.path
+}
+
 func (m *MockObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	// no-op
 }

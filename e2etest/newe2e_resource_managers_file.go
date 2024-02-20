@@ -84,7 +84,7 @@ func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
 
 func (s *FileServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(s.internalClient.URL())
-	base = s.internalAccount.ApplySAS(base, s.Location(), s.Level(), common.EEntityType, opts...)
+	base = s.internalAccount.ApplySAS(base, s.Location(), opts...)
 
 	return base
 }
@@ -180,7 +180,7 @@ func (s *FileShareResourceManager) Level() cmd.LocationLevel {
 
 func (s *FileShareResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(s.internalClient.URL())
-	base = s.internalAccount.ApplySAS(base, s.Location(), s.Level(), common.EEntityType, opts...)
+	base = s.internalAccount.ApplySAS(base, s.Location(), opts...)
 
 	return base
 }
@@ -397,13 +397,21 @@ func (f *FileObjectResourceManager) Level() cmd.LocationLevel {
 
 func (f *FileObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(f.getFileClient().URL()) // restype doesn't matter here, same URL under the hood
-	base = f.internalAccount.ApplySAS(base, f.Location(), f.Level(), f.EntityType(), opts...)
+	base = f.internalAccount.ApplySAS(base, f.Location(), opts...)
 
 	return base
 }
 
 func (f *FileObjectResourceManager) EntityType() common.EntityType {
 	return f.entityType
+}
+
+func (f *FileObjectResourceManager) ContainerName() string {
+	return f.Share.ContainerName()
+}
+
+func (f *FileObjectResourceManager) ObjectName() string {
+	return f.path
 }
 
 func (f *FileObjectResourceManager) PreparePermissions(a Asserter, p *string) *file.Permissions {
