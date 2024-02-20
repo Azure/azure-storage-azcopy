@@ -41,8 +41,6 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 
 	switch loc {
 	case common.ELocation.Blob():
-		parts, err := blobsas.ParseURL(URI)
-		common.PanicIfErr(err)
 
 		skc, err := blobservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
@@ -50,30 +48,33 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		p, err := sasVals.AsBlob().SignWithSharedKey(skc)
 		common.PanicIfErr(err)
 
+		parts, err := blobsas.ParseURL(URI)
+		common.PanicIfErr(err)
+
 		parts.SAS = p
 		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.File():
-		parts, err := filesas.ParseURL(URI)
-		common.PanicIfErr(err)
-
 		skc, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
 		p, err := sasVals.AsFile().SignWithSharedKey(skc)
 		common.PanicIfErr(err)
 
+		parts, err := filesas.ParseURL(URI)
+		common.PanicIfErr(err)
+
 		parts.SAS = p
 		parts.Scheme = common.Iff(opts.RemoteOpts.Scheme != "", opts.RemoteOpts.Scheme, "https")
 		return parts.String()
 	case common.ELocation.BlobFS():
-		parts, err := datalakesas.ParseURL(URI)
-		common.PanicIfErr(err)
-
 		skc, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		common.PanicIfErr(err)
 
 		p, err := sasVals.AsDatalake().SignWithSharedKey(skc)
+		common.PanicIfErr(err)
+
+		parts, err := datalakesas.ParseURL(URI)
 		common.PanicIfErr(err)
 
 		parts.SAS = p
