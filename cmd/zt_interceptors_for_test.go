@@ -118,6 +118,12 @@ func (m *mockedLifecycleManager) Dryrun(o common.OutputBuilder) {
 	default:
 	}
 }
+func (m *mockedLifecycleManager) Output(o common.OutputBuilder) {
+	select {
+	case m.infoLog <- o(m.outputFormat):
+	default:
+	}
+}
 func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
 	return common.EResponseOption.Default()
 }
