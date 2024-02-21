@@ -23,8 +23,12 @@ package cmd
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"strconv"
 	"strings"
 	"time"
@@ -182,36 +186,95 @@ func init() {
 	rootCmd.AddCommand(listContainerCmd)
 }
 
-func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
+type ListObject struct {
+	Path             string             `json:"Path"`
+	LastModifiedTime *time.Time         `json:"LastModifiedTime,omitempty"`
+	VersionId        string             `json:"VersionId,omitempty"`
+	BlobType         blob.BlobType      `json:"BlobType,omitempty"`
+	BlobAccessTier   blob.AccessTier    `json:"BlobAccessTier,omitempty"`
+	ContentType      string             `json:"ContentType,omitempty"`
+	ContentEncoding  string             `json:"ContentEncoding,omitempty"`
+	ContentMD5       []byte             `json:"ContentMD5,omitempty"`
+	LeaseState       lease.StateType    `json:"LeaseState,omitempty"`
+	LeaseStatus      lease.StatusType   `json:"LeaseStatus,omitempty"`
+	LeaseDuration    lease.DurationType `json:"LeaseDuration,omitempty"`
+	ArchiveStatus    blob.ArchiveStatus `json:"ArchiveStatus,omitempty"`
+	ContentLength    string             `json:"ContentLength"` // This is a string to support machine-readable
+
+	StringEncoding string `json:"-"` // this is stored as part of the list object to avoid looping over the properties array twice
+}
+
+func NewListObject(object StoredObject, level LocationLevel, machineReadable bool) ListObject {
+	path := object.relativePath
+	if object.entityType == common.EEntityType.Folder() {
+		path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
+	}
+
+	if level == level.Service() {
+		path = object.ContainerName + "/" + path
+	}
+
+	var contentLength string
+	if machineReadable {
+		contentLength = strconv.Itoa(int(object.size))
+	} else {
+		contentLength = byteSizeToString(object.size)
+	}
+
+	lo := ListObject{
+		Path:          path,
+		ContentLength: contentLength,
+	}
+
 	builder := strings.Builder{}
+	builder.WriteString(lo.Path + "; ")
+
 	for _, property := range cooked.properties {
 		propertyStr := string(property)
 		switch property {
 		case lastModifiedTime:
-			builder.WriteString(propertyStr + ": " + object.lastModifiedTime.String() + "; ")
+			lo.LastModifiedTime = to.Ptr(object.lastModifiedTime)
+			builder.WriteString(propertyStr + ": " + lo.LastModifiedTime.String() + "; ")
 		case versionId:
-			builder.WriteString(propertyStr + ": " + object.blobVersionID + "; ")
+			lo.VersionId = object.blobVersionID
+			builder.WriteString(propertyStr + ": " + lo.VersionId + "; ")
 		case blobType:
-			builder.WriteString(propertyStr + ": " + string(object.blobType) + "; ")
+			lo.BlobType = object.blobType
+			builder.WriteString(propertyStr + ": " + string(lo.BlobType) + "; ")
 		case blobAccessTier:
-			builder.WriteString(propertyStr + ": " + string(object.blobAccessTier) + "; ")
+			lo.BlobAccessTier = object.blobAccessTier
+			builder.WriteString(propertyStr + ": " + string(lo.BlobAccessTier) + "; ")
 		case contentType:
-			builder.WriteString(propertyStr + ": " + object.contentType + "; ")
+			lo.ContentType = object.contentType
+			builder.WriteString(propertyStr + ": " + lo.ContentType + "; ")
 		case contentEncoding:
-			builder.WriteString(propertyStr + ": " + object.contentEncoding + "; ")
+			lo.ContentEncoding = object.contentEncoding
+			builder.WriteString(propertyStr + ": " + lo.ContentEncoding + "; ")
 		case contentMD5:
-			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(object.md5) + "; ")
+			lo.ContentMD5 = object.md5
+			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(lo.ContentMD5) + "; ")
 		case leaseState:
-			builder.WriteString(propertyStr + ": " + string(object.leaseState) + "; ")
+			lo.LeaseState = object.leaseState
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseState) + "; ")
 		case leaseStatus:
-			builder.WriteString(propertyStr + ": " + string(object.leaseStatus) + "; ")
+			lo.LeaseStatus = object.leaseStatus
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseStatus) + "; ")
 		case leaseDuration:
-			builder.WriteString(propertyStr + ": " + string(object.leaseDuration) + "; ")
+			lo.LeaseDuration = object.leaseDuration
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseDuration) + "; ")
 		case archiveStatus:
-			builder.WriteString(propertyStr + ": " + string(object.archiveStatus) + "; ")
+			lo.ArchiveStatus = object.archiveStatus
+			builder.WriteString(propertyStr + ": " + string(lo.ArchiveStatus) + "; ")
 		}
 	}
-	return builder.String()
+	builder.WriteString("Content Length: " + lo.ContentLength)
+	lo.StringEncoding = builder.String()
+
+	return lo
+}
+
+func (l *ListObject) String() string {
+	return l.StringEncoding
 }
 
 // HandleListContainerCommand handles the list container command
@@ -269,23 +332,17 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	objectVer := make(map[string]versionIdObject)
 
 	processor := func(object StoredObject) error {
-		path := object.relativePath
-		if object.entityType == common.EEntityType.Folder() {
-			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
-		}
+		lo := NewListObject(object, level, cooked.MachineReadable)
 
-		properties := "; " + cooked.processProperties(object)
-		objectSummary := path + properties + " Content Length: "
-
-		if level == level.Service() {
-			objectSummary = object.ContainerName + "/" + objectSummary
-		}
-
-		if cooked.MachineReadable {
-			objectSummary += strconv.Itoa(int(object.size))
-		} else {
-			objectSummary += byteSizeToString(object.size)
-		}
+		glcm.Output(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(lo)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return lo.String()
+			}
+		})
 
 		if cooked.RunningTally {
 			if shouldGetVersionId {
@@ -319,8 +376,6 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 			fileCount++
 			sizeCount += object.size
 		}
-
-		glcm.Info(objectSummary)
 
 		// No need to strip away from the name as the traverser has already done so.
 		return nil

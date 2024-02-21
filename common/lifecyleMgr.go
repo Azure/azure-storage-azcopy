@@ -55,6 +55,7 @@ type LifecycleMgr interface {
 	Info(string)                                                 // simple print, allowed to float up
 	Warn(string)                                                 // simple print, allowed to float up
 	Dryrun(OutputBuilder)                                        // print files for dry run mode
+	Output(OutputBuilder)                                        // print output for list
 	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
 	SurrenderControl()                                           // give up control, this should never return
@@ -341,6 +342,18 @@ func (lcm *lifecycleMgr) Dryrun(o OutputBuilder) {
 	lcm.msgQueue <- outputMessage{
 		msgContent: dryrunMessage,
 		msgType:    eOutputMessageType.Dryrun(),
+	}
+}
+
+func (lcm *lifecycleMgr) Output(o OutputBuilder) {
+	om := ""
+	if o != nil {
+		om = o(lcm.outputFormat)
+	}
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: om,
+		msgType:    eOutputMessageType.Info(),
 	}
 }
 
