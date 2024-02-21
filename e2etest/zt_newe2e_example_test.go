@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -21,7 +22,6 @@ func (s *ExampleSuite) TeardownSuite(a Asserter) {
 }
 
 func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationManager) {
-	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionObject{
@@ -40,7 +40,12 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 		AzCopyCommand{
 			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy}),
 			Targets: []ResourceManager{
-				srcObj,
+				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: srcObj.ContainerName(),
+						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
+					},
+				}),
 				dstContainer,
 			},
 			Flags: CopyFlags{

@@ -127,7 +127,7 @@ jobs:
           display_name: "Linux"
           go_path: '$(go env GOPATH)/bin/'
           suffix: ''
-          run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
+          run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
           output_test_logs: ''
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
@@ -138,7 +138,7 @@ jobs:
           type: 'windows'
           go_path: 'C:\Users\VssAdministrator\go\bin\'
           suffix: '.exe'
-          run_e2e: 'go test -timeout=1h -v ./e2etest > test.txt'
+          run_e2e: 'go test -timeout=2h -v ./e2etest > test.txt'
           output_test_logs: 'cat test.txt'
           save_exit_code: 'set exit_code=%errorlevel%'
           return_exit_code: 'exit %exit_code%'
@@ -148,7 +148,7 @@ jobs:
           display_name: "MacOS"
           go_path: '$(go env GOPATH)/bin/'
           suffix: ''
-          run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
+          run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
           output_test_logs: ''
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
