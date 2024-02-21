@@ -209,7 +209,7 @@ func (m *MockContainerResourceManager) mockSignature() {
 }
 
 func (m *MockContainerResourceManager) Location() common.Location {
-	if m.overrideLocation != common.ELocation.Unknown() || m.parent != nil {
+	if m.overrideLocation != common.ELocation.Unknown() || m.parent == nil {
 		return m.overrideLocation
 	}
 
@@ -294,7 +294,7 @@ func (m *MockObjectResourceManager) mockSignature() {
 }
 
 func (m *MockObjectResourceManager) Location() common.Location {
-	if m.overrideLocation != common.ELocation.Unknown() || m.parent != nil {
+	if m.overrideLocation != common.ELocation.Unknown() || m.parent == nil {
 		return m.overrideLocation
 	}
 

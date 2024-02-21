@@ -312,8 +312,8 @@ func (b *BlobContainerResourceManager) CreateWithOptions(a Asserter, options *Bl
 	}
 
 	a.NoError("create container", err)
-	if rt, ok := a.(ResourceTracker); ok && created {
-		rt.TrackCreatedResource(b)
+	if created {
+		TrackResourceCreation(a, b)
 	}
 }
 
@@ -577,9 +577,7 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		a.NoError("Upload append blob", msu.UploadContents(body))
 	}
 
-	if rt, ok := a.(ResourceTracker); ok {
-		rt.TrackCreatedResource(b)
-	}
+	TrackResourceCreation(a, b)
 }
 
 func (b *BlobObjectResourceManager) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
