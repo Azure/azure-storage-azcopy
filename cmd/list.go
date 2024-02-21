@@ -277,6 +277,34 @@ func (l *ListObject) String() string {
 	return l.StringEncoding
 }
 
+type ListSummary struct {
+	FileCount     string `json:"FileCount"`
+	TotalFileSize string `json:"TotalFileSize"`
+
+	StringEncoding string `json:"-"`
+}
+
+func NewListSummary(fileCount, totalFileSize int64, machineReadable bool) ListSummary {
+	fc := strconv.Itoa(int(fileCount))
+	tfs := ""
+
+	if machineReadable {
+		tfs = strconv.Itoa(int(totalFileSize))
+	} else {
+		tfs = byteSizeToString(totalFileSize)
+	}
+	output := "\nFile count: " + fc + "\nTotal file size: " + tfs
+	return ListSummary{
+		FileCount:      fc,
+		TotalFileSize:  tfs,
+		StringEncoding: output,
+	}
+}
+
+func (l *ListSummary) String() string {
+	return l.StringEncoding
+}
+
 // HandleListContainerCommand handles the list container command
 func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
@@ -388,14 +416,17 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	if cooked.RunningTally {
-		glcm.Info("")
-		glcm.Info("File count: " + strconv.Itoa(int(fileCount)))
+		ls := NewListSummary(fileCount, sizeCount, cooked.MachineReadable)
+		glcm.Output(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(ls)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return ls.String()
+			}
+		})
 
-		if cooked.MachineReadable {
-			glcm.Info("Total file size: " + strconv.Itoa(int(sizeCount)))
-		} else {
-			glcm.Info("Total file size: " + byteSizeToString(sizeCount))
-		}
 	}
 
 	return nil
