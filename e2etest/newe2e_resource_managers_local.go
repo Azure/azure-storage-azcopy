@@ -67,7 +67,7 @@ func (l *LocalContainerResourceManager) Account() AccountResourceManager {
 }
 
 func (l *LocalContainerResourceManager) Canon() string {
-	return fmt.Sprintf("acountless/local/%s", l.ContainerName())
+	return fmt.Sprintf("accountless/local/%s", l.ContainerName())
 }
 
 func (l *LocalContainerResourceManager) ContainerName() string {
@@ -213,7 +213,11 @@ func (l *LocalObjectResourceManager) Account() AccountResourceManager {
 }
 
 func (l *LocalObjectResourceManager) Canon() string {
-	return l.container.Canon() + "/" + l.objectPath
+	if l.container != nil {
+		return l.container.Canon() + "/" + l.objectPath
+	} else {
+		return fmt.Sprintf("accountless/local/containerless/%s", l.rawPath)
+	}
 }
 
 func (l *LocalObjectResourceManager) EntityType() common.EntityType {
