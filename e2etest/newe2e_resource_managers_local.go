@@ -138,6 +138,22 @@ type LocalObjectResourceManager struct {
 	rawPath    string
 }
 
+func (l *LocalObjectResourceManager) ContainerName() string {
+	if l.container != nil {
+		return filepath.Base(l.container.RootPath)
+	}
+
+	return "containerless"
+}
+
+func (l *LocalObjectResourceManager) ObjectName() string {
+	if l.objectPath != "" {
+		return l.objectPath
+	} else {
+		return filepath.Base(l.rawPath)
+	}
+}
+
 type localSMBPropertiesManager interface {
 	GetSDDL(Asserter) string
 	PutSDDL(sddlstr string, a Asserter)
