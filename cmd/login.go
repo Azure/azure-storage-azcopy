@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -30,10 +29,6 @@ import (
 )
 
 var loginCmdArg = loginCmdArgs{tenantID: common.DefaultTenantID}
-
-var loginNotice = "We recommend all customers migrate off of using the 'azcopy %s' command. " +
-	"Use auto-login instead. Visit %s to know more."
-var autoLoginURL = "https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-authorize-azure-active-directory#authorize-without-a-secret-store "
 
 var lgCmd = &cobra.Command{
 	Use:        "login",
@@ -49,7 +44,6 @@ var lgCmd = &cobra.Command{
 		loginCmdArg.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 		loginCmdArg.persistToken = true
 
-		glcm.Info(fmt.Sprintf(loginNotice, "login", autoLoginURL))
 		if loginCmdArg.certPass != "" || loginCmdArg.clientSecret != "" {
 			glcm.Info(environmentVariableNotice)
 		}
