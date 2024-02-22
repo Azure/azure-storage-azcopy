@@ -1073,7 +1073,7 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
-	DefaultBlockBlobBlockSize      = 256 * 1024 * 1024
+	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
 	MaxPutBlobSize                 = 5000 * 1024 * 1024
 	MaxAppendBlobBlockSize         = 100 * 1024 * 1024
