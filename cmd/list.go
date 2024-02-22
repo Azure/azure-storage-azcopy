@@ -238,9 +238,10 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	processor := func(object StoredObject) error {
 		lo := cooked.newListObject(object, level)
+		response := AzCopyResponse[AzCopyListObject]{ResponseType: "AzCopyListObject", ResponseValue: lo}
 		glcm.Output(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(lo)
+				jsonOutput, err := json.Marshal(response)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
@@ -294,9 +295,10 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	if cooked.RunningTally {
 		ls := cooked.newListSummary(fileCount, sizeCount)
+		response := AzCopyResponse[AzCopyListSummary]{ResponseType: "AzCopyListSummary", ResponseValue: ls}
 		glcm.Output(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(ls)
+				jsonOutput, err := json.Marshal(response)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
@@ -308,7 +310,12 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	return nil
 }
 
-type ListObject struct {
+type AzCopyResponse[T any] struct {
+	ResponseType  string
+	ResponseValue T
+}
+
+type AzCopyListObject struct {
 	Path string `json:"Path"`
 
 	LastModifiedTime *time.Time         `json:"LastModifiedTime,omitempty"`
@@ -328,15 +335,15 @@ type ListObject struct {
 	StringEncoding string `json:"-"` // this is stored as part of the list object to avoid looping over the properties array twice
 }
 
-func (l *ListObject) String() string {
+func (l *AzCopyListObject) String() string {
 	return l.StringEncoding
 }
 
-func (cooked cookedListCmdArgs) newListObject(object StoredObject, level LocationLevel) ListObject {
+func (cooked cookedListCmdArgs) newListObject(object StoredObject, level LocationLevel) AzCopyListObject {
 	path := getPath(object.ContainerName, object.relativePath, level, object.entityType)
 	contentLength := sizeToString(object.size, cooked.MachineReadable)
 
-	lo := ListObject{
+	lo := AzCopyListObject{
 		Path:          path,
 		ContentLength: contentLength,
 	}
@@ -388,23 +395,23 @@ func (cooked cookedListCmdArgs) newListObject(object StoredObject, level Locatio
 	return lo
 }
 
-type ListSummary struct {
+type AzCopyListSummary struct {
 	FileCount     string `json:"FileCount"`
 	TotalFileSize string `json:"TotalFileSize"`
 
 	StringEncoding string `json:"-"`
 }
 
-func (l *ListSummary) String() string {
+func (l *AzCopyListSummary) String() string {
 	return l.StringEncoding
 }
 
-func (cooked cookedListCmdArgs) newListSummary(fileCount, totalFileSize int64) ListSummary {
+func (cooked cookedListCmdArgs) newListSummary(fileCount, totalFileSize int64) AzCopyListSummary {
 	fc := strconv.Itoa(int(fileCount))
 	tfs := sizeToString(totalFileSize, cooked.MachineReadable)
 
 	output := "\nFile count: " + fc + "\nTotal file size: " + tfs
-	return ListSummary{
+	return AzCopyListSummary{
 		FileCount:      fc,
 		TotalFileSize:  tfs,
 		StringEncoding: output,
