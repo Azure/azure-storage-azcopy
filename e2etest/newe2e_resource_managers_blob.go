@@ -416,6 +416,14 @@ func (b *BlobObjectResourceManager) EntityType() common.EntityType {
 	return b.entityType
 }
 
+func (b *BlobObjectResourceManager) ContainerName() string {
+	return b.Container.ContainerName()
+}
+
+func (b *BlobObjectResourceManager) ObjectName() string {
+	return b.Path
+}
+
 // Create defaults to Block Blob. For implementation-specific options, GetTypeOrZero[T] / GetTypeOrAssert[T] to BlobObjectResourceManager and call CreateWithOptions
 func (b *BlobObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	b.CreateWithOptions(a, body, properties, nil)
