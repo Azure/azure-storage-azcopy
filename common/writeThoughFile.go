@@ -62,7 +62,7 @@ func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreat
 	// LastIndex() will return -1 if path separator was not found, we should handle this gracefully
 	// instead of allowing AzCopy to crash with an out-of-bounds error.
 	if lastIndex == -1 {
-		return fmt.Errorf("error: Path separator (%s) not found in destination path. On Linux, this may occur if the destination is the root file, such as '/'. If this is the case, please consider changing your destination.", pathSeparator)
+		return fmt.Errorf("error: Path separator (%s) not found in destination path. On Linux, this may occur if the destination is the root file, such as '/'. If this is the case, please consider changing your destination path.", pathSeparator)
 	}
 
 	directory := destinationPath[:lastIndex]

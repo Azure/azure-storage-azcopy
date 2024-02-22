@@ -370,7 +370,7 @@ func (t *testJobPartTransferManager) GetOverwritePrompter() *overwritePrompter {
 }
 
 func (t *testJobPartTransferManager) GetFolderCreationTracker() FolderCreationTracker {
-	panic("implement me")
+	return t.jobPartMgr.getFolderCreationTracker()
 }
 
 func (t *testJobPartTransferManager) ShouldLog(level common.LogLevel) bool {
