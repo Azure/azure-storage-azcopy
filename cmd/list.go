@@ -84,15 +84,17 @@ func validProperties() []validProperty {
 		contentType, contentEncoding, contentMD5, leaseState, leaseDuration, leaseStatus, archiveStatus}
 }
 
-func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty {
+func (raw rawListCmdArgs) parseProperties() []validProperty {
 	parsedProperties := make([]validProperty, 0)
-	listProperties := strings.Split(rawProperties, ";")
-	for _, p := range listProperties {
-		for _, vp := range validProperties() {
-			// check for empty string and also ignore the case
-			if len(p) != 0 && strings.EqualFold(string(vp), p) {
-				parsedProperties = append(parsedProperties, vp)
-				break
+	if raw.Properties != "" {
+		listProperties := strings.Split(raw.Properties, ";")
+		for _, p := range listProperties {
+			for _, vp := range validProperties() {
+				// check for empty string and also ignore the case
+				if len(p) != 0 && strings.EqualFold(string(vp), p) {
+					parsedProperties = append(parsedProperties, vp)
+					break
+				}
 			}
 		}
 	}
@@ -117,10 +119,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-
-	if raw.Properties != "" {
-		cooked.properties = raw.parseProperties(raw.Properties)
-	}
+	cooked.properties = raw.parseProperties()
 
 	return cooked, nil
 }
@@ -166,7 +165,7 @@ func init() {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 				return
 			}
-			err = cooked.HandleListContainerCommand()
+			err = cooked.handleListContainerCommand()
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -186,8 +185,132 @@ func init() {
 	rootCmd.AddCommand(listContainerCmd)
 }
 
+// handleListContainerCommand handles the list container command
+func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
+	var credentialInfo common.CredentialInfo
+
+	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
+	if err != nil {
+		return err
+	}
+
+	if err := common.VerifyIsURLResolvable(raw.sourcePath); cooked.location.IsRemote() && err != nil {
+		return fmt.Errorf("failed to resolve target: %w", err)
+	}
+
+	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
+	if err != nil {
+		return err
+	}
+
+	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
+	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, true, common.CpkOptions{}); err != nil {
+		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
+	} else if cooked.location == cooked.location.File() && source.SAS == "" {
+		return errors.New("azure files requires a SAS token for authentication")
+	} else if credentialInfo.CredentialType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			credentialInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
+
+	// check if user wants to get version id
+	getVersionId := containsProperty(cooked.properties, versionId)
+
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, getVersionId)
+	if err != nil {
+		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
+	}
+
+	var fileCount int64 = 0
+	var sizeCount int64 = 0
+
+	type versionIdObject struct {
+		versionId string
+		fileSize  int64
+	}
+	objectVer := make(map[string]versionIdObject)
+
+	processor := func(object StoredObject) error {
+		lo := cooked.newListObject(object, level)
+		glcm.Output(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(lo)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return lo.String()
+			}
+		})
+
+		// ensure that versioned objects don't get counted multiple times in the tally
+		// 1. only include the size of the latest version of the object in the sizeCount
+		// 2. only include the object once in the fileCount
+		if cooked.RunningTally {
+			if getVersionId {
+				// get new version id object
+				updatedVersionId := versionIdObject{
+					versionId: object.blobVersionID,
+					fileSize:  object.size,
+				}
+
+				// there exists a current version id of the object
+				if currentVersionId, ok := objectVer[object.relativePath]; ok {
+					// get current version id time
+					currentVid, _ := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
+
+					// get new version id time
+					newVid, _ := time.Parse(versionIdTimeFormat, object.blobVersionID)
+
+					// if new vid came after the current vid, then it is the latest version
+					// update the objectVer with the latest version
+					// we will also remove sizeCount and fileCount of current object, allowing
+					// the updated sizeCount and fileCount to be added at line 320
+					if newVid.After(currentVid) {
+						sizeCount -= currentVersionId.fileSize // remove size of current object
+						fileCount--                            // remove current object file count
+						objectVer[object.relativePath] = updatedVersionId
+					}
+				} else {
+					objectVer[object.relativePath] = updatedVersionId
+				}
+			}
+			fileCount++
+			sizeCount += object.size
+		}
+		return nil
+	}
+
+	err = traverser.Traverse(nil, processor, nil)
+
+	if err != nil {
+		return fmt.Errorf("failed to traverse container: %s", err.Error())
+	}
+
+	if cooked.RunningTally {
+		ls := cooked.newListSummary(fileCount, sizeCount)
+		glcm.Output(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(ls)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return ls.String()
+			}
+		})
+	}
+
+	return nil
+}
+
 type ListObject struct {
-	Path             string             `json:"Path"`
+	Path string `json:"Path"`
+
 	LastModifiedTime *time.Time         `json:"LastModifiedTime,omitempty"`
 	VersionId        string             `json:"VersionId,omitempty"`
 	BlobType         blob.BlobType      `json:"BlobType,omitempty"`
@@ -199,27 +322,19 @@ type ListObject struct {
 	LeaseStatus      lease.StatusType   `json:"LeaseStatus,omitempty"`
 	LeaseDuration    lease.DurationType `json:"LeaseDuration,omitempty"`
 	ArchiveStatus    blob.ArchiveStatus `json:"ArchiveStatus,omitempty"`
-	ContentLength    string             `json:"ContentLength"` // This is a string to support machine-readable
+
+	ContentLength string `json:"ContentLength"` // This is a string to support machine-readable
 
 	StringEncoding string `json:"-"` // this is stored as part of the list object to avoid looping over the properties array twice
 }
 
-func NewListObject(object StoredObject, level LocationLevel, machineReadable bool) ListObject {
-	path := object.relativePath
-	if object.entityType == common.EEntityType.Folder() {
-		path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
-	}
+func (l *ListObject) String() string {
+	return l.StringEncoding
+}
 
-	if level == level.Service() {
-		path = object.ContainerName + "/" + path
-	}
-
-	var contentLength string
-	if machineReadable {
-		contentLength = strconv.Itoa(int(object.size))
-	} else {
-		contentLength = byteSizeToString(object.size)
-	}
+func (cooked cookedListCmdArgs) newListObject(object StoredObject, level LocationLevel) ListObject {
+	path := getPath(object.ContainerName, object.relativePath, level, object.entityType)
+	contentLength := sizeToString(object.size, cooked.MachineReadable)
 
 	lo := ListObject{
 		Path:          path,
@@ -273,10 +388,6 @@ func NewListObject(object StoredObject, level LocationLevel, machineReadable boo
 	return lo
 }
 
-func (l *ListObject) String() string {
-	return l.StringEncoding
-}
-
 type ListSummary struct {
 	FileCount     string `json:"FileCount"`
 	TotalFileSize string `json:"TotalFileSize"`
@@ -284,152 +395,20 @@ type ListSummary struct {
 	StringEncoding string `json:"-"`
 }
 
-func NewListSummary(fileCount, totalFileSize int64, machineReadable bool) ListSummary {
-	fc := strconv.Itoa(int(fileCount))
-	tfs := ""
+func (l *ListSummary) String() string {
+	return l.StringEncoding
+}
 
-	if machineReadable {
-		tfs = strconv.Itoa(int(totalFileSize))
-	} else {
-		tfs = byteSizeToString(totalFileSize)
-	}
+func (cooked cookedListCmdArgs) newListSummary(fileCount, totalFileSize int64) ListSummary {
+	fc := strconv.Itoa(int(fileCount))
+	tfs := sizeToString(totalFileSize, cooked.MachineReadable)
+
 	output := "\nFile count: " + fc + "\nTotal file size: " + tfs
 	return ListSummary{
 		FileCount:      fc,
 		TotalFileSize:  tfs,
 		StringEncoding: output,
 	}
-}
-
-func (l *ListSummary) String() string {
-	return l.StringEncoding
-}
-
-// HandleListContainerCommand handles the list container command
-func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
-	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	credentialInfo := common.CredentialInfo{}
-
-	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
-	if err != nil {
-		return err
-	}
-
-	if err := common.VerifyIsURLResolvable(raw.sourcePath); cooked.location.IsRemote() && err != nil {
-		return fmt.Errorf("failed to resolve target: %w", err)
-	}
-
-	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
-
-	if err != nil {
-		return err
-	}
-
-	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
-	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, true, common.CpkOptions{}); err != nil {
-		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
-	} else if cooked.location == cooked.location.File() && source.SAS == "" {
-		return errors.New("azure files requires a SAS token for authentication")
-	} else if credentialInfo.CredentialType.IsAzureOAuth() {
-		uotm := GetUserOAuthTokenManagerInstance()
-		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return err
-		} else {
-			credentialInfo.OAuthTokenInfo = *tokenInfo
-		}
-	}
-
-	// check if user wants to get version id
-	shouldGetVersionId := containsProperty(cooked.properties, versionId)
-
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, shouldGetVersionId)
-
-	if err != nil {
-		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
-	}
-
-	var fileCount int64 = 0
-	var sizeCount int64 = 0
-
-	type versionIdObject struct {
-		versionId string
-		fileSize  int64
-	}
-	objectVer := make(map[string]versionIdObject)
-
-	processor := func(object StoredObject) error {
-		lo := NewListObject(object, level, cooked.MachineReadable)
-
-		glcm.Output(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(lo)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else {
-				return lo.String()
-			}
-		})
-
-		if cooked.RunningTally {
-			if shouldGetVersionId {
-				// get new version id object
-				updatedVersionId := versionIdObject{
-					versionId: object.blobVersionID,
-					fileSize:  object.size,
-				}
-
-				// there exists a current version id of the object
-				if currentVersionId, ok := objectVer[object.relativePath]; ok {
-					// get current version id time
-					currentVid, _ := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
-
-					// get new version id time
-					newVid, _ := time.Parse(versionIdTimeFormat, object.blobVersionID)
-
-					// if new vid came after the current vid, then it is the latest version
-					// update the objectVer with the latest version
-					// we will also remove sizeCount and fileCount of current object, allowing
-					// the updated sizeCount and fileCount to be added at line 320
-					if newVid.After(currentVid) {
-						sizeCount -= currentVersionId.fileSize // remove size of current object
-						fileCount--                            // remove current object file count
-						objectVer[object.relativePath] = updatedVersionId
-					}
-				} else {
-					objectVer[object.relativePath] = updatedVersionId
-				}
-			}
-			fileCount++
-			sizeCount += object.size
-		}
-
-		// No need to strip away from the name as the traverser has already done so.
-		return nil
-	}
-
-	err = traverser.Traverse(nil, processor, nil)
-
-	if err != nil {
-		return fmt.Errorf("failed to traverse container: %s", err.Error())
-	}
-
-	if cooked.RunningTally {
-		ls := NewListSummary(fileCount, sizeCount, cooked.MachineReadable)
-		glcm.Output(func(format common.OutputFormat) string {
-			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(ls)
-				common.PanicIfErr(err)
-				return string(jsonOutput)
-			} else {
-				return ls.String()
-			}
-		})
-
-	}
-
-	return nil
 }
 
 var megaSize = []string{
@@ -468,4 +447,20 @@ func byteSizeToString(size int64) string {
 	}
 
 	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
+}
+
+func getPath(containerName, relativePath string, level LocationLevel, entityType common.EntityType) string {
+	builder := strings.Builder{}
+	if level == level.Service() {
+		builder.WriteString(containerName + "/")
+	}
+	builder.WriteString(relativePath)
+	if entityType == common.EEntityType.Folder() {
+		builder.WriteString("/")
+	}
+	return builder.String()
+}
+
+func sizeToString(size int64, machineReadable bool) string {
+	return common.Iff(machineReadable, strconv.Itoa(int(size)), byteSizeToString(size))
 }

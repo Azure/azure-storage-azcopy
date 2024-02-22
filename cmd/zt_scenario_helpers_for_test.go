@@ -886,7 +886,7 @@ func runListAndVerify(a *assert.Assertions, raw rawListCmdArgs, verifier func(er
 	cooked, err := raw.cook()
 	a.NoError(err)
 
-	err = cooked.HandleListContainerCommand()
+	err = cooked.handleListContainerCommand()
 
 	// the err is passed to verified, which knows whether it is expected or not
 	verifier(err)
