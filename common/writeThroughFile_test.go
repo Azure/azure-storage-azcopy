@@ -18,10 +18,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ste
+package common_test
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
@@ -31,25 +32,10 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 	a := assert.New(t)
 
 	// set up job part manager
-	plan := &JobPartPlanHeader{}
+	plan := &ste.JobPartPlanHeader{}
 	fpo := common.EFolderPropertiesOption.AllFolders()
 
-	jpm := jobPartMgr{
-		jobMgrInitState: &jobMgrInitState{
-			folderCreationTracker: NewFolderCreationTracker(fpo, plan),
-		},
-	}
-
-	ti := TransferInfo{}
-
-	jptm := testJobPartTransferManager{
-		info:       &ti,
-		fromTo:     0,
-		jobPartMgr: jpm,
-		ctx:        ctxSender,
-	}
-
-	tracker := jptm.GetFolderCreationTracker()
+	tracker := ste.NewFolderCreationTracker(fpo, plan)
 	fileName := "stuff.txt"
 
 	// when destination path is defined as "/" in linux, the source file becomes the destination path string
