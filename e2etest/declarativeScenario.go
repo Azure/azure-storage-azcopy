@@ -580,7 +580,7 @@ func (s *scenario) validateProperties() {
 		// validate all the different things
 		s.validatePOSIXProperties(f, actual.nameValueMetadata)
 		s.validateSymlink(f, actual.nameValueMetadata)
-		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata)
+		s.validateMetadata(f, expected.nameValueMetadata, actual.nameValueMetadata)
 		s.validateBlobTags(expected.blobTags, actual.blobTags)
 		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
 		s.validateCreateTime(expected.creationTime, actual.creationTime)
@@ -730,20 +730,22 @@ func metadataWithProperCasing(original map[string]*string) map[string]*string {
 }
 
 // // Individual property validation routines
-func (s *scenario) validateMetadata(expected, actual map[string]*string) {
+func (s *scenario) validateMetadata(f *testObject, expected, actual map[string]*string) {
+	cased := metadataWithProperCasing(actual)
+
 	for _, v := range common.AllLinuxProperties { // properties are evaluated elsewhere
 		delete(expected, v)
-		delete(actual, v)
+		delete(cased, v)
 	}
 
-	s.a.Assert(len(actual), equals(), len(expected), "Both should have same number of metadata entries")
-	cased := metadataWithProperCasing(actual)
+	s.a.Assert(len(cased), equals(), len(expected), "Both should have same number of metadata entries")
+
 	for key := range expected {
 		exValue := expected[key]
 		actualValue, ok := cased[key]
-		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", key))
+		s.a.Assert(ok, equals(), true, fmt.Sprintf("%s: expect key '%s' to be found in destination metadata", f.name, key))
 		if ok {
-			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, *exValue, *actualValue))
+			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("%s: Expect value for key '%s' to be '%s' but found '%s'", f.name, key, *exValue, *actualValue))
 		}
 	}
 }

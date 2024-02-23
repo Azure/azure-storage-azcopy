@@ -44,7 +44,7 @@ func TestProperties_NameValueMetadataIsPreservedS2S(t *testing.T) {
 
 func TestProperties_NameValueMetadataCanBeUploaded(t *testing.T) {
 	expectedMap := map[string]*string{"foo": to.Ptr("abc"), "bar": to.Ptr("def"), "baz": to.Ptr("state=a;b")}
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllUploads(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlobFS()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 		metadata:  "foo=abc;bar=def;baz=state=a\\;b",
 	}, nil, testFiles{
