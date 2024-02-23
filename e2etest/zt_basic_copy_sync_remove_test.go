@@ -41,7 +41,7 @@ import (
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
 func TestBasic_CopyUploadSingleBlob(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.LocalBlobFS()), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllUploads(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, nil, testFiles{
 		defaultSize: "1K",
@@ -419,7 +419,7 @@ func TestBasic_CopyRemoveFolderHNS(t *testing.T) {
 }
 
 func TestBasic_CopyRemoveContainer(t *testing.T) {
-	bfsRemove := TestFromTo{
+	allButBfsRemove := TestFromTo{
 		desc:      "AllRemove",
 		useAllTos: true,
 		froms: []common.Location{
@@ -431,7 +431,7 @@ func TestBasic_CopyRemoveContainer(t *testing.T) {
 		},
 	}
 
-	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), allButBfsRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "",
 	}, nil, testFiles{
