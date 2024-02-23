@@ -674,6 +674,12 @@ func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, 
 		}
 	}
 
+	// In case of a Blob to File Copy, we will go for all folder copy
+	if fromTo == common.EFromTo.BlobFile() {
+		return common.EFolderPropertiesOption.AllFolders(),
+			"Any empty folders will be processed, because source and destination both support folders"
+	}
+
 	bothFolderAware := (fromTo.AreBothFolderAware() || preservePosixProperties || preservePermissions || includeDirectoryStubs) && !isDstNull
 	isRemoveFromFolderAware := fromTo == common.EFromTo.FileTrash()
 	if bothFolderAware || isRemoveFromFolderAware {
