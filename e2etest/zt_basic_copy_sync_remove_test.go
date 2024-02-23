@@ -368,7 +368,7 @@ func TestBasic_CopyRemoveFolderHNS(t *testing.T) {
 		desc:      "AllRemove",
 		useAllTos: true,
 		froms: []common.Location{
-			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
@@ -419,8 +419,19 @@ func TestBasic_CopyRemoveFolderHNS(t *testing.T) {
 }
 
 func TestBasic_CopyRemoveContainer(t *testing.T) {
+	bfsRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(), // If you have a container-level SAS and a HNS account, you can't delete the container. HNS should not be included here.
+			common.ELocation.File(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), bfsRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "",
 	}, nil, testFiles{
@@ -438,7 +449,7 @@ func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
 		desc:      "AllRemove",
 		useAllTos: true,
 		froms: []common.Location{
-			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
@@ -472,7 +483,6 @@ func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
 				_, err = fsURL.GetAccessControl(ctx, nil)
 				a.Assert(err, notEquals(), nil)
 				a.Assert(datalakeerror.HasCode(err, "FilesystemNotFound"), equals(), true)
-
 			},
 		},
 		testFiles{
@@ -869,7 +879,7 @@ func TestBasic_OverwriteHNSDirWithChildren(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.LocalBlobFS()),
+		eTestFromTo.Other(common.EFromTo.BlobFSBlobFS()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -1066,7 +1076,7 @@ func TestBasic_SyncRemoveFoldersHNS(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eTestFromTo.Other(common.EFromTo.BlobFSBlobFS()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
