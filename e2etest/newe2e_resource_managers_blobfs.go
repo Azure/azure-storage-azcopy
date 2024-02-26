@@ -318,6 +318,14 @@ func (b *BlobFSPathResourceProvider) EntityType() common.EntityType {
 	return b.entityType
 }
 
+func (b *BlobFSPathResourceProvider) ContainerName() string {
+	return b.Container.ContainerName()
+}
+
+func (b *BlobFSPathResourceProvider) ObjectName() string {
+	return b.objectPath
+}
+
 func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	switch b.entityType {
 	case common.EEntityType.Folder():

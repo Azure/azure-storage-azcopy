@@ -229,6 +229,8 @@ type ObjectResourceManager interface {
 	ResourceManager
 
 	EntityType() common.EntityType
+	ContainerName() string
+	ObjectName() string
 	// Create attempts to create an object. Should overwrite objects if they already exist. It is expected to attempt to track object creation.
 	Create(a Asserter, body ObjectContentContainer, properties ObjectProperties)
 	// Delete attempts to delete an object. NotFound type errors are ignored.
