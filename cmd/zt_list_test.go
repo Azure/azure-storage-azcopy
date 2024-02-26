@@ -89,13 +89,13 @@ func TestListVersionIdWithNoAdditionalVersions(t *testing.T) {
 		for i, m := range msg {
 			if i < 3 { // 0-2 will be blob names + version id
 				a.True(strings.Contains(m, blobsToInclude[i]))
-				a.True(strings.Contains(m, "VersionId: "+versions[blobsToInclude[i]]))
+				a.True(strings.Contains(m, "\"VersionId\": \""+versions[blobsToInclude[i]]+"\""))
 			}
 			if i == 4 { // 4 will be file count
-				a.True(strings.Contains(m, "File count: 3"))
+				a.True(strings.Contains(m, "\"FileCount\": \"3\""))
 			}
 			if i == 5 { // 5 will be file size
-				a.True(strings.Contains(m, "Total file size: 69.00 B"))
+				a.True(strings.Contains(m, "\"TotalFileSize\": \"69.00 B\""))
 			}
 		}
 	})
@@ -202,10 +202,10 @@ func TestListVersionsMultiVersions(t *testing.T) {
 				a.True(contains(versions, m, false))
 			}
 			if i == 8 { // 8 will be file count
-				a.True(strings.Contains(m, "File count: 4"))
+				a.True(strings.Contains(m, "\"FileCount\": \"4\""))
 			}
 			if i == 9 { // 9 will be file size of latest versions (should be 70.00 B)
-				a.True(strings.Contains(m, "Total file size: 70.00 B"))
+				a.True(strings.Contains(m, "\"TotalFileSize\": \"70.00 B\""))
 			}
 		}
 	})
@@ -302,10 +302,10 @@ func TestListVersionsMultiVersionsNoPropFlag(t *testing.T) {
 				a.True(contains(blobsToInclude, m, true))
 			}
 			if i == 5 { // 5 will be file count
-				a.True(strings.Contains(m, "File count: 4"))
+				a.True(strings.Contains(m, "\"FileCount\": \"4\""))
 			}
 			if i == 6 { // 6 will be file size (should be 70 B)
-				a.True(strings.Contains(m, "Total file size: 70.00 B"))
+				a.True(strings.Contains(m, "\"TotalFileSize\": \"70.00 B\""))
 			}
 		}
 	})
