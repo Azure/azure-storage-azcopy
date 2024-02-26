@@ -19,8 +19,6 @@
 // THE SOFTWARE.
 package e2etest
 
-package e2etest
-
 import (
 	"testing"
 
