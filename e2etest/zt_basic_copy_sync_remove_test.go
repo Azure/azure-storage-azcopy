@@ -1220,3 +1220,119 @@ func TestBasic_PutBlobSizeMultiPart(t *testing.T) {
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
+
+func TestBasic_MaxSingleChunkUpload(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		blockSizeMB: 300, // 300 MB, bigger than the default of 8 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for blob, _ := range props {
+				if strings.Contains(blob, "filea") {
+					blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(blob)
+
+					// attempt to "get blocks" but we actually won't get blocks because the blob is uploaded using put blob, not put block
+					resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					h.GetAsserter().Assert(err, equals(), nil)
+					h.GetAsserter().Assert(len(resp.CommittedBlocks), equals(), 0)
+					h.GetAsserter().Assert(len(resp.UncommittedBlocks), equals(), 0)
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "100M",
+
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_MaxSingleChunkUploadNoFlag(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+		// 8 MB would be the default block size
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for blob, _ := range props {
+				if strings.Contains(blob, "filea") {
+					blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(blob)
+
+					// attempt to "get blocks" but we actually won't get blocks because the blob is uploaded using put blob, not put block
+					resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					h.GetAsserter().Assert(err, equals(), nil)
+					h.GetAsserter().Assert(len(resp.CommittedBlocks), equals(), 0)
+					h.GetAsserter().Assert(len(resp.UncommittedBlocks), equals(), 0)
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "8M",
+
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_MaxMultiChunkUpload(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		blockSizeMB: 50, // 50 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for blob, _ := range props {
+				if strings.Contains(blob, "filea") {
+					blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(blob)
+
+					// attempt to "get blocks" and get 2 committed blocks
+					resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					h.GetAsserter().Assert(err, equals(), nil)
+					h.GetAsserter().Assert(len(resp.CommittedBlocks), equals(), 2)
+					h.GetAsserter().Assert(len(resp.UncommittedBlocks), equals(), 0)
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "100M",
+
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_MaxMultiChunkUploadNoFlag(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+		// 8 MB would be the default block size
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for blob, _ := range props {
+				if strings.Contains(blob, "filea") {
+					blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(blob)
+
+					// attempt to "get blocks" and get 13 committed blocks
+					resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					h.GetAsserter().Assert(err, equals(), nil)
+					h.GetAsserter().Assert(len(resp.CommittedBlocks), equals(), 13)
+					h.GetAsserter().Assert(len(resp.UncommittedBlocks), equals(), 0)
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "100M",
+
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
