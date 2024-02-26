@@ -385,10 +385,10 @@ func (s *scenario) resumeAzCopy(logDir string) {
 
 	r := newTestRunner()
 	if sas := s.state.source.getSAS(); s.GetTestFiles().sourcePublic == nil && sas != "" {
-		r.flags["source-sas"] = sas
+		r.flags["source-sas"] = strings.TrimPrefix(sas, "?")
 	}
 	if sas := s.state.dest.getSAS(); sas != "" {
-		r.flags["destination-sas"] = sas
+		r.flags["destination-sas"] = strings.TrimPrefix(sas, "?")
 	}
 
 	// use the general-purpose "after start" mechanism, provided by execDebuggableWithOutput,

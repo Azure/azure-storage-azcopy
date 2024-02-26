@@ -1550,10 +1550,9 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if err != nil {
 		return err
 	}
-	sourceURL, _ := cca.Source.String()
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.From(),
-		sourceURL,
+		cca.Source,
 		srcCredInfo.CredentialType,
 		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -1569,7 +1568,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			AllowSourceTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File(),
 		}
 	}
-	dstURL, _ := cca.Destination.String()
 
 	var srcCred *common.ScopedCredential
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
@@ -1578,7 +1576,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
-		dstURL,
+		cca.Destination,
 		cca.credentialInfo.CredentialType,
 		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,

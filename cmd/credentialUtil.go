@@ -368,7 +368,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 		return false
 	}
 
-	// This request will not be logged. This can fail, and too many Cx do not like this. 
+	// This request will not be logged. This can fail, and too many Cx do not like this.
 	clientOptions := ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
 		TryTimeout:    ste.UploadTryTimeout,
@@ -401,7 +401,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 
 // mdAccountNeedsOAuth pings the passed in md account, and checks if we need additional token with Disk-socpe
 func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) bool {
-	// This request will not be logged. This can fail, and too many Cx do not like this. 
+	// This request will not be logged. This can fail, and too many Cx do not like this.
 	clientOptions := ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
 		TryTimeout:    ste.UploadTryTimeout,
@@ -429,11 +429,11 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 	return false
 }
 
-func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
-	return doGetCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, GetCredTypeFromEnvVar, cpkOptions)
+func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
+	return doGetCredentialTypeForLocation(ctx, location, resource, isSource, GetCredTypeFromEnvVar, cpkOptions)
 }
 
-func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, public bool, err error) {
+func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, public bool, err error) {
 	public = false
 	err = nil
 
@@ -452,7 +452,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			return
 		}
 
-		if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD, location); err != nil {
+		if err = checkAuthSafeForTarget(credType, resource.Value, cmdLineExtraSuffixesAAD, location); err != nil {
 			credType = common.ECredentialType.Unknown()
 			public = false
 		}
@@ -488,14 +488,14 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 
 	// Special blob destinations - public and MD account needing oAuth
 	if location == common.ELocation.Blob() {
-		if isSource && resourceSAS == "" && isPublic(ctx, resource, cpkOptions) {
+		uri, _ := resource.FullURL()
+		if isSource && resource.SAS == "" && isPublic(ctx, uri.String(), cpkOptions) {
 			credType = common.ECredentialType.Anonymous()
 			public = true
 			return
 		}
 
-		uri, _ := url.Parse(resource)
-		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, resource, cpkOptions) {
+		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, uri.String(), cpkOptions) {
 			if !oAuthTokenExists() {
 				return common.ECredentialType.Unknown(), false,
 					common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
@@ -506,7 +506,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		}
 	}
 
-	if resourceSAS != "" {
+	if resource.SAS != "" {
 		credType = common.ECredentialType.Anonymous()
 		return
 	}

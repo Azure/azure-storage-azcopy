@@ -72,7 +72,6 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 	}
 
-	targetURL, _ := cca.Source.String()
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 	var fileClientOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
@@ -81,7 +80,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
-		targetURL,
+		cca.Source,
 		cca.credentialInfo.CredentialType,
 		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,

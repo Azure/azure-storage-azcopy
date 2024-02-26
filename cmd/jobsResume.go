@@ -296,9 +296,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 
-	src, err := source.String()
-	_ = err // todo
-	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), src, srcCredType, tc, &options, nil)
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -308,7 +306,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
-	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination+rca.DestinationSAS, dstCredType, tc, &options, nil)
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}

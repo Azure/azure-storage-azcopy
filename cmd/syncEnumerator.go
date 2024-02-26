@@ -179,7 +179,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 
-	// Create Source Client. 
+	// Create Source Client.
 	var azureFileSpecificOptions any
 	if cca.fromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -187,10 +187,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	}
 
-	sourceURL, _ := cca.source.String()
 	copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.From(),
-		sourceURL,
+		cca.source,
 		srcCredInfo.CredentialType,
 		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -214,10 +213,9 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred)
-	dstURL, _ := cca.destination.String()
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
-		dstURL,
+		cca.destination,
 		dstCredInfo.CredentialType,
 		dstCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,

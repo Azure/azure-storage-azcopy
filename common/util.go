@@ -3,19 +3,20 @@ package common
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 )
@@ -108,13 +109,18 @@ type FileClientOptions struct {
 // container and file related details before creating the client. locationSpecificOptions
 // are required currently only for files.
 func GetServiceClientForLocation(loc Location,
-	resourceURL string,
+	resource ResourceString,
 	credType CredentialType,
 	cred azcore.TokenCredential,
 	policyOptions *azcore.ClientOptions,
 	locationSpecificOptions any,
 ) (*ServiceClient, error) {
 	ret := &ServiceClient{}
+	resourceURL, err := resource.String()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource string: %w", err)
+	}
+
 	switch loc {
 	case ELocation.BlobFS():
 		datalakeURLParts, err := azdatalake.ParseURL(resourceURL)
@@ -244,7 +250,7 @@ func NewScopedCredential(cred azcore.TokenCredential, credType CredentialType) *
 	var scope string
 	if !credType.IsAzureOAuth() {
 		return nil
-	} else  if credType == ECredentialType.MDOAuthToken() {
+	} else if credType == ECredentialType.MDOAuthToken() {
 		scope = ManagedDiskScope
 	} else if credType == ECredentialType.OAuthToken() {
 		scope = StorageScope
@@ -253,13 +259,13 @@ func NewScopedCredential(cred azcore.TokenCredential, credType CredentialType) *
 }
 
 type ScopedCredential struct {
-	cred azcore.TokenCredential
+	cred   azcore.TokenCredential
 	scopes []string
 }
 
 func (s *ScopedCredential) GetToken(ctx context.Context,
-	                                _ policy.TokenRequestOptions)(
-									azcore.AccessToken, error) {
+	_ policy.TokenRequestOptions) (
+	azcore.AccessToken, error) {
 	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes})
 }
 
@@ -292,9 +298,9 @@ func (s *ServiceClient) DatalakeServiceClient() (*datalake.Client, error) {
 
 // This is currently used only in testcases
 func NewServiceClient(bsc *blobservice.Client,
-					  fsc *fileservice.Client,
-					  dsc *datalake.Client) *ServiceClient {
-	return &ServiceClient {
+	fsc *fileservice.Client,
+	dsc *datalake.Client) *ServiceClient {
+	return &ServiceClient{
 		bsc: bsc,
 		fsc: fsc,
 		dsc: dsc,
