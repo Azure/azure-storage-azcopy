@@ -40,8 +40,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/go-autorest/autorest/date"
-
-	"github.com/Azure/go-autorest/autorest/adal"
 )
 
 // ApplicationID represents 1st party ApplicationID for AzCopy.
@@ -124,7 +122,7 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 		}
 	}
 
-	if tokenInfo == nil || tokenInfo.IsEmpty() {
+	if tokenInfo == nil || tokenInfo.AccessToken == "" {
 		return nil, errors.New("invalid state, cannot get valid token info")
 	}
 
@@ -278,33 +276,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 // If refresh token is expired, the method will fail and return failure reason.
 // Fresh token is persisted if access token or refresh token is changed.
 func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
-	hasToken, err := uotm.credCache.HasCachedToken()
-	if err != nil {
-		return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
-	}
-	if !hasToken {
-		return nil, errors.New("no cached token found, please log in with azcopy's login command")
-	}
-
-	tokenInfo, err := uotm.credCache.LoadToken()
-	if err != nil {
-		return nil, fmt.Errorf("get cached token failed, %v", err)
-	}
-
-	freshToken, err := tokenInfo.Refresh(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
-	}
-
-	// Update token cache, if token is updated.
-	if freshToken.AccessToken != tokenInfo.AccessToken || freshToken.RefreshToken != tokenInfo.RefreshToken {
-		tokenInfo.Token = *freshToken
-		if err := uotm.credCache.SaveToken(*tokenInfo); err != nil {
-			return nil, err
-		}
-	}
-
-	return tokenInfo, nil
+	return nil, nil
 }
 
 // HasCachedToken returns if there is cached token in token manager.
@@ -369,11 +341,7 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 	}
 
 	if tokenInfo.TokenRefreshSource != TokenRefreshSourceTokenStore {
-		refreshedToken, err := tokenInfo.Refresh(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %v", err)
-		}
-		tokenInfo.Token = *refreshedToken
+		panic("Invalid Token Refresh Source")
 	}
 
 	return tokenInfo, nil
@@ -388,12 +356,14 @@ const TokenRefreshSourceTokenStore = "tokenstore"
 // OAuthTokenInfo contains info necessary for refresh OAuth credentials.
 type OAuthTokenInfo struct {
 	azcore.TokenCredential `json:"-"`
-	adal.Token
-	Tenant                  string `json:"_tenant"`
-	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
-	TokenRefreshSource      string `json:"_token_refresh_source"`
-	ApplicationID           string `json:"_application_id"`
-	Identity                bool   `json:"_identity"`
+	// AccessToken and ExpiresOn are used only for TokenStoreCredential
+	AccessToken             string      `json:"access_token"`
+	ExpiresOn               json.Number `json:"expires_on"`
+	Tenant                  string      `json:"_tenant"`
+	ActiveDirectoryEndpoint string      `json:"_ad_endpoint"`
+	TokenRefreshSource      string      `json:"_token_refresh_source"`
+	ApplicationID           string      `json:"_application_id"`
+	Identity                bool        `json:"_identity"`
 	IdentityInfo            IdentityInfo
 	ServicePrincipalName    bool `json:"_spn"`
 	SPNInfo                 SPNInfo
@@ -405,6 +375,17 @@ type OAuthTokenInfo struct {
 	// For more details, please refer to
 	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
 	ClientID string `json:"_client_id"`
+}
+
+func (t *OAuthTokenInfo) Expires() time.Time {
+	s, err := t.ExpiresOn.Float64()
+	if err != nil {
+		s = -3600
+	}
+
+	expiration := date.NewUnixTimeFromSeconds(s)
+
+	return time.Time(expiration).UTC()
 }
 
 // IdentityInfo contains info for MSI.
@@ -441,47 +422,12 @@ func (identityInfo *IdentityInfo) Validate() error {
 	return nil
 }
 
-// Refresh gets new token with token info.
-func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error) {
-	// TODO: I think this method is only necessary until datalake is migrated.
-	// Returns cached TokenCredential or creates a new one if it hasn't been created yet.
-	tc, err := credInfo.GetTokenCredential()
-	if err != nil {
-		return nil, err
-	}
-	if credInfo.TokenRefreshSource == "tokenstore" || credInfo.Identity || credInfo.ServicePrincipalName {
-		scopes := []string{StorageScope}
-		t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
-		if err != nil {
-			return nil, err
-		}
-		return &adal.Token{
-			AccessToken: t.Token,
-			ExpiresOn:   json.Number(strconv.FormatInt(int64(t.ExpiresOn.Sub(date.UnixEpoch())/time.Second), 10)),
-		}, nil
-	} else {
-		if dcc, ok := tc.(*DeviceCodeCredential); ok {
-			return dcc.RefreshTokenWithUserCredential(ctx, Resource)
-		}
-	}
-	return nil, errors.New("invalid token info")
-}
-
 // Single instance token store credential cache shared by entire azcopy process.
 var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
 	KeyName:     "azcopy/aadtoken/" + strconv.Itoa(os.Getpid()),
 	ServiceName: "azcopy",
 	AccountName: "aadtoken/" + strconv.Itoa(os.Getpid()),
 })
-
-// IsEmpty returns if current OAuthTokenInfo is empty and doesn't contain any useful info.
-func (credInfo OAuthTokenInfo) IsEmpty() bool {
-	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() && !credInfo.Identity {
-		return true
-	}
-
-	return false
-}
 
 // toJSON converts OAuthTokenInfo to json format.
 func (credInfo OAuthTokenInfo) toJSON() ([]byte, error) {
@@ -650,57 +596,6 @@ func (credInfo *OAuthTokenInfo) GetPSContextCredential() (azcore.TokenCredential
 	}
 	credInfo.TokenCredential = tc
 	return tc, nil
-}
-
-type DeviceCodeCredential struct {
-	token       adal.Token
-	aadEndpoint string
-	tenantID    string
-	clientID    string
-}
-
-func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	waitDuration := dcc.token.Expires().Sub(time.Now().UTC()) / 2
-	if dcc.token.WillExpireIn(waitDuration) {
-		resource := strings.TrimSuffix(options.Scopes[0], "/.default")
-		_, err := dcc.RefreshTokenWithUserCredential(ctx, resource)
-		if err != nil {
-			return azcore.AccessToken{}, err
-		}
-	}
-	return azcore.AccessToken{Token: dcc.token.AccessToken, ExpiresOn: dcc.token.Expires()}, nil
-}
-
-// RefreshTokenWithUserCredential gets new token with user credential through refresh.
-func (dcc *DeviceCodeCredential) RefreshTokenWithUserCredential(ctx context.Context, resource string) (*adal.Token, error) {
-	targetResource := resource
-	if dcc.token.Resource != "" && dcc.token.Resource != targetResource {
-		targetResource = dcc.token.Resource
-	}
-
-	oauthConfig, err := adal.NewOAuthConfig(dcc.aadEndpoint, dcc.tenantID)
-	if err != nil {
-		return nil, err
-	}
-
-	// ClientID in credInfo is optional which is used for internal integration only.
-	// Use AzCopy's 1st party applicationID for refresh by default.
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		Iff(dcc.clientID != "", dcc.clientID, ApplicationID),
-		targetResource,
-		dcc.token)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := spt.RefreshWithContext(ctx); err != nil {
-		return nil, err
-	}
-
-	newToken := spt.Token()
-	dcc.token = newToken
-	return &newToken, nil
 }
 
 func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredential, error) {
