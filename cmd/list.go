@@ -335,7 +335,7 @@ type AzCopyListObject struct {
 	StringEncoding string `json:"-"` // this is stored as part of the list object to avoid looping over the properties array twice
 }
 
-func (l *AzCopyListObject) String() string {
+func (l AzCopyListObject) String() string {
 	return l.StringEncoding
 }
 
@@ -402,7 +402,7 @@ type AzCopyListSummary struct {
 	StringEncoding string `json:"-"`
 }
 
-func (l *AzCopyListSummary) String() string {
+func (l AzCopyListSummary) String() string {
 	return l.StringEncoding
 }
 
