@@ -267,6 +267,7 @@ type BlobProperties struct {
 	Tags                map[string]string
 	BlockBlobAccessTier *blob.AccessTier
 	PageBlobAccessTier  *pageblob.PremiumPageBlobAccessTier
+	VersionId           *string
 }
 
 type BlobFSProperties struct {

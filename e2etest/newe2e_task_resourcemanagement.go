@@ -172,3 +172,34 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 		},
 	})
 }
+
+type AzCopyOutputKey struct {
+	Path       string
+	VersionId  string
+	SnapshotId string
+}
+
+func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject, expectedSummary *cmd.AzCopyListSummary) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	a.AssertNow("stdout and expected objects must not be null", Not{IsNil{}}, a, stdout, expectedObjects)
+
+	// Unmarshall stdout
+	objects, summary, err := stdout.(*AzCopyListStdout).Unmarshal()
+	a.AssertNow("error unmarshalling stdout", IsNil{}, err)
+
+	// Validate
+	a.Assert("number of objects must match", Equal{}, len(objects), len(expectedObjects))
+	a.Assert("summary must match", Equal{Deep: true}, summary, expectedSummary)
+
+	o := make([]any, len(objects))
+	for i, v := range objects {
+		o[i] = v
+	}
+	a.Assert("map of objects must match", MapContains[AzCopyOutputKey, cmd.AzCopyListObject]{TargetMap: expectedObjects,
+		ValueToKVPair: func(obj cmd.AzCopyListObject) KVPair[AzCopyOutputKey, cmd.AzCopyListObject] {
+			return KVPair[AzCopyOutputKey, cmd.AzCopyListObject]{Key: AzCopyOutputKey{Path: obj.Path, VersionId: obj.VersionId}, Value: obj}
+		}}, o...)
+}
