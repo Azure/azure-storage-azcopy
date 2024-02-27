@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -57,9 +58,11 @@ func (t *testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 			AllowTrailingDot: true,
 		}
 	}
+	resStr, _ := cmd.SplitResourceString(t.info.Source, t.fromTo.From())
+
 	client, _ := common.GetServiceClientForLocation(
 		t.fromTo.From(),
-		t.info.Source,
+		resStr,
 		t.S2SSourceCredentialInfo().CredentialType,
 		t.S2SSourceCredentialInfo().OAuthTokenInfo.TokenCredential,
 		&options,
@@ -77,9 +80,11 @@ func (t *testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 			AllowSourceTrailingDot: true,
 		}
 	}
+	resStr, _ := cmd.SplitResourceString(t.info.Destination, t.fromTo.To())
+
 	client, _ := common.GetServiceClientForLocation(
 		t.fromTo.To(),
-		t.info.Destination,
+		resStr,
 		t.CredentialInfo().CredentialType,
 		t.CredentialInfo().OAuthTokenInfo.TokenCredential,
 		&options,
