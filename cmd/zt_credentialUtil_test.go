@@ -103,7 +103,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
 	}
 
 	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
-	a.NotNil(err)
+	a.NoError(err)
 
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
@@ -120,7 +120,7 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
 	}
 
 	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
-	a.NotNil(err)
+	a.NoError(err)
 
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
