@@ -2,7 +2,7 @@ package e2etest
 
 import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	datalakeSAS "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
@@ -20,10 +20,10 @@ type FileSignatureValues interface {
 
 // DatalakeSignatureValues makes both account/service signature values generic for output from GenericSignatureValues
 type DatalakeSignatureValues interface {
-	SignWithSharedKey(credential *datalakeSAS.SharedKeyCredential) (datalakeSAS.QueryParameters, error)
+	SignWithSharedKey(credential *datalakesas.SharedKeyCredential) (datalakesas.QueryParameters, error)
 }
 
-// GenericSignatureValues are a set of signature values that are portable to all 3 Azure storage services.
+// GenericSignatureValues are a set of signature values that are portable to all 3 Azure storage services and both service and account level SAS.
 // Distinct limitations of these generic values are documented in the struct.
 type GenericSignatureValues interface {
 	AsBlob() BlobSignatureValues
@@ -50,7 +50,7 @@ type GenericServiceSignatureValues struct {
 	// Blob and Datalake overlap nicely
 	// blobsas.ContainerPermissions blobsas.BlobPermissions
 	// filesas.SharePermissions filesas.FilePermissions
-	// datalakeSAS.FileSystemPermissions datalakeSAS.FilePermissions datalakeSAS.DirectoryPermissions
+	// datalakesas.FileSystemPermissions datalakesas.FilePermissions datalakesas.DirectoryPermissions
 	// If zero, defaults to racwdl (read, add, create, write, delete, list
 	Permissions   string
 	IPRange       blobsas.IPRange
@@ -137,13 +137,13 @@ func (vals GenericServiceSignatureValues) AsFile() FileSignatureValues {
 func (vals GenericServiceSignatureValues) AsDatalake() DatalakeSignatureValues {
 	s := vals.withDefaults()
 
-	return &datalakeSAS.DatalakeSignatureValues{
+	return &datalakesas.DatalakeSignatureValues{
 		Version:              s.Version,
-		Protocol:             datalakeSAS.Protocol(s.Protocol),
+		Protocol:             datalakesas.Protocol(s.Protocol),
 		StartTime:            s.StartTime,
 		ExpiryTime:           s.ExpiryTime,
 		Permissions:          s.Permissions,
-		IPRange:              datalakeSAS.IPRange(s.IPRange),
+		IPRange:              datalakesas.IPRange(s.IPRange),
 		Identifier:           s.Identifier,
 		FileSystemName:       s.ContainerName,
 		FilePath:             s.ObjectName,
@@ -167,10 +167,10 @@ type GenericAccountSignatureValues struct {
 	StartTime time.Time
 	// Defaults to 24hr past StartTime
 	ExpiryTime time.Time
-	// Defaults to racwdl, uses blobsas.AccountPermissions, filesas.AccountPermissions, or datalakeSAS.AccountPermissions
+	// Defaults to racwdl, uses blobsas.AccountPermissions, filesas.AccountPermissions, or datalakesas.AccountPermissions
 	Permissions string
 	IPRange     blobsas.IPRange
-	// defaults to sco, uses blobsas.AccountResourceTypes, filesas.AccountResourceTypes, or datalakeSAS.AccountResourceTypes
+	// defaults to sco, uses blobsas.AccountResourceTypes, filesas.AccountResourceTypes, or datalakesas.AccountResourceTypes
 	ResourceTypes string
 }
 
@@ -219,13 +219,13 @@ func (vals GenericAccountSignatureValues) AsFile() FileSignatureValues {
 func (vals GenericAccountSignatureValues) AsDatalake() DatalakeSignatureValues {
 	s := vals.withDefaults()
 
-	return datalakeSAS.AccountSignatureValues{
+	return datalakesas.AccountSignatureValues{
 		Version:       s.Version,
-		Protocol:      datalakeSAS.Protocol(s.Protocol),
+		Protocol:      datalakesas.Protocol(s.Protocol),
 		StartTime:     s.StartTime,
 		ExpiryTime:    s.ExpiryTime,
 		Permissions:   s.Permissions,
-		IPRange:       datalakeSAS.IPRange(s.IPRange),
+		IPRange:       datalakesas.IPRange(s.IPRange),
 		ResourceTypes: s.ResourceTypes,
 	}
 }

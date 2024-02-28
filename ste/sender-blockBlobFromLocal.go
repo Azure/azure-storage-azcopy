@@ -36,8 +36,8 @@ type blockBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (sender, error) {
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, pacer, sip, nil)
+func newBlockBlobUploader(jptm IJobPartTransferMgr, pacer pacer, sip ISourceInfoProvider) (sender, error) {
+	senderBase, err := newBlockBlobSenderBase(jptm, pacer, sip, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 			panic("chunk cannot be whole file where there is more than one chunk")
 		}
 		setPutListNeed(&u.atomicPutListIndicator, putListNotNeeded)
-		return u.generatePutWholeBlob(id, blockIndex, reader)
+		return u.generatePutWholeBlob(id, reader)
 	} else {
 		setPutListNeed(&u.atomicPutListIndicator, putListNeeded)
 		return u.generatePutBlock(id, blockIndex, reader)
@@ -116,7 +116,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 }
 
 // generates PUT Blob (for a blob that fits in a single put request)
-func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader) chunkFunc {
+func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader common.SingleChunkReader) chunkFunc {
 
 	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm

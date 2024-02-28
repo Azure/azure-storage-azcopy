@@ -406,6 +406,14 @@ func (f *FileObjectResourceManager) EntityType() common.EntityType {
 	return f.entityType
 }
 
+func (f *FileObjectResourceManager) ContainerName() string {
+	return f.Share.ContainerName()
+}
+
+func (f *FileObjectResourceManager) ObjectName() string {
+	return f.path
+}
+
 func (f *FileObjectResourceManager) PreparePermissions(a Asserter, p *string) *file.Permissions {
 	if p == nil {
 		return nil

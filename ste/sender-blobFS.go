@@ -47,11 +47,11 @@ type DatalakeClientStub interface {
 
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
-	sip             ISourceInfoProvider
-	blobClient		blockblob.Client
-	fileOrDirClient DatalakeClientStub
-	parentDirClient *directory.Client
-	chunkSize       int64
+	sip                 ISourceInfoProvider
+	blobClient          blockblob.Client
+	fileOrDirClient     DatalakeClientStub
+	parentDirClient     *directory.Client
+	chunkSize           int64
 	numChunks           uint32
 	pacer               pacer
 	creationTimeHeaders *file.HTTPHeaders
@@ -63,7 +63,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 
 	// compute chunk size and number of chunks
 	chunkSize := info.BlockSize
-	numChunks := getNumChunks(info.SourceSize, chunkSize)
+	numChunks := getNumChunks(info.SourceSize, chunkSize, chunkSize)
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -99,7 +99,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	return &blobFSSenderBase{
 		jptm:                jptm,
 		sip:                 sip,
-		blobClient: *bsc.NewContainerClient(info.DstContainer).NewBlockBlobClient(info.DstFilePath),
+		blobClient:          *bsc.NewContainerClient(info.DstContainer).NewBlockBlobClient(info.DstFilePath),
 		fileOrDirClient:     destClient,
 		parentDirClient:     fsc.NewDirectoryClient(parentPath),
 		chunkSize:           chunkSize,
@@ -218,9 +218,7 @@ func (u *blobFSSenderBase) doEnsureDirExists(directoryClient *directory.Client) 
 	// or a folder-centric one, since with the parallelism we use, we don't actually
 	// know which will happen first
 	err = u.jptm.GetFolderCreationTracker().CreateFolder(directoryClient.DFSURL(), func() error {
-		_, err := directoryClient.Create(u.jptm.Context(), &directory.CreateOptions{AccessConditions:
-			&directory.AccessConditions{ModifiedAccessConditions:
-				&directory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+		_, err := directoryClient.Create(u.jptm.Context(), &directory.CreateOptions{AccessConditions: &directory.AccessConditions{ModifiedAccessConditions: &directory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 		return err
 	})
 	if datalakeerror.HasCode(err, datalakeerror.PathAlreadyExists) {
@@ -285,19 +283,19 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 	common.AddStatToBlobMetadata(adapter, meta)
 	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
 	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
-		BlobContentType: u.creationTimeHeaders.ContentType,
-		BlobContentEncoding: u.creationTimeHeaders.ContentEncoding,
-		BlobContentLanguage: u.creationTimeHeaders.ContentLanguage,
+		BlobContentType:        u.creationTimeHeaders.ContentType,
+		BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
+		BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,
 		BlobContentDisposition: u.creationTimeHeaders.ContentDisposition,
-		BlobCacheControl: u.creationTimeHeaders.CacheControl,
-		BlobContentMD5: u.creationTimeHeaders.ContentMD5,
+		BlobCacheControl:       u.creationTimeHeaders.CacheControl,
+		BlobContentMD5:         u.creationTimeHeaders.ContentMD5,
 	}
 	_, err = u.blobClient.Upload(
 		u.jptm.Context(),
 		streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{
 			HTTPHeaders: &blobHeaders,
-			Metadata: meta,
+			Metadata:    meta,
 		})
 
 	return err

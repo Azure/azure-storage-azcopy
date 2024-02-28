@@ -5,7 +5,7 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	blobfscommon "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
-	datalakeSAS "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	blobfsservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
@@ -30,10 +30,13 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		return URI
 	}
 
-	sasVals := opts.AzureOpts.SASValues
-	if sasVals == nil {
+	var sasVals GenericSignatureValues
+	if opts.AzureOpts.SASValues == nil {
+		// Default to account level SAS to cover all our bases
+		sasVals = GenericAccountSignatureValues{}
+	} else {
+		sasVals = opts.AzureOpts.SASValues
 
-		sasVals = GenericServiceSignatureValues{}
 	}
 
 	switch loc {
@@ -70,7 +73,7 @@ func (acct *AzureAccountResourceManager) ApplySAS(URI string, loc common.Locatio
 		p, err := sasVals.AsDatalake().SignWithSharedKey(skc)
 		common.PanicIfErr(err)
 
-		parts, err := datalakeSAS.ParseURL(URI)
+		parts, err := datalakesas.ParseURL(URI)
 		common.PanicIfErr(err)
 
 		parts.SAS = p

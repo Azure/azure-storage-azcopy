@@ -23,10 +23,15 @@ package cmd
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -60,7 +65,19 @@ const (
 	leaseDuration    validProperty = "LeaseDuration"
 	leaseStatus      validProperty = "LeaseStatus"
 	archiveStatus    validProperty = "ArchiveStatus"
+
+	versionIdTimeFormat = "2006-01-02T15:04:05.9999999Z"
 )
+
+// containsProperty checks if the property array contains a valid property
+func containsProperty(properties []validProperty, prop validProperty) bool {
+	for _, item := range properties {
+		if item == prop {
+			return true
+		}
+	}
+	return false
+}
 
 // validProperties returns an array of possible values for the validProperty const type.
 func validProperties() []validProperty {
@@ -68,15 +85,17 @@ func validProperties() []validProperty {
 		contentType, contentEncoding, contentMD5, leaseState, leaseDuration, leaseStatus, archiveStatus}
 }
 
-func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty {
+func (raw rawListCmdArgs) parseProperties() []validProperty {
 	parsedProperties := make([]validProperty, 0)
-	listProperties := strings.Split(rawProperties, ";")
-	for _, p := range listProperties {
-		for _, vp := range validProperties() {
-			// check for empty string and also ignore the case
-			if len(p) != 0 && strings.EqualFold(string(vp), p) {
-				parsedProperties = append(parsedProperties, vp)
-				break
+	if raw.Properties != "" {
+		listProperties := strings.Split(raw.Properties, ";")
+		for _, p := range listProperties {
+			for _, vp := range validProperties() {
+				// check for empty string and also ignore the case
+				if len(p) != 0 && strings.EqualFold(string(vp), p) {
+					parsedProperties = append(parsedProperties, vp)
+					break
+				}
 			}
 		}
 	}
@@ -109,10 +128,7 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-
-	if raw.Properties != "" {
-		cooked.properties = raw.parseProperties(raw.Properties)
-	}
+	cooked.properties = raw.parseProperties()
 
 	return cooked, nil
 }
@@ -158,7 +174,7 @@ func init() {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 				return
 			}
-			err = cooked.HandleListContainerCommand()
+			err = cooked.handleListContainerCommand()
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -179,44 +195,11 @@ func init() {
 	rootCmd.AddCommand(listContainerCmd)
 }
 
-func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
-	builder := strings.Builder{}
-	for _, property := range cooked.properties {
-		propertyStr := string(property)
-		switch property {
-		case lastModifiedTime:
-			builder.WriteString(propertyStr + ": " + object.lastModifiedTime.String() + "; ")
-		case versionId:
-			builder.WriteString(propertyStr + ": " + object.blobVersionID + "; ")
-		case blobType:
-			builder.WriteString(propertyStr + ": " + string(object.blobType) + "; ")
-		case blobAccessTier:
-			builder.WriteString(propertyStr + ": " + string(object.blobAccessTier) + "; ")
-		case contentType:
-			builder.WriteString(propertyStr + ": " + object.contentType + "; ")
-		case contentEncoding:
-			builder.WriteString(propertyStr + ": " + object.contentEncoding + "; ")
-		case contentMD5:
-			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(object.md5) + "; ")
-		case leaseState:
-			builder.WriteString(propertyStr + ": " + string(object.leaseState) + "; ")
-		case leaseStatus:
-			builder.WriteString(propertyStr + ": " + string(object.leaseStatus) + "; ")
-		case leaseDuration:
-			builder.WriteString(propertyStr + ": " + string(object.leaseDuration) + "; ")
-		case archiveStatus:
-			builder.WriteString(propertyStr + ": " + string(object.archiveStatus) + "; ")
-		}
-	}
-	return builder.String()
-}
-
-// HandleListContainerCommand handles the list container command
-func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
-	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
+// handleListContainerCommand handles the list container command
+func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	credentialInfo := common.CredentialInfo{}
+	var credentialInfo common.CredentialInfo
 
 	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
@@ -228,7 +211,6 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
-
 	if err != nil {
 		return err
 	}
@@ -247,8 +229,10 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil)
+	// check if user wants to get version id
+	getVersionId := containsProperty(cooked.properties, versionId)
 
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, getVersionId)
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
 	}
@@ -256,33 +240,60 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	var fileCount int64 = 0
 	var sizeCount int64 = 0
 
+	type versionIdObject struct {
+		versionId string
+		fileSize  int64
+	}
+	objectVer := make(map[string]versionIdObject)
+
 	processor := func(object StoredObject) error {
-		path := object.relativePath
-		if object.entityType == common.EEntityType.Folder() {
-			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
-		}
+		lo := cooked.newListObject(object, level)
+		response := AzCopyResponse[AzCopyListObject]{ResponseType: "AzCopyListObject", ResponseValue: lo}
+		glcm.Output(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(response)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return lo.String()
+			}
+		})
 
-		properties := "; " + cooked.processProperties(object)
-		objectSummary := path + properties + " Content Length: "
-
-		if level == level.Service() {
-			objectSummary = object.ContainerName + "/" + objectSummary
-		}
-
-		if cooked.MachineReadable {
-			objectSummary += strconv.Itoa(int(object.size))
-		} else {
-			objectSummary += byteSizeToString(object.size)
-		}
-
+		// ensure that versioned objects don't get counted multiple times in the tally
+		// 1. only include the size of the latest version of the object in the sizeCount
+		// 2. only include the object once in the fileCount
 		if cooked.RunningTally {
+			if getVersionId {
+				// get new version id object
+				updatedVersionId := versionIdObject{
+					versionId: object.blobVersionID,
+					fileSize:  object.size,
+				}
+
+				// there exists a current version id of the object
+				if currentVersionId, ok := objectVer[object.relativePath]; ok {
+					// get current version id time
+					currentVid, _ := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
+
+					// get new version id time
+					newVid, _ := time.Parse(versionIdTimeFormat, object.blobVersionID)
+
+					// if new vid came after the current vid, then it is the latest version
+					// update the objectVer with the latest version
+					// we will also remove sizeCount and fileCount of current object, allowing
+					// the updated sizeCount and fileCount to be added at line 320
+					if newVid.After(currentVid) {
+						sizeCount -= currentVersionId.fileSize // remove size of current object
+						fileCount--                            // remove current object file count
+						objectVer[object.relativePath] = updatedVersionId
+					}
+				} else {
+					objectVer[object.relativePath] = updatedVersionId
+				}
+			}
 			fileCount++
 			sizeCount += object.size
 		}
-
-		glcm.Info(objectSummary)
-
-		// No need to strip away from the name as the traverser has already done so.
 		return nil
 	}
 
@@ -293,17 +304,128 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	if cooked.RunningTally {
-		glcm.Info("")
-		glcm.Info("File count: " + strconv.Itoa(int(fileCount)))
-
-		if cooked.MachineReadable {
-			glcm.Info("Total file size: " + strconv.Itoa(int(sizeCount)))
-		} else {
-			glcm.Info("Total file size: " + byteSizeToString(sizeCount))
-		}
+		ls := cooked.newListSummary(fileCount, sizeCount)
+		response := AzCopyResponse[AzCopyListSummary]{ResponseType: "AzCopyListSummary", ResponseValue: ls}
+		glcm.Output(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(response)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return ls.String()
+			}
+		})
 	}
 
 	return nil
+}
+
+type AzCopyResponse[T any] struct {
+	ResponseType  string
+	ResponseValue T
+}
+
+type AzCopyListObject struct {
+	Path string `json:"Path"`
+
+	LastModifiedTime *time.Time         `json:"LastModifiedTime,omitempty"`
+	VersionId        string             `json:"VersionId,omitempty"`
+	BlobType         blob.BlobType      `json:"BlobType,omitempty"`
+	BlobAccessTier   blob.AccessTier    `json:"BlobAccessTier,omitempty"`
+	ContentType      string             `json:"ContentType,omitempty"`
+	ContentEncoding  string             `json:"ContentEncoding,omitempty"`
+	ContentMD5       []byte             `json:"ContentMD5,omitempty"`
+	LeaseState       lease.StateType    `json:"LeaseState,omitempty"`
+	LeaseStatus      lease.StatusType   `json:"LeaseStatus,omitempty"`
+	LeaseDuration    lease.DurationType `json:"LeaseDuration,omitempty"`
+	ArchiveStatus    blob.ArchiveStatus `json:"ArchiveStatus,omitempty"`
+
+	ContentLength string `json:"ContentLength"` // This is a string to support machine-readable
+
+	StringEncoding string `json:"-"` // this is stored as part of the list object to avoid looping over the properties array twice
+}
+
+func (l AzCopyListObject) String() string {
+	return l.StringEncoding
+}
+
+func (cooked cookedListCmdArgs) newListObject(object StoredObject, level LocationLevel) AzCopyListObject {
+	path := getPath(object.ContainerName, object.relativePath, level, object.entityType)
+	contentLength := sizeToString(object.size, cooked.MachineReadable)
+
+	lo := AzCopyListObject{
+		Path:          path,
+		ContentLength: contentLength,
+	}
+
+	builder := strings.Builder{}
+	builder.WriteString(lo.Path + "; ")
+
+	for _, property := range cooked.properties {
+		propertyStr := string(property)
+		switch property {
+		case lastModifiedTime:
+			lo.LastModifiedTime = to.Ptr(object.lastModifiedTime)
+			builder.WriteString(propertyStr + ": " + lo.LastModifiedTime.String() + "; ")
+		case versionId:
+			lo.VersionId = object.blobVersionID
+			builder.WriteString(propertyStr + ": " + lo.VersionId + "; ")
+		case blobType:
+			lo.BlobType = object.blobType
+			builder.WriteString(propertyStr + ": " + string(lo.BlobType) + "; ")
+		case blobAccessTier:
+			lo.BlobAccessTier = object.blobAccessTier
+			builder.WriteString(propertyStr + ": " + string(lo.BlobAccessTier) + "; ")
+		case contentType:
+			lo.ContentType = object.contentType
+			builder.WriteString(propertyStr + ": " + lo.ContentType + "; ")
+		case contentEncoding:
+			lo.ContentEncoding = object.contentEncoding
+			builder.WriteString(propertyStr + ": " + lo.ContentEncoding + "; ")
+		case contentMD5:
+			lo.ContentMD5 = object.md5
+			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(lo.ContentMD5) + "; ")
+		case leaseState:
+			lo.LeaseState = object.leaseState
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseState) + "; ")
+		case leaseStatus:
+			lo.LeaseStatus = object.leaseStatus
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseStatus) + "; ")
+		case leaseDuration:
+			lo.LeaseDuration = object.leaseDuration
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseDuration) + "; ")
+		case archiveStatus:
+			lo.ArchiveStatus = object.archiveStatus
+			builder.WriteString(propertyStr + ": " + string(lo.ArchiveStatus) + "; ")
+		}
+	}
+	builder.WriteString("Content Length: " + lo.ContentLength)
+	lo.StringEncoding = builder.String()
+
+	return lo
+}
+
+type AzCopyListSummary struct {
+	FileCount     string `json:"FileCount"`
+	TotalFileSize string `json:"TotalFileSize"`
+
+	StringEncoding string `json:"-"`
+}
+
+func (l AzCopyListSummary) String() string {
+	return l.StringEncoding
+}
+
+func (cooked cookedListCmdArgs) newListSummary(fileCount, totalFileSize int64) AzCopyListSummary {
+	fc := strconv.Itoa(int(fileCount))
+	tfs := sizeToString(totalFileSize, cooked.MachineReadable)
+
+	output := "\nFile count: " + fc + "\nTotal file size: " + tfs
+	return AzCopyListSummary{
+		FileCount:      fc,
+		TotalFileSize:  tfs,
+		StringEncoding: output,
+	}
 }
 
 var megaSize = []string{
@@ -342,4 +464,20 @@ func byteSizeToString(size int64) string {
 	}
 
 	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
+}
+
+func getPath(containerName, relativePath string, level LocationLevel, entityType common.EntityType) string {
+	builder := strings.Builder{}
+	if level == level.Service() {
+		builder.WriteString(containerName + "/")
+	}
+	builder.WriteString(relativePath)
+	if entityType == common.EEntityType.Folder() {
+		builder.WriteString("/")
+	}
+	return builder.String()
+}
+
+func sizeToString(size int64, machineReadable bool) string {
+	return common.Iff(machineReadable, strconv.Itoa(int(size)), byteSizeToString(size))
 }

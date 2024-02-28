@@ -35,7 +35,7 @@ type urlToBlockBlobCopier struct {
 	srcURL string
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
 	var destBlobTier *blob.AccessTier
 	// If the source is block blob, preserve source's blob tier.
@@ -45,7 +45,7 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, pacer
 		}
 	}
 
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, pacer, srcInfoProvider, destBlobTier)
+	senderBase, err := newBlockBlobSenderBase(jptm, pacer, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	 * for blobs of all sizes.
 	 */
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(blockblob.MaxUploadBlobBytes) {
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(common.MaxPutBlobSize) {
 		/*
 		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
 		 * invalid error from service due to PutBlockFromUrl.

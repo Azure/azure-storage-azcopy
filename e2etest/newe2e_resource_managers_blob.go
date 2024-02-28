@@ -221,7 +221,8 @@ func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, re
 			},
 			Metadata: v.Metadata,
 			BlobProperties: BlobProperties{
-				Type: v.Properties.BlobType,
+				VersionId: v.VersionID,
+				Type:      v.Properties.BlobType,
 				Tags: func() map[string]string {
 					out := make(map[string]string)
 
@@ -414,6 +415,14 @@ func (b *BlobObjectResourceManager) Parent() ResourceManager {
 
 func (b *BlobObjectResourceManager) EntityType() common.EntityType {
 	return b.entityType
+}
+
+func (b *BlobObjectResourceManager) ContainerName() string {
+	return b.Container.ContainerName()
+}
+
+func (b *BlobObjectResourceManager) ObjectName() string {
+	return b.Path
 }
 
 // Create defaults to Block Blob. For implementation-specific options, GetTypeOrZero[T] / GetTypeOrAssert[T] to BlobObjectResourceManager and call CreateWithOptions
@@ -620,7 +629,8 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 		},
 		Metadata: resp.Metadata,
 		BlobProperties: BlobProperties{
-			Type: resp.BlobType,
+			VersionId: resp.VersionID,
+			Type:      resp.BlobType,
 			Tags: func() map[string]string {
 				out := make(map[string]string)
 				resp, err := b.internalClient.GetTags(ctx, nil)
