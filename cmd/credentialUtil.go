@@ -70,12 +70,7 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 		if common.AzcopyJobPlanFolder == "" {
 			panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
 		}
-		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
-			DPAPIFilePath: common.AzcopyJobPlanFolder,
-			KeyName:       oauthLoginSessionCacheKeyName,
-			ServiceName:   oauthLoginSessionCacheServiceName,
-			AccountName:   oauthLoginSessionCacheAccountName,
-		})
+		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance()
 	})
 
 	return currentUserOAuthTokenManager
@@ -370,7 +365,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 		return false
 	}
 
-	// This request will not be logged. This can fail, and too many Cx do not like this. 
+	// This request will not be logged. This can fail, and too many Cx do not like this.
 	clientOptions := ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
 		TryTimeout:    ste.UploadTryTimeout,
@@ -403,7 +398,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 
 // mdAccountNeedsOAuth pings the passed in md account, and checks if we need additional token with Disk-socpe
 func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) bool {
-	// This request will not be logged. This can fail, and too many Cx do not like this. 
+	// This request will not be logged. This can fail, and too many Cx do not like this.
 	clientOptions := ste.NewClientOptions(policy.RetryOptions{
 		MaxRetries:    ste.UploadMaxTries,
 		TryTimeout:    ste.UploadTryTimeout,

@@ -58,19 +58,14 @@ const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
-	oauthClient *http.Client
-	credCache   *CredCache
 
 	// Stash the credential info as we delete the environment variable after reading it, and we need to get it multiple times.
 	stashedInfo *OAuthTokenInfo
 }
 
 // NewUserOAuthTokenManagerInstance creates a token manager instance.
-func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOAuthTokenManager {
-	return &UserOAuthTokenManager{
-		oauthClient: newAzcopyHTTPClient(),
-		credCache:   NewCredCache(credCacheOptions),
-	}
+func NewUserOAuthTokenManagerInstance() *UserOAuthTokenManager {
+	return &UserOAuthTokenManager{}
 }
 
 func newAzcopyHTTPClient() *http.Client {
@@ -150,12 +145,15 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	}
 	uotm.stashedInfo = oAuthTokenInfo
 
-	if persist && err == nil {
-		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
-		if err != nil {
-			return err
+	// TODO : Revisit for new persistance logic
+	/*
+		if persist && err == nil {
+			err = uotm.credCache.SaveToken(*oAuthTokenInfo)
+			if err != nil {
+				return err
+			}
 		}
-	}
+	*/
 
 	return nil
 }
@@ -261,12 +259,11 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	// buf, _ := json.Marshal(oAuthTokenInfo)
 	// panic("don't check me in. Buf is " + string(buf))
 
-	if persist {
-		err = uotm.credCache.SaveToken(oAuthTokenInfo)
-		if err != nil {
-			return err
+	/*
+		if persist {
+			// TODO: Revisit for new persist logic
 		}
-	}
+	*/
 
 	return nil
 }
@@ -285,12 +282,16 @@ func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 		return true, nil
 	}
 
-	return uotm.credCache.HasCachedToken()
+	// TODO: Revisit
+	//return uotm.credCache.HasCachedToken()
+	return false, nil
 }
 
 // RemoveCachedToken delete all the cached token.
 func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
-	return uotm.credCache.RemoveCachedToken()
+	// TODO: Revisit
+	//return uotm.credCache.RemoveCachedToken()
+	return nil
 }
 
 // ====================================================================================

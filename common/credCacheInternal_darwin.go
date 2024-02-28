@@ -45,7 +45,7 @@ type CredCache struct {
 	// for more details, refer to https://developer.apple.com/documentation/security/ksecattraccessgroup?language=objc
 }
 
-func NewCredCache(options CredCacheOptions) *CredCache {
+func NewCredCacheInternalIntegration(options CredCacheOptions) *CredCache {
 	return &CredCache{
 		serviceName: options.ServiceName,
 		accountName: options.AccountName,
@@ -60,31 +60,12 @@ func NewCredCache(options CredCacheOptions) *CredCache {
 	}
 }
 
-// keychain is used for internal integration as well.
-var NewCredCacheInternalIntegration = NewCredCache
-
 // HasCachedToken returns if there is cached token for current executing user.
 func (c *CredCache) HasCachedToken() (bool, error) {
 	c.lock.Lock()
 	has, err := c.hasCachedTokenInternal()
 	c.lock.Unlock()
 	return has, err
-}
-
-// RemoveCachedToken deletes the cached token.
-func (c *CredCache) RemoveCachedToken() error {
-	c.lock.Lock()
-	err := c.removeCachedTokenInternal()
-	c.lock.Unlock()
-	return err
-}
-
-// SaveToken saves an oauth token.
-func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
-	c.lock.Lock()
-	err := c.saveTokenInternal(token)
-	c.lock.Unlock()
-	return err
 }
 
 // LoadToken gets the cached oauth token.
@@ -127,59 +108,6 @@ func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 		return false, errors.New("invalid state, more than one cached token found")
 	}
 	return true, nil
-}
-
-// removeCachedTokenInternal delete the cached token.
-func (c *CredCache) removeCachedTokenInternal() error {
-	err := keychain.DeleteGenericPasswordItem(c.serviceName, c.accountName)
-	if err != nil {
-		err = handleGenericKeyChainSecError(err)
-
-		if err == keychain.ErrorItemNotFound {
-			return fmt.Errorf("no cached token found for current user")
-		}
-
-		return fmt.Errorf("failed to remove cached token, %v", err)
-	}
-	return nil
-}
-
-// saveTokenInternal saves an oauth token in keychain(use user's default keychain, i.e. login keychain).
-func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
-	b, err := token.toJSON()
-	if err != nil {
-		return fmt.Errorf("failed to marshal during saving token, %v", err)
-	}
-	item := keychain.NewItem()
-	item.SetSecClass(c.kcSecClass)
-	item.SetService(c.serviceName)
-	item.SetAccount(c.accountName)
-	item.SetData(b)
-	item.SetSynchronizable(c.kcSynchronizable)
-	item.SetAccessible(c.kcAccessible)
-
-	err = keychain.AddItem(item)
-	if err != nil {
-		// Handle duplicate key error
-		if err != keychain.ErrorDuplicateItem {
-			err = handleGenericKeyChainSecError(err)
-			return fmt.Errorf("failed to save token, %v", err)
-		}
-
-		// Update the key
-		query := keychain.NewItem()
-		query.SetSecClass(c.kcSecClass)
-		query.SetService(c.serviceName)
-		query.SetAccount(c.accountName)
-		query.SetMatchLimit(keychain.MatchLimitOne)
-		query.SetReturnData(true)
-		err := keychain.UpdateItem(query, item)
-		if err != nil {
-			err = handleGenericKeyChainSecError(err)
-			return fmt.Errorf("failed to save token, %v", err)
-		}
-	}
-	return nil
 }
 
 // loadTokenInternal gets an oauth token from keychain.

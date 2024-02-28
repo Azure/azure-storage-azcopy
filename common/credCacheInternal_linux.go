@@ -54,22 +54,6 @@ func (c *CredCacheInternalIntegration) HasCachedToken() (bool, error) {
 	return has, err
 }
 
-// RemoveCachedToken deletes the cached token.
-func (c *CredCacheInternalIntegration) RemoveCachedToken() error {
-	c.lock.Lock()
-	err := c.removeCachedTokenInternal()
-	c.lock.Unlock()
-	return err
-}
-
-// SaveToken saves an oauth token.
-func (c *CredCacheInternalIntegration) SaveToken(token OAuthTokenInfo) error {
-	c.lock.Lock()
-	err := c.saveTokenInternal(token)
-	c.lock.Unlock()
-	return err
-}
-
 // LoadToken gets the cached oauth token.
 func (c *CredCacheInternalIntegration) LoadToken() (*OAuthTokenInfo, error) {
 	c.lock.Lock()
@@ -99,13 +83,8 @@ func (c *CredCacheInternalIntegration) hasCachedTokenInternal() (bool, error) {
 	return true, nil
 }
 
-// removeCachedTokenInternal deletes all the cached token.
-func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
-	// By design, not useful currently.
-	return errors.New("Not implemented")
-}
-
 // loadTokenInternal restores a Token object from file cache.
+//
 //nolint:staticcheck
 func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, error) {
 	data, err := c.keyring.Get(c.serviceName, c.accountName)
@@ -118,10 +97,4 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 		return nil, fmt.Errorf("failed to unmarshal token during loading token, %v", err)
 	}
 	return token, nil
-}
-
-// saveTokenInternal persists an oauth token on disk.
-func (c *CredCacheInternalIntegration) saveTokenInternal(token OAuthTokenInfo) error {
-	// By design, not useful currently.
-	return errors.New("Not implemented")
 }
