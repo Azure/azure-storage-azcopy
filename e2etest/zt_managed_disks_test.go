@@ -23,6 +23,7 @@ package e2etest
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"testing"
+	"time"
 )
 
 // Purpose: Tests for the special cases that relate to moving managed disks (default local VHD to page blob; special handling for
@@ -85,7 +86,12 @@ func TestManagedDisks_SnapshotOAuth(t *testing.T) {
 		params{
 			disableParallelTesting: true,
 		},
-		nil,
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// try giving the service some time to think
+				time.Sleep(time.Second * 30)
+			},
+		},
 		testFiles{
 			shouldTransfer: []interface{}{
 				"",
@@ -109,7 +115,12 @@ func TestManagedDisks_OAuthRequired(t *testing.T) {
 		params{
 			disableParallelTesting: true, // testing is implemented with a single managed disk
 		},
-		nil,
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// try giving the service some time to think
+				time.Sleep(time.Second * 30)
+			},
+		},
 		testFiles{
 			shouldTransfer: []interface{}{
 				"",
