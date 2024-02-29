@@ -4,7 +4,6 @@
     <TargetFramework>net472</TargetFramework>
     <OutputType>Library</OutputType>
     <Title>Microsoft.AzCopy.Windows.X86</Title>
-    <Version>10.22.2</Version>
     <Authors>azcopydev@microsoft.com</Authors>
     <Authors>azcopydev@microsoft.com</Authors>
     <Company>Microsoft</Company>
@@ -17,6 +16,16 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <DebugType>embedded</DebugType>
     <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <!--Specified version should give an obvious answer-->
+  <PropertyGroup Condition="'$(AZCOPY_VERSION)' != ''">
+    <Version>$(AZCOPY_VERSION)</Version>
+  </PropertyGroup>
+
+  <!--No specified version should give an obvious dev-only version.-->
+  <PropertyGroup Condition="'$(AZCOPY_VERSION)' == ''">
+    <Version>99.99.99-dev</Version>
   </PropertyGroup>
 
   <ItemGroup>
