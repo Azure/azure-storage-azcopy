@@ -193,6 +193,9 @@ type params struct {
 		INFO: source:  dest: /New Text Document.txt
 	*/
 
+	// OAuth params, "SPN" (default), "AZCLI", and "PSCRED" are currently supported
+	AutoLoginType string
+
 	// cancel params
 	ignoreErrorIfCompleted bool
 
