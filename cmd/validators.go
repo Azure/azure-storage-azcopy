@@ -217,6 +217,7 @@ func InferArgumentLocation(arg string) common.Location {
 			if common.IsGCPURL(*u) {
 				return common.ELocation.GCP()
 			}
+			return common.ELocation.Unknown()
 		}
 	}
 
