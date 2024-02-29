@@ -339,3 +339,4 @@ venv*
 # go files
 *.mod
 *.sum
+e2etest/.azcopy/
