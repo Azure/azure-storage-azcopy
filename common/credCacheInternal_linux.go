@@ -21,7 +21,6 @@
 package common
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 )

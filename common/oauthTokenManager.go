@@ -145,7 +145,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	}
 	uotm.stashedInfo = oAuthTokenInfo
 
-	// TODO : Revisit for new persistance logic
+	// TODO : Revisit for new persistence logic
 	/*
 		if persist && err == nil {
 			err = uotm.credCache.SaveToken(*oAuthTokenInfo)
