@@ -55,7 +55,7 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" -ldflags "-linkmode 'external' -extldflags ' -static'"
+          GOARCH=arm64 GOOS=linux CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
 
@@ -74,6 +74,7 @@ jobs:
         env:
           GOARCH: 386
           GOOS: windows
+          CGO_ENABLED: 1
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe" -ldflags "-linkmode 'external' -extldflags ' -static'"
@@ -83,6 +84,7 @@ jobs:
           GOARCH: arm
           GOARM: 7
           GOOS: windows
+          CGO_ENABLED: 1
 
       - script: |
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
