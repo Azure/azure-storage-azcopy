@@ -45,22 +45,22 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate Linux AMD64'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+          GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate Windows AMD64'
         condition: eq(variables.type, 'windows')
         env:
@@ -68,7 +68,7 @@ jobs:
           GOOS: windows
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate Windows i386'
         condition: eq(variables.type, 'windows')
         env:
@@ -76,7 +76,7 @@ jobs:
           GOOS: windows
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate Windows ARM'
         condition: eq(variables.type, 'windows')
         env:
@@ -90,7 +90,7 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
 
@@ -102,7 +102,7 @@ jobs:
 
       # cross compile to make sure nothing broke
       - script: |
-          GOARCH=arm64 CGO_ENABLED=1 go build
+          GOARCH=arm64 CGO_ENABLED=1 go build -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Test Cross-compiled MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
