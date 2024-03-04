@@ -55,8 +55,8 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          sudo apt-get install gcc-arm*
-          GOARCH=arm64 GOOS=linux CGO_ENABLED=1 CC=arm-linux-gnueabi-gcc go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" -ldflags "-linkmode 'external' -extldflags ' -static'"
+          sudo apt-get install gcc-arm-linux-gnueabi
+          GOARCH=arm64 GOOS=linux CGO_ENABLED=1 CC=gcc-arm-linux-gnueabi go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" -ldflags "-linkmode 'external' -extldflags ' -static'"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
 
