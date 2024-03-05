@@ -51,7 +51,7 @@ jobs:
 
       - script: |
           sudo apt-get update
-          sudo apt-get -y install libsecret-1-0
+          sudo apt-get -y install libsecret-1-0 libglib2.0-dev
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64" -ldflags "-linkmode 'external' -extldflags '-static'"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
