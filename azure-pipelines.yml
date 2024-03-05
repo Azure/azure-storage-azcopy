@@ -239,16 +239,6 @@ jobs:
           summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
           additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
 
-  - job: Copy_Nuget_To_Artifacts
-    pool:
-      vmImage: 'windows-2019'
-    steps:
-      - task: PublishBuildArtifacts@1
-        displayName: 'Create NuGet artifact @ commit'
-        inputs:
-          pathtoPublish: $(System.DefaultWorkingDirectory)/Microsoft.AzCopy
-          artifactName: Microsoft.AzCopy
-
   - job: Test_On_Ubuntu
     variables:
       isMutexSet: 'false'
