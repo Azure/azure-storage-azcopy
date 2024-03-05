@@ -66,6 +66,7 @@ jobs:
         displayName: 'Copy NOTICE.txt'
         condition: eq(variables.type, 'linux')
 
+      # Windows builds do not need to be statically linked since no new libraries are introduced since Go 1.19
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
         displayName: 'Generate Windows AMD64'
