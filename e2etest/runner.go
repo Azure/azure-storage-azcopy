@@ -23,6 +23,7 @@ package e2etest
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -256,7 +257,7 @@ func (t *TestRunner) execDebuggableWithOutput(name string, args []string, env []
 	return stdout.Bytes(), runErr
 }
 
-func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, needsFromTo bool, fromTo common.FromTo, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
+func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, needsOAuth bool, oauthMode string, needsFromTo bool, fromTo common.FromTo, afterStart func() string, chToStdin <-chan string, logDir string) (CopyOrSyncCommandResult, bool, error) {
 	capLen := func(b []byte) []byte {
 		if len(b) < 1024 {
 			return b
@@ -297,18 +298,66 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 	env := make([]string, len(os.Environ()))
 	copy(env, os.Environ())
 
-	// paste in OAuth environment variables if not specified
-	if needsOAuth && os.Getenv("AZCOPY_AUTO_LOGIN_TYPE") == "" {
+	if needsOAuth {
 		tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 
-		env = append(env,
-			"AZCOPY_AUTO_LOGIN_TYPE=SPN",
-			"AZCOPY_SPA_APPLICATION_ID="+appId,
-			"AZCOPY_SPA_CLIENT_SECRET="+clientSecret,
-		)
+		switch strings.ToLower(oauthMode) {
+		case "", common.AutologinTypeSPN:
+			env = append(env,
+				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.AutologinTypeSPN, oauthMode),
+				"AZCOPY_SPA_APPLICATION_ID="+appId,
+				"AZCOPY_SPA_CLIENT_SECRET="+clientSecret,
+			)
 
-		if tenId != "" {
-			env = append(env, "AZCOPY_TENANT_ID="+tenId)
+			if tenId != "" {
+				env = append(env, "AZCOPY_TENANT_ID="+tenId)
+			}
+		case common.AutologinTypeAzCLI:
+			args := []string{
+				"login",
+				"--service-principal",
+				"-u=" + appId,
+				"-p=" + clientSecret,
+			}
+			if tenId != "" {
+				args = append(args, "--tenant="+tenId)
+				env = append(env, "AZCOPY_TENANT_ID="+tenId)
+			}
+
+			out, err := exec.Command("az", args...).Output()
+			if err != nil {
+				e, ok := err.(*exec.ExitError)
+				if ok {
+					return CopyOrSyncCommandResult{}, false, fmt.Errorf("%s\n%s\nfailed to login with AzCli: %s", e.Stderr, out, err.Error())
+				} else {
+					return CopyOrSyncCommandResult{}, false, fmt.Errorf("failed to login with AzCli: %s", err.Error())
+				}
+			}
+
+			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE="+oauthMode)
+		case "pscred":
+			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
+			cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
+				$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList %s, $secret;
+				Connect-AzAccount -ServicePrincipal -Credential $cred`
+			if tenId != "" {
+				cmd += " -Tenant " + tenId
+			}
+
+			script := fmt.Sprintf(cmd, clientSecret, appId)
+			out, err := exec.Command("pwsh", "-Command", script).Output()
+			if err != nil {
+				e := err.(*exec.ExitError)
+				e, ok := err.(*exec.ExitError)
+				if ok {
+					return CopyOrSyncCommandResult{}, false, fmt.Errorf("%s\n%s\nfailed to login with Powershell: %s", e.Stderr, out, err.Error())
+				} else {
+					return CopyOrSyncCommandResult{}, false, fmt.Errorf("failed to login with Powershell: %s", err.Error())
+				}
+			}
+			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE=PsCred")
+		default:
+			return CopyOrSyncCommandResult{}, false, errors.New("Unsupported OAuth mode " + oauthMode)
 		}
 	}
 
