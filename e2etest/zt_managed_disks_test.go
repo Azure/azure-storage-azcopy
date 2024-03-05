@@ -31,6 +31,11 @@ import (
 //     md- and md-impex URLs.
 
 func TestManagedDisks_NoOAuthRequired(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Limit runs to Linux so no simultaneous runs occur")
+		return
+	}
+
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -54,6 +59,11 @@ func TestManagedDisks_NoOAuthRequired(t *testing.T) {
 }
 
 func TestManagedDisks_Snapshot(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Limit runs to Linux so no simultaneous runs occur")
+		return
+	}
+
 	RunScenarios(
 		t,
 		eOperation.Copy(),
