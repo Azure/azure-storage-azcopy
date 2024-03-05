@@ -50,13 +50,15 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
+          sudo apt-get update
+          sudo apt-get -y install libsecret-1-0
           GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64" -ldflags "-linkmode 'external' -extldflags '-static'"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
 
       - script: |
           sudo apt-get update
-          sudo apt-get install gcc-aarch64-linux-gnu
+          sudo apt-get -y install gcc-aarch64-linux-gnu
           GOARCH=arm64 GOOS=linux CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" -ldflags "-linkmode 'external' -extldflags '-static'"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
