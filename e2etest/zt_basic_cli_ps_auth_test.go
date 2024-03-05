@@ -21,9 +21,6 @@
 package e2etest
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
 	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -33,31 +30,9 @@ import (
 
 func TestBasic_AzCLIAuth(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		recursive: true,
-	}, &hooks{
-		beforeTestRun: func(h hookHelper) {
-			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
-			args := []string{
-				"login",
-				"--service-principal",
-				"-u=" + appId,
-				"-p=" + clientSecret,
-			}
-			if tenId != "" {
-				args = append(args, "--tenant="+tenId)
-			}
-
-			out, err := exec.Command("az", args...).Output()
-			if err != nil {
-				e := err.(*exec.ExitError)
-				t.Logf(string(e.Stderr))
-				t.Logf(string(out))
-				t.Logf("Failed to login with AzCLI " + err.Error())
-				t.FailNow()
-			}
-			os.Setenv("AZCOPY_AUTO_LOGIN_TYPE", "AZCLI")
-		},
-	}, testFiles{
+		recursive:     true,
+		AutoLoginType: common.AutologinTypeAzCLI,
+	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
 			"wantedfile",
@@ -70,31 +45,9 @@ func TestBasic_AzCLIAuth(t *testing.T) {
 
 func TestBasic_AzCLIAuthLowerCase(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		recursive: true,
-	}, &hooks{
-		beforeTestRun: func(h hookHelper) {
-			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
-			args := []string{
-				"login",
-				"--service-principal",
-				"-u=" + appId,
-				"-p=" + clientSecret,
-			}
-			if tenId != "" {
-				args = append(args, "--tenant="+tenId)
-			}
-
-			out, err := exec.Command("az", args...).Output()
-			if err != nil {
-				e := err.(*exec.ExitError)
-				t.Logf(string(e.Stderr))
-				t.Logf(string(out))
-				t.Logf("Failed to login with AzCLI " + err.Error())
-				t.FailNow()
-			}
-			os.Setenv("AZCOPY_AUTO_LOGIN_TYPE", "azcli")
-		},
-	}, testFiles{
+		recursive:     true,
+		AutoLoginType: "azCli", // the purpose of this test is to check whether our casing is working or not
+	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
 			"wantedfile",
@@ -107,29 +60,9 @@ func TestBasic_AzCLIAuthLowerCase(t *testing.T) {
 
 func TestBasic_PSAuth(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		recursive: true,
-	}, &hooks{
-		beforeTestRun: func(h hookHelper) {
-			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
-			cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
-				$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList %s, $secret;
-				Connect-AzAccount -ServicePrincipal -Credential $cred`
-			if tenId != "" {
-				cmd += " -Tenant " + tenId
-			}
-
-			script := fmt.Sprintf(cmd, clientSecret, appId)
-			out, err := exec.Command("pwsh", "-Command", script).Output()
-			if err != nil {
-				e := err.(*exec.ExitError)
-				t.Logf(string(e.Stderr))
-				t.Logf(string(out))
-				t.Logf("Failed to login with Powershell " + err.Error())
-				t.FailNow()
-			}
-			os.Setenv("AZCOPY_AUTO_LOGIN_TYPE", "PSCRED")
-		},
-	}, testFiles{
+		recursive:     true,
+		AutoLoginType: common.AutologinTypePsCred,
+	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
 			"wantedfile",
@@ -142,29 +75,9 @@ func TestBasic_PSAuth(t *testing.T) {
 
 func TestBasic_PSAuthCamelCase(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		recursive: true,
-	}, &hooks{
-		beforeTestRun: func(h hookHelper) {
-			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
-			cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
-				$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList %s, $secret;
-				Connect-AzAccount -ServicePrincipal -Credential $cred`
-			if tenId != "" {
-				cmd += " -Tenant " + tenId
-			}
-
-			script := fmt.Sprintf(cmd, clientSecret, appId)
-			out, err := exec.Command("pwsh", "-Command", script).Output()
-			if err != nil {
-				e := err.(*exec.ExitError)
-				t.Logf(string(e.Stderr))
-				t.Logf(string(out))
-				t.Logf("Failed to login with Powershell " + err.Error())
-				t.FailNow()
-			}
-			os.Setenv("AZCOPY_AUTO_LOGIN_TYPE", "PsCred")
-		},
-	}, testFiles{
+		recursive:     true,
+		AutoLoginType: "PSCred", // ditto
+	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
 			"wantedfile",
