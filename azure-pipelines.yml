@@ -45,7 +45,7 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64" -ldflags '-linkmode external -extldflags "-static-libgcc -static-libstdc++ -Wl,-Bstatic -lresolv -Wl,-Bdynamic"'
+          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64" -ldflags '-linkmode external -extldflags "-Wl,-Bstatic -lresolv -Wl"'
         displayName: 'Generate Linux AMD64'
         condition: eq(variables.type, 'linux')
 
