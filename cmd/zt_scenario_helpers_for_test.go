@@ -345,6 +345,18 @@ func (scenarioHelper) generateBlobsFromList(a *assert.Assertions, containerClien
 	time.Sleep(time.Millisecond * 1050)
 }
 
+func (scenarioHelper) generateVersionsForBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string, randomData []string) {
+	for i, blobName := range blobList {
+		blobClient := containerClient.NewBlockBlobClient(blobName)
+		uploadResp, err := blobClient.Upload(ctx, streaming.NopCloser(strings.NewReader(randomData[i])), nil)
+		a.NoError(err)
+		a.NotNil(uploadResp.VersionID)
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1050)
+}
+
 func (scenarioHelper) generatePageBlobsFromList(a *assert.Assertions, containerClient *container.Client, blobList []string, data string) {
 	for _, blobName := range blobList {
 		// Create the blob (PUT blob)
@@ -590,6 +602,17 @@ func (scenarioHelper) addPrefix(list []string, prefix string) []string {
 
 func (scenarioHelper) getRawContainerURLWithSAS(a *assert.Assertions, containerName string) *url.URL {
 	accountName, accountKey := getAccountAndKey()
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	a.Nil(err)
+	cc := getContainerClientWithSAS(a, credential, containerName)
+
+	u := cc.URL()
+	parsedURL, err := url.Parse(u)
+	return parsedURL
+}
+
+func (scenarioHelper) getSecondaryRawContainerURLWithSAS(a *assert.Assertions, containerName string) *url.URL {
+	accountName, accountKey := getSecondaryAccountAndKey()
 	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
 	a.Nil(err)
 	cc := getContainerClientWithSAS(a, credential, containerName)
@@ -858,6 +881,17 @@ func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(er
 	verifier(err)
 }
 
+func runListAndVerify(a *assert.Assertions, raw rawListCmdArgs, verifier func(err error)) {
+	// the simulated user input should parse properly
+	cooked, err := raw.cook()
+	a.NoError(err)
+
+	err = cooked.HandleListContainerCommand()
+
+	// the err is passed to verified, which knows whether it is expected or not
+	verifier(err)
+}
+
 func validateUploadTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
 	validateCopyTransfersAreScheduled(a, false, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
@@ -986,6 +1020,17 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		includeDirectoryStubs:          true,
+	}
+}
+
+func getDefaultListRawInput(src string) rawListCmdArgs {
+	return rawListCmdArgs{
+		sourcePath:      src,
+		Properties:      "",
+		MachineReadable: false,
+		RunningTally:    false,
+		MegaUnits:       false,
+		trailingDot:     "",
 	}
 }
 

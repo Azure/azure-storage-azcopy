@@ -131,7 +131,7 @@ func TestIsDestDirWithDFSEP(t *testing.T) {
 	serviceClientWithSAS := scenarioHelper{}.getBlobServiceClientWithSASFromURL(a, rawBlobURLWithSAS)
 	blobTraverser := newBlobTraverser(rawBlobURLWithSAS, serviceClientWithSAS, ctx, true, true, func(common.EntityType) {}, false, common.CpkOptions{}, false, false, false, common.EPreservePermissionsOption.None(), true)
 
-	// a directory with name parentDirName exists on target. So irrespective of 
+	// a directory with name parentDirName exists on target. So irrespective of
 	// isSource, IsDirectory()  should return true.
 	isDir, err := blobTraverser.IsDirectory(true)
 	a.True(isDir)

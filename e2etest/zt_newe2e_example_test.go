@@ -34,7 +34,7 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 		Body:       body,
 	}) // todo: generic CreateResource is something to pursue in another branch, but it's an interesting thought.
 	// Scale up from service to container
-	dstObj := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
+	dstCont := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
 
 	RunAzCopy(
 		svm,
@@ -43,10 +43,11 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 			Targets: []ResourceManager{
 				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
-						Permissions: (&blobsas.BlobPermissions{Read: true, List: true}).String(),
+						ContainerName: srcObj.ContainerName(),
+						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
 					},
 				}),
-				dstObj,
+				dstCont,
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -57,7 +58,12 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 			},
 		})
 
-	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
-		Body: body,
+	dstObjs := make(ObjectResourceMappingFlat)
+	dstObjs["test"] = ResourceDefinitionObject{
+		ObjectName: pointerTo("test"),
+		Body:       body,
+	}
+	ValidateResource[ContainerResourceManager](svm, dstCont, ResourceDefinitionContainer{
+		Objects: dstObjs,
 	}, true)
 }
