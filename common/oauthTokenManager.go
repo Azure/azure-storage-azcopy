@@ -39,6 +39,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"github.com/Azure/go-autorest/autorest/date"
 )
 
@@ -55,10 +56,10 @@ const ManagedDiskScope = "https://disk.azure.com//.default" // There must be a t
 
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
+const TokenCache = "AzcopyTokenCache"
 
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
-
 	// Stash the credential info as we delete the environment variable after reading it, and we need to get it multiple times.
 	stashedInfo *OAuthTokenInfo
 }
@@ -134,7 +135,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	if oAuthTokenInfo.ActiveDirectoryEndpoint == "" {
 		oAuthTokenInfo.ActiveDirectoryEndpoint = DefaultActiveDirectoryEndpoint
 	}
-	tc, err := oAuthTokenInfo.GetTokenCredential()
+	tc, err := oAuthTokenInfo.GetTokenCredential(persist)
 	if err != nil {
 		return err
 	}
@@ -144,16 +145,6 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 		return err
 	}
 	uotm.stashedInfo = oAuthTokenInfo
-
-	// TODO : Revisit for new persistence logic
-	/*
-		if persist && err == nil {
-			err = uotm.credCache.SaveToken(*oAuthTokenInfo)
-			if err != nil {
-				return err
-			}
-		}
-	*/
 
 	return nil
 }
@@ -241,8 +232,23 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	if activeDirectoryEndpoint == "" {
 		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
 	}
+	var dc azcore.TokenCredential
+	var err error
 
-	dc, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{TenantID: tenantID})
+	// The conditional statement checks whether 'persist' is true before configuring token caching options.
+	// If 'persist' evaluates to true, the options for token caching are provided.
+	if persist {
+		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+			TenantID: tenantID,
+			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+				AllowUnencryptedStorage: false,
+				Name:                    TokenCache,
+			}})
+	} else {
+		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+			TenantID: tenantID,
+		})
+	}
 	if err != nil {
 		return err
 	}
@@ -258,12 +264,6 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	// to dump for diagnostic purposes:
 	// buf, _ := json.Marshal(oAuthTokenInfo)
 	// panic("don't check me in. Buf is " + string(buf))
-
-	/*
-		if persist {
-			// TODO: Revisit for new persist logic
-		}
-	*/
 
 	return nil
 }
@@ -537,7 +537,7 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 	return tc, nil
 }
 
-func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCredential, error) {
+func (credInfo *OAuthTokenInfo) GetClientCertificateCredential(persist bool) (azcore.TokenCredential, error) {
 	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
@@ -550,12 +550,29 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 	if err != nil {
 		return nil, err
 	}
-	tc, err := azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
-		ClientOptions: azcore.ClientOptions{
-			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
-			Transport: newAzcopyHTTPClient(),
-		},
-	})
+
+	var tc azcore.TokenCredential
+	// The conditional statement checks whether 'persist' is true before configuring token caching options.
+	// If 'persist' evaluates to true, the options for token caching are provided.
+	if persist {
+		tc, err = azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
+			ClientOptions: azcore.ClientOptions{
+				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+				Transport: newAzcopyHTTPClient(),
+			},
+			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+				AllowUnencryptedStorage: false,
+				Name:                    TokenCache,
+			},
+		})
+	} else {
+		tc, err = azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
+			ClientOptions: azcore.ClientOptions{
+				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+				Transport: newAzcopyHTTPClient(),
+			},
+		})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -563,17 +580,31 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 	return tc, nil
 }
 
-func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredential, error) {
+func (credInfo *OAuthTokenInfo) GetClientSecretCredential(persist bool) (azcore.TokenCredential, error) {
 	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	tc, err := azidentity.NewClientSecretCredential(credInfo.Tenant, credInfo.ApplicationID, credInfo.SPNInfo.Secret, &azidentity.ClientSecretCredentialOptions{
-		ClientOptions: azcore.ClientOptions{
-			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
-			Transport: newAzcopyHTTPClient(),
-		},
-	})
+	var tc azcore.TokenCredential
+	if persist {
+		tc, err = azidentity.NewClientSecretCredential(credInfo.Tenant, credInfo.ApplicationID, credInfo.SPNInfo.Secret, &azidentity.ClientSecretCredentialOptions{
+			ClientOptions: azcore.ClientOptions{
+				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+				Transport: newAzcopyHTTPClient(),
+			},
+			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+				AllowUnencryptedStorage: false,
+				Name:                    TokenCache,
+			},
+		})
+	} else {
+		tc, err = azidentity.NewClientSecretCredential(credInfo.Tenant, credInfo.ApplicationID, credInfo.SPNInfo.Secret, &azidentity.ClientSecretCredentialOptions{
+			ClientOptions: azcore.ClientOptions{
+				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+				Transport: newAzcopyHTTPClient(),
+			},
+		})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +634,7 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 	return credInfo.TokenCredential, nil
 }
 
-func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, error) {
+func (credInfo *OAuthTokenInfo) GetTokenCredential(persist bool) (azcore.TokenCredential, error) {
 	// Token Credential is cached.
 	if credInfo.TokenCredential != nil {
 		return credInfo.TokenCredential, nil
@@ -619,9 +650,9 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 
 	if credInfo.ServicePrincipalName {
 		if credInfo.SPNInfo.CertPath != "" {
-			return credInfo.GetClientCertificateCredential()
+			return credInfo.GetClientCertificateCredential(persist)
 		} else {
-			return credInfo.GetClientSecretCredential()
+			return credInfo.GetClientSecretCredential(persist)
 		}
 	}
 
