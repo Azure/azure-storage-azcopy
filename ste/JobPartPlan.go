@@ -36,7 +36,6 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 
 type IJobPartPlanHeader interface {
 	CommandString() string
-	GetRelativeSrcDstStrings(transferIndex uint32) (source string, destination string)
 	JobPartStatus() common.JobStatus
 	JobStatus() common.JobStatus
 	SetJobPartStatus(newJobStatus common.JobStatus)
@@ -143,52 +142,17 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 
 // CommandString returns the command string given by user when job was created
 func (jpph *JobPartPlanHeader) CommandString() string {
-	commandSlice := []byte{}
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&commandSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(unsafe.Sizeof(*jpph)) // Address of Job Part Plan + Command String Length
-	sh.Len = int(jpph.CommandStringLength)
-	sh.Cap = sh.Len
-	return string(commandSlice)
+	data := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph)) // Address of Job Part Plan + Command String Length
+	return unsafe.String((*byte)(data), int(jpph.CommandStringLength))
 }
 
 func (jpph *JobPartPlanHeader) TransferSrcDstRelatives(transferIndex uint32) (relSource, relDest string) {
 	jppt := jpph.Transfer(transferIndex)
 
-	srcSlice := []byte{}
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
-	sh.Len = int(jppt.SrcLength)
-	sh.Cap = sh.Len
-	srcRelative := string(srcSlice)
+	srcData := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset))                           // Address of Job Part Plan + this transfer's src string offset
+	dstData := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength)) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
 
-	dstSlice := []byte{}
-	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
-	sh.Len = int(jppt.DstLength)
-	sh.Cap = sh.Len
-	dstRelative := string(dstSlice)
-
-	return srcRelative, dstRelative
-}
-
-func (jpph *JobPartPlanHeader) GetRelativeSrcDstStrings(transferIndex uint32) (source, destination string) {
-	jppt := jpph.Transfer(transferIndex)
-
-	srcSlice := []byte{}
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
-	sh.Len = int(jppt.SrcLength)
-	sh.Cap = sh.Len
-	srcRelative := string(srcSlice)
-
-	dstSlice := []byte{}
-	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
-	sh.Len = int(jppt.DstLength)
-	sh.Cap = sh.Len
-	dstRelative := string(dstSlice)
-
-	return srcRelative, dstRelative
+	return unsafe.String((*byte)(srcData), int(jppt.SrcLength)), unsafe.String((*byte)(dstData), int(jppt.DstLength))
 }
 
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
@@ -202,7 +166,7 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	jppt := jpph.Transfer(transferIndex)
 	isFolder = jppt.EntityType == common.EEntityType.Folder()
 
-	srcRelative, dstRelative := jpph.GetRelativeSrcDstStrings(transferIndex)
+	srcRelative, dstRelative := jpph.TransferSrcDstRelatives(transferIndex)
 
 	return common.GenerateFullPathWithQuery(srcRoot, srcRelative, srcExtraQuery),
 		common.GenerateFullPathWithQuery(dstRoot, dstRelative, dstExtraQuery),
@@ -210,13 +174,8 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 }
 
 func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
-	tempSlice := []byte{}
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&tempSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(offset) // Address of Job Part Plan + this string's offset
-	sh.Len = int(length)
-	sh.Cap = sh.Len
-
-	return string(tempSlice)
+	data := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + uintptr(offset)) // Address of Job Part Plan + this string's offset
+	return unsafe.String((*byte)(data), int(length))
 }
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder

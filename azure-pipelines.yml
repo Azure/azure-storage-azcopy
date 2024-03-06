@@ -45,8 +45,7 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
-          GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64" 
-          ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
         displayName: 'Generate Linux AMD64'
         condition: eq(variables.type, 'linux')
 

@@ -36,7 +36,7 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
-	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
+	rand.New(rand.NewSource(time.Now().UnixNano())) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
 
 	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
 	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
