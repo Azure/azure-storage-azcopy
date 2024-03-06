@@ -575,8 +575,9 @@ func (r *resourceManagedDisk) downloadContent(a asserter, options downloadConten
 
 // cleanup also usurps traditional resourceManager functionality.
 func (r *resourceManagedDisk) cleanup(a asserter) {
-	// revoking access isn't required and causes funky behaviour for testing that might require a distributed mutex.
-	// todo: we should create managed disks as needed with the requirements rather than using a single MD should we plan to do read-write tests.
+	//
+	err := r.config.RevokeAccess()
+	a.AssertNoErr(err)
 }
 
 // getParam works functionally different because resourceManagerDisk inherently only targets a single file.
