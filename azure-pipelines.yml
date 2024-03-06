@@ -45,20 +45,22 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64" -ldflags "-linkmode 'external' -extldflags '-Wl,-Bstatic -lresolv -Wl,-Bdynamic'"
+          GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64" 
           ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
         displayName: 'Generate Linux AMD64'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64" -ldflags '-linkmode external -extldflags "-static-libgcc -static-libstdc++ -Wl,-Bstatic -lresolv -Wl,-Bdynamic"'
+          GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64" 
+          ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
 
       - script: |
           sudo apt-get update
           sudo apt-get -y install gcc-aarch64-linux-gnu
-          GOARCH=arm64 GOOS=linux CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" -ldflags '-linkmode external -extldflags "-static-libgcc -static-libstdc++ -Wl,-Bstatic -lresolv -Wl,-Bdynamic"'
+          GOARCH=arm64 GOOS=linux CGO_ENABLED=0 CC=aarch64-linux-gnu-gcc go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" 
+          ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
 
