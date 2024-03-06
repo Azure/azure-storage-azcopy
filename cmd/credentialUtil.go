@@ -59,10 +59,6 @@ func warnIfSharedKeyAuthForDatalake() {
 // (given appAppPathFolder is mapped to current user)
 var currentUserOAuthTokenManager *common.UserOAuthTokenManager
 
-const oauthLoginSessionCacheKeyName = "AzCopyOAuthTokenCache"
-const oauthLoginSessionCacheServiceName = "AzCopyV10"
-const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
-
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
