@@ -34,6 +34,12 @@ jobs:
         # Learn more about CodeQL language support at https://git.io/codeql-language-support
 
     steps:
+      - task: GoTool@0
+        env:
+          GO111MODULE: 'on'
+        inputs:
+          version: 1.22.0
+
       - name: Checkout repository
         uses: actions/checkout@v2
 

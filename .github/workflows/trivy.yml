@@ -28,6 +28,12 @@ jobs:
     runs-on: "ubuntu-22.04"
 
     steps:
+      - task: GoTool@0
+        env:
+          GO111MODULE: 'on'
+        inputs:
+          version: 1.22.0
+
       - name: Checkout code
         uses: actions/checkout@v3
 
