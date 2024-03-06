@@ -51,16 +51,13 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64" 
+          GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64" 
           ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          sudo apt-get update
-          sudo apt-get -y install gcc-aarch64-linux-gnu
-          GOARCH=arm64 GOOS=linux CGO_ENABLED=0 CC=aarch64-linux-gnu-gcc go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64" 
-          ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+          GOARCH=arm64 GOOS=linux CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
 
@@ -85,7 +82,6 @@ jobs:
         env:
           GOARCH: 386
           GOOS: windows
-          CGO_ENABLED: 1
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
@@ -95,7 +91,6 @@ jobs:
           GOARCH: arm
           GOARM: 7
           GOOS: windows
-          CGO_ENABLED: 1
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
@@ -110,7 +105,7 @@ jobs:
 
       # cross compile to make sure nothing broke
       - script: |
-          GOARCH=arm64 CGO_ENABLED=1 go build
+          GOARCH=arm64 go build
         displayName: 'Test Cross-compiled MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
 
