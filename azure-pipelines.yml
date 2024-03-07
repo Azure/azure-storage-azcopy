@@ -97,7 +97,7 @@ jobs:
           CGO_ENABLED: 0
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64" -tags "netgo"
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64" -ldflags "-linkmode 'external' -extldflags '-static'"
           otool -L "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
@@ -110,7 +110,7 @@ jobs:
 
       # cross compile to make sure nothing broke
       - script: |
-          GOARCH=arm64 CGO_ENABLED=1 go build -o "azcopy_darwin_arm64" -tags "netgo"
+          GOARCH=arm64 CGO_ENABLED=1 go build -o "azcopy_darwin_arm64" -ldflags "-linkmode 'external' -extldflags '-static'"
           otool -L "azcopy_darwin_arm64"
         displayName: 'Test Cross-compiled MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
