@@ -1831,7 +1831,7 @@ Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
-TotalBytesTransferred: %v
+Total Number of Bytes Transferred: %v
 Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
