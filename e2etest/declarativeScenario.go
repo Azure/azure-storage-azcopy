@@ -329,7 +329,8 @@ func (s *scenario) runAzCopy(logDirectory string) {
 		s.operation,
 		s.state.source.getParam(s.a, s.stripTopDir, needsSAS(s.credTypes[0]), tf.objectTarget),
 		s.state.dest.getParam(s.a, false, needsSAS(s.credTypes[1]), destObjTarget),
-		s.credTypes[0] == common.ECredentialType.OAuthToken() || s.credTypes[1] == common.ECredentialType.OAuthToken(), // needsOAuth
+		s.credTypes[0].IsAzureOAuth() || s.credTypes[1].IsAzureOAuth(), // needsOAuth
+		s.p.AutoLoginType,
 		needsFromTo,
 		s.fromTo,
 		afterStart, s.chToStdin, logDirectory)
@@ -361,6 +362,7 @@ func (s *scenario) cancelAzCopy(logDir string) {
 		s.state.result.jobID.String(),
 		"",
 		false,
+		"",
 		false,
 		s.fromTo,
 		afterStart,
@@ -403,7 +405,8 @@ func (s *scenario) resumeAzCopy(logDir string) {
 		eOperation.Resume(),
 		s.state.result.jobID.String(),
 		"",
-		false,
+		s.credTypes[0].IsAzureOAuth() || s.credTypes[1].IsAzureOAuth(),
+		s.p.AutoLoginType,
 		false,
 		s.fromTo,
 		afterStart,
