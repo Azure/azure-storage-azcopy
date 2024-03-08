@@ -3,7 +3,6 @@ package ste
 import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"reflect"
 	"sync/atomic"
 	"unsafe"
 
@@ -28,7 +27,8 @@ type JobPartPlanMMF common.MMF
 func (mmf *JobPartPlanMMF) Plan() *JobPartPlanHeader {
 	// getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
 	// casting the mmf slice's address  to JobPartPlanHeader Pointer
-	return (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(mmf)).Data))
+	slice := (*common.MMF)(mmf).Slice()
+	return (*JobPartPlanHeader)(unsafe.Pointer(&slice))
 }
 func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 

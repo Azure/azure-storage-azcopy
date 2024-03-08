@@ -119,7 +119,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	writeValue := func(writer io.Writer, v interface{}) int64 {
 		rv := reflect.ValueOf(v)
 		structSize := reflect.TypeOf(v).Elem().Size()
-		slice := reflect.SliceHeader{Data: rv.Pointer(), Len: int(structSize), Cap: int(structSize)}
+		slice := unsafe.Slice(rv.UnsafePointer(), int(structSize))
 		byteSlice := *(*[]byte)(unsafe.Pointer(&slice)) //nolint:govet
 		err := binary.Write(writer, binary.LittleEndian, byteSlice)
 		common.PanicIfErr(err)
