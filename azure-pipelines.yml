@@ -46,19 +46,16 @@ jobs:
 
       - script: |
           GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
-          ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
         displayName: 'Generate Linux AMD64'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64" 
-          ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
 
       - script: |
           GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
-          ldd "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
 
@@ -97,7 +94,7 @@ jobs:
           CGO_ENABLED: 0
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64" -ldflags "-linkmode 'external' -extldflags '-static'"
+          CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
           otool -L "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
@@ -110,7 +107,7 @@ jobs:
 
       # cross compile to make sure nothing broke
       - script: |
-          GOARCH=arm64 CGO_ENABLED=1 go build -o "azcopy_darwin_arm64" -ldflags "-linkmode 'external' -extldflags '-static'"
+          GOARCH=arm64 CGO_ENABLED=1 go build -o "azcopy_darwin_arm64" 
           otool -L "azcopy_darwin_arm64"
         displayName: 'Test Cross-compiled MacOS Build with ARM64'
         condition: eq(variables.type, 'mac-os')
