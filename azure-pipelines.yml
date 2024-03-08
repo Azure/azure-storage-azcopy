@@ -94,7 +94,7 @@ jobs:
           CGO_ENABLED: 0
 
       - script: |
-          CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+          CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
           otool -L "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
