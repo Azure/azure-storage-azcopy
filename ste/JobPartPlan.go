@@ -26,7 +26,7 @@ type JobPartPlanMMF common.MMF
 
 func (mmf *JobPartPlanMMF) Plan() *JobPartPlanHeader {
 	// getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
-	// casting the mmf slice's address  to JobPartPlanHeader Pointer
+	// casting the mmf slice's address to JobPartPlanHeader Pointer
 	slice := (*common.MMF)(mmf).Slice()
 	return (*JobPartPlanHeader)(unsafe.Pointer(&slice))
 }
