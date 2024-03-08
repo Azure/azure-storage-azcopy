@@ -72,7 +72,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	}
 
 	m := []byte{}
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&m)) //nolint:staticcheck
 	h.Data = addr
 	h.Len = int(length)
 	h.Cap = h.Len
