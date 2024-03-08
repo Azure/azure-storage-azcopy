@@ -207,8 +207,8 @@ func (b *BlobFSFileSystemResourceManager) CreateWithOptions(a Asserter, opts *fi
 	}
 
 	a.NoError("Create filesystem", err)
-	if rt, ok := a.(ResourceTracker); ok && created {
-		rt.TrackCreatedResource(b)
+	if created {
+		TrackResourceCreation(a, b)
 	}
 }
 
@@ -383,9 +383,7 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 		a.NoError("Set tier", err)
 	}
 
-	if rt, ok := a.(ResourceTracker); ok {
-		rt.TrackCreatedResource(b)
-	}
+	TrackResourceCreation(a, b)
 }
 
 func (b *BlobFSPathResourceProvider) Delete(a Asserter) {
