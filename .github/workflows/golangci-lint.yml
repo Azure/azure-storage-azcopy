@@ -21,12 +21,12 @@ jobs:
     name: lint
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v4
         with:
           # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
           version: latest
