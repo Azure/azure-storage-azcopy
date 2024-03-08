@@ -575,9 +575,10 @@ func (r *resourceManagedDisk) downloadContent(a asserter, options downloadConten
 
 // cleanup also usurps traditional resourceManager functionality.
 func (r *resourceManagedDisk) cleanup(a asserter) {
-	//
 	err := r.config.RevokeAccess()
 	a.AssertNoErr(err)
+
+	time.Sleep(time.Second * 5)
 }
 
 // getParam works functionally different because resourceManagerDisk inherently only targets a single file.
