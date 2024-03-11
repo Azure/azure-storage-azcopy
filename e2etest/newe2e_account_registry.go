@@ -57,7 +57,7 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 	}
 
 	accountARMDefinition := ARMStorageAccountCreateParams{
-		Location: "West US", // todo configurable
+		Location: "West US 2", // todo configurable
 	}
 
 	switch accountType { // https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal#storage-account-type-parameters

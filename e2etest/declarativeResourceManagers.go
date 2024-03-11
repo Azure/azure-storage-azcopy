@@ -578,7 +578,7 @@ func (r *resourceManagedDisk) cleanup(a asserter) {
 	err := r.config.RevokeAccess()
 	a.AssertNoErr(err)
 
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 10)
 }
 
 // getParam works functionally different because resourceManagerDisk inherently only targets a single file.
