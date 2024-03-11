@@ -22,6 +22,7 @@ vendor/
 
 ## Ignore the executables
 azcopy*
+!Microsoft.AzCopy/Microsoft.AzCopy/AzCopyRunner.cs
 
 ## Dep tool
 vendor/
@@ -75,6 +76,8 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 **/Properties/launchSettings.json
+**/bin
+**/obj
 
 *_i.c
 *_p.c
@@ -336,3 +339,4 @@ venv*
 # go files
 *.mod
 *.sum
+e2etest/.azcopy/

@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"runtime"
 	"testing"
 )
 
@@ -29,6 +30,11 @@ import (
 //     md- and md-impex URLs.
 
 func TestManagedDisks_NoOAuthRequired(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Limit to single OS to avoid parallelism issues")
+		return
+	}
+
 	RunScenarios(
 		t,
 		eOperation.Copy(),
