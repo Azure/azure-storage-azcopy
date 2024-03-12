@@ -116,7 +116,7 @@ func GetServiceClientForLocation(loc Location,
 ) (*ServiceClient, error) {
 	ret := &ServiceClient{}
 	switch loc {
-	case ELocation.BlobFS():
+	case ELocation.BlobFS(), ELocation.Blob(): // Since we always may need to interact with DFS while working with Blob, we should just attach both.
 		datalakeURLParts, err := azdatalake.ParseURL(resourceURL)
 		if err != nil {
 			return nil, err
@@ -150,9 +150,6 @@ func GetServiceClientForLocation(loc Location,
 
 		ret.dsc = dsc
 
-		// For BlobFS, we additionally create a blob client as well. We interact with both endpoints.
-		fallthrough
-	case ELocation.Blob():
 		blobURLParts, err := blob.ParseURL(resourceURL)
 		if err != nil {
 			return nil, err
@@ -162,23 +159,23 @@ func GetServiceClientForLocation(loc Location,
 		// In case we are creating a blob client for a datalake target, correct the endpoint
 		blobURLParts.Host = strings.Replace(blobURLParts.Host, ".dfs", ".blob", 1)
 		resourceURL = blobURLParts.String()
-		var o *blobservice.ClientOptions
+		var bso *blobservice.ClientOptions
 		var bsc *blobservice.Client
 		if policyOptions != nil {
-			o = &blobservice.ClientOptions{ClientOptions: *policyOptions}
+			bso = &blobservice.ClientOptions{ClientOptions: *policyOptions}
 		}
 
 		if credType.IsAzureOAuth() {
-			bsc, err = blobservice.NewClient(resourceURL, cred, o)
+			bsc, err = blobservice.NewClient(resourceURL, cred, bso)
 		} else if credType.IsSharedKey() {
 			var sharedKeyCred *blob.SharedKeyCredential
 			sharedKeyCred, err = GetBlobSharedKeyCredential()
 			if err != nil {
 				return nil, err
 			}
-			bsc, err = blobservice.NewClientWithSharedKeyCredential(resourceURL, sharedKeyCred, o)
+			bsc, err = blobservice.NewClientWithSharedKeyCredential(resourceURL, sharedKeyCred, bso)
 		} else {
-			bsc, err = blobservice.NewClientWithNoCredential(resourceURL, o)
+			bsc, err = blobservice.NewClientWithNoCredential(resourceURL, bso)
 		}
 
 		if err != nil {

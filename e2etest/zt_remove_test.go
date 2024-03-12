@@ -39,7 +39,8 @@ func TestRemove_IncludeAfter(t *testing.T) {
 		folder("fold1"),
 		f("fold1/fileb"),
 	}
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	// these filters aren't supported for blobFS
+	RunScenarios(t, eOperation.Remove(), eTestFromTo.Other(common.EFromTo.BlobTrash(), common.EFromTo.FileTrash()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive: true,
 	}, &hooks{
 		beforeRunJob: func(h hookHelper) {
