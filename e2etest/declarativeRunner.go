@@ -140,8 +140,9 @@ func RunScenarios(
 		}
 
 		seenFromTos := make(map[common.FromTo]bool)
+		fromTos := testFromTo.getValues(op)
 
-		for _, fromTo := range testFromTo.getValues(op) {
+		for _, fromTo := range fromTos {
 			// dedupe the scenarios
 			if _, ok := seenFromTos[fromTo]; ok {
 				continue
@@ -166,9 +167,20 @@ func RunScenarios(
 					subtestName += "-" + scenarioSuffix
 				}
 
+				usedSrc, usedDst := srcAccountType, destAccountType
+				if fromTo.From() == common.ELocation.BlobFS() {
+					// switch to an account made for dfs
+					usedSrc = EAccountType.HierarchicalNamespaceEnabled()
+				}
+
+				if fromTo.To() == common.ELocation.BlobFS() {
+					// switch to an account made for dfs
+					usedDst = EAccountType.HierarchicalNamespaceEnabled()
+				}
+
 				s := scenario{
-					srcAccountType:      srcAccountType,
-					destAccountType:     destAccountType,
+					srcAccountType:      usedSrc,
+					destAccountType:     usedDst,
 					subtestName:         subtestName,
 					compactScenarioName: compactScenarioName,
 					fullScenarioName:    fullScenarioName,

@@ -24,11 +24,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/filesystem"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
-	"net/http"
 	"path"
 	"strings"
 	"time"
@@ -239,16 +237,14 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 	// we do not know if the source is a file or a directory
 	// we assume it is a directory and get its properties
 	directoryClient := dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).NewDirectoryClient(datalakeURLParts.PathName)
-	var respFromCtx *http.Response
-	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
-	_, err := directoryClient.GetProperties(ctxWithResp, nil)
+	props, err := directoryClient.GetProperties(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("cannot verify resource due to error: %s", err)
 	}
 
 	// if the source URL is actually a file
 	// then we should short-circuit and simply remove that file
-	resourceType := respFromCtx.Header.Get("x-ms-resource-type")
+	resourceType := common.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
 		glcm.Dryrun(func(_ common.OutputFormat) string {
 			return fmt.Sprintf("DRYRUN: remove file %s", datalakeURLParts.PathName)

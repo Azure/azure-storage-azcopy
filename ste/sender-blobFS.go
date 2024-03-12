@@ -56,6 +56,7 @@ type blobFSSenderBase struct {
 	pacer               pacer
 	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
+	metadataToSet       common.Metadata
 }
 
 func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
@@ -107,6 +108,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
+		metadataToSet:       props.SrcMetadata,
 	}, nil
 }
 
@@ -243,12 +245,12 @@ func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, e
 func (u *blobFSSenderBase) SetPOSIXProperties() error {
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
-		return fmt.Errorf("failed to get POSIX properties")
+		return fmt.Errorf("failed to get POSIX properties: %w", err)
 	} else if adapter == nil {
 		return nil
 	}
 
-	meta := common.Metadata{}
+	meta := u.metadataToSet
 	common.AddStatToBlobMetadata(adapter, meta)
 	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
@@ -257,7 +259,16 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 }
 
 func (u *blobFSSenderBase) SetFolderProperties() error {
-	return u.SetPOSIXProperties()
+	if u.jptm.Info().PreservePOSIXProperties {
+		return u.SetPOSIXProperties()
+	} else if len(u.metadataToSet) > 0 {
+		_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet, nil)
+		if err != nil {
+			return fmt.Errorf("failed to set metadata: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (u *blobFSSenderBase) DirUrlToString() string {
@@ -282,7 +293,7 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 
 	common.AddStatToBlobMetadata(adapter, meta)
 	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
-	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
+	blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
 		BlobContentType:        u.creationTimeHeaders.ContentType,
 		BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
 		BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,

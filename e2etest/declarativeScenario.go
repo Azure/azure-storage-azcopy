@@ -107,15 +107,15 @@ func (s *scenario) Run() {
 	// setup scenario
 	// First, validate the accounts make sense for the source/dests
 	if s.srcAccountType.IsBlobOnly() {
-		s.a.Assert(s.fromTo.From(), equals(), common.ELocation.Blob())
+		s.a.Assert(true, equals(), s.fromTo.From() == common.ELocation.Blob() || s.fromTo.From() == common.ELocation.BlobFS())
 	}
 
-	if s.destAccountType.IsBlobOnly() {
+	if s.destAccountType.IsManagedDisk() {
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.StdManagedDisk(), "Upload is not supported in MD testing yet")
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.OAuthManagedDisk(), "Upload is not supported in MD testing yet")
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.ManagedDiskSnapshot(), "Cannot upload to a MD snapshot")
 		s.a.Assert(s.destAccountType, notEquals(), EAccountType.ManagedDiskSnapshotOAuth(), "Cannot upload to a MD snapshot")
-		s.a.Assert(s.fromTo.To(), equals(), common.ELocation.Blob())
+		s.a.Assert(true, equals(), s.fromTo.From() == common.ELocation.Blob() || s.fromTo.From() == common.ELocation.BlobFS())
 	}
 
 	// setup
@@ -263,7 +263,7 @@ func (s *scenario) assignSourceAndDest() {
 			return &resourceLocal{common.Iff[string](s.p.destNull && !isSourceAcc, common.Dev_Null, "")}
 		case common.ELocation.File():
 			return &resourceAzureFileShare{accountType: accType}
-		case common.ELocation.Blob():
+		case common.ELocation.Blob(), common.ELocation.BlobFS():
 			// TODO: handle the multi-container (whole account) scenario
 			// TODO: handle wider variety of account types
 			if accType.IsManagedDisk() {
@@ -272,10 +272,7 @@ func (s *scenario) assignSourceAndDest() {
 				return &resourceManagedDisk{config: *mdCfg}
 			}
 
-			return &resourceBlobContainer{accountType: accType}
-		case common.ELocation.BlobFS():
-			s.a.Error("Not implemented yet for blob FS")
-			return &resourceDummy{}
+			return &resourceBlobContainer{accountType: accType, isBlobFS: loc == common.ELocation.BlobFS()}
 		case common.ELocation.S3():
 			s.a.Error("Not implemented yet for S3")
 			return &resourceDummy{}
@@ -484,7 +481,7 @@ func (s *scenario) getTransferInfo() (srcRoot string, dstRoot string, expectFold
 	expectFolders = (s.fromTo.From().IsFolderAware() &&
 		s.fromTo.To().IsFolderAware() &&
 		s.p.allowsFolderTransfers()) ||
-		(s.p.preserveSMBPermissions && s.FromTo() == common.EFromTo.BlobBlob()) ||
+		(s.p.preserveSMBPermissions && s.FromTo().From().SupportsHnsACLs() && s.FromTo().To().SupportsHnsACLs()) ||
 		(s.p.preservePOSIXProperties && (s.FromTo() == common.EFromTo.LocalBlob() || s.FromTo() == common.EFromTo.BlobBlob() || s.FromTo() == common.EFromTo.BlobLocal()))
 	expectRootFolder := expectFolders
 
@@ -583,7 +580,7 @@ func (s *scenario) validateProperties() {
 		// validate all the different things
 		s.validatePOSIXProperties(f, actual.nameValueMetadata)
 		s.validateSymlink(f, actual.nameValueMetadata)
-		s.validateMetadata(expected.nameValueMetadata, actual.nameValueMetadata)
+		s.validateMetadata(f, expected.nameValueMetadata, actual.nameValueMetadata)
 		s.validateBlobTags(expected.blobTags, actual.blobTags)
 		s.validateContentHeaders(expected.contentHeaders, actual.contentHeaders)
 		s.validateCreateTime(expected.creationTime, actual.creationTime)
@@ -733,20 +730,22 @@ func metadataWithProperCasing(original map[string]*string) map[string]*string {
 }
 
 // // Individual property validation routines
-func (s *scenario) validateMetadata(expected, actual map[string]*string) {
+func (s *scenario) validateMetadata(f *testObject, expected, actual map[string]*string) {
+	cased := metadataWithProperCasing(actual)
+
 	for _, v := range common.AllLinuxProperties { // properties are evaluated elsewhere
 		delete(expected, v)
-		delete(actual, v)
+		delete(cased, v)
 	}
 
-	s.a.Assert(len(actual), equals(), len(expected), "Both should have same number of metadata entries")
-	cased := metadataWithProperCasing(actual)
+	s.a.Assert(len(cased), equals(), len(expected), "Both should have same number of metadata entries")
+
 	for key := range expected {
 		exValue := expected[key]
 		actualValue, ok := cased[key]
-		s.a.Assert(ok, equals(), true, fmt.Sprintf("expect key '%s' to be found in destination metadata", key))
+		s.a.Assert(ok, equals(), true, fmt.Sprintf("%s: expect key '%s' to be found in destination metadata", f.name, key))
 		if ok {
-			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("Expect value for key '%s' to be '%s' but found '%s'", key, *exValue, *actualValue))
+			s.a.Assert(exValue, equals(), actualValue, fmt.Sprintf("%s: Expect value for key '%s' to be '%s' but found '%s'", f.name, key, *exValue, *actualValue))
 		}
 	}
 }
