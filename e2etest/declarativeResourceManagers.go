@@ -212,6 +212,7 @@ func (r *resourceLocal) createSourceSnapshot(a asserter) {
 
 type resourceBlobContainer struct {
 	accountType     AccountType
+	isBlobFS        bool
 	containerClient *container.Client
 	rawSasURL       *url.URL
 }
@@ -383,7 +384,7 @@ func (r *resourceBlobContainer) getParam(a asserter, stripTopDir, withSas bool, 
 		uri = bURLParts.String()
 	}
 
-	if r.accountType == EAccountType.HierarchicalNamespaceEnabled() {
+	if r.isBlobFS {
 		uri = strings.ReplaceAll(uri, "blob", "dfs")
 	}
 
