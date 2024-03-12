@@ -686,6 +686,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.asSubdir = raw.asSubdir
 
 	cooked.IncludeDirectoryStubs = raw.includeDirectoryStubs
+	if cooked.preservePermissions.IsTruthy() && cooked.FromTo.From() == common.ELocation.Blob() {
+		// If a user is trying to persist from Blob storage with ACLs, they probably want directories too, because ACLs only exist in HNS.
+		cooked.IncludeDirectoryStubs = true
+	}
 
 	cooked.backupMode = raw.backupMode
 	if err = validateBackupMode(cooked.backupMode, cooked.FromTo); err != nil {
