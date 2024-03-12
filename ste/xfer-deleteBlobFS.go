@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 
 	"net/http"
@@ -101,15 +100,13 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 
 	// Check if the source is a file or directory
 	directoryClient := c.NewDirectoryClient(info.SrcFilePath)
-	var respFromCtx *http.Response
-	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
-	_, err = directoryClient.GetProperties(ctxWithResp, nil)
+	props, err := directoryClient.GetProperties(ctx, nil)
 	if err != nil {
 		transferDone(err)
 		return
 	}
 
-	resourceType := respFromCtx.Header.Get("x-ms-resource-type")
+	resourceType := common.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
 		fileClient := c.NewFileClient(info.SrcFilePath)
 
