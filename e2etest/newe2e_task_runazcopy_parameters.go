@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
@@ -32,7 +33,7 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 			val = val.Elem()
 		}
 
-		if !val.IsValid() || val.IsZero() {
+		if !val.IsValid() {
 			continue
 		}
 
@@ -41,6 +42,7 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 
 		for i := 0; i < numField; i++ {
 			key, ok := t.Field(i).Tag.Lookup(tagName)
+
 			if ok {
 				field := val.Field(i)
 				// break the key down
@@ -190,8 +192,12 @@ type GlobalFlags struct {
 
 	// TODO: handle prompting and input; WI#26475441
 	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
-	//AwaitContinue   *bool `flag:"await-continue"`
+	AwaitContinue *bool `flag:"await-continue,defaultfunc:DefaultAwaitContinue"`
 	//AwaitOpen       *bool `flag:"await-open"`
+}
+
+func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter) string {
+	return common.Iff(isLaunchedByDebugger, "true", "false")
 }
 
 type CommonFilterFlags struct {
@@ -440,4 +446,21 @@ var WindowsAttributesByName = map[string]WindowsAttribute{
 	"O": WindowsAttributeOfflineFile,
 	"I": WindowsAttributeNonIndexedFile,
 	"E": WindowsAttributeEncryptedFile,
+}
+
+func ParseNTFSAttributes(attr string) (WindowsAttribute, error) {
+	out := WindowsAttribute(0)
+
+	for _, v := range []rune(attr) {
+		attrName := string(v)
+		attr, ok := WindowsAttributesByName[attrName]
+
+		if !ok {
+			return 0, errors.New("could not parse attribute character " + attrName)
+		}
+
+		out |= attr
+	}
+
+	return out, nil
 }
