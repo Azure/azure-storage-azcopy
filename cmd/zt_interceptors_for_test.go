@@ -118,7 +118,7 @@ func (m *mockedLifecycleManager) Dryrun(o common.OutputBuilder) {
 	default:
 	}
 }
-func (m *mockedLifecycleManager) Output(o common.OutputBuilder) {
+func (m *mockedLifecycleManager) Output(o common.OutputBuilder, e common.OutputMessageType) {
 	select {
 	case m.infoLog <- o(m.outputFormat):
 	default:

@@ -75,21 +75,21 @@ func (a *AzCopyListStdout) Unmarshal() ([]cmd.AzCopyListObject, *cmd.AzCopyListS
 		if err != nil {
 			return nil, nil, err
 		}
-		if out.MessageType == "Info" {
-			var obj *cmd.AzCopyResponse[cmd.AzCopyListObject]
+		if out.MessageType == common.EOutputMessageType.ListObject().String() {
+			var obj *cmd.AzCopyListObject
 			objErr := json.Unmarshal([]byte(out.MessageContent), &obj)
-			if objErr != nil || obj.ResponseType != "AzCopyListObject" {
-				// if we can't unmarshal an object, try to unmarshal a summary
-				var sum *cmd.AzCopyResponse[cmd.AzCopyListSummary]
-				sumErr := json.Unmarshal([]byte(out.MessageContent), &sum)
-				if sumErr != nil {
-					return nil, nil, fmt.Errorf("error unmarshaling list output; object error: %s, summary error: %s", objErr, sumErr)
-				} else {
-					listSummary = &sum.ResponseValue
-				}
-			} else {
-				listOutput = append(listOutput, obj.ResponseValue)
+			if objErr != nil {
+				return nil, nil, fmt.Errorf("error unmarshaling list output; object error: %s", objErr)
 			}
+			listOutput = append(listOutput, *obj)
+
+		} else if out.MessageType == common.EOutputMessageType.ListSummary().String() {
+			var sum *cmd.AzCopyListSummary
+			sumErr := json.Unmarshal([]byte(out.MessageContent), &sum)
+			if sumErr != nil {
+				return nil, nil, fmt.Errorf("error unmarshaling list output; summary error: %s", sumErr)
+			}
+			listSummary = sum
 		}
 	}
 	return listOutput, listSummary, nil

@@ -238,16 +238,15 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	processor := func(object StoredObject) error {
 		lo := cooked.newListObject(object, level)
-		response := AzCopyResponse[AzCopyListObject]{ResponseType: "AzCopyListObject", ResponseValue: lo}
 		glcm.Output(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(response)
+				jsonOutput, err := json.Marshal(lo)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
 				return lo.String()
 			}
-		})
+		}, common.EOutputMessageType.ListObject())
 
 		// ensure that versioned objects don't get counted multiple times in the tally
 		// 1. only include the size of the latest version of the object in the sizeCount
@@ -295,24 +294,18 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	if cooked.RunningTally {
 		ls := cooked.newListSummary(fileCount, sizeCount)
-		response := AzCopyResponse[AzCopyListSummary]{ResponseType: "AzCopyListSummary", ResponseValue: ls}
 		glcm.Output(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(response)
+				jsonOutput, err := json.Marshal(ls)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
 				return ls.String()
 			}
-		})
+		}, common.EOutputMessageType.ListSummary())
 	}
 
 	return nil
-}
-
-type AzCopyResponse[T any] struct {
-	ResponseType  string
-	ResponseValue T
 }
 
 type AzCopyListObject struct {
