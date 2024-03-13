@@ -444,7 +444,13 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
+
+		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		if err != nil {
+			return nil, err
+		}
+
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -489,7 +495,13 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		fileOptions := &common.FileClientOptions{
 			AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
 		}
-		c, err := common.GetServiceClientForLocation(common.ELocation.File(), fileURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+
+		res, err := SplitResourceString(fileURLParts.String(), common.ELocation.File())
+		if err != nil {
+			return nil, err
+		}
+
+		c, err := common.GetServiceClientForLocation(common.ELocation.File(), res, credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -530,7 +542,12 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		if err != nil {
+			return nil, err
+		}
+
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}

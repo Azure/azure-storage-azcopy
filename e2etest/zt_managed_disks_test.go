@@ -22,13 +22,20 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"runtime"
 	"testing"
+	"time"
 )
 
 // Purpose: Tests for the special cases that relate to moving managed disks (default local VHD to page blob; special handling for
 //     md- and md-impex URLs.
 
 func TestManagedDisks_NoOAuthRequired(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Limit runs to Linux so no simultaneous runs occur")
+		return
+	}
+
 	RunScenarios(
 		t,
 		eOperation.Copy(),
@@ -51,26 +58,92 @@ func TestManagedDisks_NoOAuthRequired(t *testing.T) {
 	)
 }
 
+func TestManagedDisks_Snapshot(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Limit runs to Linux so no simultaneous runs occur")
+		return
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()), // It's relevant to test blobblob since this interfaces with x-ms-copysourceauthorization
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			disableParallelTesting: true,
+		},
+		nil,
+		testFiles{
+			shouldTransfer: []interface{}{
+				"",
+			},
+		}, // Managed disks will always have a transfer target of ""
+		EAccountType.Standard(),
+		EAccountType.ManagedDiskSnapshot(),
+		"",
+	)
+}
+
+func TestManagedDisks_SnapshotOAuth(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Limit runs to Linux so no simultaneous runs occur")
+		return
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()), // It's relevant to test blobblob since this interfaces with x-ms-copysourceauthorization
+		eValidate.Auto(),
+		[]common.CredentialType{common.ECredentialType.MDOAuthToken()},
+		[]common.CredentialType{common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+		params{
+			disableParallelTesting: true,
+		},
+		nil,
+		testFiles{
+			shouldTransfer: []interface{}{
+				"",
+			},
+		}, // Managed disks will always have a transfer target of ""
+		EAccountType.Standard(),
+		EAccountType.ManagedDiskSnapshotOAuth(),
+		"",
+	)
+}
+
 // Service issue causes occasional flickers in feature functionality; enough that testing is problematic. Temporarily disabled until issue is resolved.
-// func TestManagedDisks_OAuthRequired(t *testing.T) {
-// 	RunScenarios(
-// 		t,
-// 		eOperation.Copy(),
-// 		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()), // It's relevant to test blobblob since this interfaces with x-ms-copysourceauthorization
-// 		eValidate.Auto(),
-// 		[]common.CredentialType{common.ECredentialType.MDOAuthToken()},
-// 		[]common.CredentialType{common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
-// 		params{
-// 			disableParallelTesting: true, // testing is implemented with a single managed disk
-// 		},
-// 		nil,
-// 		testFiles{
-// 			shouldTransfer: []interface{}{
-// 				"",
-// 			},
-// 		}, // Managed disks will always have a transfer target of ""
-// 		EAccountType.Standard(),
-// 		EAccountType.OAuthManagedDisk(),
-// 		"",
-// 	)
-// }
+func TestManagedDisks_OAuthRequired(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Limit runs to Linux so no simultaneous runs occur")
+		return
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()), // It's relevant to test blobblob since this interfaces with x-ms-copysourceauthorization
+		eValidate.Auto(),
+		[]common.CredentialType{common.ECredentialType.MDOAuthToken()},
+		[]common.CredentialType{common.ECredentialType.Anonymous(), common.ECredentialType.OAuthToken()},
+		params{
+			disableParallelTesting: true, // testing is implemented with a single managed disk
+		},
+		&hooks{
+			beforeRunJob: func(h hookHelper) {
+				// try giving the service some time to think
+				time.Sleep(time.Second * 30)
+			},
+		},
+		testFiles{
+			shouldTransfer: []interface{}{
+				"",
+			},
+		}, // Managed disks will always have a transfer target of ""
+		EAccountType.Standard(),
+		EAccountType.OAuthManagedDisk(),
+		"",
+	)
+}
