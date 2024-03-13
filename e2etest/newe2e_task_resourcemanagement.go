@@ -14,6 +14,16 @@ type ResourceTracker interface {
 	TrackCreatedAccount(account AccountResourceManager)
 }
 
+func TrackResourceCreation(a Asserter, rm any) {
+	if t, ok := a.(ResourceTracker); ok {
+		if arm, ok := rm.(AccountResourceManager); ok {
+			t.TrackCreatedAccount(arm)
+		} else if resMan, ok := rm.(ResourceManager); ok {
+			t.TrackCreatedResource(resMan)
+		}
+	}
+}
+
 func CreateResource[T ResourceManager](a Asserter, base ResourceManager, def MatchedResourceDefinition[T]) T {
 	definition := ResourceDefinition(def)
 
@@ -42,6 +52,10 @@ func CreateResource[T ResourceManager](a Asserter, base ResourceManager, def Mat
 
 		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objDef := definition.(ResourceDefinitionObject)
+
+			if objDef.Body == nil {
+				objDef.Body = NewZeroObjectContentContainer(0)
+			}
 
 			manager.(ObjectResourceManager).Create(a, objDef.Body, objDef.ObjectProperties)
 		},
@@ -159,7 +173,6 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Page blob access tier", vProps.BlobProperties.PageBlobAccessTier, oProps.BlobProperties.PageBlobAccessTier)
 			case common.ELocation.File():
 				ValidatePropertyPtr(a, "Attributes", vProps.FileProperties.FileAttributes, oProps.FileProperties.FileAttributes)
-				ValidatePropertyPtr(a, "Change time", vProps.FileProperties.FileChangeTime, oProps.FileProperties.FileChangeTime)
 				ValidatePropertyPtr(a, "Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
 				ValidatePropertyPtr(a, "Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)

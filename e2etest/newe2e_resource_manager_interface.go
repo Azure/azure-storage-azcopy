@@ -70,6 +70,14 @@ type RemoteResourceManager interface {
 	ResourceClient() any
 }
 
+func TryApplySpecificAuthType(rm ResourceManager, cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	if rrm, ok := rm.(RemoteResourceManager); ok {
+		return rrm.WithSpecificAuthType(cred, a, opts...)
+	}
+
+	return CreateAzCopyTarget(rm, EExplicitCredentialType.None(), a)
+}
+
 // ExplicitCredentialTypes defines a more explicit enum for credential types as AzCopy's internal definition is very loose (e.g. Anonymous can be public or SAS); accepts the URI as-is.
 // ExplicitCredentialTypes is a set of bitflags indicating intended credential types for a test and available credential types for resources
 type ExplicitCredentialTypes uint8
@@ -278,9 +286,15 @@ type BlobFSProperties struct {
 }
 
 type FileProperties struct {
-	FileAttributes    *string
-	FileChangeTime    *time.Time
+	FileAttributes *string
+	// ChangeTime, though available on the Files service is not writeable locally, or queryable.
+	// We also just do not persist it, even on Files at the moment.
+	// Hence, we do not test ChangeTime.
 	FileCreationTime  *time.Time
 	FileLastWriteTime *time.Time
 	FilePermissions   *string
+}
+
+func (f FileProperties) hasCustomTimes() bool {
+	return f.FileCreationTime != nil || f.FileLastWriteTime != nil
 }
