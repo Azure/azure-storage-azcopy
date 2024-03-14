@@ -12,7 +12,9 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"path"
 	"runtime"
+	"strings"
 )
 
 // check that everything aligns with interfaces
@@ -326,7 +328,24 @@ func (b *BlobFSPathResourceProvider) ObjectName() string {
 	return b.objectPath
 }
 
+func (b *BlobFSPathResourceProvider) CreateParents(a Asserter) {
+	if !b.Container.Exists() {
+		b.Container.Create(a, ContainerProperties{})
+	}
+
+	dir, _ := path.Split(b.objectPath)
+	if dir != "" {
+		obj := b.Container.GetObject(a, strings.TrimSuffix(dir, "/"), common.EEntityType.Folder()).(*FileObjectResourceManager)
+		// Create recursively calls this function.
+		if !obj.Exists() {
+			obj.Create(a, nil, ObjectProperties{})
+		}
+	}
+}
+
 func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
+	b.CreateParents(a)
+
 	switch b.entityType {
 	case common.EEntityType.Folder():
 		_, err := b.getDirClient().Create(ctx, &directory.CreateOptions{

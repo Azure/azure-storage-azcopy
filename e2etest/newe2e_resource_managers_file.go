@@ -16,6 +16,7 @@ import (
 	"io"
 	"path"
 	"runtime"
+	"strings"
 )
 
 // check that everything complies with interfaces
@@ -432,6 +433,21 @@ func (f *FileObjectResourceManager) PreparePermissions(a Asserter, p *string) *f
 	return &file.Permissions{Permission: &perm}
 }
 
+func (f *FileObjectResourceManager) CreateParents(a Asserter) {
+	if !f.Share.Exists() {
+		f.Share.Create(a, ContainerProperties{})
+	}
+
+	dir, _ := path.Split(f.path)
+	if dir != "" {
+		obj := f.Share.GetObject(a, strings.TrimSuffix(dir, "/"), common.EEntityType.Folder()).(*FileObjectResourceManager)
+		// Create recursively calls this function.
+		if !obj.Exists() {
+			obj.Create(a, nil, ObjectProperties{})
+		}
+	}
+}
+
 func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContainer, props ObjectProperties) {
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
@@ -441,6 +457,8 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	}
 
 	perms := f.PreparePermissions(a, props.FileProperties.FilePermissions)
+
+	f.CreateParents(a)
 
 	switch f.entityType {
 	case common.EEntityType.File():
