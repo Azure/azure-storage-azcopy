@@ -161,14 +161,14 @@ Elapsed Time (Minutes): %v
 Number of File Transfers: %v
 Number of Folder Property Transfers: %v
 Number of Symlink Transfers: %v
-Total Number Of Transfers: %v
+Total Number of Transfers: %v
 Number of File Transfers Completed: %v
 Number of Folder Transfers Completed: %v
 Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
-TotalBytesTransferred: %v
+Total Number of Bytes Transferred: %v
 Final Job Status: %v
 `,
 					summary.JobID.String(),
