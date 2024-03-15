@@ -5,6 +5,7 @@ import (
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 	"time"
 )
 
@@ -204,6 +205,8 @@ func (vals GenericAccountSignatureValues) AsBlob() BlobSignatureValues {
 
 func (vals GenericAccountSignatureValues) AsFile() FileSignatureValues {
 	s := vals.withDefaults()
+
+	s.Permissions = strings.ReplaceAll(s.Permissions, "a", "") // remove 'a', because it's invalid and causes panics.
 
 	return filesas.AccountSignatureValues{
 		Version:       s.Version,
