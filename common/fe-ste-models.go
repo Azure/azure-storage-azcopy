@@ -515,6 +515,14 @@ func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
 }
 
+func (l *Location) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(l), s, true, true)
+	if err == nil {
+		*l = val.(Location)
+	}
+	return err
+}
+
 // AllStandardLocations returns all locations that are "normal" for testing purposes. Excludes the likes of Unknown, Benchmark and Pipe
 func (Location) AllStandardLocations() []Location {
 	return []Location{
