@@ -81,12 +81,12 @@ func getValidCredCombinationsForFromTo(fromTo common.FromTo, requestedCredential
 	}
 
 	for _, srcCredType := range sourceTypes {
-		if srcCredType == common.ECredentialType.MDOAuthToken() && accountTypes[0] != EAccountType.OAuthManagedDisk() {
+		if srcCredType == common.ECredentialType.MDOAuthToken() && accountTypes[0] != EAccountType.OAuthManagedDisk() && accountTypes[0] != EAccountType.ManagedDiskSnapshotOAuth() {
 			continue // invalid selection
 		}
 
 		for _, dstCredType := range validCredTypesPerLocation[fromTo.To()] {
-			if dstCredType == common.ECredentialType.MDOAuthToken() && accountTypes[1] != EAccountType.OAuthManagedDisk() {
+			if dstCredType == common.ECredentialType.MDOAuthToken() && accountTypes[1] != EAccountType.OAuthManagedDisk() && accountTypes[0] != EAccountType.ManagedDiskSnapshotOAuth() {
 				continue // invalid selection
 			}
 
