@@ -129,7 +129,7 @@ Download a subset of containers within a storage account by using a wildcard sym
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
-Download all the versions of a blob from Azure Storage to local directory. Ensure that source is a valid blob, destination is a local folder and versionidsFile which takes in a path to the file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
+Download all the versions of a blob from Azure Storage to local directory listed in a text file (i.e, versionidsFile). Ensure that source is a valid blob, destination is a local folder and versionidsFile is a text file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/another/path/to/dir/[versionidsFile]"
 
@@ -265,7 +265,7 @@ const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) se
 	"enclosed in double quotes (\")]"
 
 // ===================================== LOGIN COMMAND ===================================== //
-const loginCmdShortDescription = "Log in to Azure Active Directory (AD) to access Azure Storage resources."
+const loginCmdShortDescription = "Log in to Microsoft Entra ID to access Azure Storage resources."
 
 const loginCmdLongDescription = `To be authorized to your Azure Storage account, you must assign the **Storage Blob Data Contributor** role to your user account in the context of either the Storage account, parent resource group or parent subscription.
 This command will cache encrypted login information for current user using the OS built-in mechanisms.
@@ -277,7 +277,7 @@ const environmentVariableNotice = "If you set an environment variable by using t
 	"Consider clearing variables that contain credentials from your command line history.  " +
 	"To keep variables from appearing in your history, you can use a script to prompt the user for their credentials, and to set the environment variable."
 
-const loginCmdExample = `Log in interactively with default AAD tenant ID set to common:
+const loginCmdExample = `Log in interactively with default Microsoft Entra tenant ID set to common:
 - azcopy login
 
 Log in interactively with a specified tenant ID:
@@ -365,7 +365,7 @@ Remove specified version ids of a blob from Azure Storage. Ensure that source is
 
   - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsfile]"
 
-Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
+Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a text file (i.e., list.txt) using the --list-of-files flag. In the text file, each blob and virtual directory is written on a separate line, see file contents below.
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/parent/dir]" --recursive=true --list-of-files=/usr/bar/list.txt
    - file content:
