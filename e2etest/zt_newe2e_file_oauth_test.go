@@ -2,15 +2,16 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 )
 
 func init() {
-	suiteManager.RegisterSuite(&ErrorTestSuite{})
+	suiteManager.RegisterSuite(&FileOAuthTestSuite{})
 }
 
-type ErrorTestSuite struct{}
+type FileOAuthTestSuite struct{}
 
-func (s *ErrorTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationManager) {
+func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	srcService := CreateResource[ServiceResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()})), ResourceDefinitionService{})
@@ -18,7 +19,7 @@ func (s *ErrorTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationManag
 
 	dstAuth := ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()})
 
-	RunAzCopy(
+	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
@@ -33,4 +34,11 @@ func (s *ErrorTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationManag
 			},
 			ShouldFail: true,
 		})
+
+	for _, line := range stdout.RawOutput {
+		if strings.Contains(line, "S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported") {
+			return
+		}
+	}
+	svm.Error("expected error message not found in azcopy output")
 }
