@@ -48,6 +48,8 @@ var lgCmd = &cobra.Command{
 			glcm.Info(environmentVariableNotice)
 		}
 
+		loginCmdArg.loginType = strings.ToLower(loginCmdArg.loginType)
+
 		err := loginCmdArg.process()
 		if err != nil {
 			// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
@@ -132,7 +134,6 @@ func (lca loginCmdArgs) validate() error {
 		// This isn't necessary, but stands as a sanity check. It will never be hit.
 		return errors.New("you can only log in with one type of auth at once")
 	}
-	lca.loginType = strings.ToLower(lca.loginType)
 	// Any required variables for login type will be validated by the Azure Identity SDK.
 	return nil
 }
