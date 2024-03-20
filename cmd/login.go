@@ -152,13 +152,11 @@ func (lca loginCmdArgs) process() error {
 			if err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
-
 			glcm.Info("SPN Auth via cert succeeded.")
 		} else {
 			if err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
-
 			glcm.Info("SPN Auth via secret succeeded.")
 		}
 	case common.AutologinTypeMSI:

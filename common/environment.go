@@ -165,6 +165,20 @@ func (EnvironmentVariable) ManagedIdentityResourceString() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) WorkloadIdentityClientID() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_WORKLOAD_CLIENT_ID",
+		Description: "Client ID for Workload identity. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+	}
+}
+
+func (EnvironmentVariable) WorkloadIdentityTokenFilePath() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_WORKLOAD_TOKEN_FILE_PATH",
+		Description: "Token file path for Workload identity. This variable is only used for auto login, please use the command line flag instead when invoking the login command.",
+	}
+}
+
 func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENCY_VALUE",
