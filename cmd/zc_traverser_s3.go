@@ -221,7 +221,7 @@ func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx c
 // For info see: https://github.com/aws/aws-sdk-go/issues/720#issuecomment-243891223
 // Once we change to bucketExists, assuming its reliable, we will be able to re allow this URL type.
 func showS3UrlTypeWarning(s3URLParts common.S3URLParts) {
-	if strings.EqualFold(s3URLParts.Host, "s3.amazonaws.com") {
+	if strings.EqualFold(s3URLParts.Host, "s3." + common.GetS3EssentialHostPart()) {
 		s3UrlWarningOncer.Do(func() {
 			glcm.Info("Instead of transferring from the 's3.amazonaws.com' URL, in this version of AzCopy we recommend you " +
 				"use a region-specific endpoint to transfer from one specific region. E.g. s3.us-east-1.amazonaws.com or a virtual-hosted reference to a single bucket.")
