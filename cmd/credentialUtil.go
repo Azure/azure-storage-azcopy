@@ -111,7 +111,6 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
 			lca.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-
 		case common.AutologinTypeMSI:
 			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
 			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
@@ -120,8 +119,6 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		case common.AutologinTypeAzCLI:
 		case common.AutologinTypePsCred:
 		case common.AutologinTypeWorkload:
-			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.WorkloadIdentityClientID())
-			lca.tokenFilePath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.WorkloadIdentityTokenFilePath())
 		default:
 			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
 			return
