@@ -77,7 +77,7 @@ func init() {
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.loginType, "login-type", common.AutologinTypeDevice, "Default value is DEVICE. Specify the credential type to access Azure Resource, available values SPN, MSI, DEVICE, AZCLI, and PSCRED, WORKLOAD  - sequentially for Service Principal, Managed Service Identity, Device workflow, Azure CLI, Azure PowerShell. or Workload Identity.")
 
 	// Managed Identity flags
-	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityClientID, "identity-client-id", "", "Client ID of user-assigned or federated identity.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityClientID, "identity-client-id", "", "Client ID of user-assigned identity.")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityResourceID, "identity-resource-id", "", "Resource ID of user-assigned identity.")
 	// SPN flags
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.applicationID, "application-id", "", "Application ID of user-assigned identity. Required for service principal auth.")
