@@ -121,7 +121,7 @@ type loginCmdArgs struct {
 	persistToken  bool
 }
 
-func (lca loginCmdArgs) validate() error {
+func (lca loginCmdArgs) process() error {
 	// Login type consolidation to allow backward compatibility.
 	if lca.servicePrincipal || lca.identity {
 		glcm.Warn("The flags --service-principal and --identity will be deprecated in a future release. Please use --login-type=SPN or --login-type=MSI instead.")
@@ -135,14 +135,6 @@ func (lca loginCmdArgs) validate() error {
 		return errors.New("you can only log in with one type of auth at once")
 	}
 	// Any required variables for login type will be validated by the Azure Identity SDK.
-	return nil
-}
-
-func (lca loginCmdArgs) process() error {
-	// Validate login parameters.
-	if err := lca.validate(); err != nil {
-		return err
-	}
 
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
@@ -181,7 +173,7 @@ func (lca loginCmdArgs) process() error {
 		}
 		glcm.Info("Login with Powershell context succeeded")
 	case common.AutologinTypeWorkload:
-		if err := uotm.WorkloadIdentityLogin(lca.tenantID, lca.identityClientID, lca.tokenFilePath, lca.persistToken); err != nil {
+		if err := uotm.WorkloadIdentityLogin(lca.persistToken); err != nil {
 			return err
 		}
 		glcm.Info("Login with Workload Identity succeeded")

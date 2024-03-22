@@ -162,14 +162,9 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	return nil
 }
 
-func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(tenantID, clientID, tokenFilePath string, persist bool) error {
+func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		WorkloadIdentity: true,
-		Tenant:           tenantID,
-		WorkloadIdentityInfo: WorkloadIdentityInfo{
-			ClientID:      clientID,
-			TokenFilePath: tokenFilePath,
-		},
+		LoginType: AutologinTypeWorkload,
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
@@ -177,7 +172,7 @@ func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(tenantID, clientID, tok
 
 func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		AzCLICred: true,
+		LoginType: AutologinTypeAzCLI,
 		Tenant:    tenantID,
 	}
 
@@ -187,8 +182,8 @@ func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
 
 func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		PSCred: true,
-		Tenant: tenantID,
+		LoginType: AutologinTypePsCred,
+		Tenant:    tenantID,
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo, false)
@@ -201,7 +196,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 	}
 
 	oAuthTokenInfo := &OAuthTokenInfo{
-		Identity:     true,
+		LoginType:    AutologinTypeMSI,
 		IdentityInfo: identityInfo,
 	}
 
@@ -211,7 +206,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 // SecretLogin is a UOTM shell for secretLoginNoUOTM.
 func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		ServicePrincipalName:    true,
+		LoginType:               AutologinTypeSPN,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           applicationID,
@@ -228,7 +223,7 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) error {
 	absCertPath, _ := filepath.Abs(certPath)
 	oAuthTokenInfo := &OAuthTokenInfo{
-		ServicePrincipalName:    true,
+		LoginType:               AutologinTypeSPN,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           applicationID,
@@ -286,6 +281,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	}
 
 	oAuthTokenInfo := OAuthTokenInfo{
+		LoginType:               AutologinTypeDevice,
 		Token:                   *token,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
@@ -427,20 +423,9 @@ type OAuthTokenInfo struct {
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 	TokenRefreshSource      string `json:"_token_refresh_source"`
 	ApplicationID           string `json:"_application_id"`
-	Identity                bool   `json:"_identity"`
+	LoginType               string `json:"_login_type"`
 	IdentityInfo            IdentityInfo
-	ServicePrincipalName    bool `json:"_spn"`
 	SPNInfo                 SPNInfo
-	AzCLICred               bool
-	PSCred                  bool
-	WorkloadIdentity        bool
-	WorkloadIdentityInfo    WorkloadIdentityInfo
-	// Note: ClientID should be only used for internal integrations through env var with refresh token.
-	// It indicates the Application ID assigned to your app when you registered it with Azure AD.
-	// In this case AzCopy refresh token on behalf of caller.
-	// For more details, please refer to
-	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
-	ClientID string `json:"_client_id"`
 }
 
 // IdentityInfo contains info for MSI.
@@ -457,11 +442,6 @@ type SPNInfo struct {
 	// Thus, the original secret is needed to refresh.
 	Secret   string `json:"_spn_secret"`
 	CertPath string `json:"_spn_cert_path"`
-}
-
-type WorkloadIdentityInfo struct {
-	ClientID      string
-	TokenFilePath string
 }
 
 // Validate validates identity info, at most only one of clientID, objectID or MSI resource ID could be set.
@@ -490,7 +470,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 	if err != nil {
 		return nil, err
 	}
-	if credInfo.TokenRefreshSource == "tokenstore" || credInfo.Identity || credInfo.ServicePrincipalName || credInfo.AzCLICred || credInfo.PSCred || credInfo.WorkloadIdentity {
+	if credInfo.TokenRefreshSource == "tokenstore" || credInfo.LoginType != AutologinTypeDevice {
 		scopes := []string{StorageScope}
 		t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
 		if err != nil {
@@ -517,7 +497,7 @@ var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
 
 // IsEmpty returns if current OAuthTokenInfo is empty and doesn't contain any useful info.
 func (credInfo OAuthTokenInfo) IsEmpty() bool {
-	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() && !credInfo.Identity {
+	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() && credInfo.LoginType == "" {
 		return true
 	}
 
@@ -699,9 +679,6 @@ func (credInfo *OAuthTokenInfo) GetWorkloadIdentityCredential() (azcore.TokenCre
 		ClientOptions: azcore.ClientOptions{
 			Transport: newAzcopyHTTPClient(),
 		},
-		ClientID:      credInfo.WorkloadIdentityInfo.ClientID,
-		TenantID:      credInfo.Tenant,
-		TokenFilePath: credInfo.WorkloadIdentityInfo.TokenFilePath,
 	})
 	if err != nil {
 		return nil, err
@@ -777,31 +754,26 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 		return credInfo.GetTokenStoreCredential()
 	}
 
-	if credInfo.Identity {
+	switch credInfo.LoginType {
+	case AutologinTypeMSI:
 		return credInfo.GetManagedIdentityCredential()
-	}
-
-	if credInfo.ServicePrincipalName {
+	case AutologinTypeSPN:
 		if credInfo.SPNInfo.CertPath != "" {
 			return credInfo.GetClientCertificateCredential()
 		} else {
 			return credInfo.GetClientSecretCredential()
 		}
-	}
-
-	if credInfo.AzCLICred {
+	case AutologinTypeAzCLI:
 		return credInfo.GetAzCliCredential()
-	}
-
-	if credInfo.PSCred {
+	case AutologinTypePsCred:
 		return credInfo.GetPSContextCredential()
-	}
-
-	if credInfo.WorkloadIdentity {
+	case AutologinTypeWorkload:
 		return credInfo.GetWorkloadIdentityCredential()
+	case AutologinTypeDevice:
+		return credInfo.GetDeviceCodeCredential()
+	default:
+		return nil, fmt.Errorf("invalid auto-login type specified: %s", credInfo.LoginType)
 	}
-
-	return credInfo.GetDeviceCodeCredential()
 }
 
 // jsonToTokenInfo converts bytes to OAuthTokenInfo
