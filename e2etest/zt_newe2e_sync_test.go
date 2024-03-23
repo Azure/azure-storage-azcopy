@@ -130,3 +130,43 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 
 	a.Assert("hashes must match", Equal{}, data.Data, base64.StdEncoding.EncodeToString(md5[:]))
 }
+
+func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+
+	if srcLoc == common.ELocation.Local() && srcLoc == dstLoc {
+		svm.InvalidateScenario()
+		return
+	}
+
+	srcRes := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc, GetResourceOptions{
+		PreferredAccount: common.Iff(srcLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
+	}), ResourceDefinitionContainer{})
+	dstRes := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, dstLoc, GetResourceOptions{
+		PreferredAccount: common.Iff(dstLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
+	}), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"deleteme.txt":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, 512)},
+			"also/deleteme.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, 512)},
+		},
+	})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbSync,
+		Targets: []ResourceManager{srcRes, dstRes},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+			DeleteDestination: pointerTo(true),
+		},
+	})
+
+	ValidateResource[ContainerResourceManager](svm, dstRes, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"deleteme.txt":      ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
+		},
+	}, false)
+}

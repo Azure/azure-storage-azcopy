@@ -247,7 +247,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 	if err != nil {
 		return nil, err
 	}
-  
+
 	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
@@ -284,7 +284,7 @@ func (b *remoteResourceDeleter) getObjectURL(objectURL string) (*url.URL, error)
 	if err != nil {
 		return nil, err
 	}
-	return u,nil
+	return u, nil
 }
 
 func (b *remoteResourceDeleter) delete(object StoredObject) error {
@@ -305,12 +305,12 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 
 		var err error
 		var objURL *url.URL
-		
+
 		switch b.targetLocation {
 		case common.ELocation.Blob():
 			bsc, _ := sc.BlobServiceClient()
-			var blobClient *blob.Client = bsc.NewContainerClient(b.containerName).NewBlobClient(path.Join(b.rootPath + object.relativePath))
-			
+			var blobClient *blob.Client = bsc.NewContainerClient(b.containerName).NewBlobClient(path.Join(b.rootPath, object.relativePath))
+
 			objURL, err = b.getObjectURL(blobClient.URL())
 			if err != nil {
 				break
@@ -321,7 +321,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			_, err = blobClient.Delete(b.ctx, nil)
 		case common.ELocation.File():
 			fsc, _ := sc.FileServiceClient()
-			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(path.Join(b.rootPath + object.relativePath))
+			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(path.Join(b.rootPath, object.relativePath))
 
 			objURL, err = b.getObjectURL(fileClient.URL())
 			if err != nil {
@@ -330,13 +330,13 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			b.folderManager.RecordChildExists(objURL)
 			defer b.folderManager.RecordChildDeleted(objURL)
 
-			err = common.DoWithOverrideReadOnlyOnAzureFiles(b.ctx, func()(interface{}, error) {
+			err = common.DoWithOverrideReadOnlyOnAzureFiles(b.ctx, func() (interface{}, error) {
 				return fileClient.Delete(b.ctx, nil)
 			}, fileClient, b.forceIfReadOnly)
 		case common.ELocation.BlobFS():
 			dsc, _ := sc.DatalakeServiceClient()
-			fileClient := dsc.NewFileSystemClient(b.containerName).NewFileClient(path.Join(b.rootPath + object.relativePath))
-			
+			fileClient := dsc.NewFileSystemClient(b.containerName).NewFileClient(path.Join(b.rootPath, object.relativePath))
+
 			objURL, err = b.getObjectURL(fileClient.DFSURL())
 			if err != nil {
 				break
@@ -369,48 +369,48 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		var objURL *url.URL
 		var err error
 		switch b.targetLocation {
-			case common.ELocation.Blob():
-				bsc, _ := sc.BlobServiceClient()
-				blobClient := bsc.NewContainerClient(b.containerName).NewBlobClient(path.Join(b.rootPath + object.relativePath))
-				// HNS endpoint doesn't like delete snapshots on a directory
-				objURL, err = b.getObjectURL(blobClient.URL())
-				if err != nil {
-					return err
-				}
+		case common.ELocation.Blob():
+			bsc, _ := sc.BlobServiceClient()
+			blobClient := bsc.NewContainerClient(b.containerName).NewBlobClient(path.Join(b.rootPath, object.relativePath))
+			// HNS endpoint doesn't like delete snapshots on a directory
+			objURL, err = b.getObjectURL(blobClient.URL())
+			if err != nil {
+				return err
+			}
 
-				deleteFunc = func(ctx context.Context, logger common.ILogger) bool {
-					_, err = blobClient.Delete(b.ctx, nil)
-					return (err == nil)
-				}
-			case common.ELocation.File():
-				fsc, _ := sc.FileServiceClient()
-				dirClient := fsc.NewShareClient(b.containerName).NewDirectoryClient(path.Join(b.rootPath + object.relativePath))
-				objURL, err = b.getObjectURL(dirClient.URL())
-				if err != nil {
-					return err
-				}
+			deleteFunc = func(ctx context.Context, logger common.ILogger) bool {
+				_, err = blobClient.Delete(b.ctx, nil)
+				return (err == nil)
+			}
+		case common.ELocation.File():
+			fsc, _ := sc.FileServiceClient()
+			dirClient := fsc.NewShareClient(b.containerName).NewDirectoryClient(path.Join(b.rootPath, object.relativePath))
+			objURL, err = b.getObjectURL(dirClient.URL())
+			if err != nil {
+				return err
+			}
 
-				deleteFunc = func(ctx context.Context, logger common.ILogger) bool {
-					err = common.DoWithOverrideReadOnlyOnAzureFiles(b.ctx, func()(interface{}, error) {
-						return dirClient.Delete(b.ctx, nil)
-					}, dirClient, b.forceIfReadOnly)
-					return (err == nil)
-				}
-			case common.ELocation.BlobFS():
-				dsc, _ := sc.DatalakeServiceClient()
-				directoryClient := dsc.NewFileSystemClient(b.containerName).NewDirectoryClient(path.Join(b.rootPath + object.relativePath))
-				objURL, err = b.getObjectURL(directoryClient.DFSURL())
-				if err != nil {
-					return err
-				}
+			deleteFunc = func(ctx context.Context, logger common.ILogger) bool {
+				err = common.DoWithOverrideReadOnlyOnAzureFiles(b.ctx, func() (interface{}, error) {
+					return dirClient.Delete(b.ctx, nil)
+				}, dirClient, b.forceIfReadOnly)
+				return (err == nil)
+			}
+		case common.ELocation.BlobFS():
+			dsc, _ := sc.DatalakeServiceClient()
+			directoryClient := dsc.NewFileSystemClient(b.containerName).NewDirectoryClient(path.Join(b.rootPath, object.relativePath))
+			objURL, err = b.getObjectURL(directoryClient.DFSURL())
+			if err != nil {
+				return err
+			}
 
-				deleteFunc = func(ctx context.Context, logger common.ILogger) bool {
-					recursiveContext := common.WithRecursive(b.ctx, false)
-					_, err = directoryClient.Delete(recursiveContext, nil)
-					return (err == nil)
-				}
-			default:
-				panic("not implemented, check your code")
+			deleteFunc = func(ctx context.Context, logger common.ILogger) bool {
+				recursiveContext := common.WithRecursive(b.ctx, false)
+				_, err = directoryClient.Delete(recursiveContext, nil)
+				return (err == nil)
+			}
+		default:
+			panic("not implemented, check your code")
 		}
 
 		b.folderManager.RecordChildExists(objURL)
