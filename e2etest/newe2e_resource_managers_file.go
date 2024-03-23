@@ -439,9 +439,9 @@ func (f *FileObjectResourceManager) CreateParents(a Asserter) {
 		f.Share.Create(a, ContainerProperties{})
 	}
 
-	dir, _ := path.Split(f.path)
+	dir, _ := path.Split(strings.TrimSuffix(f.path, "/"))
 	if dir != "" {
-		obj := f.Share.GetObject(a, strings.TrimSuffix(dir, "/"), common.EEntityType.Folder()).(*FileObjectResourceManager)
+		obj := f.Share.GetObject(a, dir, common.EEntityType.Folder()).(*FileObjectResourceManager)
 		// Create recursively calls this function.
 		if !obj.Exists() {
 			obj.Create(a, nil, ObjectProperties{})
