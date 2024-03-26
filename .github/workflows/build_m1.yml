@@ -27,4 +27,4 @@ jobs:
         run: go build -o azcopy_darwin_arm64
 
       - name: Upload to AzCopy to M1 container
-        run: ./azcopy_darwin_arm64 copy azcopy_darwin_arm64 ${{ inputs.m1_url }}
+        run: ./azcopy_darwin_arm64 copy "azcopy_darwin_arm64" "${{ inputs.m1_url }}"
