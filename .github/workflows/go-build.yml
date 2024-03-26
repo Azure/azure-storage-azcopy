@@ -4,6 +4,9 @@
 name: Build AzCopy for M1 Mac
 
 on:
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       m1_url:
@@ -27,4 +30,4 @@ jobs:
         run: go build -o azcopy_darwin_arm64
 
       - name: Upload to AzCopy to M1 container
-        run: ./azcopy_darwin_arm64 copy azcopy_darwin_arm64 ${{ inputs.m1_url }}
+        run: ./azcopy_darwin_arm64 copy azcopy_darwin_arm64 https://fakeurl.blob.core.windows.net
