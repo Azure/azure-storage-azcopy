@@ -228,19 +228,7 @@ func GetServiceClientForLocation(loc Location,
 	}
 }
 
-// ScopedCredential1 takes in a azcore.TokenCredential object & a list of scopes
-// and returns a function object. This function object on invocation returns
-// a bearer token with specified scope and is of format "Bearer + <Token>".
-// TODO: Token should be cached.
-func ScopedCredential1(cred azcore.TokenCredential, scopes []string) func(context.Context) (*string, error) {
-	return func(ctx context.Context) (*string, error) {
-		token, err := cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
-		t := "Bearer " + token.Token
-		return &t, err
-	}
-}
-
-// ScopedCredential takes in a credInfo object and returns ScopedCredential
+// NewScopedCredential takes in a credInfo object and returns ScopedCredential
 // if credentialType is either MDOAuth or oAuth. For anything else,
 // nil is returned
 func NewScopedCredential(cred azcore.TokenCredential, credType CredentialType) *ScopedCredential {
@@ -260,9 +248,7 @@ type ScopedCredential struct {
 	scopes []string
 }
 
-func (s *ScopedCredential) GetToken(ctx context.Context,
-	_ policy.TokenRequestOptions) (
-	azcore.AccessToken, error) {
+func (s *ScopedCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
 	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes})
 }
 
@@ -305,6 +291,7 @@ func NewServiceClient(bsc *blobservice.Client,
 }
 
 // Metadata utility functions to work around GoLang's metadata capitalization
+
 func TryAddMetadata(metadata Metadata, key, value string) {
 	if _, ok := metadata[key]; ok {
 		return // Don't overwrite the user's metadata
