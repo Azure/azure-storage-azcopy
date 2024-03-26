@@ -94,7 +94,7 @@ const (
 func (EnvironmentVariable) AutoLoginType() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_AUTO_LOGIN_TYPE",
-		Description: "Specify the credential type to access Azure Resource without invoking the login command and using the OS secret store, available values SPN, MSI, DEVICE, AZCLI, and PSCRED, WORKLOAD  - sequentially for Service Principal, Managed Service Identity, Device workflow, Azure CLI, Azure PowerShell. or Workload Identity.",
+		Description: "Specify the credential type to access Azure Resource without invoking the login command and using the OS secret store, available values SPN, MSI, DEVICE, AZCLI, and PSCRED, WORKLOAD  - sequentially for Service Principal, Managed Service Identity, Device workflow, Azure CLI, Azure PowerShell, or Workload Identity.",
 	}
 }
 
