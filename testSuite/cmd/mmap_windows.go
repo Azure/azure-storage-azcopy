@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"os"
-	"reflect"
 	"syscall"
 	"unsafe"
 )
@@ -20,11 +19,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, erro
 	}
 	defer syscall.CloseHandle(hMMF) //nolint:errcheck
 	addr, _ := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
-	m := MMF{}
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
-	h.Data = addr
-	h.Len = int(length)
-	h.Cap = h.Len
+	m := unsafe.Slice((*byte)(unsafe.Pointer(addr)), int(length))
 	return m, nil
 }
 
