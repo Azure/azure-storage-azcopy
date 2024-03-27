@@ -1,0 +1,30 @@
+# This workflow will build a golang project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+
+name: Build AzCopy for M1 Mac
+
+on:
+  workflow_dispatch:
+    inputs:
+      m1_url:
+        description: 'URL with SAS to upload M1 build'
+        required: true
+        type: string
+
+jobs:
+
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.19'
+
+      - name: Build
+        run: go build -o azcopy_darwin_arm64
+
+      - name: Upload to AzCopy to M1 container
+        run: ./azcopy_darwin_arm64 copy "azcopy_darwin_arm64" "${{ inputs.m1_url }}"
