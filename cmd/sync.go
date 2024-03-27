@@ -622,7 +622,7 @@ Files Scanned at Destination: %v
 Elapsed Time (Minutes): %v
 Number of Copy Transfers for Files: %v
 Number of Copy Transfers for Folder Properties: %v 
-Total Number Of Copy Transfers: %v
+Total Number of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
@@ -676,12 +676,12 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)
+	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
 	if err != nil {
 		return err
 	}
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
 	if err != nil {
 		return err
 	}

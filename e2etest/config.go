@@ -121,13 +121,15 @@ func (AccountType) OAuthManagedDisk() AccountType             { return AccountTy
 func (AccountType) S3() AccountType                           { return AccountType(6) } // Stub, for future testing use
 func (AccountType) GCP() AccountType                          { return AccountType(7) } // Stub, for future testing use
 func (AccountType) Azurite() AccountType                      { return AccountType(8) }
+func (AccountType) ManagedDiskSnapshot() AccountType          { return AccountType(9) }
+func (AccountType) ManagedDiskSnapshotOAuth() AccountType     { return AccountType(10) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }
 
 func (o AccountType) IsManagedDisk() bool {
-	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk()
+	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk() || o == o.ManagedDiskSnapshot() || o == o.ManagedDiskSnapshotOAuth()
 }
 
 func (o AccountType) IsBlobOnly() bool {
@@ -141,19 +143,28 @@ type ManagedDiskConfig struct {
 	SubscriptionID    string
 	ResourceGroupName string
 	DiskName          string
+
 	oauth             AccessToken
+	isSnapshot bool
 }
 
 var ClassicE2EOAuthCache *OAuthCache
 
 func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDiskConfig, error) {
 	var mdConfigVar string
+	var isSnapshot bool
 
 	switch accountType {
 	case EAccountType.StdManagedDisk():
 		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_CONFIG"
 	case EAccountType.OAuthManagedDisk():
 		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG"
+	case EAccountType.ManagedDiskSnapshot():
+		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG"
+		isSnapshot = true
+	case EAccountType.ManagedDiskSnapshotOAuth():
+		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG"
+		isSnapshot = true
 	default:
 		return nil, fmt.Errorf("account type %s is invalid for GetMDConfig", accountType.String())
 	}
@@ -169,6 +180,8 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		return nil, fmt.Errorf("failed to parse config") // Outputting the error may reveal semi-sensitive info like subscription ID
 	}
 
+	// Attach additional details to the config
+	out.isSnapshot = isSnapshot
 	err = gim.SetupClassicOAuthCache()
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup OAuth cache: %w", err)

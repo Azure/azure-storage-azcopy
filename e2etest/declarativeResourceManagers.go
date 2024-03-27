@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
@@ -548,6 +549,11 @@ func (r *resourceManagedDisk) createLocation(a asserter, s *scenario) {
 	uri, err := r.config.GetAccess()
 	a.AssertNoErr(err)
 
+	snapshotID := uri.Query().Get("snapshot")
+	if r.config.isSnapshot {
+		a.Assert(snapshotID, notEquals(), "", "Snapshot target must be incremental, or no snapshot query value is present")
+	}
+
 	r.accessURI = uri
 }
 
@@ -570,8 +576,11 @@ func (r *resourceManagedDisk) downloadContent(a asserter, options downloadConten
 
 // cleanup also usurps traditional resourceManager functionality.
 func (r *resourceManagedDisk) cleanup(a asserter) {
-	// revoking access isn't required and causes funky behaviour for testing that might require a distributed mutex.
-	// todo: we should create managed disks as needed with the requirements rather than using a single MD should we plan to do read-write tests.
+	err := r.config.RevokeAccess()
+	a.AssertNoErr(err)
+
+	// The signed identifier cache supposedly lasts 30s, so we'll assume that's a safe break time.
+	time.Sleep(time.Second * 30)
 }
 
 // getParam works functionally different because resourceManagerDisk inherently only targets a single file.
@@ -579,7 +588,11 @@ func (r *resourceManagedDisk) getParam(a asserter, stripTopDir, withSas bool, wi
 	out := *r.accessURI // clone the URI
 
 	if !withSas {
-		out.RawQuery = ""
+		//out.RawQuery = ""
+		parts, err := blob.ParseURL(out.String())
+		a.AssertNoErr(err, "url should parse, sanity check")
+		parts.SAS = blobsas.QueryParameters{}
+		return parts.String()
 	}
 
 	toReturn := out.String()
