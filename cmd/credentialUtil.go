@@ -80,14 +80,9 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 	var err error
 	autoOAuth.Do(func() {
 		var lca loginCmdArgs
-		autoLoginType := strings.ToUpper(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
+		autoLoginType := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
 		if autoLoginType == "" {
 			glcm.Info("Autologin not specified.")
-			return
-		}
-
-		if autoLoginType != "SPN" && autoLoginType != "MSI" && autoLoginType != "DEVICE" && autoLoginType != "AZCLI" && autoLoginType != "PSCRED" {
-			glcm.Error("Invalid Auto-login type specified.")
 			return
 		}
 
@@ -101,33 +96,37 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 
 		// Fill up lca
 		switch autoLoginType {
-		case "SPN":
+		case common.AutologinTypeSPN:
 			lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
 			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
 			lca.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 			lca.servicePrincipal = true
 
-		case "MSI":
+		case common.AutologinTypeMSI:
 			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
 			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
 			lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
 			lca.identity = true
 
-		case "DEVICE":
+		case common.AutologinTypeDevice:
 			lca.identity = false
 
-		case "AZCLI":
+		case common.AutologinTypeAzCLI:
 			lca.identity = false
 			lca.servicePrincipal = false
 			lca.psCred = false
 			lca.azCliCred = true
 
-		case "PSCRED":
+		case common.AutologinTypePsCred:
 			lca.identity = false
 			lca.servicePrincipal = false
 			lca.azCliCred = false
 			lca.psCred = true
+
+		default:
+			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
+			return
 		}
 
 		lca.persistToken = true
@@ -201,9 +200,8 @@ func GetCredTypeFromEnvVar() common.CredentialType {
 }
 
 type rawFromToInfo struct {
-	fromTo                    common.FromTo
-	source, destination       string
-	sourceSAS, destinationSAS string // Standalone SAS which might be provided
+	fromTo              common.FromTo
+	source, destination common.ResourceString
 }
 
 const trustedSuffixesNameAAD = "trusted-microsoft-suffixes"
@@ -422,11 +420,11 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 	return false
 }
 
-func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
-	return doGetCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, GetCredTypeFromEnvVar, cpkOptions)
+func getCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, cpkOptions common.CpkOptions) (credType common.CredentialType, isPublic bool, err error) {
+	return doGetCredentialTypeForLocation(ctx, location, resource, isSource, GetCredTypeFromEnvVar, cpkOptions)
 }
 
-func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, public bool, err error) {
+func doGetCredentialTypeForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, getForcedCredType func() common.CredentialType, cpkOptions common.CpkOptions) (credType common.CredentialType, public bool, err error) {
 	public = false
 	err = nil
 
@@ -445,7 +443,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 			return
 		}
 
-		if err = checkAuthSafeForTarget(credType, resource, cmdLineExtraSuffixesAAD, location); err != nil {
+		if err = checkAuthSafeForTarget(credType, resource.Value, cmdLineExtraSuffixesAAD, location); err != nil {
 			credType = common.ECredentialType.Unknown()
 			public = false
 		}
@@ -481,14 +479,14 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 
 	// Special blob destinations - public and MD account needing oAuth
 	if location == common.ELocation.Blob() {
-		if isSource && resourceSAS == "" && isPublic(ctx, resource, cpkOptions) {
+		uri, _ := resource.FullURL()
+		if isSource && resource.SAS == "" && isPublic(ctx, uri.String(), cpkOptions) {
 			credType = common.ECredentialType.Anonymous()
 			public = true
 			return
 		}
 
-		uri, _ := url.Parse(resource)
-		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, resource, cpkOptions) {
+		if strings.HasPrefix(uri.Host, "md-") && mdAccountNeedsOAuth(ctx, uri.String(), cpkOptions) {
 			if !oAuthTokenExists() {
 				return common.ECredentialType.Unknown(), false,
 					common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
@@ -499,7 +497,7 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 		}
 	}
 
-	if resourceSAS != "" {
+	if resource.SAS != "" {
 		credType = common.ECredentialType.Anonymous()
 		return
 	}
@@ -527,10 +525,10 @@ func doGetCredentialTypeForLocation(ctx context.Context, location common.Locatio
 	return
 }
 
-func GetCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool, cpkOptions common.CpkOptions) (credInfo common.CredentialInfo, isPublic bool, err error) {
+func GetCredentialInfoForLocation(ctx context.Context, location common.Location, resource common.ResourceString, isSource bool, cpkOptions common.CpkOptions) (credInfo common.CredentialInfo, isPublic bool, err error) {
 
 	// get the type
-	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, resourceSAS, isSource, cpkOptions)
+	credInfo.CredentialType, isPublic, err = getCredentialTypeForLocation(ctx, location, resource, isSource, cpkOptions)
 
 	// flesh out the rest of the fields, for those types that require it
 	if credInfo.CredentialType.IsAzureOAuth() {
@@ -555,17 +553,17 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 	switch {
 	case raw.fromTo.To().IsRemote():
 		// we authenticate to the destination. Source is assumed to be SAS, or public, or a local resource
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, raw.destinationSAS, false, common.CpkOptions{})
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.To(), raw.destination, false, common.CpkOptions{})
 	case raw.fromTo == common.EFromTo.BlobTrash() ||
 		raw.fromTo == common.EFromTo.BlobFSTrash() ||
 		raw.fromTo == common.EFromTo.FileTrash():
 		// For to Trash direction, use source as resource URL
 		// Also, by setting isSource=false we inform getCredentialTypeForLocation() that resource
 		// being deleted cannot be public.
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, false, cpkOptions)
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, false, cpkOptions)
 	case raw.fromTo.From().IsRemote() && raw.fromTo.To().IsLocal():
 		// we authenticate to the source.
-		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, raw.sourceSAS, true, cpkOptions)
+		credType, _, err = getCredentialTypeForLocation(ctx, raw.fromTo.From(), raw.source, true, cpkOptions)
 	default:
 		credType = common.ECredentialType.Anonymous()
 		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.

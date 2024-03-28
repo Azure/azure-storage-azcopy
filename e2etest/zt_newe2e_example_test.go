@@ -6,7 +6,8 @@ import (
 )
 
 func init() {
-	suiteManager.RegisterSuite(&ExampleSuite{})
+	// Deregistered the example suite so test doesn't run, re-enable for local test writing/usage of example
+	//suiteManager.RegisterSuite(&ExampleSuite{})
 }
 
 type ExampleSuite struct{}
@@ -21,20 +22,18 @@ func (s *ExampleSuite) TeardownSuite(a Asserter) {
 }
 
 func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationManager) {
-	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
-	//svm.InsertVariationSeparator("->")
-	dstService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
-
-	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
 	// Scale up from service to object
-	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
 		Body:       body,
 	}) // todo: generic CreateResource is something to pursue in another branch, but it's an interesting thought.
 	// Scale up from service to container
-	dstObj := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionContainer{})
+
+	if srcObj.Location().IsRemote() == dstContainer.Location().IsRemote() {
+		svm.InvalidateScenario()
+	}
 
 	RunAzCopy(
 		svm,
@@ -43,21 +42,20 @@ func (s *ExampleSuite) Scenario_SingleFileCopySyncS2S(svm *ScenarioVariationMana
 			Targets: []ResourceManager{
 				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
-						Permissions: (&blobsas.BlobPermissions{Read: true, List: true}).String(),
+						ContainerName: srcObj.ContainerName(),
+						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
 					},
 				}),
-				dstObj,
+				dstContainer,
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
 				},
-
-				ListOfFiles: []string{"test"},
 			},
 		})
 
-	ValidateResource[ObjectResourceManager](svm, srcObj, ResourceDefinitionObject{
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, "test", common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
 	}, true)
 }

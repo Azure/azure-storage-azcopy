@@ -256,8 +256,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		if !t.includeDeleted && (isBlob || err != nil) {
 			return err
 		}
-	} else if blobURLParts.BlobName == "" && t.preservePermissions.IsTruthy() {
-		// if the root is a container and we're copying "folders", we should persist the ACLs there too.
+	} else if blobURLParts.BlobName == "" && (t.preservePermissions.IsTruthy() || t.isDFS) {
+		// If the root is a container and we're copying "folders", we should persist the ACLs there too.
+		// For DFS, we should always include the container root.
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a container.")
 		}
@@ -476,7 +477,7 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 	object.blobDeleted = common.IffNotNil(blobInfo.Deleted, false)
 	if t.includeDeleted && t.includeSnapshot {
 		object.blobSnapshotID = common.IffNotNil(blobInfo.Snapshot, "")
-	} else if t.includeDeleted && t.includeVersion && blobInfo.VersionID != nil {
+	} else if t.includeVersion && blobInfo.VersionID != nil {
 		object.blobVersionID = common.IffNotNil(blobInfo.VersionID, "")
 	}
 	return object

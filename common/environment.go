@@ -82,6 +82,14 @@ func (EnvironmentVariable) UserDir() EnvironmentVariable {
 	}
 }
 
+const (
+	AutologinTypeSPN    = "spn"
+	AutologinTypeMSI    = "msi"
+	AutologinTypeDevice = "device"
+	AutologinTypeAzCLI  = "azcli"
+	AutologinTypePsCred = "pscred"
+)
+
 func (EnvironmentVariable) AutoLoginType() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_AUTO_LOGIN_TYPE",

@@ -312,8 +312,8 @@ func (b *BlobContainerResourceManager) CreateWithOptions(a Asserter, options *Bl
 	}
 
 	a.NoError("create container", err)
-	if rt, ok := a.(ResourceTracker); ok && created {
-		rt.TrackCreatedResource(b)
+	if created {
+		TrackResourceCreation(a, b)
 	}
 }
 
@@ -414,6 +414,14 @@ func (b *BlobObjectResourceManager) Parent() ResourceManager {
 
 func (b *BlobObjectResourceManager) EntityType() common.EntityType {
 	return b.entityType
+}
+
+func (b *BlobObjectResourceManager) ContainerName() string {
+	return b.Container.ContainerName()
+}
+
+func (b *BlobObjectResourceManager) ObjectName() string {
+	return b.Path
 }
 
 // Create defaults to Block Blob. For implementation-specific options, GetTypeOrZero[T] / GetTypeOrAssert[T] to BlobObjectResourceManager and call CreateWithOptions
@@ -577,9 +585,7 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		a.NoError("Upload append blob", msu.UploadContents(body))
 	}
 
-	if rt, ok := a.(ResourceTracker); ok {
-		rt.TrackCreatedResource(b)
-	}
+	TrackResourceCreation(a, b)
 }
 
 func (b *BlobObjectResourceManager) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {

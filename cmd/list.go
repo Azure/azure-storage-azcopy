@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -59,7 +60,19 @@ const (
 	leaseDuration    validProperty = "LeaseDuration"
 	leaseStatus      validProperty = "LeaseStatus"
 	archiveStatus    validProperty = "ArchiveStatus"
+
+	versionIdTimeFormat = "2006-01-02T15:04:05.9999999Z"
 )
+
+// containsProperty checks if the property array contains a valid property
+func containsProperty(properties []validProperty, prop validProperty) bool {
+	for _, item := range properties {
+		if item == prop {
+			return true
+		}
+	}
+	return false
+}
 
 // validProperties returns an array of possible values for the validProperty const type.
 func validProperties() []validProperty {
@@ -224,7 +237,7 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
-	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, true, common.CpkOptions{}); err != nil {
+	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if cooked.location == cooked.location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
@@ -237,7 +250,10 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 	}
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil)
+	// check if user wants to get version id
+	shouldGetVersionId := containsProperty(cooked.properties, versionId)
+
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, shouldGetVersionId)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
@@ -245,6 +261,12 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 
 	var fileCount int64 = 0
 	var sizeCount int64 = 0
+
+	type versionIdObject struct {
+		versionId string
+		fileSize  int64
+	}
+	objectVer := make(map[string]versionIdObject)
 
 	processor := func(object StoredObject) error {
 		path := object.relativePath
@@ -266,6 +288,34 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 		}
 
 		if cooked.RunningTally {
+			if shouldGetVersionId {
+				// get new version id object
+				updatedVersionId := versionIdObject{
+					versionId: object.blobVersionID,
+					fileSize:  object.size,
+				}
+
+				// there exists a current version id of the object
+				if currentVersionId, ok := objectVer[object.relativePath]; ok {
+					// get current version id time
+					currentVid, _ := time.Parse(versionIdTimeFormat, currentVersionId.versionId)
+
+					// get new version id time
+					newVid, _ := time.Parse(versionIdTimeFormat, object.blobVersionID)
+
+					// if new vid came after the current vid, then it is the latest version
+					// update the objectVer with the latest version
+					// we will also remove sizeCount and fileCount of current object, allowing
+					// the updated sizeCount and fileCount to be added at line 320
+					if newVid.After(currentVid) {
+						sizeCount -= currentVersionId.fileSize // remove size of current object
+						fileCount--                            // remove current object file count
+						objectVer[object.relativePath] = updatedVersionId
+					}
+				} else {
+					objectVer[object.relativePath] = updatedVersionId
+				}
+			}
 			fileCount++
 			sizeCount += object.size
 		}

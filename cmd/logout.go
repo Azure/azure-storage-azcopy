@@ -53,7 +53,6 @@ func init() {
 type logoutCmdArgs struct{}
 
 func (lca logoutCmdArgs) process() error {
-	glcm.Info(fmt.Sprintf(loginNotice, "logout", autoLoginURL))
 	uotm := GetUserOAuthTokenManagerInstance()
 	if err := uotm.RemoveCachedToken(); err != nil {
 		return err

@@ -209,7 +209,7 @@ func (m *MockContainerResourceManager) mockSignature() {
 }
 
 func (m *MockContainerResourceManager) Location() common.Location {
-	if m.overrideLocation != common.ELocation.Unknown() || m.parent != nil {
+	if m.overrideLocation != common.ELocation.Unknown() || m.parent == nil {
 		return m.overrideLocation
 	}
 
@@ -294,7 +294,7 @@ func (m *MockObjectResourceManager) mockSignature() {
 }
 
 func (m *MockObjectResourceManager) Location() common.Location {
-	if m.overrideLocation != common.ELocation.Unknown() || m.parent != nil {
+	if m.overrideLocation != common.ELocation.Unknown() || m.parent == nil {
 		return m.overrideLocation
 	}
 
@@ -307,6 +307,14 @@ func (m *MockObjectResourceManager) Level() cmd.LocationLevel {
 
 func (m *MockObjectResourceManager) EntityType() common.EntityType {
 	return m.entityType
+}
+
+func (m *MockObjectResourceManager) ContainerName() string {
+	return m.parent.ContainerName()
+}
+
+func (m *MockObjectResourceManager) ObjectName() string {
+	return m.path
 }
 
 func (m *MockObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {

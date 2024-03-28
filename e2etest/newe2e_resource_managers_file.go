@@ -226,8 +226,8 @@ func (s *FileShareResourceManager) CreateWithOptions(a Asserter, options *FileSh
 	}
 
 	a.NoError("Create container", err)
-	if rt, ok := a.(ResourceTracker); ok && created {
-		rt.TrackCreatedResource(s)
+	if created {
+		TrackResourceCreation(a, s)
 	}
 }
 
@@ -284,7 +284,6 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 					Metadata:   resp.Metadata,
 					FileProperties: FileProperties{
 						FileAttributes:    v.Attributes,
-						FileChangeTime:    v.Properties.ChangeTime,
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
@@ -320,7 +319,6 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 					Metadata: resp.Metadata,
 					FileProperties: FileProperties{
 						FileAttributes:    v.Attributes,
-						FileChangeTime:    v.Properties.ChangeTime,
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
@@ -406,6 +404,14 @@ func (f *FileObjectResourceManager) EntityType() common.EntityType {
 	return f.entityType
 }
 
+func (f *FileObjectResourceManager) ContainerName() string {
+	return f.Share.ContainerName()
+}
+
+func (f *FileObjectResourceManager) ObjectName() string {
+	return f.path
+}
+
 func (f *FileObjectResourceManager) PreparePermissions(a Asserter, p *string) *file.Permissions {
 	if p == nil {
 		return nil
@@ -471,9 +477,7 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		a.Error("File Objects only support Files and Folders")
 	}
 
-	if rt, ok := a.(ResourceTracker); ok {
-		rt.TrackCreatedResource(f)
-	}
+	TrackResourceCreation(a, f)
 }
 
 func (f *FileObjectResourceManager) Delete(a Asserter) {
@@ -519,7 +523,6 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			Metadata:   resp.Metadata,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
-				FileChangeTime:    resp.FileChangeTime,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
@@ -550,7 +553,6 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			Metadata: resp.Metadata,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
-				FileChangeTime:    resp.FileChangeTime,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
