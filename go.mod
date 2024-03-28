@@ -9,7 +9,7 @@ require (
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.1.2
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
-	github.com/google/uuid v1.5.0
+	github.com/google/uuid v1.6.0
 	github.com/hillu/go-ntdll v0.0.0-20220217145204-be7b5318100d
 	github.com/mattn/go-ieproxy v0.0.11
 	github.com/minio/minio-go v6.0.14+incompatible

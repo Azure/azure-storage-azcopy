@@ -130,7 +130,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			lca.psCred = true
 		}
 
-		lca.persistToken = false
+		lca.persistToken = true
 		if err = lca.process(); err != nil {
 			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
 		}
