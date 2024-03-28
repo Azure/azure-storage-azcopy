@@ -98,6 +98,9 @@ func (r ResourceString) ValueLocal() string {
 
 func (r ResourceString) addParamsToUrl(u *url.URL, sas, extraQuery string) {
 	for _, p := range []string{sas, extraQuery} {
+		// Sanity check: trim ? from the start
+		p = strings.TrimPrefix(p, "?")
+
 		if p == "" {
 			continue
 		}

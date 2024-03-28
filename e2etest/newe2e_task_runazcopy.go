@@ -39,7 +39,7 @@ const ( // initially supporting a limited set of verbs
 )
 
 type AzCopyTarget struct {
-	RemoteResourceManager
+	ResourceManager
 	AuthType ExplicitCredentialTypes // Expects *one* credential type that the Resource supports. Assumes SAS (or GCP/S3) if not present.
 	Opts     CreateAzCopyTargetOptions
 
@@ -53,11 +53,18 @@ type CreateAzCopyTargetOptions struct {
 	Scheme          string
 }
 
-func CreateAzCopyTarget(rm RemoteResourceManager, authType ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
-	validTypes := rm.ValidAuthTypes()
+func CreateAzCopyTarget(rm ResourceManager, authType ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	var validTypes ExplicitCredentialTypes
+	if rrm, ok := rm.(RemoteResourceManager); ok {
+		validTypes = rrm.ValidAuthTypes()
+	}
 
-	a.AssertNow(fmt.Sprintf("expected only one auth type, got %s", authType), Equal{}, authType.Count(), 1)
-	a.AssertNow(fmt.Sprintf("expected authType to be contained within valid types (got %s, needed %s)", authType, validTypes), Equal{}, validTypes.Includes(authType), true)
+	if validTypes != EExplicitCredentialType.None() {
+		a.AssertNow(fmt.Sprintf("expected only one auth type, got %s", authType), Equal{}, authType.Count(), 1)
+		a.AssertNow(fmt.Sprintf("expected authType to be contained within valid types (got %s, needed %s)", authType, validTypes), Equal{}, validTypes.Includes(authType), true)
+	} else {
+		a.AssertNow("Expected no auth types", Equal{}, authType, EExplicitCredentialType.None())
+	}
 
 	return AzCopyTarget{rm, authType, FirstOrZero(opts)}
 }
@@ -222,11 +229,19 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (*AzCopyStdout, *A
 		Env:  env,
 
 		Stdout: out, // todo
-		Stdin:  nil, // todo
+	}
+	in, err := command.StdinPipe()
+	a.NoError("get stdin pipe", err)
+
+	err = command.Start()
+	a.Assert("run command", IsNil{}, err)
+
+	if isLaunchedByDebugger {
+		beginAzCopyDebugging(in)
 	}
 
-	err := command.Run()
-	a.Assert("run command", IsNil{}, err)
+	err = command.Wait()
+	a.Assert("wait for finalize", IsNil{}, err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())

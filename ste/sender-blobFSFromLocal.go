@@ -97,10 +97,15 @@ func (u *blobFSUploader) Epilogue() {
 
 	// Write POSIX data
 	if jptm.IsLive() {
-		if jptm.Info().PreservePOSIXProperties {
+		if jptm.Info().PreservePOSIXProperties { // metadata would be set here
 			err := u.SetPOSIXProperties()
 			if err != nil {
 				jptm.FailActiveUpload("Setting POSIX Properties", err)
+			}
+		} else if len(u.metadataToSet) > 0 { // but if we aren't writing POSIX properties, let's set metadata to be consistent.
+			_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet, nil)
+			if err != nil {
+				jptm.FailActiveUpload("Setting blob metadata", err)
 			}
 		}
 	}
