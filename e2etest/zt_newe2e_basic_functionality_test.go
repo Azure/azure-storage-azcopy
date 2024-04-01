@@ -21,7 +21,7 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload(svm *Scenari
 
 		if !svm.Dryrun() {
 			// Make sure the LMT is in the past
-			time.Sleep(time.Second)
+			time.Sleep(time.Second * 10)
 		}
 	}
 

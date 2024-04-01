@@ -226,9 +226,6 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				RunningTally: to.Ptr(true),
 			},
 		})
