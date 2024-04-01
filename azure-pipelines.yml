@@ -134,7 +134,7 @@ jobs:
           output_test_logs: ''
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
-          go_build: 'CGO_ENABLED=1 GOARCH=amd64 GOOS=linux go build -tags "netgo" -o $(build_name)'
+          go_build: 'GOARCH=amd64 GOOS=linux go build -tags "netgo" -o $(build_name)'
         Windows:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
@@ -228,7 +228,6 @@ jobs:
           NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
           NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
           NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-          CGO_ENABLED: 0
         displayName: 'E2E Test $(display_name) - AMD64'
 
       - task: PublishBuildArtifacts@1
