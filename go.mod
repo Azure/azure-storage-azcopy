@@ -16,7 +16,6 @@ require (
 	github.com/pkg/xattr v0.4.6
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/spf13/cobra v1.4.0
-	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
 	golang.org/x/crypto v0.18.0 // indirect
 	golang.org/x/oauth2 v0.7.0
 	golang.org/x/sync v0.1.0
@@ -31,6 +30,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.2
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0-beta.2
 	github.com/Azure/go-autorest/autorest/date v0.3.0
+	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
 	golang.org/x/net v0.20.0
 )
 
