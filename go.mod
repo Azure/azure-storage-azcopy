@@ -30,7 +30,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.2
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.6.0-beta.2
 	github.com/Azure/go-autorest/autorest/date v0.3.0
-	github.com/wastore/keychain v0.0.0-20180920053336-f2c902a3d807
 	golang.org/x/net v0.20.0
 )
 
