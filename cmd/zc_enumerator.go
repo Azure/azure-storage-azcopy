@@ -234,6 +234,7 @@ type blobPropsProvider interface {
 	LeaseDuration() lease.DurationType
 	LeaseState() lease.StateType
 	ArchiveStatus() blob.ArchiveStatus
+	LastModified() time.Time
 }
 type filePropsProvider interface {
 	contentPropsProvider

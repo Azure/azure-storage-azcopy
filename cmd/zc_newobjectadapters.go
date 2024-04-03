@@ -74,6 +74,10 @@ func (e emptyPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
 	return ""
 }
 
+func (e emptyPropertiesAdapter) LastModified() time.Time {
+	return time.Time{}
+}
+
 func (e emptyPropertiesAdapter) LeaseDuration() lease.DurationType {
 	return ""
 }
@@ -89,6 +93,10 @@ func (e emptyPropertiesAdapter) LeaseStatus() lease.StatusType {
 // blobPropertiesResponseAdapter adapts a BlobGetPropertiesResponse to the blobPropsProvider interface
 type blobPropertiesResponseAdapter struct {
 	*blob.GetPropertiesResponse
+}
+
+func (a blobPropertiesResponseAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.GetPropertiesResponse.LastModified, time.Time{})
 }
 
 func (a blobPropertiesResponseAdapter) CacheControl() string {
@@ -197,6 +205,10 @@ func (a blobPropertiesAdapter) LeaseStatus() lease.StatusType {
 
 func (a blobPropertiesAdapter) ArchiveStatus() blob.ArchiveStatus {
 	return common.IffNotNil(a.BlobProperties.ArchiveStatus, "")
+}
+
+func (a blobPropertiesAdapter) LastModified() time.Time {
+	return common.IffNotNil(a.BlobProperties.LastModified, time.Time{})
 }
 
 type shareFilePropertiesAdapter struct {

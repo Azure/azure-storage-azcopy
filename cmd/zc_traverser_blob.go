@@ -223,16 +223,17 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Root entity type: %s", getEntityType(blobProperties.Metadata)))
 		}
 
+		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
 		storedObject := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
-			getEntityType(blobProperties.Metadata),
-			*blobProperties.LastModified,
-			*blobProperties.ContentLength,
-			blobPropertiesResponseAdapter{blobProperties},
-			blobPropertiesResponseAdapter{blobProperties},
-			blobProperties.Metadata,
+			getEntityType(blobPropsAdapter.Metadata),
+			blobPropsAdapter.LastModified(),
+			*blobPropsAdapter.ContentLength,
+			blobPropsAdapter,
+			blobPropsAdapter,
+			blobPropsAdapter.Metadata,
 			blobURLParts.ContainerName,
 		)
 
@@ -340,6 +341,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						blobClient := containerClient.NewBlobClient(strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
 						pResp, err := blobClient.GetProperties(t.ctx, nil)
+						pbPropAdapter := blobPropertiesResponseAdapter{&pResp}
 						folderRelativePath := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
 						if err == nil {
@@ -348,11 +350,11 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 								getObjectNameOnly(strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
 								folderRelativePath,
 								common.EEntityType.Folder(),
-								*pResp.LastModified,
-								*pResp.ContentLength,
-								blobPropertiesResponseAdapter{&pResp},
-								blobPropertiesResponseAdapter{&pResp},
-								pResp.Metadata,
+								pbPropAdapter.LastModified(),
+								*pbPropAdapter.ContentLength,
+								pbPropAdapter,
+								pbPropAdapter,
+								pbPropAdapter.Metadata,
 								containerName,
 							)
 
@@ -466,8 +468,8 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 		getObjectNameOnly(*blobInfo.Name),
 		relativePath,
 		getEntityType(blobInfo.Metadata),
-		*blobInfo.Properties.LastModified,
-		*blobInfo.Properties.ContentLength,
+		adapter.LastModified(),
+		*adapter.BlobProperties.ContentLength,
 		adapter,
 		adapter, // adapter satisfies both interfaces
 		blobInfo.Metadata,
