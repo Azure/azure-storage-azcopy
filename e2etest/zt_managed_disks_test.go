@@ -158,7 +158,7 @@ func TestManagedDisks_LargeManagedDisk(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobLocal()),
+		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
