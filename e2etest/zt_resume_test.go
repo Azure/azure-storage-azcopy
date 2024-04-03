@@ -74,6 +74,7 @@ func TestResume_LargeGeneric(t *testing.T) {
 }
 
 func TestResume_PublicSource_BlobTarget(t *testing.T) {
+	t.Skip("Public access is disabled in our subscription.")
 	RunScenarios(
 		t,
 		// copy only instead of sync because single file sync is not entirely compatible with the test suite
@@ -103,6 +104,7 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 }
 
 func TestResume_PublicSource_ContainerTarget(t *testing.T) {
+	t.Skip("Public access is disabled in our subscription.")
 	RunScenarios(
 		t,
 		eOperation.CopyAndSync()|eOperation.Resume(),
@@ -134,6 +136,7 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 // The test ensures that at most two log files are generated: one for scanning logs and one for normal logs.
 
 func TestResume_ConsistentLogs_PublicSource_BlobTarget(t *testing.T) {
+	t.Skip("Public access is disabled in our subscription.")
 	RunScenarios(
 		t,
 		eOperation.Copy()|eOperation.Resume(),
