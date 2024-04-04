@@ -502,6 +502,11 @@ var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
 	AccountName: "aadtoken/" + strconv.Itoa(os.Getpid()),
 })
 
+// toJSON converts OAuthTokenInfo to json format.
+func (credInfo OAuthTokenInfo) toJSON() ([]byte, error) {
+	return json.Marshal(credInfo)
+}
+
 func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error) {
 	u, err := url.Parse(activeDirectoryEndpoint)
 	if err != nil {
