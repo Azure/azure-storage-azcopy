@@ -59,10 +59,6 @@ func warnIfSharedKeyAuthForDatalake() {
 // (given appAppPathFolder is mapped to current user)
 var currentUserOAuthTokenManager *common.UserOAuthTokenManager
 
-const oauthLoginSessionCacheKeyName = "AzCopyOAuthTokenCache"
-const oauthLoginSessionCacheServiceName = "AzCopyV10"
-const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
-
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
@@ -70,12 +66,7 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 		if common.AzcopyJobPlanFolder == "" {
 			panic("invalid state, AzcopyJobPlanFolder should not be an empty string")
 		}
-		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
-			DPAPIFilePath: common.AzcopyJobPlanFolder,
-			KeyName:       oauthLoginSessionCacheKeyName,
-			ServiceName:   oauthLoginSessionCacheServiceName,
-			AccountName:   oauthLoginSessionCacheAccountName,
-		})
+		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance()
 	})
 
 	return currentUserOAuthTokenManager
@@ -138,7 +129,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			return
 		}
 
-		lca.persistToken = false
+		lca.persistToken = true
 		if err = lca.process(); err != nil {
 			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
 		}
