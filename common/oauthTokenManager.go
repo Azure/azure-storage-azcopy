@@ -39,6 +39,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"github.com/Azure/go-autorest/autorest/date"
 
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -57,6 +58,9 @@ const ManagedDiskScope = "https://disk.azure.com//.default" // There must be a t
 
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
+
+const TokenCache = "AzcopyTokenCache"
+const TokenCred = "token_record.json"
 
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
@@ -245,10 +249,40 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	if activeDirectoryEndpoint == "" {
 		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
 	}
+	var dc *azidentity.DeviceCodeCredential
+	var err error
+	var record azidentity.AuthenticationRecord
 
-	dc, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{TenantID: tenantID})
-	if err != nil {
-		return err
+	// The conditional statement checks whether 'persist' is true before configuring token caching options.
+	// If 'persist' evaluates to true, the options for token caching are provided.
+	if persist {
+		record, err = retrieveRecord()
+		if err != nil {
+			return err
+		}
+		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+			AuthenticationRecord: record,
+			TenantID:             tenantID,
+			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+				AllowUnencryptedStorage: false,
+				Name:                    TokenCache,
+			}})
+		// If record is empty
+		if record == (azidentity.AuthenticationRecord{}) {
+			// No stored record; call Authenticate to acquire one
+			record, err = dc.Authenticate(context.TODO(), nil)
+			if err != nil {
+				return err
+			}
+			err = storeRecord(record)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+			TenantID: tenantID,
+		})
 	}
 
 	oAuthTokenInfo := OAuthTokenInfo{
@@ -262,14 +296,6 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	// to dump for diagnostic purposes:
 	// buf, _ := json.Marshal(oAuthTokenInfo)
 	// panic("don't check me in. Buf is " + string(buf))
-
-	if persist {
-		err = uotm.credCache.SaveToken(oAuthTokenInfo)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -278,33 +304,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 // If refresh token is expired, the method will fail and return failure reason.
 // Fresh token is persisted if access token or refresh token is changed.
 func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
-	hasToken, err := uotm.credCache.HasCachedToken()
-	if err != nil {
-		return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
-	}
-	if !hasToken {
-		return nil, errors.New("no cached token found, please log in with azcopy's login command")
-	}
-
-	tokenInfo, err := uotm.credCache.LoadToken()
-	if err != nil {
-		return nil, fmt.Errorf("get cached token failed, %v", err)
-	}
-
-	freshToken, err := tokenInfo.Refresh(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
-	}
-
-	// Update token cache, if token is updated.
-	if freshToken.AccessToken != tokenInfo.AccessToken || freshToken.RefreshToken != tokenInfo.RefreshToken {
-		tokenInfo.Token = *freshToken
-		if err := uotm.credCache.SaveToken(*tokenInfo); err != nil {
-			return nil, err
-		}
-	}
-
-	return tokenInfo, nil
+	return nil, nil
 }
 
 // HasCachedToken returns if there is cached token in token manager.
@@ -313,12 +313,64 @@ func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 		return true, nil
 	}
 
-	return uotm.credCache.HasCachedToken()
+	return false, nil
 }
 
 // RemoveCachedToken delete all the cached token.
 func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
-	return uotm.credCache.RemoveCachedToken()
+	filePath := filepath.Join(AzcopyJobPlanFolder, TokenCred)
+
+	// Check if the file exists
+	if _, err := os.Stat(filePath); err == nil {
+		// File exists, so delete it
+		if err := os.Remove(filePath); err != nil {
+			return fmt.Errorf("error deleting file: %v", err)
+		}
+		fmt.Println("File deleted successfully.")
+	} else if os.IsNotExist(err) {
+		fmt.Println("File does not exist.")
+	} else {
+		return fmt.Errorf("error checking file: %v", err)
+	}
+	return nil
+}
+
+func retrieveRecord() (azidentity.AuthenticationRecord, error) {
+	filePath := filepath.Join(AzcopyJobPlanFolder, TokenCred)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return azidentity.AuthenticationRecord{}, nil
+	}
+	record := azidentity.AuthenticationRecord{}
+	b, err := os.ReadFile(filePath)
+	if err == nil {
+		err = json.Unmarshal(b, &record)
+	}
+	return record, err
+}
+
+func storeRecord(record azidentity.AuthenticationRecord) error {
+	filePath := filepath.Join(AzcopyJobPlanFolder, TokenCred)
+
+	// Check if the file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// File doesn't exist, create it
+		if err := os.MkdirAll(filepath.Dir(filePath), 0700); err != nil {
+			return err
+		}
+		// Create an empty file
+		if _, err := os.Create(filePath); err != nil {
+			return err
+		}
+	}
+	b, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(filePath, b, 0600)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // ====================================================================================
