@@ -216,7 +216,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	}
 
 	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
-	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, true, common.CpkOptions{}); err != nil {
+	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if cooked.location == cooked.location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
@@ -248,16 +248,15 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	processor := func(object StoredObject) error {
 		lo := cooked.newListObject(object, level)
-		response := AzCopyResponse[AzCopyListObject]{ResponseType: "AzCopyListObject", ResponseValue: lo}
 		glcm.Output(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(response)
+				jsonOutput, err := json.Marshal(lo)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
 				return lo.String()
 			}
-		})
+		}, common.EOutputMessageType.ListObject())
 
 		// ensure that versioned objects don't get counted multiple times in the tally
 		// 1. only include the size of the latest version of the object in the sizeCount
@@ -305,24 +304,18 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 
 	if cooked.RunningTally {
 		ls := cooked.newListSummary(fileCount, sizeCount)
-		response := AzCopyResponse[AzCopyListSummary]{ResponseType: "AzCopyListSummary", ResponseValue: ls}
 		glcm.Output(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(response)
+				jsonOutput, err := json.Marshal(ls)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
 				return ls.String()
 			}
-		})
+		}, common.EOutputMessageType.ListSummary())
 	}
 
 	return nil
-}
-
-type AzCopyResponse[T any] struct {
-	ResponseType  string
-	ResponseValue T
 }
 
 type AzCopyListObject struct {

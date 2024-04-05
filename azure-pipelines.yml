@@ -1,6 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.19.12'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.20.2'
+  AZCOPY_GOLANG_VERSION: '1.21.8'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
 
 trigger:
   branches:
@@ -45,17 +45,17 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
         displayName: 'Generate Linux AMD64'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+          GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
 
@@ -66,6 +66,7 @@ jobs:
         env:
           GOARCH: amd64
           GOOS: windows
+          CGO_ENABLED: 0
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
@@ -74,6 +75,7 @@ jobs:
         env:
           GOARCH: 386
           GOOS: windows
+          CGO_ENABLED: 0
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
@@ -83,6 +85,7 @@ jobs:
           GOARCH: arm
           GOARM: 7
           GOOS: windows
+          CGO_ENABLED: 0
 
       - script: |
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
@@ -90,7 +93,7 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+          CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
 
@@ -131,6 +134,7 @@ jobs:
           output_test_logs: ''
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
+          go_build: 'GOARCH=amd64 GOOS=linux go build -tags "netgo" -o $(build_name)'
         Windows:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
@@ -142,6 +146,7 @@ jobs:
           output_test_logs: 'cat test.txt'
           save_exit_code: 'set exit_code=%errorlevel%'
           return_exit_code: 'exit %exit_code%'
+          go_build: 'go build -cover -o $(build_name)'
         MacOS:
           imageName: 'macos-11'
           build_name: 'azcopy_darwin_amd64'
@@ -152,6 +157,7 @@ jobs:
           output_test_logs: ''
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
+          go_build: 'CGO_ENABLED=1 go build -cover -o $(build_name)'
     pool:
       vmImage: $(imageName)
 
@@ -172,6 +178,10 @@ jobs:
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
         displayName: 'Installing dependencies'
       - bash: |
+          echo "##vso[task.setvariable variable=CGO_ENABLED]0"
+        displayName: 'Set CGO_ENABLED for Windows'
+        condition: eq(variables.type, 'windows')
+      - bash: |
           npm install -g azurite
           mkdir azurite
           azurite --silent --location azurite --debug azurite\debug.log &
@@ -180,7 +190,7 @@ jobs:
       - script: |
           mkdir coverage
           echo 'Building executable'
-          go build -cover -o $(build_name)
+          $(go_build)
           echo 'Running tests'
           $(run_e2e)
           $(save_exit_code)
@@ -206,7 +216,9 @@ jobs:
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
           AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
           AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
+          AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG)
           AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
+          AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG)
           CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
           CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
@@ -298,8 +310,8 @@ jobs:
           directory: 'sddl'
           coverage_name: 'sddl'
       - script: |
-          GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64 
-          go build -o test-validator ./testSuite/
+          GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
+          go build -tags "netgo" -o test-validator ./testSuite/
           mkdir test-temp
           mkdir coverage
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64

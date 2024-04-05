@@ -162,21 +162,6 @@ func TestFilter_RemoveFolder(t *testing.T) {
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
-func TestFilter_RemoveContainer(t *testing.T) {
-
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:          true,
-		relativeSourcePath: "",
-	}, nil, testFiles{
-		defaultSize: "1K",
-		shouldTransfer: []interface{}{
-			"file1.txt",
-			"folder1/file11.txt",
-			"folder1/file12.txt",
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
-
 func TestFilter_ExcludePath(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.AllSourcesToOneDest(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:   true,

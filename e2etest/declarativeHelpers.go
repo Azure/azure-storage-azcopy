@@ -193,6 +193,9 @@ type params struct {
 		INFO: source:  dest: /New Text Document.txt
 	*/
 
+	// OAuth params, "SPN" (default), "AZCLI", and "PSCRED" are currently supported
+	AutoLoginType string
+
 	// cancel params
 	ignoreErrorIfCompleted bool
 
@@ -457,6 +460,11 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 			if op == eOperation.Sync() {
 				switch fromTo {
 				case common.EFromTo.BlobBlob(),
+					common.EFromTo.BlobFSBlob(),
+					common.EFromTo.BlobBlobFS(),
+					common.EFromTo.BlobFSBlobFS(),
+					common.EFromTo.BlobFSLocal(),
+					common.EFromTo.LocalBlobFS(),
 					common.EFromTo.FileFile(),
 					common.EFromTo.LocalBlob(),
 					common.EFromTo.BlobLocal(),
@@ -472,8 +480,7 @@ func (tft TestFromTo) getValues(op Operation) []common.FromTo {
 
 			// TODO: remove this temp block
 			// temp
-			if fromTo.From() == common.ELocation.S3() ||
-				fromTo.From() == common.ELocation.BlobFS() || fromTo.To() == common.ELocation.BlobFS() {
+			if fromTo.From() == common.ELocation.S3() {
 				continue // until we implement the declarativeResourceManagers
 			}
 

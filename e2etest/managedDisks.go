@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,7 +18,12 @@ func (config *ManagedDiskConfig) GetMDURL() (*url.URL, error) {
 		return nil, fmt.Errorf("one or more important details are missing in the config")
 	}
 
-	uri := fmt.Sprintf("https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/disks/%s?api-version=2022-03-02", config.SubscriptionID, config.ResourceGroupName, config.DiskName)
+	// the API is the same, but the provider is different
+	uriFormat := common.Iff(config.isSnapshot,
+		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/snapshots/%s?api-version=2023-04-02",
+		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/disks/%s?api-version=2023-04-02")
+
+	uri := fmt.Sprintf(uriFormat, config.SubscriptionID, config.ResourceGroupName, config.DiskName)
 	out, err := url.Parse(uri)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URI (maybe some detail of the config was formatted invalid?)")

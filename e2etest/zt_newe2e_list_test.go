@@ -16,7 +16,7 @@ type ListSuite struct{}
 // TODO : Test json for majority of cases and add a few for text output
 func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	srcService := acct.GetService(svm, common.ELocation.Blob())
 
 	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
@@ -29,7 +29,7 @@ func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbList}),
+			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
 				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
@@ -53,7 +53,7 @@ func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 
 func (s *ListSuite) Scenario_ListRunningTally(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	srcService := acct.GetService(svm, common.ELocation.Blob())
 
 	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
@@ -66,7 +66,7 @@ func (s *ListSuite) Scenario_ListRunningTally(svm *ScenarioVariationManager) {
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbList}),
+			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
 				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
@@ -92,7 +92,7 @@ func (s *ListSuite) Scenario_ListRunningTally(svm *ScenarioVariationManager) {
 
 func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	srcService := acct.GetService(svm, common.ELocation.Blob())
 
 	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
@@ -113,7 +113,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVari
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbList}),
+			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
 				srcContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
@@ -137,7 +137,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVari
 
 func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	srcService := acct.GetService(svm, common.ELocation.Blob())
 
 	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
@@ -166,7 +166,7 @@ func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationMan
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbList}),
+			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
 				srcContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
@@ -190,7 +190,7 @@ func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationMan
 
 func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	srcService := acct.GetService(svm, common.ELocation.Blob())
 
 	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
@@ -216,7 +216,7 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: ResolveVariation(svm, []AzCopyVerb{AzCopyVerbList}),
+			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
 				srcContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
