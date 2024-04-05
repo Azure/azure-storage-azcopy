@@ -28,7 +28,7 @@ func TestValidateArgumentLocation(t *testing.T) {
 		// User specifies location
 		{"https://privateendpoint.com/container1", "FILE", common.ELocation.File(), ""},
 		{"http://127.0.0.1:10000/devstoreaccount1/container1", "BloB", common.ELocation.Blob(), ""},
-		{"https://test.file.core.windows.net/container1", "blobfs", common.ELocation.BlobFS(), ""}, // Tests that the endpoint doesnt really matter
+		{"https://test.file.core.windows.net/container1", "blobfs", common.ELocation.BlobFS(), ""}, // Tests that the endpoint does not really matter
 		{"https://privateendpoint.com/container1", "random", common.ELocation.Unknown(), "invalid --location value specified"},
 	}
 
