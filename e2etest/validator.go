@@ -55,6 +55,35 @@ func fixSlashes(s string, loc common.Location) string {
 // versionIDRegex is intended to capture variations of the destination version ID.
 var versionIDRegex = regexp.MustCompile("^\\d{4}-\\d{2}-\\d{2}T\\d{2}[-:]\\d{2}[-:]\\d{2}\\.\\d{7}Z")
 
+func trimBaseSnapshotDetails(c asserter, url *url.URL, location common.Location, acctType AccountType) (trimmed, snapshot string) {
+	switch {
+	case location == common.ELocation.File():
+		snapshot = url.Query().Get("sharesnapshot")
+		if snapshot != "" {
+			query := url.Query()
+			query.Del("sharesnapshot")
+			url.RawQuery = query.Encode()
+			trimmed = url.String()
+		} else {
+			trimmed = url.String()
+		}
+	case location == common.ELocation.Blob() && acctType.IsManagedDisk():
+		snapshot = url.Query().Get("snapshot")
+		if snapshot != "" {
+			query := url.Query()
+			query.Del("snapshot")
+			url.RawQuery = query.Encode()
+			trimmed = url.String()
+		} else {
+			trimmed = url.String()
+		}
+	default:
+		trimmed = url.String()
+	}
+
+	return
+}
+
 func (Validator) ValidateRemoveTransfer(c asserter, isSrcEncoded bool, isDstEncoded bool,
 	sourcePrefix string, destinationPrefix string, expectedTransfers []*testObject, actualTransfers []common.TransferDetail, statusToTest common.TransferStatus) {
 	// TODO: Think of how to validate files in case of remove
@@ -71,10 +100,7 @@ func (Validator) ValidateCopyTransfersAreScheduled(s *scenario, isSrcEncoded boo
 		// i.e. source is a URL
 		srcPrefixURL, err := url.Parse(sourcePrefix)
 		if err == nil {
-			snapshotID = srcPrefixURL.Query().Get("sharesnapshot")
-			if snapshotID != "" {
-				sourcePrefix = strings.TrimSuffix(sourcePrefix, "?sharesnapshot="+snapshotID)
-			}
+			sourcePrefix, snapshotID = trimBaseSnapshotDetails(c, srcPrefixURL, s.fromTo.From(), s.srcAccountType)
 		}
 	}
 
@@ -100,7 +126,9 @@ func (Validator) ValidateCopyTransfersAreScheduled(s *scenario, isSrcEncoded boo
 	for _, transfer := range actualTransfers {
 		if snapshotID != "" {
 			c.Assert(strings.Contains(transfer.Src, snapshotID), equals(), true)
-			transfer.Src = strings.TrimSuffix(transfer.Src, "?sharesnapshot="+snapshotID)
+			uri, err := url.Parse(transfer.Src)
+			c.AssertNoErr(err, "url must parse, sanity check")
+			transfer.Src, _ = trimBaseSnapshotDetails(c, uri, s.fromTo.From(), s.srcAccountType)
 		}
 
 		srcRelativeFilePath := strings.Trim(strings.TrimPrefix(makeSlashesComparable(transfer.Src), sourcePrefix), "/")

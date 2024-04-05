@@ -85,7 +85,6 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 		jobsAdmin.JobsAdmin.LogToJobLog(message, common.LogInfo)
 	}
 
-	targetURL, _ := cca.Source.String()
 	from := cca.FromTo.From()
 	if !from.SupportsTrailingDot() {
 		cca.trailingDot = common.ETrailingDotOption.Disable()
@@ -97,7 +96,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	}
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
-		targetURL,
+		cca.Source,
 		cca.credentialInfo.CredentialType,
 		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -144,7 +143,7 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	sourceURL, _ := cca.Source.String()
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
 
-	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), sourceURL, cca.credentialInfo.CredentialType, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
+	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, cca.credentialInfo.CredentialType, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
 	if err != nil {
 		return err
 	}
