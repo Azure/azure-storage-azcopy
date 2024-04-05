@@ -14,8 +14,8 @@ type FileOAuthTestSuite struct{}
 func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
-	srcService := CreateResource[ServiceResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()})), ResourceDefinitionService{})
-	dstService := CreateResource[ServiceResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()})), ResourceDefinitionService{})
+	srcService := CreateResource[ServiceResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionService{})
+	dstService := CreateResource[ServiceResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionService{})
 
 	dstAuth := ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()})
 
@@ -35,7 +35,7 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationM
 			ShouldFail: true,
 		})
 
-	for _, line := range stdout.RawOutput {
+	for _, line := range stdout.RawStdout() {
 		if strings.Contains(line, "S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported") {
 			return
 		}
