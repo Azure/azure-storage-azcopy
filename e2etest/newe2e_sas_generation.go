@@ -76,7 +76,7 @@ func (vals GenericServiceSignatureValues) withDefaults() GenericServiceSignature
 	out := vals
 
 	SetIfZero(&out.Protocol, blobsas.ProtocolHTTPS)
-	SetIfZero(&out.StartTime, time.Now())
+	SetIfZero(&out.StartTime, time.Now().Add(-time.Minute))
 	SetIfZero(&out.ExpiryTime, out.StartTime.Add(time.Hour*24))
 	SetIfZero(&out.Permissions, (&blobsas.ContainerPermissions{
 		Read: true, Add: true, Create: true, Write: true, Delete: true, List: true,
