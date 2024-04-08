@@ -500,11 +500,8 @@ func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error)
 	return u.Parse(tenantID)
 }
 
-const minimumTokenValidDuration = time.Minute * 5
-
 type TokenStoreCredential struct {
 	token *azcore.AccessToken
-	lock  sync.RWMutex
 }
 
 // globalTokenStoreCredential is created to make sure that all
