@@ -30,7 +30,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -493,14 +492,6 @@ func (identityInfo *IdentityInfo) Validate() error {
 	}
 	return nil
 }
-
-// Single instance token store credential cache shared by entire azcopy process.
-var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
-	KeyName:     "azcopy/aadtoken/" + strconv.Itoa(os.Getpid()),
-	ServiceName: "azcopy",
-	AccountName: "aadtoken/" + strconv.Itoa(os.Getpid()),
-})
-
 func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error) {
 	u, err := url.Parse(activeDirectoryEndpoint)
 	if err != nil {
@@ -533,30 +524,7 @@ var globalTokenStoreCredential *TokenStoreCredential
 var globalTsc sync.Once
 
 func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	// if the token we've has not expired, return the same.
-	tsc.lock.RLock()
-	if time.Until(tsc.token.ExpiresOn) > minimumTokenValidDuration {
-		return *tsc.token, nil
-	}
-	tsc.lock.RUnlock()
-
-	tsc.lock.Lock()
-	defer tsc.lock.Unlock()
-	hasToken, err := tokenStoreCredCache.HasCachedToken()
-	if err != nil || !hasToken {
-		return azcore.AccessToken{}, fmt.Errorf("no cached token found in Token Store Mode(SE), %v", err)
-	}
-
-	tokenInfo, err := tokenStoreCredCache.LoadToken()
-	if err != nil {
-		return azcore.AccessToken{}, fmt.Errorf("get cached token failed in Token Store Mode(SE), %v", err)
-	}
-
-	tsc.token = &azcore.AccessToken{
-		Token:     tokenInfo.AccessToken,
-		ExpiresOn: tokenInfo.Expires(),
-	}
-
+	tsc.token = &azcore.AccessToken{}
 	return *tsc.token, nil
 
 }
