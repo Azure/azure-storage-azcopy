@@ -59,10 +59,10 @@ func TestManagedDisks_NoOAuthRequired(t *testing.T) {
 }
 
 func TestManagedDisks_Snapshot(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Limit runs to Linux so no simultaneous runs occur")
-		return
-	}
+	// if runtime.GOOS != "linux" {
+	t.Skip("Limit runs to Linux so no simultaneous runs occur")
+	return
+	// }
 
 	RunScenarios(
 		t,
@@ -87,10 +87,10 @@ func TestManagedDisks_Snapshot(t *testing.T) {
 }
 
 func TestManagedDisks_SnapshotOAuth(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Limit runs to Linux so no simultaneous runs occur")
-		return
-	}
+	// if runtime.GOOS != "linux" {
+	t.Skip("Limit runs to Linux so no simultaneous runs occur")
+	return
+	// }
 
 	RunScenarios(
 		t,
