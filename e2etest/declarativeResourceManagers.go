@@ -579,8 +579,8 @@ func (r *resourceManagedDisk) cleanup(a asserter) {
 	err := r.config.RevokeAccess()
 	a.AssertNoErr(err)
 
-	// The signed identifier cache supposedly lasts 30s, so we'll double that and assume that's a safe break time.
-	time.Sleep(time.Minute * 1)
+	// The signed identifier cache supposedly lasts 30s, so we'll assume that's a safe break time.
+	time.Sleep(time.Second * 30)
 }
 
 // getParam works functionally different because resourceManagerDisk inherently only targets a single file.
