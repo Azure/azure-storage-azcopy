@@ -21,6 +21,7 @@
 package e2etest
 
 import (
+	"flag"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"runtime"
 	"testing"
@@ -29,6 +30,8 @@ import (
 
 // Purpose: Tests for the special cases that relate to moving managed disks (default local VHD to page blob; special handling for
 //     md- and md-impex URLs.
+
+var runManagedDiskSnapshot = flag.Bool("md-snapshot", false, "Whether or not to run snapshot managed disk tests")
 
 func TestManagedDisks_NoOAuthRequired(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -59,10 +62,10 @@ func TestManagedDisks_NoOAuthRequired(t *testing.T) {
 }
 
 func TestManagedDisks_Snapshot(t *testing.T) {
-	// if runtime.GOOS != "linux" {
-	t.Skip("Limit runs to Linux so no simultaneous runs occur")
-	return
-	// }
+	if runManagedDiskSnapshot != nil && !*runManagedDiskSnapshot {
+		t.Skip("Temporarily disabled test until cause is found for sudden failure")
+		return
+	}
 
 	RunScenarios(
 		t,
@@ -87,10 +90,10 @@ func TestManagedDisks_Snapshot(t *testing.T) {
 }
 
 func TestManagedDisks_SnapshotOAuth(t *testing.T) {
-	// if runtime.GOOS != "linux" {
-	t.Skip("Limit runs to Linux so no simultaneous runs occur")
-	return
-	// }
+	if runManagedDiskSnapshot != nil && !*runManagedDiskSnapshot {
+		t.Skip("Temporarily disabled test until cause is found for sudden failure")
+		return
+	}
 
 	RunScenarios(
 		t,
