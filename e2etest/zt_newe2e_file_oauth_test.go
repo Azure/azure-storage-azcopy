@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 func init() {
@@ -14,8 +13,8 @@ type FileOAuthTestSuite struct{}
 func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
-	srcService := CreateResource[ServiceResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionService{})
-	dstService := CreateResource[ServiceResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionService{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
 	dstAuth := ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()})
 
@@ -24,8 +23,8 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationM
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcService, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
-				TryApplySpecificAuthType(dstService, dstAuth, svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstContainer, dstAuth, svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -35,10 +34,5 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationM
 			ShouldFail: true,
 		})
 
-	for _, line := range stdout.RawStdout() {
-		if strings.Contains(line, "S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported") {
-			return
-		}
-	}
-	svm.Error("expected error message not found in azcopy output")
+	ValidateErrorOutput(svm, stdout, "S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
 }
