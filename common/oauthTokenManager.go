@@ -247,7 +247,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 			AuthenticationRecord: record,
 			TenantID:             tenantID,
 			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
-				AllowUnencryptedStorage: false,
+				AllowUnencryptedStorage: true,
 				Name:                    TokenCache,
 			}})
 		// If record is empty
@@ -592,7 +592,7 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential(persist bool) (az
 				Transport: newAzcopyHTTPClient(),
 			},
 			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
-				AllowUnencryptedStorage: false,
+				AllowUnencryptedStorage: true,
 				Name:                    TokenCache,
 			},
 		})
@@ -624,7 +624,7 @@ func (credInfo *OAuthTokenInfo) GetClientSecretCredential(persist bool) (azcore.
 				Transport: newAzcopyHTTPClient(),
 			},
 			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
-				AllowUnencryptedStorage: false,
+				AllowUnencryptedStorage: true,
 				Name:                    TokenCache,
 			},
 		})
