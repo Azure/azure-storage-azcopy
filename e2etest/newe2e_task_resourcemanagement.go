@@ -6,6 +6,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"strings"
 )
 
 // ResourceTracker tracks resources
@@ -215,4 +216,16 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 		ValueToKVPair: func(obj cmd.AzCopyListObject) KVPair[AzCopyOutputKey, cmd.AzCopyListObject] {
 			return KVPair[AzCopyOutputKey, cmd.AzCopyListObject]{Key: AzCopyOutputKey{Path: obj.Path, VersionId: obj.VersionId}, Value: obj}
 		}}, o...)
+}
+
+func ValidateErrorOutput(a Asserter, stdout AzCopyStdout, errorMsg string) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	for _, line := range stdout.(*AzCopyRawStdout).RawOutput {
+		if strings.Contains(line, errorMsg) {
+			return
+		}
+	}
+	a.Error("expected error message not found in azcopy output")
 }
