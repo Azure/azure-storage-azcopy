@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -34,5 +35,5 @@ func (s *FileOAuthTestSuite) Scenario_FileBlobOAuthError(svm *ScenarioVariationM
 			ShouldFail: true,
 		})
 
-	ValidateErrorOutput(svm, stdout, "S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
+	ValidateErrorOutput(svm, stdout, fmt.Sprintf("S2S %s from Azure File authenticated with Azure AD to Blob/BlobFS is not supported", azCopyVerb))
 }
