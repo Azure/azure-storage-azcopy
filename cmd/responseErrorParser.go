@@ -20,12 +20,17 @@ var errorURLs = map[bloberror.Code]string{
 	bloberror.ServerBusy:                    "https://aka.ms/AzCopyError/ServerBusy",
 }
 
-// getErrorCodeUrl - returns url string for specific error code
+// getErrorCodeUrl - returns url string for specific error codes
 func getErrorCodeUrl(err error) string {
+	var urls []string
 	for code, url := range errorURLs {
 		if hasCode(err, code) {
-			return "ERROR DETAILS: " + url
+			urls = append(urls, url)
 		}
+	}
+
+	if len(urls) > 0 {
+		return "ERROR DETAILS: " + strings.Join(urls, "; ")
 	}
 
 	return "" // We do not currently have a URL for this specific error code
