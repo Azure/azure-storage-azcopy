@@ -881,17 +881,6 @@ func runCopyAndVerify(a *assert.Assertions, raw rawCopyCmdArgs, verifier func(er
 	verifier(err)
 }
 
-func runListAndVerify(a *assert.Assertions, raw rawListCmdArgs, verifier func(err error)) {
-	// the simulated user input should parse properly
-	cooked, err := raw.cook()
-	a.NoError(err)
-
-	err = cooked.HandleListContainerCommand()
-
-	// the err is passed to verified, which knows whether it is expected or not
-	verifier(err)
-}
-
 func validateUploadTransfersAreScheduled(a *assert.Assertions, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
 	validateCopyTransfersAreScheduled(a, false, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
@@ -1020,17 +1009,6 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		forceWrite:                     common.EOverwriteOption.True().String(),
 		preserveOwner:                  common.PreserveOwnerDefault,
 		includeDirectoryStubs:          true,
-	}
-}
-
-func getDefaultListRawInput(src string) rawListCmdArgs {
-	return rawListCmdArgs{
-		sourcePath:      src,
-		Properties:      "",
-		MachineReadable: false,
-		RunningTally:    false,
-		MegaUnits:       false,
-		trailingDot:     "",
 	}
 }
 

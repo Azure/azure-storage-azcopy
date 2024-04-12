@@ -1,8 +1,11 @@
 package e2etest
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"io"
 	"os"
 	"os/exec"
 	"reflect"
@@ -12,12 +15,23 @@ import (
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
 type AzCopyJobPlan struct{}
 
-// AzCopyStdout shouldn't be used or relied upon right now! This will be fleshed out eventually. todo WI#26418258
-type AzCopyStdout struct {
+type AzCopyStdout interface {
+	RawStdout() []string
+
+	io.Writer
+	fmt.Stringer
+}
+
+// AzCopyRawStdout shouldn't be used or relied upon right now! This will be fleshed out eventually. todo WI#26418258
+type AzCopyRawStdout struct {
 	RawOutput []string
 }
 
-func (a *AzCopyStdout) Write(p []byte) (n int, err error) {
+func (a *AzCopyRawStdout) RawStdout() []string {
+	return a.RawOutput
+}
+
+func (a *AzCopyRawStdout) Write(p []byte) (n int, err error) {
 	str := string(p)
 	lines := strings.Split(str, "\n")
 
@@ -26,8 +40,59 @@ func (a *AzCopyStdout) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (a *AzCopyStdout) String() string {
+func (a *AzCopyRawStdout) String() string {
 	return strings.Join(a.RawOutput, "\n")
+}
+
+var _ AzCopyStdout = &AzCopyRawStdout{}
+var _ AzCopyStdout = &AzCopyListStdout{}
+
+type AzCopyListStdout struct {
+	AzCopyRawStdout
+}
+
+func (a *AzCopyListStdout) RawStdout() []string {
+	return a.AzCopyRawStdout.RawStdout()
+}
+
+func (a *AzCopyListStdout) Write(p []byte) (n int, err error) {
+	return a.AzCopyRawStdout.Write(p)
+}
+
+func (a *AzCopyListStdout) String() string {
+	return a.AzCopyRawStdout.String()
+}
+
+func (a *AzCopyListStdout) Unmarshal() ([]cmd.AzCopyListObject, *cmd.AzCopyListSummary, error) {
+	var listOutput []cmd.AzCopyListObject
+	var listSummary *cmd.AzCopyListSummary
+	for _, line := range a.RawOutput {
+		if line == "" {
+			continue
+		}
+		var out common.JsonOutputTemplate
+		err := json.Unmarshal([]byte(line), &out)
+		if err != nil {
+			return nil, nil, err
+		}
+		if out.MessageType == common.EOutputMessageType.ListObject().String() {
+			var obj *cmd.AzCopyListObject
+			objErr := json.Unmarshal([]byte(out.MessageContent), &obj)
+			if objErr != nil {
+				return nil, nil, fmt.Errorf("error unmarshaling list output; object error: %s", objErr)
+			}
+			listOutput = append(listOutput, *obj)
+
+		} else if out.MessageType == common.EOutputMessageType.ListSummary().String() {
+			var sum *cmd.AzCopyListSummary
+			sumErr := json.Unmarshal([]byte(out.MessageContent), &sum)
+			if sumErr != nil {
+				return nil, nil, fmt.Errorf("error unmarshaling list output; summary error: %s", sumErr)
+			}
+			listSummary = sum
+		}
+	}
+	return listOutput, listSummary, nil
 }
 
 type AzCopyVerb string
@@ -36,6 +101,7 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbCopy   AzCopyVerb = "copy"
 	AzCopyVerbSync   AzCopyVerb = "sync"
 	AzCopyVerbRemove AzCopyVerb = "remove"
+	AzCopyVerbList   AzCopyVerb = "list"
 )
 
 type AzCopyTarget struct {
@@ -180,7 +246,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 }
 
 // RunAzCopy todo define more cleanly, implement
-func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (*AzCopyStdout, *AzCopyJobPlan) {
+func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *AzCopyJobPlan) {
 	if a.Dryrun() {
 		return nil, &AzCopyJobPlan{}
 	}
@@ -222,7 +288,13 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (*AzCopyStdout, *A
 		return out
 	}()
 
-	out := &AzCopyStdout{}
+	var out AzCopyStdout
+	switch commandSpec.Verb {
+	case AzCopyVerbList:
+		out = &AzCopyListStdout{}
+	default:
+		out = &AzCopyRawStdout{}
+	}
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
 		Args: args,
@@ -241,7 +313,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (*AzCopyStdout, *A
 	}
 
 	err = command.Wait()
-	a.Assert("wait for finalize", IsNil{}, err)
+	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
