@@ -123,16 +123,13 @@ func (AccountType) GCP() AccountType                          { return AccountTy
 func (AccountType) Azurite() AccountType                      { return AccountType(8) }
 func (AccountType) ManagedDiskSnapshot() AccountType          { return AccountType(9) }
 func (AccountType) ManagedDiskSnapshotOAuth() AccountType     { return AccountType(10) }
-func (AccountType) LargeManagedDiskSnapshot() AccountType     { return AccountType((11)) }
-func (AccountType) LargeManagedDisk() AccountType             { return AccountType((12)) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }
 
 func (o AccountType) IsManagedDisk() bool {
-	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk() || o == o.ManagedDiskSnapshot() || o == o.ManagedDiskSnapshotOAuth() ||
-		o == o.LargeManagedDiskSnapshot() || o == o.LargeManagedDisk()
+	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk() || o == o.ManagedDiskSnapshot() || o == o.ManagedDiskSnapshotOAuth()
 }
 
 func (o AccountType) IsBlobOnly() bool {
@@ -162,16 +159,11 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_CONFIG"
 	case EAccountType.OAuthManagedDisk():
 		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG"
-	case EAccountType.LargeManagedDisk():
-		mdConfigVar = "AZCOPY_E2E_LARGE_MANAGED_DISK_CONFIG"
 	case EAccountType.ManagedDiskSnapshot():
 		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG"
 		isSnapshot = true
 	case EAccountType.ManagedDiskSnapshotOAuth():
 		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG"
-		isSnapshot = true
-	case EAccountType.LargeManagedDiskSnapshot():
-		mdConfigVar = "AZCOPY_E2E_LARGE_MANAGED_DISK_SNAPSHOT_CONFIG"
 		isSnapshot = true
 	default:
 		return nil, fmt.Errorf("account type %s is invalid for GetMDConfig", accountType.String())
