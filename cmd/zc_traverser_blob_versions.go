@@ -96,7 +96,7 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 			"",
 			common.EEntityType.File(),
 			blobPropsAdapter.LastModified(),
-			*blobPropsAdapter.ContentLength,
+			blobPropsAdapter.ContentLength(),
 			blobPropsAdapter,
 			blobPropsAdapter,
 			blobPropsAdapter.Metadata,

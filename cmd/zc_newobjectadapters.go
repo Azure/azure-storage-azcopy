@@ -62,6 +62,10 @@ func (e emptyPropertiesAdapter) ContentMD5() []byte {
 	return make([]byte, 0)
 }
 
+func (e emptyPropertiesAdapter) ContentLength() int64 {
+	return 0
+}
+
 func (e emptyPropertiesAdapter) BlobType() blob.BlobType {
 	return ""
 }
@@ -123,6 +127,10 @@ func (a blobPropertiesResponseAdapter) ContentMD5() []byte {
 	return a.GetPropertiesResponse.ContentMD5
 }
 
+func (a blobPropertiesResponseAdapter) ContentLength() int64 {
+	return common.IffNotNil(a.GetPropertiesResponse.ContentLength, 0)
+}
+
 func (a blobPropertiesResponseAdapter) BlobType() blob.BlobType {
 	return common.IffNotNil(a.GetPropertiesResponse.BlobType, "")
 }
@@ -178,6 +186,10 @@ func (a blobPropertiesAdapter) ContentType() string {
 
 func (a blobPropertiesAdapter) ContentMD5() []byte {
 	return a.BlobProperties.ContentMD5
+}
+
+func (a blobPropertiesAdapter) ContentLength() int64 {
+	return common.IffNotNil(a.BlobProperties.ContentLength, 0)
 }
 
 func (a blobPropertiesAdapter) BlobType() blob.BlobType {
