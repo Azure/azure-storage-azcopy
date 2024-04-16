@@ -101,6 +101,7 @@ func (b *BlobServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 }
 
 func (b *BlobServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	a.HelperMarker().Helper()
 	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
@@ -117,6 +118,7 @@ func (b *BlobServiceResourceManager) Canon() string {
 }
 
 func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
+	a.HelperMarker().Helper()
 	pager := b.internalClient.NewListContainersPager(&service.ListContainersOptions{})
 	out := make([]string, 0)
 
@@ -183,6 +185,7 @@ func (b *BlobContainerResourceManager) DefaultAuthType() ExplicitCredentialTypes
 }
 
 func (b *BlobContainerResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	a.HelperMarker().Helper()
 	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
@@ -207,6 +210,7 @@ func (b *BlobContainerResourceManager) Parent() ResourceManager {
 var premiumRegex = regexp.MustCompile("P\\d{2}")
 
 func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, recursive bool) map[string]ObjectProperties {
+	a.HelperMarker().Helper()
 	out := make(map[string]ObjectProperties)
 
 	processBlobItem := func(v *container.BlobItem) {
@@ -282,6 +286,7 @@ func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, re
 }
 
 func (b *BlobContainerResourceManager) Create(a Asserter, props ContainerProperties) {
+	a.HelperMarker().Helper()
 	b.CreateWithOptions(a, &BlobContainerCreateOptions{
 		Access:       props.BlobContainerProperties.Access,
 		Metadata:     props.Metadata,
@@ -290,6 +295,7 @@ func (b *BlobContainerResourceManager) Create(a Asserter, props ContainerPropert
 }
 
 func (b *BlobContainerResourceManager) GetProperties(a Asserter) ContainerProperties {
+	a.HelperMarker().Helper()
 	props, err := b.internalClient.GetProperties(ctx, nil)
 	a.NoError("Get container properties", err)
 
@@ -304,6 +310,7 @@ func (b *BlobContainerResourceManager) GetProperties(a Asserter) ContainerProper
 type BlobContainerCreateOptions = container.CreateOptions
 
 func (b *BlobContainerResourceManager) CreateWithOptions(a Asserter, options *BlobContainerCreateOptions) {
+	a.HelperMarker().Helper()
 	_, err := b.internalClient.Create(ctx, options)
 
 	created := true
@@ -353,6 +360,7 @@ func (b *BlobContainerResourceManager) HasMetadata() PropertiesAvailability {
 }
 
 func (b *BlobContainerResourceManager) GetMetadata(a Asserter) common.Metadata {
+	a.HelperMarker().Helper()
 	resp, err := b.internalClient.GetProperties(ctx, &container.GetPropertiesOptions{})
 	a.NoError("Get container properties", err)
 
@@ -360,11 +368,13 @@ func (b *BlobContainerResourceManager) GetMetadata(a Asserter) common.Metadata {
 }
 
 func (b *BlobContainerResourceManager) SetMetadata(a Asserter, metadata common.Metadata) {
+	a.HelperMarker().Helper()
 	_, err := b.internalClient.SetMetadata(ctx, &container.SetMetadataOptions{Metadata: metadata})
 	a.NoError("Set container metadata", err)
 }
 
 func (b *BlobContainerResourceManager) Delete(a Asserter) {
+	a.HelperMarker().Helper()
 	_, err := b.internalClient.Delete(ctx, nil)
 	a.NoError("Delete container", err)
 }
@@ -398,6 +408,7 @@ func (b *BlobObjectResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 }
 
 func (b *BlobObjectResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	a.HelperMarker().Helper()
 	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
@@ -427,10 +438,12 @@ func (b *BlobObjectResourceManager) ObjectName() string {
 
 // Create defaults to Block Blob. For implementation-specific options, GetTypeOrZero[T] / GetTypeOrAssert[T] to BlobObjectResourceManager and call CreateWithOptions
 func (b *BlobObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
+	a.HelperMarker().Helper()
 	b.CreateWithOptions(a, body, properties, nil)
 }
 
 func (b *BlobObjectResourceManager) Delete(a Asserter) {
+	a.HelperMarker().Helper()
 	_, err := b.internalClient.Delete(ctx, nil)
 
 	if bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ResourceNotFound, bloberror.ContainerNotFound) {
@@ -446,6 +459,7 @@ type BlobObjectCreateOptions struct {
 }
 
 func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectContentContainer, properties ObjectProperties, options *BlobObjectCreateOptions) {
+	a.HelperMarker().Helper()
 	opts := DerefOrZero(options)
 	blobProps := properties.BlobProperties
 
@@ -590,10 +604,12 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 }
 
 func (b *BlobObjectResourceManager) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
+	a.HelperMarker().Helper()
 	return b.Container.ListObjects(a, b.Path, recursive)
 }
 
 func (b *BlobObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
+	a.HelperMarker().Helper()
 	return b.GetPropertiesWithOptions(a, nil)
 }
 
@@ -602,6 +618,7 @@ type BlobObjectGetPropertiesOptions struct {
 }
 
 func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options *BlobObjectGetPropertiesOptions) ObjectProperties {
+	a.HelperMarker().Helper()
 	resp, err := b.internalClient.GetProperties(ctx, &blob.GetPropertiesOptions{
 		CPKInfo: nil,
 	})
@@ -650,11 +667,13 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 }
 
 func (b *BlobObjectResourceManager) SetHTTPHeaders(a Asserter, h contentHeaders) {
+	a.HelperMarker().Helper()
 	_, err := b.internalClient.SetHTTPHeaders(ctx, DerefOrZero(h.ToBlob()), nil)
 	a.NoError("Set HTTP Headers", err)
 }
 
 func (b *BlobObjectResourceManager) SetMetadata(a Asserter, metadata common.Metadata) {
+	a.HelperMarker().Helper()
 	_, err := b.internalClient.SetMetadata(ctx, metadata, nil)
 	a.NoError("set metadata", err)
 }
@@ -680,8 +699,13 @@ func (b *BlobObjectResourceManager) URI(opts ...GetURIOptions) string {
 }
 
 func (b *BlobObjectResourceManager) Download(a Asserter) io.ReadSeeker {
+	a.HelperMarker().Helper()
 	resp, err := b.internalClient.DownloadStream(ctx, nil)
 	a.NoError("Download stream", err)
+
+	if resp.Body == nil {
+		return bytes.NewReader(make([]byte, 0))
+	}
 
 	buf := &bytes.Buffer{}
 	_, err = io.Copy(buf, resp.Body)

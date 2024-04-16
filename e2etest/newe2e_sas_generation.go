@@ -5,6 +5,7 @@ import (
 	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 	"time"
 )
 
@@ -115,6 +116,8 @@ func (vals GenericServiceSignatureValues) AsBlob() BlobSignatureValues {
 func (vals GenericServiceSignatureValues) AsFile() FileSignatureValues {
 	s := vals.withDefaults()
 
+	s.Permissions = strings.ReplaceAll(s.Permissions, "a", "")
+
 	return &filesas.SignatureValues{
 		Version:            s.Version,
 		Protocol:           filesas.Protocol(s.Protocol),
@@ -204,6 +207,8 @@ func (vals GenericAccountSignatureValues) AsBlob() BlobSignatureValues {
 
 func (vals GenericAccountSignatureValues) AsFile() FileSignatureValues {
 	s := vals.withDefaults()
+
+	s.Permissions = strings.ReplaceAll(s.Permissions, "a", "")
 
 	return filesas.AccountSignatureValues{
 		Version:       s.Version,

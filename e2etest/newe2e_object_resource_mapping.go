@@ -4,6 +4,11 @@ import "path"
 
 // this should maybe be in newe2e_resource_definitions but it felt relevant to have on it's own
 
+var _ ObjectResourceMapping = ObjectResourceMappingFlat{}
+var _ ObjectResourceMapping = ObjectResourceMappingObject{}
+var _ ObjectResourceMapping = ObjectResourceMappingFolder{}
+var _ ObjectResourceMapping = ObjectResourceMappingParentFolder{}
+
 type ObjectResourceMapping interface {
 	// Flatten returns a set of objects, flat mapped, as the root of container space.
 	// "" is the root, or self. This is useful for setting folder properties, or creating single files under folders.
@@ -14,6 +19,22 @@ type ObjectResourceMappingFlat map[string]ResourceDefinitionObject // todo: conv
 
 func (o ObjectResourceMappingFlat) Flatten() map[string]ResourceDefinitionObject {
 	return o // We're already flat!
+}
+
+type ObjectResourceMappingParentFolder struct {
+	FolderName string
+	Children   ObjectResourceMapping
+}
+
+func (o ObjectResourceMappingParentFolder) Flatten() map[string]ResourceDefinitionObject {
+	base := o.Children.Flatten()
+	out := make(map[string]ResourceDefinitionObject)
+
+	for k, v := range base {
+		out[path.Join(o.FolderName, k)] = v
+	}
+
+	return out
 }
 
 type ObjectResourceMappingFolder struct {

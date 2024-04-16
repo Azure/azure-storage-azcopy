@@ -15,6 +15,8 @@ type ResourceTracker interface {
 }
 
 func TrackResourceCreation(a Asserter, rm any) {
+	a.HelperMarker().Helper()
+
 	if t, ok := a.(ResourceTracker); ok {
 		if arm, ok := rm.(AccountResourceManager); ok {
 			t.TrackCreatedAccount(arm)
@@ -103,12 +105,15 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 		return
 	}
 
+	a.HelperMarker().Helper()
+
 	definition.ApplyDefinition(a, target, map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition){
 		cmd.ELocationLevel.Container(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+			a.HelperMarker().Helper()
 			cRes := manager.(ContainerResourceManager)
 
 			if !definition.ShouldExist() {
-				a.AssertNow("container must not exist", Equal{}, cRes.Exists(), false)
+				a.Assert("container must not exist", Equal{}, cRes.Exists(), false)
 				return
 			}
 
@@ -129,11 +134,12 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			}
 		},
 		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
+			a.HelperMarker().Helper()
 			objMan := manager.(ObjectResourceManager)
 			objDef := definition.(ResourceDefinitionObject)
 
 			if !objDef.ShouldExist() {
-				a.AssertNow("object must not exist", Equal{}, objMan.Exists(), false)
+				a.Assert("object must not exist", Equal{}, objMan.Exists(), false)
 				return
 			}
 

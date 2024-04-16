@@ -32,12 +32,14 @@ type ResourceDefinitionService struct {
 }
 
 func (r ResourceDefinitionService) GenerateAdoptiveParent(a Asserter) ResourceDefinition {
+	a.HelperMarker().Helper()
 	a.Error("Cannot generate account definition (yet)")
 
 	return nil
 }
 
 func (r ResourceDefinitionService) MatchAdoptiveChild(a Asserter, target ResourceManager) (ResourceManager, ResourceDefinition) {
+	a.HelperMarker().Helper()
 	targetSvc, ok := target.(ServiceResourceManager)
 	a.AssertNow("adoptive parent definitions must match the level of the target they're finding a child for", Equal{}, ok, true)
 	a.AssertNow("adoptive parent definitions can only have one container", Equal{}, len(r.Containers), 1)
@@ -50,6 +52,7 @@ func (r ResourceDefinitionService) MatchAdoptiveChild(a Asserter, target Resourc
 }
 
 func (r ResourceDefinitionService) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 	serviceManager := target.(ServiceResourceManager)
 
@@ -97,6 +100,7 @@ func (r ResourceDefinitionContainer) GenerateAdoptiveParent(a Asserter) Resource
 }
 
 func (r ResourceDefinitionContainer) MatchAdoptiveChild(a Asserter, target ResourceManager) (ResourceManager, ResourceDefinition) {
+	a.HelperMarker().Helper()
 	targetCont, ok := target.(ContainerResourceManager)
 
 	objs := r.Objects.Flatten()
@@ -111,6 +115,7 @@ func (r ResourceDefinitionContainer) MatchAdoptiveChild(a Asserter, target Resou
 }
 
 func (r ResourceDefinitionContainer) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 	containerManager := target.(ContainerResourceManager)
 
@@ -164,11 +169,13 @@ func (r ResourceDefinitionObject) GenerateAdoptiveParent(a Asserter) ResourceDef
 }
 
 func (r ResourceDefinitionObject) MatchAdoptiveChild(a Asserter, target ResourceManager) (ResourceManager, ResourceDefinition) {
+	a.HelperMarker().Helper()
 	a.Error("objects have no semantic children")
 	panic("sanity check: error should catch this")
 }
 
 func (r ResourceDefinitionObject) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 
 	// Run the application function for containers

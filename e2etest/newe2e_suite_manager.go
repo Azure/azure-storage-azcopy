@@ -61,7 +61,6 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 		}
 
 		t.Run(sName, func(t *testing.T) {
-
 			t.Parallel() // todo: env var
 
 			if setupIdx != -1 {

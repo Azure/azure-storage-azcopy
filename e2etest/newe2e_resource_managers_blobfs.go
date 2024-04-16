@@ -91,6 +91,7 @@ func (b *BlobFSServiceResourceManager) ResourceClient() any {
 }
 
 func (b *BlobFSServiceResourceManager) ListContainers(a Asserter) []string {
+	a.HelperMarker().Helper()
 	pager := b.internalClient.NewListFileSystemsPager(nil)
 
 	out := make([]string, 0)
@@ -185,6 +186,7 @@ func (b *BlobFSFileSystemResourceManager) ContainerName() string {
 }
 
 func (b *BlobFSFileSystemResourceManager) Create(a Asserter, props ContainerProperties) {
+	a.HelperMarker().Helper()
 	b.CreateWithOptions(a, &filesystem.CreateOptions{
 		Access:       props.BlobContainerProperties.Access,
 		Metadata:     props.Metadata,
@@ -193,11 +195,13 @@ func (b *BlobFSFileSystemResourceManager) Create(a Asserter, props ContainerProp
 }
 
 func (b *BlobFSFileSystemResourceManager) GetProperties(a Asserter) ContainerProperties {
+	a.HelperMarker().Helper()
 	// Same resource, same code. BlobFS SDK can't seem to return these props anyway.
 	return b.Account().GetService(a, common.ELocation.Blob()).GetContainer(b.containerName).GetProperties(a)
 }
 
 func (b *BlobFSFileSystemResourceManager) CreateWithOptions(a Asserter, opts *filesystem.CreateOptions) {
+	a.HelperMarker().Helper()
 	_, err := b.internalClient.Create(ctx, opts)
 
 	created := true
@@ -213,15 +217,18 @@ func (b *BlobFSFileSystemResourceManager) CreateWithOptions(a Asserter, opts *fi
 }
 
 func (b *BlobFSFileSystemResourceManager) Delete(a Asserter) {
+	a.HelperMarker().Helper()
 	b.DeleteWithOptions(a, nil)
 }
 
 func (b *BlobFSFileSystemResourceManager) DeleteWithOptions(a Asserter, opts *filesystem.DeleteOptions) {
+	a.HelperMarker().Helper()
 	_, err := b.internalClient.Delete(ctx, opts)
 	a.NoError("Delete filesystem", err)
 }
 
 func (b *BlobFSFileSystemResourceManager) ListObjects(a Asserter, prefixOrDirectory string, recursive bool) map[string]ObjectProperties {
+	a.HelperMarker().Helper()
 	pager := b.internalClient.NewListPathsPager(recursive, &filesystem.ListPathsOptions{
 		Prefix: &prefixOrDirectory,
 	})
@@ -271,6 +278,7 @@ func (b *BlobFSPathResourceProvider) DefaultAuthType() ExplicitCredentialTypes {
 }
 
 func (b *BlobFSPathResourceProvider) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
+	a.HelperMarker().Helper()
 	return CreateAzCopyTarget(b, cred, a, opts...)
 }
 
@@ -327,6 +335,7 @@ func (b *BlobFSPathResourceProvider) ObjectName() string {
 }
 
 func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
+	a.HelperMarker().Helper()
 	switch b.entityType {
 	case common.EEntityType.Folder():
 		_, err := b.getDirClient().Create(ctx, &directory.CreateOptions{
@@ -387,6 +396,7 @@ func (b *BlobFSPathResourceProvider) Create(a Asserter, body ObjectContentContai
 }
 
 func (b *BlobFSPathResourceProvider) Delete(a Asserter) {
+	a.HelperMarker().Helper()
 	var err error
 	switch b.entityType {
 	case common.EEntityType.File():
@@ -403,10 +413,12 @@ func (b *BlobFSPathResourceProvider) Delete(a Asserter) {
 }
 
 func (b *BlobFSPathResourceProvider) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
+	a.HelperMarker().Helper()
 	return b.Container.ListObjects(a, b.objectPath, recursive)
 }
 
 func (b *BlobFSPathResourceProvider) GetProperties(a Asserter) ObjectProperties {
+	a.HelperMarker().Helper()
 	return b.GetPropertiesWithOptions(a, nil)
 }
 
@@ -417,6 +429,7 @@ type BlobFSPathGetPropertiesOptions struct {
 }
 
 func (b *BlobFSPathResourceProvider) GetPropertiesWithOptions(a Asserter, options *BlobFSPathGetPropertiesOptions) ObjectProperties {
+	a.HelperMarker().Helper()
 	opts := DerefOrZero(options)
 
 	// As far as BlobFS (and it's SDK) are concerned, the REST API call is the same for files and directories. Using the same call doesn't hurt.
@@ -452,16 +465,19 @@ func (b *BlobFSPathResourceProvider) GetPropertiesWithOptions(a Asserter, option
 }
 
 func (b *BlobFSPathResourceProvider) SetHTTPHeaders(a Asserter, h contentHeaders) {
+	a.HelperMarker().Helper()
 	_, err := b.getFileClient().SetHTTPHeaders(ctx, DerefOrZero(h.ToBlobFS()), nil)
 	a.NoError("Set HTTP headers", err)
 }
 
 func (b *BlobFSPathResourceProvider) SetMetadata(a Asserter, metadata common.Metadata) {
+	a.HelperMarker().Helper()
 	_, err := b.getFileClient().SetMetadata(ctx, metadata, nil)
 	a.NoError("Set metadata", err)
 }
 
 func (b *BlobFSPathResourceProvider) SetObjectProperties(a Asserter, props ObjectProperties) {
+	a.HelperMarker().Helper()
 	b.SetHTTPHeaders(a, props.HTTPHeaders)
 	b.SetMetadata(a, props.Metadata)
 
@@ -494,12 +510,14 @@ func (b *BlobFSPathResourceProvider) getFileClient() *file.Client {
 }
 
 func (b *BlobFSPathResourceProvider) getBlobClient(a Asserter) *blob.Client {
+	a.HelperMarker().Helper()
 	blobService := b.internalAccount.GetService(a, common.ELocation.Blob()).(*BlobServiceResourceManager) // Blob and BlobFS are synonymous, so simply getting the same path is fine.
 	container := blobService.internalClient.NewContainerClient(b.Container.containerName)
 	return container.NewBlobClient(b.objectPath) // Generic blob client for now, we can specialize if we want in the future.
 }
 
 func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
+	a.HelperMarker().Helper()
 	a.Assert("Object type must be file", Equal{}, common.EEntityType.File(), b.entityType)
 
 	resp, err := b.getFileClient().DownloadStream(ctx, nil)
