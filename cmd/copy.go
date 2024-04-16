@@ -1449,7 +1449,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 			// get token from env var or cache
 			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 				return srcCredInfo, err
-			} else if _, err := tokenInfo.GetTokenCredential(true); err != nil {
+			} else if _, err := tokenInfo.GetTokenCredential(); err != nil {
 				// we just verified we can get a token credential
 				return srcCredInfo, err
 			}

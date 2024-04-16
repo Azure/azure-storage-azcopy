@@ -288,7 +288,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 			return nil, nil, err
 		}
 
-		tc, err = tokenInfo.GetTokenCredential(true)
+		tc, err = tokenInfo.GetTokenCredential()
 		if err != nil {
 			return nil, nil, err
 		}

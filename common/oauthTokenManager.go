@@ -112,10 +112,6 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 		if err != nil { // this is the case when env var exists while get token info failed
 			return nil, err
 		}
-	} else { // Scenario: session mode which get token from cache
-		if tokenInfo, err = uotm.getCachedTokenInfo(ctx); err != nil {
-			return nil, err
-		}
 	}
 
 	if tokenInfo == nil || tokenInfo.AccessToken == "" {
@@ -135,7 +131,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	if oAuthTokenInfo.ActiveDirectoryEndpoint == "" {
 		oAuthTokenInfo.ActiveDirectoryEndpoint = DefaultActiveDirectoryEndpoint
 	}
-	tc, err := oAuthTokenInfo.GetTokenCredential(persist)
+	tc, err := oAuthTokenInfo.GetTokenCredential()
 	if err != nil {
 		return err
 	}
@@ -177,6 +173,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 	oAuthTokenInfo := &OAuthTokenInfo{
 		Identity:     true,
 		IdentityInfo: identityInfo,
+		Persist:      persist,
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
@@ -193,6 +190,7 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 			Secret:   secret,
 			CertPath: "",
 		},
+		Persist: persist,
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
@@ -217,6 +215,7 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 			Secret:   certPass,
 			CertPath: absCertPath,
 		},
+		Persist: persist,
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
@@ -286,22 +285,12 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	return nil
 }
 
-// getCachedTokenInfo get a fresh token from local disk cache.
-// If access token is expired, it will refresh the token.
-// If refresh token is expired, the method will fail and return failure reason.
-// Fresh token is persisted if access token or refresh token is changed.
-func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
-	return nil, nil
-}
-
 // HasCachedToken returns if there is cached token in token manager.
 func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 	if uotm.stashedInfo != nil {
 		return true, nil
 	}
 
-	// TODO: Revisit
-	//return uotm.credCache.HasCachedToken()
 	return false, nil
 }
 
@@ -446,6 +435,7 @@ type OAuthTokenInfo struct {
 	// For more details, please refer to
 	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
 	ClientID string `json:"_client_id"`
+	Persist  bool
 }
 
 func (t *OAuthTokenInfo) Expires() time.Time {
@@ -568,7 +558,7 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 	return tc, nil
 }
 
-func (credInfo *OAuthTokenInfo) GetClientCertificateCredential(persist bool) (azcore.TokenCredential, error) {
+func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCredential, error) {
 	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
@@ -585,7 +575,7 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential(persist bool) (az
 	var tc azcore.TokenCredential
 	// The conditional statement checks whether 'persist' is true before configuring token caching options.
 	// If 'persist' evaluates to true, the options for token caching are provided.
-	if persist {
+	if credInfo.Persist {
 		tc, err = azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
 			ClientOptions: azcore.ClientOptions{
 				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
@@ -611,13 +601,13 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential(persist bool) (az
 	return tc, nil
 }
 
-func (credInfo *OAuthTokenInfo) GetClientSecretCredential(persist bool) (azcore.TokenCredential, error) {
+func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredential, error) {
 	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
 	var tc azcore.TokenCredential
-	if persist {
+	if credInfo.Persist {
 		tc, err = azidentity.NewClientSecretCredential(credInfo.Tenant, credInfo.ApplicationID, credInfo.SPNInfo.Secret, &azidentity.ClientSecretCredentialOptions{
 			ClientOptions: azcore.ClientOptions{
 				Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
@@ -665,7 +655,7 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 	return credInfo.TokenCredential, nil
 }
 
-func (credInfo *OAuthTokenInfo) GetTokenCredential(persist bool) (azcore.TokenCredential, error) {
+func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, error) {
 	// Token Credential is cached.
 	if credInfo.TokenCredential != nil {
 		return credInfo.TokenCredential, nil
@@ -681,9 +671,9 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential(persist bool) (azcore.TokenCr
 
 	if credInfo.ServicePrincipalName {
 		if credInfo.SPNInfo.CertPath != "" {
-			return credInfo.GetClientCertificateCredential(persist)
+			return credInfo.GetClientCertificateCredential()
 		} else {
-			return credInfo.GetClientSecretCredential(persist)
+			return credInfo.GetClientSecretCredential()
 		}
 	}
 
