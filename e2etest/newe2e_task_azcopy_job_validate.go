@@ -5,6 +5,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -38,6 +39,65 @@ type ExpectedPlanFile struct {
 	FileData  ExpectedPlanFileFileDstData
 
 	Objects map[PlanFilePath]PlanFileObject
+}
+
+type GeneratePlanFileObjectsOptions struct {
+	// Morphs the destination path; source is retained as-is.
+	DestPathProcessor func(path string) string
+	// Processors morph objects
+	Processors []func(def *ResourceDefinitionObject)
+	// Filters return true to admit an object to the plan file,
+	Filters []func(def *ResourceDefinitionObject) bool
+}
+
+func ParentDirDestPathProcessor(DirName string) func(path string) string {
+	return func(modPath string) string {
+		return path.Join(DirName, modPath)
+	}
+}
+
+func GeneratePlanFileObjectsFromMapping(mapping ObjectResourceMapping, options ...GeneratePlanFileObjectsOptions) map[PlanFilePath]PlanFileObject {
+	objects := mapping.Flatten()
+	opts := FirstOrZero(options)
+
+	out := make(map[PlanFilePath]PlanFileObject)
+
+	ensurePathSeparatorPrefix := func(path string) string {
+		sep := "/"
+
+		if !strings.HasPrefix(path, sep) {
+			return sep + path
+		}
+
+		return path
+	}
+
+	for k, v := range objects {
+		v = v.Clone()
+		v.ObjectName = &k
+
+		for _, proc := range opts.Processors {
+			proc(&v)
+		}
+
+		keep := true
+		for _, filter := range opts.Filters {
+			keep = filter(&v)
+			if !keep {
+				break
+			}
+		}
+
+		out[PlanFilePath{
+			SrcPath: ensurePathSeparatorPrefix(*v.ObjectName),
+			DstPath: ensurePathSeparatorPrefix(opts.DestPathProcessor(*v.ObjectName)),
+		}] = PlanFileObject{
+			Properties:      v.ObjectProperties,
+			ShouldBePresent: &keep,
+		}
+	}
+
+	return out
 }
 
 func (e *ExpectedPlanFile) Validate(a Asserter, header *ste.JobPartPlanHeader) {

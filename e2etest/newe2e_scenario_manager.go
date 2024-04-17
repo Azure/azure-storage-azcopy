@@ -100,20 +100,9 @@ func (sm *ScenarioManager) RunScenario() {
 
 				sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
 
-				//failNow:
-				//for len(svm.CleanupFuncs) > 0 {
-				//	f := svm.CleanupFuncs[len(svm.CleanupFuncs)-1]
-				//	svm.CleanupFuncs = svm.CleanupFuncs[:len(svm.CleanupFuncs)-1]
-				//
-				//	func() {
-				//		defer func() {
-				//			err := recover()
-				//			svm.Assert("Failed cleanup step", IsNil{}, err)
-				//		}()
-				//
-				//		f(svm)
-				//	}()
-				//}
+				if svm.isInvalid {
+					t.Fail() // If FailNow hasn't already been called, we should fail.
+				}
 			})
 		}
 	}

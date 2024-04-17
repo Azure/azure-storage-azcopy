@@ -114,16 +114,13 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 					Recursive: pointerTo(true),
 				},
 
-				AsSubdir: common.Iff(azCopyVerb == AzCopyVerbCopy, PtrOf(true), nil),
+				AsSubdir: common.Iff(azCopyVerb == AzCopyVerbCopy, PtrOf(true), nil), // defaults true
 			},
 		})
 
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
-		Objects: map[PlanFilePath]PlanFileObject{
-			PlanFilePath{SrcPath: "/abc", DstPath: "/abc"}:       {},
-			PlanFilePath{SrcPath: "/def", DstPath: "/def"}:       {},
-			PlanFilePath{SrcPath: "/foobar", DstPath: "/foobar"}: {},
-		},
+		// todo: service level resource to object mapping
+		Objects: GeneratePlanFileObjectsFromMapping(srcDef.Objects, GeneratePlanFileObjectsOptions{DestPathProcessor: ParentDirDestPathProcessor(srcContainer.ContainerName())}),
 	})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, srcDef, true)
