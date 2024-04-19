@@ -22,11 +22,12 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/JeffreyRichter/enum/enum"
 	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
+
+	"github.com/JeffreyRichter/enum/enum"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -164,6 +165,9 @@ func InferArgumentLocation(arg string) common.Location {
 			if common.IsGCPURL(*u) {
 				return common.ELocation.GCP()
 			}
+
+			// If none of the above conditions match, return Unknown
+			return common.ELocation.Unknown()
 		}
 	}
 
