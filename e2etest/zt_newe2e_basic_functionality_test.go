@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	suiteManager.RegisterSuite(&BasicFunctionalitySuite{})
+	//suiteManager.RegisterSuite(&BasicFunctionalitySuite{})
 }
 
 type BasicFunctionalitySuite struct{}

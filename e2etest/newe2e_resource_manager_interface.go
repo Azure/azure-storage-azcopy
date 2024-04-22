@@ -3,6 +3,7 @@ package e2etest
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
@@ -276,6 +277,11 @@ type BlobProperties struct {
 	BlockBlobAccessTier *blob.AccessTier
 	PageBlobAccessTier  *pageblob.PremiumPageBlobAccessTier
 	VersionId           *string
+	LastModifiedTime    *time.Time
+	LeaseState          *lease.StateType
+	LeaseDuration       *lease.DurationType
+	LeaseStatus         *lease.StatusType
+	ArchiveStatus       *blob.ArchiveStatus
 }
 
 type BlobFSProperties struct {
