@@ -1,9 +1,7 @@
 package e2etest
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"io/fs"
