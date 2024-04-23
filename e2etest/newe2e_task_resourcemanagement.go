@@ -3,6 +3,7 @@ package e2etest
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
@@ -198,34 +199,24 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 		return
 	}
 
+	listStdout, ok := stdout.(*AzCopyParsedListStdout)
+	a.AssertNow("stdout must be AzCopyParsedListStdout", Equal{}, ok, true)
+
 	a.AssertNow("stdout and expected objects must not be null", Not{IsNil{}}, a, stdout, expectedObjects)
-
-	// Unmarshall stdout
-	objects, summary, err := stdout.(*AzCopyListStdout).Unmarshal()
-	a.AssertNow("error unmarshalling stdout", IsNil{}, err)
-
-	// Validate
-	a.Assert("number of objects must match", Equal{}, len(objects), len(expectedObjects))
-	a.Assert("summary must match", Equal{Deep: true}, summary, expectedSummary)
-
-	o := make([]any, len(objects))
-	for i, v := range objects {
-		o[i] = v
-	}
-	a.Assert("map of objects must match", MapContains[AzCopyOutputKey, cmd.AzCopyListObject]{TargetMap: expectedObjects,
-		ValueToKVPair: func(obj cmd.AzCopyListObject) KVPair[AzCopyOutputKey, cmd.AzCopyListObject] {
-			return KVPair[AzCopyOutputKey, cmd.AzCopyListObject]{Key: AzCopyOutputKey{Path: obj.Path, VersionId: obj.VersionId}, Value: obj}
-		}}, o...)
+	a.Assert("map of objects must be equivalent in size", Equal{}, len(expectedObjects), len(listStdout.Items))
+	a.Assert("map of objects must match", MapContains[AzCopyOutputKey, cmd.AzCopyListObject]{TargetMap: expectedObjects}, listStdout.Items)
+	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
 }
 
 func ValidateErrorOutput(a Asserter, stdout AzCopyStdout, errorMsg string) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
-	for _, line := range stdout.(*AzCopyRawStdout).RawOutput {
+	for _, line := range stdout.RawStdout() {
 		if strings.Contains(line, errorMsg) {
 			return
 		}
 	}
+	fmt.Println(stdout.String())
 	a.Error("expected error message not found in azcopy output")
 }
