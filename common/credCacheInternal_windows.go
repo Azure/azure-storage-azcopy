@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -51,6 +52,22 @@ func (c *CredCacheInternalIntegration) HasCachedToken() (bool, error) {
 	has, err := c.hasCachedTokenInternal()
 	c.lock.Unlock()
 	return has, err
+}
+
+// RemoveCachedToken deletes the cached token.
+func (c *CredCacheInternalIntegration) RemoveCachedToken() error {
+	c.lock.Lock()
+	err := c.removeCachedTokenInternal()
+	c.lock.Unlock()
+	return err
+}
+
+// SaveToken saves an oauth token.
+func (c *CredCacheInternalIntegration) SaveToken(token OAuthTokenInfo) error {
+	c.lock.Lock()
+	err := c.saveTokenInternal(token)
+	c.lock.Unlock()
+	return err
 }
 
 // LoadToken gets the cached oauth token.
@@ -86,6 +103,12 @@ func (c *CredCacheInternalIntegration) hasCachedTokenInternal() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// removeCachedTokenInternal deletes all the cached token.
+func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
+	// By design, not useful currently.
+	return errors.New("Not implemented")
 }
 
 // segmentTokenInfo is used to present information about segmented token saved in credential manager.
@@ -139,4 +162,10 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 	}
 
 	return token, nil
+}
+
+// saveTokenInternal persists an oauth token on disk.
+func (c *CredCacheInternalIntegration) saveTokenInternal(token OAuthTokenInfo) error {
+	// By design, not useful currently.
+	return errors.New("Not implemented")
 }
