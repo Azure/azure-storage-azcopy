@@ -52,7 +52,7 @@ func init() {
 			uotm := GetUserOAuthTokenManagerInstance()
 			tokenInfo, err := uotm.GetTokenInfo(ctx)
 
-			if err == nil && tokenInfo == nil {
+			if err == nil && tokenInfo.AccessToken.Token != "" {
 				glcm.Info("You have successfully refreshed your token. Your login session is still active")
 
 				if commandLineInput.tenantID {

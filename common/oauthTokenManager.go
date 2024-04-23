@@ -56,7 +56,8 @@ const ManagedDiskScope = "https://disk.azure.com//.default" // There must be a t
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 const TokenCache = "AzcopyTokenCache"
-const TokenCred = "token_record.json"
+const defaultAuthFileName = "auth_record.json"
+const defaultTokenFileName = "accessToken.json"
 
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
@@ -112,9 +113,13 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 		if err != nil { // this is the case when env var exists while get token info failed
 			return nil, err
 		}
+	} else { // Scenario: session mode which get token from cache
+		if tokenInfo, err = uotm.getCachedTokenInfo(ctx); err != nil {
+			return nil, err
+		}
 	}
 
-	if tokenInfo == nil || tokenInfo.AccessToken == "" {
+	if tokenInfo == nil || tokenInfo.IsEmpty() {
 		return nil, errors.New("invalid state, cannot get valid token info")
 	}
 
@@ -234,6 +239,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	var dc *azidentity.DeviceCodeCredential
 	var err error
 	var record azidentity.AuthenticationRecord
+	var token azcore.AccessToken
 
 	// The conditional statement checks whether 'persist' is true before configuring token caching options.
 	// If 'persist' evaluates to true, the options for token caching are provided.
@@ -269,8 +275,23 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	if err != nil {
 		return err
 	}
+	scopes := []string{StorageScope}
 
+	token, err = dc.GetToken(context.TODO(), policy.TokenRequestOptions{
+		TenantID: tenantID,
+		Scopes:   scopes,
+	})
+	if err != nil {
+		return err
+	}
+
+	// StoreToken is storing the accesToken locally
+	err = storeToken(token)
+	if err != nil {
+		return err
+	}
 	oAuthTokenInfo := OAuthTokenInfo{
+		AccessToken:             token,
 		TokenCredential:         dc,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
@@ -285,17 +306,23 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	return nil
 }
 
-// HasCachedToken returns if there is cached token in token manager.
-func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
-	if uotm.stashedInfo != nil {
-		return true, nil
+// TODO- change commnets for this function
+func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
+	tokenInfo, err := retrieveToken()
+	if err != nil {
+		return nil, fmt.Errorf("get cached token failed, %v", err)
 	}
 
-	return false, nil
+	oAuthTokenInfo := OAuthTokenInfo{
+		AccessToken:   tokenInfo,
+		ApplicationID: ApplicationID,
+	}
+
+	return &oAuthTokenInfo, nil
 }
 
 func retrieveRecord() (azidentity.AuthenticationRecord, error) {
-	filePath := filepath.Join(AzcopyJobPlanFolder, TokenCred)
+	filePath := filepath.Join(AzcopyJobPlanFolder, defaultAuthFileName)
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return azidentity.AuthenticationRecord{}, nil
 	}
@@ -308,7 +335,7 @@ func retrieveRecord() (azidentity.AuthenticationRecord, error) {
 }
 
 func storeRecord(record azidentity.AuthenticationRecord) error {
-	filePath := filepath.Join(AzcopyJobPlanFolder, TokenCred)
+	filePath := filepath.Join(AzcopyJobPlanFolder, defaultAuthFileName)
 
 	// Check if the file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -332,11 +359,57 @@ func storeRecord(record azidentity.AuthenticationRecord) error {
 	return nil
 }
 
+func storeToken(token azcore.AccessToken) error {
+	filePath := filepath.Join(AzcopyJobPlanFolder, defaultTokenFileName)
+
+	// Check if the file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// File doesn't exist, create it
+		if err := os.MkdirAll(filepath.Dir(filePath), 0700); err != nil {
+			return err
+		}
+		// Create an empty file
+		if _, err := os.Create(filePath); err != nil {
+			return err
+		}
+	}
+	b, err := json.Marshal(token)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(filePath, b, 0600)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func retrieveToken() (azcore.AccessToken, error) {
+	filePath := filepath.Join(AzcopyJobPlanFolder, defaultTokenFileName)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return azcore.AccessToken{}, nil
+	}
+	token := azcore.AccessToken{}
+	b, err := os.ReadFile(filePath)
+	if err == nil {
+		err = json.Unmarshal(b, &token)
+	}
+	return token, err
+}
+
+func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
+	if uotm.stashedInfo != nil {
+		return true, nil
+	}
+
+	return false, nil
+}
+
 // RemoveCachedToken deletes the token record as part of the logout command execution.
 // It checks for the existence of the token record file and deletes it if found.
 // Returns an error if encountered during file deletion or checking.
 func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
-	filePath := filepath.Join(AzcopyJobPlanFolder, TokenCred)
+	filePath := filepath.Join(AzcopyJobPlanFolder, defaultAuthFileName)
 
 	// Check if the file exists
 	if _, err := os.Stat(filePath); err == nil {
@@ -417,7 +490,7 @@ const TokenRefreshSourceTokenStore = "tokenstore"
 type OAuthTokenInfo struct {
 	azcore.TokenCredential `json:"-"`
 	// AccessToken and ExpiresOn are used only for TokenStoreCredential
-	AccessToken             string      `json:"access_token"`
+	AccessToken             azcore.AccessToken
 	ExpiresOn               json.Number `json:"expires_on"`
 	Tenant                  string      `json:"_tenant"`
 	ActiveDirectoryEndpoint string      `json:"_ad_endpoint"`
@@ -482,6 +555,15 @@ func (identityInfo *IdentityInfo) Validate() error {
 	}
 	return nil
 }
+
+func (credInfo OAuthTokenInfo) IsEmpty() bool {
+	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.AccessToken.Token == "" && !credInfo.Identity {
+		return true
+	}
+
+	return false
+}
+
 func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error) {
 	u, err := url.Parse(activeDirectoryEndpoint)
 	if err != nil {
@@ -490,8 +572,11 @@ func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error)
 	return u.Parse(tenantID)
 }
 
+const minimumTokenValidDuration = time.Minute * 5
+
 type TokenStoreCredential struct {
 	token *azcore.AccessToken
+	lock  sync.RWMutex
 }
 
 // globalTokenStoreCredential is created to make sure that all
@@ -511,7 +596,26 @@ var globalTokenStoreCredential *TokenStoreCredential
 var globalTsc sync.Once
 
 func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	tsc.token = &azcore.AccessToken{}
+	// if the token we've has not expired, return the same.
+	tsc.lock.RLock()
+	if time.Until(tsc.token.ExpiresOn) > minimumTokenValidDuration {
+		return *tsc.token, nil
+	}
+	tsc.lock.RUnlock()
+
+	tsc.lock.Lock()
+	defer tsc.lock.Unlock()
+
+	tokenInfo, err := retrieveToken()
+	if err != nil {
+		return azcore.AccessToken{}, fmt.Errorf("get cached token failed in Token Store Mode(SE), %v", err)
+	}
+
+	tsc.token = &azcore.AccessToken{
+		Token:     tokenInfo.Token,
+		ExpiresOn: tokenInfo.ExpiresOn,
+	}
+
 	return *tsc.token, nil
 
 }
@@ -531,7 +635,7 @@ func GetTokenStoreCredential(accessToken string, expiresOn time.Time) azcore.Tok
 }
 
 func (credInfo *OAuthTokenInfo) GetTokenStoreCredential() (azcore.TokenCredential, error) {
-	credInfo.TokenCredential = GetTokenStoreCredential(credInfo.AccessToken, credInfo.Expires())
+	credInfo.TokenCredential = GetTokenStoreCredential(credInfo.AccessToken.Token, credInfo.Expires())
 	return credInfo.TokenCredential, nil
 }
 
