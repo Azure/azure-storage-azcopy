@@ -220,3 +220,14 @@ func ValidateErrorOutput(a Asserter, stdout AzCopyStdout, errorMsg string) {
 	fmt.Println(stdout.String())
 	a.Error("expected error message not found in azcopy output")
 }
+
+func ValidateStatsReturned(a Asserter, stdout AzCopyStdout) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	csrStdout, ok := stdout.(*AzCopyParsedCopySyncRemoveStdout)
+	a.AssertNow("stdout must be AzCopyParsedCopySyncRemoveStdout", Equal{}, ok, true)
+	// Check for any of the stats. It's possible for average iops, server busy percentage, network error percentage to be 0, but average e2e milliseconds should never be 0.
+	statsFound := csrStdout.FinalStatus.AverageIOPS != 0 || csrStdout.FinalStatus.AverageE2EMilliseconds != 0 || csrStdout.FinalStatus.ServerBusyPercentage != 0 || csrStdout.FinalStatus.NetworkErrorPercentage != 0
+	a.Assert("stats must be returned", Equal{}, statsFound, true)
+}
