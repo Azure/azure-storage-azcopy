@@ -70,22 +70,9 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
 
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
-	// The object must exist already if we're syncing.
-	if azCopyVerb == AzCopyVerbSync {
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
 
-		if !svm.Dryrun() {
-			// Make sure the LMT is in the past
-			time.Sleep(time.Second)
-		}
-	}
-
-	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
 	// Scale up from service to object
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{
-		ObjectName: pointerTo("test"),
-		Body:       body,
-	})
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{})
 
 	// no local <-> local
 	if srcObj.Location().IsLocal() == dstObj.Location().IsLocal() {
