@@ -5,7 +5,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strings"
-	"time"
 )
 
 var _ AzCopyStdout = &AzCopyParsedStdout{}
@@ -117,17 +116,9 @@ func (a *AzCopyParsedListStdout) InsertObject(obj cmd.AzCopyListObject) {
 		a.Items = make(map[AzCopyOutputKey]cmd.AzCopyListObject)
 	}
 
-	versionName := common.Iff(obj.VersionId == "", "latest", obj.VersionId)
-	var parsedVersionID time.Time
-	if versionName == "latest" {
-		parsedVersionID = DerefOrZero(obj.LastModifiedTime)
-	} else {
-		parsedVersionID, _ = time.Parse(time.RFC3339Nano, obj.VersionId)
-	}
-
 	a.Items[AzCopyOutputKey{
 		Path:      obj.Path,
-		VersionId: parsedVersionID.Format(time.RFC3339Nano),
+		VersionId: obj.VersionId,
 	}] = obj
 }
 
