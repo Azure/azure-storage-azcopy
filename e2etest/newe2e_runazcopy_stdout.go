@@ -113,18 +113,22 @@ type AzCopyParsedListStdout struct {
 }
 
 func (a *AzCopyParsedListStdout) InsertObject(obj cmd.AzCopyListObject) {
+	if a.Items == nil {
+		a.Items = make(map[AzCopyOutputKey]cmd.AzCopyListObject)
+	}
+
 	versionName := common.Iff(obj.VersionId == "", "latest", obj.VersionId)
 	var parsedVersionID time.Time
 	if versionName == "latest" {
 		parsedVersionID = DerefOrZero(obj.LastModifiedTime)
 	} else {
-		parsedVersionID, _ = time.Parse(time.RFC3339, obj.VersionId)
+		parsedVersionID, _ = time.Parse(time.RFC3339Nano, obj.VersionId)
 	}
 
 	a.Items[AzCopyOutputKey{
 		Path:      obj.Path,
-		VersionId: parsedVersionID.Format(time.RFC3339),
-	}] = cmd.AzCopyListObject{}
+		VersionId: parsedVersionID.Format(time.RFC3339Nano),
+	}] = obj
 }
 
 func (a *AzCopyParsedListStdout) Write(p []byte) (n int, err error) {
@@ -141,7 +145,10 @@ func (a *AzCopyParsedListStdout) Write(p []byte) (n int, err error) {
 				a.InsertObject(object)
 
 			case "ListSummary":
-				_ = json.Unmarshal([]byte(line.MessageContent), &a.Summary)
+				err = json.Unmarshal([]byte(line.MessageContent), &a.Summary)
+				if err != nil {
+					return
+				}
 			}
 		})
 	}
