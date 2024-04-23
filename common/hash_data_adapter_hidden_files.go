@@ -6,14 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 )
 
 type HiddenFileDataAdapter struct {
 	hashBasePath string // "" == dataBasePath
 	dataBasePath string
-
-	createHashDirOnce *sync.Once
 }
 
 func (a *HiddenFileDataAdapter) GetMode() HashStorageMode {
