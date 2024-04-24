@@ -515,6 +515,14 @@ func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
 }
 
+func (l *Location) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(l), s, true, true)
+	if err == nil {
+		*l = val.(Location)
+	}
+	return err
+}
+
 // AllStandardLocations returns all locations that are "normal" for testing purposes. Excludes the likes of Unknown, Benchmark and Pipe
 func (Location) AllStandardLocations() []Location {
 	return []Location{
@@ -551,6 +559,11 @@ func (l Location) IsLocal() bool {
 	} else {
 		return !l.IsRemote()
 	}
+}
+
+// IsAzure checks if location is Azure (BlobFS, Blob, File)
+func (l Location) IsAzure() bool {
+	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File()
 }
 
 // IsFolderAware returns true if the location has real folders (e.g. there's such a thing as an empty folder,
@@ -931,7 +944,7 @@ func (CredentialType) MDOAuthToken() CredentialType         { return CredentialT
 func (CredentialType) Anonymous() CredentialType            { return CredentialType(2) } // For Azure, SAS or public.
 func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
 func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
-func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) }
+func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) } // For GCP, App Credentials
 func (CredentialType) S3PublicBucket() CredentialType       { return CredentialType(6) } // For S3, Anon Credentials & public bucket
 
 func (ct CredentialType) IsAzureOAuth() bool {
