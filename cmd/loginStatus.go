@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -52,7 +53,7 @@ func init() {
 			uotm := GetUserOAuthTokenManagerInstance()
 			tokenInfo, err := uotm.GetTokenInfo(ctx)
 
-			if err == nil && tokenInfo.AccessToken.Token != "" {
+			if err == nil && tokenInfo.AccessToken.ExpiresOn.After(time.Now()) {
 				glcm.Info("You have successfully refreshed your token. Your login session is still active")
 
 				if commandLineInput.tenantID {
