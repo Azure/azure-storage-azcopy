@@ -207,3 +207,62 @@ func (e Equal) Assert(items ...any) bool {
 // ====== Contains ======
 
 // Contains checks that all parameters are included within the array (or map's keys)
+
+// MapContains takes in a TargetMap, and multiple KVPair objects, and checks if the map contains all of them.
+type MapContains[K comparable, V any] struct {
+	TargetMap     map[K]V
+	ValueToKVPair func(V) KVPair[K, V]
+}
+
+type KVPair[K comparable, V any] struct {
+	Key   K
+	Value V
+}
+
+func (m MapContains[K, V]) Name() string {
+	return "MapContains"
+}
+
+func (m MapContains[K, V]) MaxArgs() int {
+	return 0
+}
+
+func (m MapContains[K, V]) MinArgs() int {
+	return 0
+}
+
+func (m MapContains[K, V]) Assert(items ...any) bool {
+	if (m.TargetMap == nil || len(m.TargetMap) == 0) && len(items) > 0 {
+		return false // Map is nil, so, can't contain anything!
+	}
+
+	for len(items) > 0 {
+		v := items[0]
+		items = items[1:]
+		kvPair, ok := v.(KVPair[K, V])
+
+		if !ok {
+			if val, ok := v.(V); ok {
+				kvPair = m.ValueToKVPair(val)
+			} else if dict, ok := v.(map[K]V); ok {
+				for key, value := range dict {
+					items = append(items, KVPair[K, V]{key, value})
+				}
+				continue
+			} else {
+				panic("MapContains only accepts KVPair[K,V], map[K]V, or V as items")
+			}
+		}
+
+		val, ok := m.TargetMap[kvPair.Key]
+		if !ok {
+			return false // map must contain the key
+		}
+
+		if !reflect.DeepEqual(val, kvPair.Value) {
+			return false
+		}
+	}
+
+	return true
+}
