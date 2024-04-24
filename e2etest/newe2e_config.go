@@ -55,9 +55,12 @@ type NewE2EConfig struct {
 			} `env:",required"`
 		} `env:",required,minimum_required=1"`
 	} `env:",required,mutually_exclusive"`
+
 	AzCopyExecutableConfig struct {
 		ExecutablePath      string `env:"NEW_E2E_AZCOPY_PATH,required"`
 		AutobuildExecutable bool   `env:"NEW_E2E_AUTOBUILD_AZCOPY,default=true"` // todo: make this work. It does not as of 11-21-23
+
+		LogDropPath string `env:"AZCOPY_E2E_LOG_OUTPUT"`
 	} `env:",required"`
 }
 
