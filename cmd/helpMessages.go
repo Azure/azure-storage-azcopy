@@ -376,6 +376,7 @@ Remove specified version ids of a blob from Azure Storage. Ensure that source is
   - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsfile]"
 
 Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a text file (i.e., list.txt) using the --list-of-files flag. In the text file, each blob and virtual directory is written on a separate line, see file contents below.
+FYI: The "--list-of-files" flag may incur performance and monetary cost. 
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/parent/dir]" --recursive=true --list-of-files=/usr/bar/list.txt
    - file content:
