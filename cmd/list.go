@@ -93,7 +93,7 @@ func validPropertiesString() []string {
 	return propertiesArray
 }
 
-func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty {
+func (raw rawListCmdArgs) parseProperties() []validProperty {
 	parsedProperties := make([]validProperty, 0)
 	if raw.Properties != "" {
 		listProperties := strings.Split(raw.Properties, ";")
