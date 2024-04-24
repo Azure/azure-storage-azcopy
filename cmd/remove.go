@@ -45,8 +45,8 @@ func init() {
 			// the resource to delete is set as the source
 			raw.src = args[0]
 
-			srcLocationType := InferArgumentLocation(raw.src)
 			if raw.fromTo == "" {
+				srcLocationType := InferArgumentLocation(raw.src)
 				switch srcLocationType {
 				case common.ELocation.Blob():
 					raw.fromTo = common.EFromTo.BlobTrash().String()
@@ -60,7 +60,7 @@ func init() {
 			} else if raw.fromTo != "" {
 				err := strings.Contains(raw.fromTo, "Trash")
 				if !err {
-					return fmt.Errorf("Invalid destination. Please enter a valid destination, i.e. BlobTrash, FileTrash, BlobFSTrash")
+					return fmt.Errorf("invalid destination. please enter a valid destination, i.e. BlobTrash, FileTrash, BlobFSTrash")
 				}
 			}
 			raw.setMandatoryDefaults()

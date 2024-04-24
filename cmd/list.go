@@ -41,7 +41,8 @@ import (
 
 type rawListCmdArgs struct {
 	// obtained from argument
-	sourcePath string
+	src      string
+	location string
 
 	Properties      string
 	MachineReadable bool
@@ -114,17 +115,25 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
-	location := InferArgumentLocation(raw.sourcePath)
-	// Only support listing for Azure locations
-	if location != location.Blob() && location != location.File() && location != location.BlobFS() {
-		return cooked, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
+	var err error
+	cooked.location, err = ValidateArgumentLocation(raw.src, raw.location)
+	if err != nil {
+		return cooked, err
 	}
-	cooked.sourcePath = raw.sourcePath
+	// Only support listing for Azure locations
+	switch cooked.location {
+	case common.ELocation.Blob():
+	case common.ELocation.File():
+	case common.ELocation.BlobFS():
+		break
+	default:
+		return cooked, fmt.Errorf("azcopy only supports Azure resources for listing i.e. Blob, File, BlobFS")
+	}
+	cooked.sourcePath = raw.src
 	cooked.MachineReadable = raw.MachineReadable
 	cooked.RunningTally = raw.RunningTally
 	cooked.MegaUnits = raw.MegaUnits
-	cooked.location = location
-	err := cooked.trailingDot.Parse(raw.trailingDot)
+	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
 		return cooked, err
 	}
@@ -162,10 +171,10 @@ func init() {
 
 			// If no argument is passed then it is not valid
 			// lsc expects the container path / virtual directory
-			if len(args) == 0 || len(args) > 2 {
+			if len(args) != 1 {
 				return errors.New("this command only requires container destination")
 			}
-			raw.sourcePath = args[0]
+			raw.src = args[0]
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -183,6 +192,7 @@ func init() {
 		},
 	}
 
+  listContainerCmd.PersistentFlags().StringVar(&raw.location, "location", "", "Optionally specifies the location. For Example: Blob, File, BlobFS")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "False by default. Lists file sizes in bytes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "False by default. Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "False by default. Displays units in orders of 1000, not 1024.")
@@ -207,7 +217,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		return err
 	}
 
-	if err := common.VerifyIsURLResolvable(raw.sourcePath); cooked.location.IsRemote() && err != nil {
+	if err := common.VerifyIsURLResolvable(raw.src); cooked.location.IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
