@@ -61,7 +61,7 @@ func (mode *HashStorageMode) Parse(s string) error {
 
 // NewHashDataAdapter is a function that creates a new HiddenFileDataAdapter on systems that do not override the default functionality.
 var NewHashDataAdapter = func(hashPath, dataPath string, mode HashStorageMode) (HashDataAdapter, error) {
-	return &HiddenFileDataAdapter{hashPath, dataPath, &sync.Once{}}, nil
+	return &HiddenFileDataAdapter{hashPath, dataPath}, nil
 }
 
 // HashDataAdapter implements an interface to pull and set hash data on files based upon a relative path
