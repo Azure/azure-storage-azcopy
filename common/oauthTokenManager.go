@@ -839,7 +839,6 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 	var err error
 	var record azidentity.AuthenticationRecord
 
-	// Retrive the authentication record
 	record, err = retrieveRecord()
 	if err != nil {
 		return nil, err
@@ -851,6 +850,10 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 			AllowUnencryptedStorage: true,
 			Name:                    TokenCache,
 		}})
+	if err != nil {
+		return nil, err
+	}
+
 	return dc, nil
 }
 
