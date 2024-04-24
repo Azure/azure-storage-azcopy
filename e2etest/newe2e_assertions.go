@@ -236,15 +236,22 @@ func (m MapContains[K, V]) Assert(items ...any) bool {
 		return false // Map is nil, so, can't contain anything!
 	}
 
-	for _, v := range items {
+	for len(items) > 0 {
+		v := items[0]
+		items = items[1:]
 		kvPair, ok := v.(KVPair[K, V])
 
 		if !ok {
-			val, ok := v.(V)
-			if !ok {
-				panic("MapContains only accepts KVPair[K,V] or V as items")
+			if val, ok := v.(V); ok {
+				kvPair = m.ValueToKVPair(val)
+			} else if dict, ok := v.(map[K]V); ok {
+				for key, value := range dict {
+					items = append(items, KVPair[K, V]{key, value})
+				}
+				continue
+			} else {
+				panic("MapContains only accepts KVPair[K,V], map[K]V, or V as items")
 			}
-			kvPair = m.ValueToKVPair(val)
 		}
 
 		val, ok := m.TargetMap[kvPair.Key]

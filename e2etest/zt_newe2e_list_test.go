@@ -138,8 +138,6 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVari
 func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
-
-	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
 
 	// Create expected objects
@@ -191,8 +189,6 @@ func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationMan
 func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
-
-	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
 
 	// Create expected objects
@@ -226,9 +222,6 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				RunningTally: to.Ptr(true),
 			},
 		})

@@ -1,13 +1,13 @@
 package e2etest
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 )
@@ -45,55 +45,6 @@ func (a *AzCopyRawStdout) String() string {
 }
 
 var _ AzCopyStdout = &AzCopyRawStdout{}
-var _ AzCopyStdout = &AzCopyListStdout{}
-
-type AzCopyListStdout struct {
-	AzCopyRawStdout
-}
-
-func (a *AzCopyListStdout) RawStdout() []string {
-	return a.AzCopyRawStdout.RawStdout()
-}
-
-func (a *AzCopyListStdout) Write(p []byte) (n int, err error) {
-	return a.AzCopyRawStdout.Write(p)
-}
-
-func (a *AzCopyListStdout) String() string {
-	return a.AzCopyRawStdout.String()
-}
-
-func (a *AzCopyListStdout) Unmarshal() ([]cmd.AzCopyListObject, *cmd.AzCopyListSummary, error) {
-	var listOutput []cmd.AzCopyListObject
-	var listSummary *cmd.AzCopyListSummary
-	for _, line := range a.RawOutput {
-		if line == "" {
-			continue
-		}
-		var out common.JsonOutputTemplate
-		err := json.Unmarshal([]byte(line), &out)
-		if err != nil {
-			return nil, nil, err
-		}
-		if out.MessageType == common.EOutputMessageType.ListObject().String() {
-			var obj *cmd.AzCopyListObject
-			objErr := json.Unmarshal([]byte(out.MessageContent), &obj)
-			if objErr != nil {
-				return nil, nil, fmt.Errorf("error unmarshaling list output; object error: %s", objErr)
-			}
-			listOutput = append(listOutput, *obj)
-
-		} else if out.MessageType == common.EOutputMessageType.ListSummary().String() {
-			var sum *cmd.AzCopyListSummary
-			sumErr := json.Unmarshal([]byte(out.MessageContent), &sum)
-			if sumErr != nil {
-				return nil, nil, fmt.Errorf("error unmarshaling list output; summary error: %s", sumErr)
-			}
-			listSummary = sum
-		}
-	}
-	return listOutput, listSummary, nil
-}
 
 type AzCopyVerb string
 
@@ -143,6 +94,9 @@ type AzCopyCommand struct {
 	Targets     []ResourceManager
 	Flags       any // check SampleFlags
 	Environment *AzCopyEnvironment
+
+	// If Stdout is nil, a sensible default is picked in place.
+	Stdout AzCopyStdout
 
 	ShouldFail bool
 }
@@ -250,6 +204,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	if a.Dryrun() {
 		return nil, &AzCopyJobPlan{}
 	}
+	var flagMap map[string]string
+	var envMap map[string]string
 
 	// separate these from the struct so their execution order is fixed
 	args := func() []string {
@@ -264,8 +220,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		if commandSpec.Flags != nil {
-			flags := MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a)
-			for k, v := range flags {
+			flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a)
+			for k, v := range flagMap {
 				out = append(out, fmt.Sprintf("--%s=%s", k, v))
 			}
 		}
@@ -275,9 +231,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	env := func() []string {
 		out := make([]string, 0)
 
-		env := MapFromTags(reflect.ValueOf(commandSpec.Environment), "env", a)
+		envMap = MapFromTags(reflect.ValueOf(commandSpec.Environment), "env", a)
 
-		for k, v := range env {
+		for k, v := range envMap {
 			out = append(out, fmt.Sprintf("%s=%s", k, v))
 		}
 
@@ -288,12 +244,20 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		return out
 	}()
 
-	var out AzCopyStdout
-	switch commandSpec.Verb {
-	case AzCopyVerbList:
-		out = &AzCopyListStdout{}
-	default:
-		out = &AzCopyRawStdout{}
+	var out = commandSpec.Stdout
+	if out == nil {
+		switch {
+		case !strings.EqualFold(flagMap["output-type"], "json"): // Won't parse non-computer-readable outputs
+			out = &AzCopyRawStdout{}
+		case strings.EqualFold(flagMap["dryrun"], "true"): //  Dryrun has its own special sort of output
+			out = &AzCopyParsedDryrunStdout{}
+		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
+			out = &AzCopyParsedCopySyncRemoveStdout{}
+		case commandSpec.Verb == AzCopyVerbList:
+			out = &AzCopyParsedListStdout{}
+		default: // We don't know how to parse this.
+			out = &AzCopyRawStdout{}
+		}
 	}
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
@@ -318,9 +282,75 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
 
-	if err != nil {
-		a.Log("AzCopy output:\n%s", out.String())
-	}
+	a.Cleanup(func(a ScenarioAsserter) {
+		if stdout, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok {
+			UploadLogs(a, stdout, DerefOrZero(commandSpec.Environment.LogLocation))
+			_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
+		}
+	})
 
 	return out, &AzCopyJobPlan{}
+}
+
+func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, logDir string) {
+	logPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
+	if logPath == "" || !a.Failed() {
+		return
+	}
+
+	// sometimes, the log dir cannot be copied because the destination is on another drive. So, we'll copy the files instead by hand.
+	files, err := os.ReadDir(logDir)
+	a.NoError("Failed to read log dir", err)
+	jobId := ""
+	if stdout.InitMsg.JobID != "" {
+		jobId = stdout.InitMsg.JobID
+	} else {
+		for _, file := range files { // first, find the job ID
+			if strings.HasSuffix(file.Name(), ".log") {
+				jobId = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(file.Name(), "-chunks"), "-scanning"), ".log")
+				break
+			}
+		}
+	}
+
+	// Create the destination log directory
+	destLogDir := filepath.Join(logPath, jobId)
+	err = os.MkdirAll(destLogDir, os.ModePerm|os.ModeDir)
+	a.NoError("Failed to create log dir", err)
+
+	// Copy the files by hand
+	err = filepath.WalkDir(logDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath := strings.TrimPrefix(path, logDir)
+		if d.IsDir() {
+			err = os.MkdirAll(filepath.Join(destLogDir, relPath), os.ModePerm|os.ModeDir)
+			return err
+		}
+
+		// copy the file
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+
+		destFile, err := os.Create(filepath.Join(destLogDir, relPath))
+		if err != nil {
+			return err
+		}
+
+		defer srcFile.Close()
+		defer destFile.Close()
+
+		_, err = io.Copy(destFile, srcFile)
+		if err != nil {
+			return err
+		}
+
+		return err
+	})
+	a.NoError("Failed to copy log files", err)
+
+	a.Log("Uploaded failed run logs for job %s", jobId)
 }
