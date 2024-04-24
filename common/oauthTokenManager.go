@@ -606,19 +606,15 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*azcore.AccessToke
 		return nil, err
 	}
 
-	if credInfo.TokenRefreshSource == "tokenstore" || credInfo.Identity || credInfo.ServicePrincipalName {
-		scopes := []string{StorageScope}
-		t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
-		if err != nil {
-			return nil, err
-		}
-		return &azcore.AccessToken{
-			Token:     t.Token,
-			ExpiresOn: t.ExpiresOn,
-		}, nil
+	scopes := []string{StorageScope}
+	t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, errors.New("invalid token info")
+	return &azcore.AccessToken{
+		Token:     t.Token,
+		ExpiresOn: t.ExpiresOn,
+	}, nil
 }
 
 // Single instance token store credential cache shared by entire azcopy process.
@@ -836,7 +832,26 @@ func (credInfo *OAuthTokenInfo) GetPSContextCredential() (azcore.TokenCredential
 }
 
 func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredential, error) {
-	return credInfo.TokenCredential, nil
+	if credInfo.TokenCredential != nil {
+		return credInfo.TokenCredential, nil
+	}
+	var dc *azidentity.DeviceCodeCredential
+	var err error
+	var record azidentity.AuthenticationRecord
+
+	// Retrive the authentication record
+	record, err = retrieveRecord()
+	if err != nil {
+		return nil, err
+	}
+	dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+		AuthenticationRecord: record,
+		TenantID:             record.TenantID,
+		TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+			AllowUnencryptedStorage: true,
+			Name:                    TokenCache,
+		}})
+	return dc, nil
 }
 
 func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, error) {
