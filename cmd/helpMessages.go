@@ -129,7 +129,7 @@ Download a subset of containers within a storage account by using a wildcard sym
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
-Download all the versions of a blob from Azure Storage to local directory listed in a text file (i.e, versionidsFile). Ensure that source is a valid blob, destination is a local folder and versionidsFile is a text file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
+Download all the versions of a blob from Azure Storage listed in a text file (i.e, versionidsFile) to local directory. Ensure that source is a valid blob, destination is a local folder and versionidsFile is a text file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/another/path/to/dir/[versionidsFile]"
 
@@ -206,6 +206,8 @@ Copy all buckets to Blob Storage from Google Cloud Storage (GCS) by using a serv
 Copy a subset of buckets by using a wildcard symbol (*) in the bucket name from Google Cloud Storage (GCS) by using a service account key and a SAS token for destination. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
  
   - azcopy cp "https://storage.cloud.google.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
+
+To copy files changed before or after the AzCopy job has started, AzCopy provides date/time in the job log in ISO8601 format (search for 'ISO 8601 START TIME' in the job log) that can be used with the --include-after and --include-before flags, see examples below. This is helpful for incremental copies.
 
 Copy a subset of files modified on or after the given date/time (in ISO8601 format) in a container by using the include-after flag.
 
