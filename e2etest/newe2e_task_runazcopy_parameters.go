@@ -183,6 +183,7 @@ type GlobalFlags struct {
 	TrustedSuffixes  []string `flag:"trusted-microsoft-suffixes"`
 	SkipVersionCheck *bool    `flag:"skip-version-check"`
 
+	// TODO : Flags default seems to be broken; WI#26954065
 	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
 	LogLevel    *common.LogLevel        `flag:"log-level,default:DEBUG"`
 	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
@@ -279,7 +280,7 @@ type CopyFlags struct {
 	ExcludeBlobType *common.BlobType      `flag:"exclude-blob-type"`
 	BlobType        *common.BlobType      `flag:"blob-type"`
 	BlockBlobTier   *common.BlockBlobTier `flag:"block-blob-tier"`
-	PageBlobTier    *common.BlockBlobTier `flag:"page-blob-tier"`
+	PageBlobTier    *common.PageBlobTier  `flag:"page-blob-tier"`
 	Metadata        common.Metadata       `flag:"metadata,serializer:SerializeMetadata"`
 
 	ContentType        *string `flag:"content-type"`
@@ -398,6 +399,16 @@ type RemoveFlags struct {
 
 func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter) {
 	CopyFlags{}.SerializeListingFile(in, scenarioAsserter)
+}
+
+type ListFlags struct {
+	GlobalFlags
+
+	MachineReadable *bool                     `flag:"machine-readable"`
+	RunningTally    *bool                     `flag:"running-tally"`
+	MegaUnits       *bool                     `flag:"mega-units"`
+	Properties      *string                   `flag:"properties"`
+	TrailingDot     *common.TrailingDotOption `flag:"trailing-dot"`
 }
 
 type WindowsAttribute uint32

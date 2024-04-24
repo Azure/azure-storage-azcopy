@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.25.0-Preview-1
+
+### Security fixes
+
+1. Updated version of GoLang used to 1.21 to address security vulnerabilities. 
+
 ## Version 10.24.0
 
 ### New Features
