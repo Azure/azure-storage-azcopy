@@ -326,40 +326,79 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	return nil
 }
 
-// getCachedTokenInfo get a fresh token from local disk cache.
-// If access token is expired, it will refresh the token.
-// If refresh token is expired, the method will fail and return failure reason.
-// Fresh token is persisted if access token or refresh token is changed.
+// getCachedTokenInfo retrieves a fresh token.
+// If a valid AuthenticationRecord exists, the token is obtained from the azidentity token cache.
+// If the access token has expired, it is refreshed.
+// If the refresh token has expired, the method fails and returns the reason for failure.
+// The fresh token is persisted if either the access token or refresh token has changed.
 func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
-	hasToken, err := uotm.credCache.HasCachedToken()
+
+	// retrieveRecord gets an AuthenticationRecord from the local disk
+	record, err := retrieveRecord()
 	if err != nil {
-		return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
-	}
-	if !hasToken {
-		return nil, errors.New("no cached token found, please log in with azcopy's login command")
+		return nil, err
 	}
 
-	tokenInfo, err := uotm.credCache.LoadToken()
-	if err != nil {
-		return nil, fmt.Errorf("get cached token failed, %v", err)
-	}
-
-	freshToken, err := tokenInfo.Refresh(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
-	}
-
-	// Update token cache, if token is updated.
-	if freshToken.Token != tokenInfo.AccessToken.Token {
-		tokenInfo.AccessToken = *freshToken
-		if err := uotm.credCache.SaveToken(*tokenInfo); err != nil {
-			return nil, err
+	// If the AAuthenticationRecord is empty get a fresh token from our credential cache.
+	if record == (azidentity.AuthenticationRecord{}) {
+		hasToken, err := uotm.credCache.HasCachedToken()
+		if err != nil {
+			return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
 		}
+		if !hasToken {
+			return nil, errors.New("no cached token found, please log in with azcopy's login command")
+		}
+
+		tokenInfo, err := uotm.credCache.LoadToken()
+		if err != nil {
+			return nil, fmt.Errorf("get cached token failed, %v", err)
+		}
+
+		freshToken, err := tokenInfo.Refresh(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
+		}
+
+		// Update token cache, if token is updated.
+		if freshToken.Token != tokenInfo.AccessToken.Token {
+			tokenInfo.AccessToken = *freshToken
+			if err := uotm.credCache.SaveToken(*tokenInfo); err != nil {
+				return nil, err
+			}
+		}
+		return tokenInfo, nil
 	}
 
-	return tokenInfo, nil
+	// Create oAuthTokenInfo from the existing AuthenticationRecord
+	oAuthTokenInfo := &OAuthTokenInfo{
+		Tenant:   record.TenantID,
+		ClientID: record.ClientID,
+	}
+
+	tc, err := oAuthTokenInfo.GetTokenCredential()
+	if err != nil {
+		return nil, err
+	}
+	scopes := []string{StorageScope}
+
+	token, err := tc.GetToken(context.TODO(), policy.TokenRequestOptions{
+		TenantID: record.TenantID,
+		Scopes:   scopes,
+	})
+	if err != nil {
+		return nil, err
+	}
+	oAuthTokenInfo.AccessToken = token
+
+	// Update the credential cache with the new token
+	if err := uotm.credCache.SaveToken(*oAuthTokenInfo); err != nil {
+		return nil, err
+	}
+
+	return oAuthTokenInfo, nil
 }
 
+// retrieveRecord retrieves an AuthenticationRecord  from the local file system.
 func retrieveRecord() (azidentity.AuthenticationRecord, error) {
 	filePath := filepath.Join(AzcopyJobPlanFolder, defaultAuthFileName)
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -373,6 +412,7 @@ func retrieveRecord() (azidentity.AuthenticationRecord, error) {
 	return record, err
 }
 
+// storeRecord stores the AuthenticationRecord onto our file system.
 func storeRecord(record azidentity.AuthenticationRecord) error {
 	filePath := filepath.Join(AzcopyJobPlanFolder, defaultAuthFileName)
 
@@ -398,45 +438,6 @@ func storeRecord(record azidentity.AuthenticationRecord) error {
 	return nil
 }
 
-/*
-func storeToken(token azcore.AccessToken) error {
-	filePath := filepath.Join(AzcopyJobPlanFolder, defaultTokenFileName)
-
-	// Check if the file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		// File doesn't exist, create it
-		if err := os.MkdirAll(filepath.Dir(filePath), 0700); err != nil {
-			return err
-		}
-		// Create an empty file
-		if _, err := os.Create(filePath); err != nil {
-			return err
-		}
-	}
-	b, err := json.Marshal(token)
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(filePath, b, 0600)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func retrieveToken() (azcore.AccessToken, error) {
-	filePath := filepath.Join(AzcopyJobPlanFolder, defaultTokenFileName)
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return azcore.AccessToken{}, nil
-	}
-	token := azcore.AccessToken{}
-	b, err := os.ReadFile(filePath)
-	if err == nil {
-		err = json.Unmarshal(b, &token)
-	}
-	return token, err
-}
-*/
 // HasCachedToken returns if there is cached token in token manager.
 func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 	if uotm.stashedInfo != nil {
@@ -446,8 +447,7 @@ func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 	return uotm.credCache.HasCachedToken()
 }
 
-// RemoveCachedToken deletes the token record as part of the logout command execution.
-// It checks for the existence of the token record file and deletes it if found.
+// RemoveCachedToken deletes the token and the AuthenticationRecord as part of the logout command execution.
 // Returns an error if encountered during file deletion or checking.
 func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 	filePath := filepath.Join(AzcopyJobPlanFolder, defaultAuthFileName)
