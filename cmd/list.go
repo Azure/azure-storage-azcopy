@@ -41,7 +41,8 @@ import (
 
 type rawListCmdArgs struct {
 	// obtained from argument
-	sourcePath string
+	src      string
+	location string
 
 	Properties      string
 	MachineReadable bool
@@ -84,6 +85,15 @@ func validProperties() []validProperty {
 		contentType, contentEncoding, contentMD5, leaseState, leaseDuration, leaseStatus, archiveStatus}
 }
 
+// validPropertiesString returns an array of valid properties in string array.
+func validPropertiesString() []string {
+	var propertiesArray []string
+	for _, prop := range validProperties() {
+		propertiesArray = append(propertiesArray, string(prop))
+	}
+	return propertiesArray
+}
+
 func (raw rawListCmdArgs) parseProperties() []validProperty {
 	parsedProperties := make([]validProperty, 0)
 	if raw.Properties != "" {
@@ -105,17 +115,25 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
-	location := InferArgumentLocation(raw.sourcePath)
-	// Only support listing for Azure locations
-	if location != location.Blob() && location != location.File() && location != location.BlobFS() {
-		return cooked, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
+	var err error
+	cooked.location, err = ValidateArgumentLocation(raw.src, raw.location)
+	if err != nil {
+		return cooked, err
 	}
-	cooked.sourcePath = raw.sourcePath
+	// Only support listing for Azure locations
+	switch cooked.location {
+	case common.ELocation.Blob():
+	case common.ELocation.File():
+	case common.ELocation.BlobFS():
+		break
+	default:
+		return cooked, fmt.Errorf("azcopy only supports Azure resources for listing i.e. Blob, File, BlobFS")
+	}
+	cooked.sourcePath = raw.src
 	cooked.MachineReadable = raw.MachineReadable
 	cooked.RunningTally = raw.RunningTally
 	cooked.MegaUnits = raw.MegaUnits
-	cooked.location = location
-	err := cooked.trailingDot.Parse(raw.trailingDot)
+	err = cooked.trailingDot.Parse(raw.trailingDot)
 	if err != nil {
 		return cooked, err
 	}
@@ -153,10 +171,10 @@ func init() {
 
 			// If no argument is passed then it is not valid
 			// lsc expects the container path / virtual directory
-			if len(args) == 0 || len(args) > 2 {
+			if len(args) != 1 {
 				return errors.New("this command only requires container destination")
 			}
-			raw.sourcePath = args[0]
+			raw.src = args[0]
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -174,11 +192,14 @@ func init() {
 		},
 	}
 
-	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "Lists file sizes in bytes.")
-	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
-	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
-	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "delimiter (;) separated values of properties required in list output.")
-	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. "+
+  listContainerCmd.PersistentFlags().StringVar(&raw.location, "location", "", "Optionally specifies the location. For Example: Blob, File, BlobFS")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "False by default. Lists file sizes in bytes.")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "False by default. Counts the total number of files and their sizes.")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "False by default. Displays units in orders of 1000, not 1024.")
+	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "Properties to be displayed in list output. "+
+		"Possible properties include: "+strings.Join(validPropertiesString(), ", ")+". "+
+		"Delimiter (;) should be used to separate multiple values of properties (i.e. 'LastModifiedTime;VersionId;BlobType').")
+	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
 		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
@@ -196,7 +217,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 		return err
 	}
 
-	if err := common.VerifyIsURLResolvable(raw.sourcePath); cooked.location.IsRemote() && err != nil {
+	if err := common.VerifyIsURLResolvable(raw.src); cooked.location.IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
