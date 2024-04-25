@@ -105,12 +105,6 @@ func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
 	return errors.New("Not implemented")
 }
 
-// saveTokenInternal persists an oauth token on disk.
-func (c *CredCacheInternalIntegration) saveTokenInternal(token OAuthTokenInfo) error {
-	// By design, not useful currently.
-	return errors.New("Not implemented")
-}
-
 // loadTokenInternal restores a Token object from file cache.
 //
 //nolint:staticcheck
@@ -125,4 +119,10 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 		return nil, fmt.Errorf("failed to unmarshal token during loading token, %v", err)
 	}
 	return token, nil
+}
+
+// saveTokenInternal persists an oauth token on disk.
+func (c *CredCacheInternalIntegration) saveTokenInternal(token OAuthTokenInfo) error {
+	// By design, not useful currently.
+	return errors.New("Not implemented")
 }
