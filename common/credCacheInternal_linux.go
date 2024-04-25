@@ -106,7 +106,6 @@ func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
 }
 
 // loadTokenInternal restores a Token object from file cache.
-//
 //nolint:staticcheck
 func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, error) {
 	data, err := c.keyring.Get(c.serviceName, c.accountName)
