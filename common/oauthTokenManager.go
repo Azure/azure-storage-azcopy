@@ -391,8 +391,14 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 	oAuthTokenInfo.AccessToken = token
 
 	// Update the credential cache with the new token
-	if err := uotm.credCache.SaveToken(*oAuthTokenInfo); err != nil {
-		return nil, err
+	storedTokenInfo, err := uotm.credCache.LoadToken()
+	if err != nil {
+		return nil, fmt.Errorf("get cached token failed, %v", err)
+	}
+	if storedTokenInfo.AccessToken != oAuthTokenInfo.AccessToken {
+		if err := uotm.credCache.SaveToken(*oAuthTokenInfo); err != nil {
+			return nil, err
+		}
 	}
 
 	return oAuthTokenInfo, nil
