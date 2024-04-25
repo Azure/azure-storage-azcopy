@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 	"time"
 )
 
@@ -85,8 +84,8 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
-				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.PublicAuth(), svm, CreateAzCopyTargetOptions{}),
+				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				AzCopyTarget{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -96,11 +95,5 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 			ShouldFail: true,
 		})
 
-	for _, line := range stdout.RawStdout() {
-		if strings.Contains(line, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append SAS to your Azure URL.") {
-			return
-		}
-	}
-
-	svm.Error("expected output not found in azcopy output")
+	ValidateErrorOutput(svm, stdout, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append SAS to your Azure URL.")
 }
