@@ -133,7 +133,7 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 	return tokenInfo, nil
 }
 
-func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuthTokenInfo, persist bool) error {
+func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuthTokenInfo) error {
 	// Use default tenant ID and active directory endpoint, if nothing specified.
 	if oAuthTokenInfo.Tenant == "" {
 		oAuthTokenInfo.Tenant = DefaultTenantID
@@ -152,7 +152,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	}
 	uotm.stashedInfo = oAuthTokenInfo
 
-	if persist && err == nil {
+	if oAuthTokenInfo.Persist && err == nil {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
 			return err
@@ -163,22 +163,25 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 }
 
 func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
+
+	// CLI creds will not be persisted. AzCLI would have already persistd that
 	oAuthTokenInfo := &OAuthTokenInfo{
 		AzCLICred: true,
 		Tenant:    tenantID,
+		Persist:   false,
 	}
 
-	// CLI creds will not be persisted. AzCLI would have already persistd that
-	return uotm.validateAndPersistLogin(oAuthTokenInfo, false)
+	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
 func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		PSCred: true,
-		Tenant: tenantID,
+		PSCred:  true,
+		Tenant:  tenantID,
+		Persist: false,
 	}
 
-	return uotm.validateAndPersistLogin(oAuthTokenInfo, false)
+	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
 // MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
@@ -193,7 +196,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 		Persist:      persist,
 	}
 
-	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
+	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
 // SecretLogin is a UOTM shell for secretLoginNoUOTM.
@@ -210,7 +213,7 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 		Persist: persist,
 	}
 
-	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
+	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
 // CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
@@ -235,7 +238,7 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 		Persist: persist,
 	}
 
-	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
+	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
 // UserLogin interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
@@ -256,17 +259,13 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	// The conditional statement checks whether 'persist' is true before configuring token caching options.
 	// If 'persist' evaluates to true, the options for token caching are provided.
 	if persist {
+
+		// Fetching the AuthenticationRecord
 		record, err = retrieveRecord()
 		if err != nil {
 			return err
 		}
-		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
-			AuthenticationRecord: record,
-			TenantID:             tenantID,
-			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
-				AllowUnencryptedStorage: true,
-				Name:                    TokenCache,
-			}})
+
 		// If record is empty
 		if record == (azidentity.AuthenticationRecord{}) {
 			// No stored record; call Authenticate to acquire one
@@ -279,6 +278,13 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 				return err
 			}
 		}
+		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+			AuthenticationRecord: record,
+			TenantID:             tenantID,
+			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+				AllowUnencryptedStorage: true,
+				Name:                    TokenCache,
+			}})
 	} else {
 		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
 			TenantID: tenantID,
@@ -296,13 +302,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	if err != nil {
 		return err
 	}
-	/*
-		// StoreToken is storing the accesToken locally
-		err = storeToken(token)
-		if err != nil {
-			return err
-		}
-	*/
+
 	oAuthTokenInfo := OAuthTokenInfo{
 		AccessToken:             token,
 		TokenCredential:         dc,
@@ -389,17 +389,6 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 		return nil, err
 	}
 	oAuthTokenInfo.AccessToken = token
-
-	// Update the credential cache with the new token
-	storedTokenInfo, err := uotm.credCache.LoadToken()
-	if err != nil {
-		return nil, fmt.Errorf("get cached token failed, %v", err)
-	}
-	if storedTokenInfo.AccessToken != oAuthTokenInfo.AccessToken {
-		if err := uotm.credCache.SaveToken(*oAuthTokenInfo); err != nil {
-			return nil, err
-		}
-	}
 
 	return oAuthTokenInfo, nil
 }
