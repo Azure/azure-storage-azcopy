@@ -54,8 +54,7 @@ func (s *FileServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 }
 
 func (s *FileServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	// OAuth isn't supported *quite yet* in azcopy!
-	return EExplicitCredentialType.With(EExplicitCredentialType.SASToken())
+	return EExplicitCredentialType.With(EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth())
 }
 
 func (s *FileServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {

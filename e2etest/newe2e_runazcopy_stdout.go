@@ -5,7 +5,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strings"
-	"time"
 )
 
 var _ AzCopyStdout = &AzCopyParsedStdout{}
@@ -113,18 +112,14 @@ type AzCopyParsedListStdout struct {
 }
 
 func (a *AzCopyParsedListStdout) InsertObject(obj cmd.AzCopyListObject) {
-	versionName := common.Iff(obj.VersionId == "", "latest", obj.VersionId)
-	var parsedVersionID time.Time
-	if versionName == "latest" {
-		parsedVersionID = DerefOrZero(obj.LastModifiedTime)
-	} else {
-		parsedVersionID, _ = time.Parse(time.RFC3339, obj.VersionId)
+	if a.Items == nil {
+		a.Items = make(map[AzCopyOutputKey]cmd.AzCopyListObject)
 	}
 
 	a.Items[AzCopyOutputKey{
 		Path:      obj.Path,
-		VersionId: parsedVersionID.Format(time.RFC3339),
-	}] = cmd.AzCopyListObject{}
+		VersionId: obj.VersionId,
+	}] = obj
 }
 
 func (a *AzCopyParsedListStdout) Write(p []byte) (n int, err error) {
@@ -141,7 +136,10 @@ func (a *AzCopyParsedListStdout) Write(p []byte) (n int, err error) {
 				a.InsertObject(object)
 
 			case "ListSummary":
-				_ = json.Unmarshal([]byte(line.MessageContent), &a.Summary)
+				err = json.Unmarshal([]byte(line.MessageContent), &a.Summary)
+				if err != nil {
+					return
+				}
 			}
 		})
 	}
@@ -155,7 +153,7 @@ type AzCopyParsedCopySyncRemoveStdout struct {
 
 	JobPlanFolder string
 	LogFolder     string
-
+  
 	InitMsg     common.InitMsgJsonTemplate
 	FinalStatus common.ListJobSummaryResponse
 }

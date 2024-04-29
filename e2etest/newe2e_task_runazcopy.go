@@ -253,6 +253,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		case strings.EqualFold(flagMap["dryrun"], "true"): //  Dryrun has its own special sort of output
 			out = &AzCopyParsedDryrunStdout{}
 		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
+
 			out = &AzCopyParsedCopySyncRemoveStdout{
 				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
 				LogFolder:     *commandSpec.Environment.LogLocation,
@@ -282,7 +283,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	err = command.Wait()
-	a.Assert("wait for finalize", IsNil{}, err)
+	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
@@ -303,7 +304,7 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, lo
 			fmt.Println("Log cleanup failed", err, "\n", string(debug.Stack()))
 		}
 	}()
-
+  
 	logPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
 	if logPath == "" || !a.Failed() {
 		return
@@ -311,7 +312,6 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, lo
 
 	// sometimes, the log dir cannot be copied because the destination is on another drive. So, we'll copy the files instead by hand.
 	files, err := os.ReadDir(logDir)
-	fmt.Println("Not finished")
 	a.NoError("Failed to read log dir", err)
 	jobId := ""
 	if stdout.InitMsg.JobID != "" {
@@ -365,5 +365,4 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, lo
 	a.NoError("Failed to copy log files", err)
 
 	a.Log("Uploaded failed run logs for job %s", jobId)
-	fmt.Println("finished")
 }

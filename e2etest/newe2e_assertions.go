@@ -244,7 +244,9 @@ func (m MapContains[K, V]) Assert(items ...any) bool {
 		return false // Map is nil, so, can't contain anything!
 	}
 
-	for _, v := range items {
+	for len(items) > 0 {
+		v := items[0]
+		items = items[1:]
 		kvPair, ok := v.(KVPair[K, V])
 
 		if !ok {
