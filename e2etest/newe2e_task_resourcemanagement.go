@@ -7,6 +7,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"strings"
 )
 
 // ResourceTracker tracks resources
@@ -185,4 +186,37 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			}
 		},
 	})
+}
+
+type AzCopyOutputKey struct {
+	Path       string
+	VersionId  string
+	SnapshotId string
+}
+
+func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject, expectedSummary *cmd.AzCopyListSummary) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	listStdout, ok := stdout.(*AzCopyParsedListStdout)
+	a.AssertNow("stdout must be AzCopyParsedListStdout", Equal{}, ok, true)
+
+	a.AssertNow("stdout and expected objects must not be null", Not{IsNil{}}, a, stdout, expectedObjects)
+	a.Assert("map of objects must be equivalent in size", Equal{}, len(expectedObjects), len(listStdout.Items))
+	a.Assert("map of objects must match", MapContains[AzCopyOutputKey, cmd.AzCopyListObject]{TargetMap: expectedObjects}, listStdout.Items)
+	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
+}
+
+func ValidateErrorOutput(a Asserter, stdout AzCopyStdout, errorMsg string) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	for _, line := range stdout.RawStdout() {
+		if strings.Contains(line, errorMsg) {
+			return
+		}
+	}
+	fmt.Println(stdout.String())
+	a.Error("expected error message not found in azcopy output")
 }
