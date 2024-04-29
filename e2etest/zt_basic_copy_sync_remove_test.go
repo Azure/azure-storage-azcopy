@@ -846,7 +846,7 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 					a.Error(fmt.Sprintf("Could not create hash adapter: %s", err))
 					return
 				}
-				a.Assert(hashAdapter.GetMode(), equals(), common.HashStorageMode(11)) // 1 is currently either XAttr or ADS; both are the intent of this test.
+				a.Assert(hashAdapter.GetMode(), equals(), common.EHashStorageMode.HiddenFiles())
 
 				hashData, err := hashAdapter.GetHashData("asdf.txt")
 				if err != nil || hashData == nil {
