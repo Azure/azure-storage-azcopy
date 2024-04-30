@@ -152,7 +152,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	}
 	uotm.stashedInfo = oAuthTokenInfo
 
-	if oAuthTokenInfo.Persist && err == nil {
+	if oAuthTokenInfo.Persist {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
 			return err
@@ -316,13 +316,6 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	// buf, _ := json.Marshal(oAuthTokenInfo)
 	// panic("don't check me in. Buf is " + string(buf))
 
-	if persist {
-		err = uotm.credCache.SaveToken(oAuthTokenInfo)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -451,12 +444,8 @@ func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 		if err := os.Remove(filePath); err != nil {
 			return fmt.Errorf("error deleting AuthenticationRecord: %v", err)
 		}
-		fmt.Println("AuthenticationRecord deleted successfully.")
-	} else if os.IsNotExist(err) {
-		fmt.Println("AuthenticationRecord does not exist.")
-	} else {
-		return fmt.Errorf("error checking AuthenticationRecord: %v", err)
 	}
+
 	return uotm.credCache.RemoveCachedToken()
 }
 
