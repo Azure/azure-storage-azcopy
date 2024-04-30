@@ -335,12 +335,10 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 
 	// retrieveRecord gets an AuthenticationRecord from the local disk
 	record, err := retrieveRecord()
-	if err != nil {
-		return nil, err
-	}
 
-	// If the AAuthenticationRecord is empty get a fresh token from our credential cache.
-	if record == (azidentity.AuthenticationRecord{}) {
+	// If the AuthenticationRecord is empty or if we encounter errors while retrieving the record,
+	// obtain a fresh token from our credential cache.
+	if record == (azidentity.AuthenticationRecord{}) || err != nil {
 		hasToken, err := uotm.credCache.HasCachedToken()
 		if err != nil {
 			return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
@@ -451,13 +449,13 @@ func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 	if _, err := os.Stat(filePath); err == nil {
 		// File exists, so delete it
 		if err := os.Remove(filePath); err != nil {
-			return fmt.Errorf("error deleting file: %v", err)
+			return fmt.Errorf("error deleting AuthenticationRecord: %v", err)
 		}
-		fmt.Println("File deleted successfully.")
+		fmt.Println("AuthenticationRecord deleted successfully.")
 	} else if os.IsNotExist(err) {
-		fmt.Println("File does not exist.")
+		fmt.Println("AuthenticationRecord does not exist.")
 	} else {
-		return fmt.Errorf("error checking file: %v", err)
+		return fmt.Errorf("error checking AuthenticationRecord: %v", err)
 	}
 	return uotm.credCache.RemoveCachedToken()
 }
