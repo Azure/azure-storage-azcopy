@@ -266,6 +266,14 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 			return err
 		}
 
+		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+			AuthenticationRecord: record,
+			TenantID:             tenantID,
+			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+				AllowUnencryptedStorage: true,
+				Name:                    TokenCache,
+			}})
+
 		// If record is empty
 		if record == (azidentity.AuthenticationRecord{}) {
 			// No stored record; call Authenticate to acquire one
@@ -278,13 +286,6 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 				return err
 			}
 		}
-		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
-			AuthenticationRecord: record,
-			TenantID:             tenantID,
-			TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
-				AllowUnencryptedStorage: true,
-				Name:                    TokenCache,
-			}})
 	} else {
 		dc, err = azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
 			TenantID: tenantID,
@@ -444,9 +445,12 @@ func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 		if err := os.Remove(filePath); err != nil {
 			return fmt.Errorf("error deleting AuthenticationRecord: %v", err)
 		}
+	} else if os.IsNotExist(err) {
+		// If AuthenticationRecord does not exist delete the token present in credCache.
+		return uotm.credCache.RemoveCachedToken()
 	}
 
-	return uotm.credCache.RemoveCachedToken()
+	return nil
 }
 
 // ====================================================================================
@@ -532,6 +536,7 @@ type OAuthTokenInfo struct {
 	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
 	ClientID string `json:"_client_id"`
 	Persist  bool
+	IsDevice bool
 }
 
 func (t *OAuthTokenInfo) Expires() time.Time {
