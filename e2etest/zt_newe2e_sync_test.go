@@ -33,8 +33,8 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 
 	a.InsertVariationSeparator("|")
 
-	// Thus, if we're using mode "11", we should only run this test on Windows or Linux.
-	if hashStorageMode == 11 && (runtime.GOOS != "windows" && runtime.GOOS != "linux") {
+	// TODO: If you want to test XAttr support on Linux or Mac, remove me! ADO does not support XAttr!
+	if hashStorageMode == 11 && (runtime.GOOS != "windows") {
 		a.InvalidateScenario()
 		return
 	}
