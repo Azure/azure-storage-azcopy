@@ -229,3 +229,42 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 	expectedSummary := &cmd.AzCopyListSummary{FileCount: "4", TotalFileSize: "6.00 KiB"}
 	ValidateListOutput(svm, stdout, expectedObjects, expectedSummary)
 }
+
+func (s *FileOAuthTestSuite) Scenario_ListFileOAuth(svm *ScenarioVariationManager) {
+	srcShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	// Create expected objects
+	expectedObjects := make(map[AzCopyOutputKey]cmd.AzCopyListObject)
+	fileNames := []string{"foo.txt", "foo/foo.txt", "test/foo.txt", "sub1/test/baz.txt"}
+
+	for _, fileName := range fileNames {
+		_ = CreateResource[ObjectResourceManager](svm, srcShare, ResourceDefinitionObject{
+			ObjectName: pointerTo(fileName),
+			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+		})
+
+		expectedObjects[AzCopyOutputKey{Path: fileName}] = cmd.AzCopyListObject{Path: fileName, ContentLength: "1.00 KiB"}
+	}
+
+	// add the directories in the expected objects
+	expectedObjects[AzCopyOutputKey{Path: "/"}] = cmd.AzCopyListObject{Path: "/", ContentLength: "0.00 B"}
+	expectedObjects[AzCopyOutputKey{Path: "foo/"}] = cmd.AzCopyListObject{Path: "foo/", ContentLength: "0.00 B"}
+	expectedObjects[AzCopyOutputKey{Path: "test/"}] = cmd.AzCopyListObject{Path: "test/", ContentLength: "0.00 B"}
+	expectedObjects[AzCopyOutputKey{Path: "sub1/"}] = cmd.AzCopyListObject{Path: "sub1/", ContentLength: "0.00 B"}
+	expectedObjects[AzCopyOutputKey{Path: "sub1/test/"}] = cmd.AzCopyListObject{Path: "sub1/test/", ContentLength: "0.00 B"}
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbList,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcShare, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+			},
+			Flags: ListFlags{
+				RunningTally: to.Ptr(true),
+			},
+		})
+
+	expectedSummary := &cmd.AzCopyListSummary{FileCount: "9", TotalFileSize: "4.00 KiB"}
+	ValidateListOutput(svm, stdout, expectedObjects, expectedSummary)
+}
