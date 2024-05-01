@@ -42,6 +42,8 @@ import (
 	"github.com/Azure/go-autorest/autorest/date"
 
 	"github.com/Azure/go-autorest/autorest/adal"
+	// importing the cache module registers the cache implementation for the current platform
+	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 )
 
 // ApplicationID represents 1st party ApplicationID for AzCopy.
@@ -57,6 +59,8 @@ const ManagedDiskScope = "https://disk.azure.com//.default" // There must be a t
 
 const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
+
+const TokenCache = "AzcopyTokenCache"
 
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
@@ -84,7 +88,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial, /*Context*/
+			}).Dial,                   /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -152,7 +156,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 	}
 	uotm.stashedInfo = oAuthTokenInfo
 
-	if persist && err == nil {
+	if persist {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
 			return err
@@ -173,13 +177,14 @@ func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
 }
 
 func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string) error {
-	oAuthTokenInfo := &OAuthTokenInfo {
+	oAuthTokenInfo := &OAuthTokenInfo{
 		PSCred: true,
 		Tenant: tenantID,
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo, false)
 }
+
 // MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
 func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist bool) error {
 	if err := identityInfo.Validate(); err != nil {
@@ -245,44 +250,44 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
 	}
 
-	// Init OAuth config
-	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
+	authorityHost, err := getAuthorityURL(tenantID, activeDirectoryEndpoint)
 	if err != nil {
 		return err
 	}
 
-	// Acquire the device code
-	deviceCode, err := adal.InitiateDeviceAuth(
-		uotm.oauthClient,
-		*oauthConfig,
-		ApplicationID,
-		Resource)
+	cred, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+		TenantID:                       tenantID,
+		ClientID:                       ApplicationID,
+		DisableAutomaticAuthentication: true,
+		TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+			// optionally set Name to isolate this credential's cache from other applications
+			Name: TokenCache,
+		},
+		ClientOptions: azcore.ClientOptions{
+			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Transport: newAzcopyHTTPClient(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create new device code credential, %v", err)
+	}
+
+	record, err := cred.Authenticate(context.TODO(), &policy.TokenRequestOptions{Scopes: []string{StorageScope}})
 	if err != nil {
 		return fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
 
-	// Display the authentication message
-	fmt.Println(*deviceCode.Message + "\n")
-
-	if tenantID == "" || tenantID == "common" {
+	if tenantID == DefaultTenantID {
 		fmt.Println("INFO: Logging in under the \"Common\" tenant. This will log the account in under its home tenant.")
 		fmt.Println("INFO: If you plan to use AzCopy with a B2B account (where the account's home tenant is separate from the tenant of the target storage account), please sign in under the target tenant with --tenant-id")
 	}
 
-	// Wait here until the user is authenticated
-	// TODO: check if adal Go SDK has new method which supports context, currently ctrl-C can stop the login in console interactively.
-	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
-	if err != nil {
-		return fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
-			tenantID, activeDirectoryEndpoint, err)
-	}
-
 	oAuthTokenInfo := OAuthTokenInfo{
-		Token:                   *token,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           ApplicationID,
+		DeviceCodeInfo:          record,
 	}
 	uotm.stashedInfo = &oAuthTokenInfo
 
@@ -425,13 +430,14 @@ type OAuthTokenInfo struct {
 	ServicePrincipalName    bool `json:"_spn"`
 	SPNInfo                 SPNInfo
 	AzCLICred               bool
-	PSCred					bool
+	PSCred                  bool
 	// Note: ClientID should be only used for internal integrations through env var with refresh token.
 	// It indicates the Application ID assigned to your app when you registered it with Azure AD.
 	// In this case AzCopy refresh token on behalf of caller.
 	// For more details, please refer to
 	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
-	ClientID string `json:"_client_id"`
+	ClientID       string `json:"_client_id"`
+	DeviceCodeInfo azidentity.AuthenticationRecord
 }
 
 // IdentityInfo contains info for MSI.
@@ -476,7 +482,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 	if err != nil {
 		return nil, err
 	}
-	if credInfo.TokenRefreshSource == "tokenstore" || credInfo.Identity || credInfo.ServicePrincipalName {
+	if credInfo.TokenRefreshSource == "tokenstore" || credInfo.Identity || credInfo.ServicePrincipalName || credInfo.DeviceCodeInfo.ClientID != "" {
 		scopes := []string{StorageScope}
 		t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
 		if err != nil {
@@ -486,10 +492,6 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 			AccessToken: t.Token,
 			ExpiresOn:   json.Number(strconv.FormatInt(int64(t.ExpiresOn.Sub(date.UnixEpoch())/time.Second), 10)),
 		}, nil
-	} else {
-		if dcc, ok := tc.(*DeviceCodeCredential); ok {
-			return dcc.RefreshTokenWithUserCredential(ctx, Resource)
-		}
 	}
 	return nil, errors.New("invalid token info")
 }
@@ -524,6 +526,7 @@ func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error)
 }
 
 const minimumTokenValidDuration = time.Minute * 5
+
 type TokenStoreCredential struct {
 	token *azcore.AccessToken
 	lock  sync.RWMutex
@@ -577,7 +580,7 @@ func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenReque
 
 // GetNewTokenFromTokenStore gets token from token store. (Credential Manager in Windows, keyring in Linux and keychain in MacOS.)
 // Note: This approach should only be used in internal integrations.
-func GetTokenStoreCredential(accessToken string, expiresOn time.Time) (azcore.TokenCredential) {
+func GetTokenStoreCredential(accessToken string, expiresOn time.Time) azcore.TokenCredential {
 	globalTsc.Do(func() {
 		globalTokenStoreCredential = &TokenStoreCredential{
 			token: &azcore.AccessToken{
@@ -679,59 +682,28 @@ func (credInfo *OAuthTokenInfo) GetPSContextCredential() (azcore.TokenCredential
 	return tc, nil
 }
 
-type DeviceCodeCredential struct {
-	token       adal.Token
-	aadEndpoint string
-	tenantID    string
-	clientID    string
-}
-
-func (dcc *DeviceCodeCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	waitDuration := dcc.token.Expires().Sub(time.Now().UTC()) / 2
-	if dcc.token.WillExpireIn(waitDuration) {
-		resource := strings.TrimSuffix(options.Scopes[0], "/.default")
-		_, err := dcc.RefreshTokenWithUserCredential(ctx, resource)
-		if err != nil {
-			return azcore.AccessToken{}, err
-		}
-	}
-	return azcore.AccessToken{Token: dcc.token.AccessToken, ExpiresOn: dcc.token.Expires()}, nil
-}
-
-// RefreshTokenWithUserCredential gets new token with user credential through refresh.
-func (dcc *DeviceCodeCredential) RefreshTokenWithUserCredential(ctx context.Context, resource string) (*adal.Token, error) {
-	targetResource := resource
-	if dcc.token.Resource != "" && dcc.token.Resource != targetResource {
-		targetResource = dcc.token.Resource
-	}
-
-	oauthConfig, err := adal.NewOAuthConfig(dcc.aadEndpoint, dcc.tenantID)
-	if err != nil {
-		return nil, err
-	}
-
-	// ClientID in credInfo is optional which is used for internal integration only.
-	// Use AzCopy's 1st party applicationID for refresh by default.
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		Iff(dcc.clientID != "", dcc.clientID, ApplicationID),
-		targetResource,
-		dcc.token)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := spt.RefreshWithContext(ctx); err != nil {
-		return nil, err
-	}
-
-	newToken := spt.Token()
-	dcc.token = newToken
-	return &newToken, nil
-}
-
 func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredential, error) {
-	tc := &DeviceCodeCredential{token: credInfo.Token, aadEndpoint: credInfo.ActiveDirectoryEndpoint, tenantID: credInfo.Tenant, clientID: credInfo.ApplicationID}
+	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+	if err != nil {
+		return nil, err
+	}
+	tc, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
+		TenantID:                       credInfo.Tenant,
+		ClientID:                       ApplicationID,
+		DisableAutomaticAuthentication: true,
+		TokenCachePersistenceOptions: &azidentity.TokenCachePersistenceOptions{
+			// optionally set Name to isolate this credential's cache from other applications
+			Name: TokenCache,
+		},
+		AuthenticationRecord: credInfo.DeviceCodeInfo,
+		ClientOptions: azcore.ClientOptions{
+			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Transport: newAzcopyHTTPClient(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
 	credInfo.TokenCredential = tc
 	return tc, nil
 }
