@@ -161,7 +161,7 @@ func (d TrailingDotOption) String() string {
 }
 
 func (d *TrailingDotOption) Parse(s string) error {
-	// allow empty to mean "None"
+	// allow empty to mean "Enable"
 	if s == "" {
 		*d = ETrailingDotOption.Enable()
 		return nil
@@ -172,6 +172,13 @@ func (d *TrailingDotOption) Parse(s string) error {
 		*d = val.(TrailingDotOption)
 	}
 	return err
+}
+
+func ValidTrailingDotOptions() []string {
+	return []string{
+		ETrailingDotOption.Enable().String(),
+		ETrailingDotOption.Disable().String(),
+	}
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -209,6 +216,15 @@ func (p PermanentDeleteOption) ToPermanentDeleteOptionType() *blob.DeleteType {
 		return nil
 	}
 	return to.Ptr(blob.DeleteTypePermanent)
+}
+
+func ValidPermanentDeleteOptions() []string {
+	return []string{
+		EPermanentDeleteOption.None().String(),
+		EPermanentDeleteOption.Snapshots().String(),
+		EPermanentDeleteOption.Versions().String(),
+		EPermanentDeleteOption.SnapshotsAndVersions().String(),
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
