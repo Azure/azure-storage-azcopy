@@ -431,6 +431,12 @@ func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 		return true, nil
 	}
 
+	// In case of Device Login we will check if the AuthenticationRecord exist.
+	record, err := retrieveRecord()
+	if record != (azidentity.AuthenticationRecord{}) && err != nil {
+		return true, nil
+	}
+
 	return uotm.credCache.HasCachedToken()
 }
 
@@ -536,7 +542,6 @@ type OAuthTokenInfo struct {
 	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
 	ClientID string `json:"_client_id"`
 	Persist  bool
-	IsDevice bool
 }
 
 func (t *OAuthTokenInfo) Expires() time.Time {
