@@ -111,34 +111,38 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			lca.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 			lca.servicePrincipal = true
+			lca.persistToken = false
 
 		case common.AutologinTypeMSI:
 			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
 			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
 			lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
 			lca.identity = true
+			lca.persistToken = false
 
 		case common.AutologinTypeDevice:
 			lca.identity = false
+			lca.persistToken = true
 
 		case common.AutologinTypeAzCLI:
 			lca.identity = false
 			lca.servicePrincipal = false
 			lca.psCred = false
 			lca.azCliCred = true
+			lca.persistToken = false
 
 		case common.AutologinTypePsCred:
 			lca.identity = false
 			lca.servicePrincipal = false
 			lca.azCliCred = false
 			lca.psCred = true
+			lca.persistToken = false
 
 		default:
 			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
 			return
 		}
 
-		lca.persistToken = false
 		if err = lca.process(); err != nil {
 			glcm.Error(fmt.Sprintf("Failed to perform Auto-login: %v.", err.Error()))
 		}
