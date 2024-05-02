@@ -261,7 +261,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	if persist {
 
 		// Fetching the AuthenticationRecord
-		record, err = retrieveRecord()
+		record, err = RetrieveRecord()
 		if err != nil {
 			return err
 		}
@@ -328,7 +328,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 
 	// retrieveRecord gets an AuthenticationRecord from the local disk
-	record, err := retrieveRecord()
+	record, err := RetrieveRecord()
 
 	// If the AuthenticationRecord is empty or if we encounter errors while retrieving the record,
 	// obtain a fresh token from our credential cache.
@@ -386,7 +386,7 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 }
 
 // retrieveRecord retrieves an AuthenticationRecord  from the local file system.
-func retrieveRecord() (azidentity.AuthenticationRecord, error) {
+func RetrieveRecord() (azidentity.AuthenticationRecord, error) {
 	filePath := filepath.Join(AzcopyJobPlanFolder, defaultAuthFileName)
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return azidentity.AuthenticationRecord{}, nil
@@ -432,7 +432,7 @@ func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 	}
 
 	// In case of Device Login we will check if the AuthenticationRecord exist.
-	record, err := retrieveRecord()
+	record, err := RetrieveRecord()
 	if record != (azidentity.AuthenticationRecord{}) && err != nil {
 		return true, nil
 	}
@@ -831,7 +831,7 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 	var err error
 	var record azidentity.AuthenticationRecord
 
-	record, err = retrieveRecord()
+	record, err = RetrieveRecord()
 	if err != nil {
 		return nil, err
 	}

@@ -33,6 +33,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -92,7 +93,14 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		autoLoginType := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
 		if autoLoginType == "" {
 			glcm.Info("Autologin not specified.")
-			return
+
+			// If we have an existing AuthenticationRecord.
+			rec, err := common.RetrieveRecord()
+			if rec != (azidentity.AuthenticationRecord{}) && err == nil {
+				autoLoginType = "device"
+			} else {
+				return
+			}
 		}
 
 		if tenantID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
