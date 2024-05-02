@@ -60,6 +60,7 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 			}
 		}
 
+		// Suite
 		t.Run(sName, func(t *testing.T) {
 
 			t.Parallel() // todo: env var
@@ -76,6 +77,7 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 			}
 
 			if !t.Failed() {
+				// Scenario in Suite
 				for scenarioName, scenarioIdx := range testIdxs {
 					scenarioName := scenarioName // create intermediate values.
 					scenarioIdx := scenarioIdx   // This bug is technically fixed in newer versions of Go, but the fix must be manually applied.

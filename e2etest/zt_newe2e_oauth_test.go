@@ -17,8 +17,7 @@ func (s *DeviceLoginSuite) SetupSuite(a Asserter) {
 }
 
 func (s *DeviceLoginSuite) TeardownSuite(a Asserter) {
-	//a.Log("Teardown logging!")
-	//a.Error("Oops!")
+	a.Log("Teardown logging!")
 }
 
 func (s *DeviceLoginSuite) Scenario_LoginDevice(svm *ScenarioVariationManager) {
