@@ -22,13 +22,14 @@ package cmd
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -467,4 +468,54 @@ func TestDryrunSyncLocaltoBlob(t *testing.T) {
 		a.True(testDryrunStatements(blobsToInclude, msg))
 		a.True(testDryrunStatements(blobsToDelete, msg))
 	})
+}
+
+// TestSyncGenerateWarningForLocalToFSUpload
+// @brief This tests performs sync operation from local to file share or vice versa.
+// @validation This test verifies if the warning message is displayed on console if the user tries to perform sync operation from local to file share.
+func TestSyncGenerateWarningForLocalToFSUpload(t *testing.T) {
+	a := assert.New(t)
+	fsc := getFileServiceClient()
+	// generate destination share
+	dstShareURL, dstShareName := createNewShare(a, fsc)
+	defer deleteShare(a, dstShareURL)
+
+	for _, srcFileName := range []string{"singlefile"} {
+		// set up the source as a single file
+		srcDirName := scenarioHelper{}.generateLocalDirectory(a)
+		defer os.RemoveAll(srcDirName)
+		fileList := []string{srcFileName}
+		scenarioHelper{}.generateLocalFilesFromList(a, srcDirName, fileList)
+
+		time.Sleep(time.Second)
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		mockedLcm := mockedLifecycleManager{dryrunLog: make(chan string, 50)}
+		mockedLcm.SetOutputFormat(common.EOutputFormat.Text())
+		glcm = &mockedLcm
+
+		// construct the raw input to simulate user input
+		dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
+		raw := getDefaultSyncRawInput(srcDirName, dstShareURLWithSAS.String())
+		raw.dryrun = true
+		// flag to validate if the warn message is displayed to console
+		foundWarnMSg := false
+
+		runSyncAndVerify(a, raw, func(err error) {
+			a.Nil(err)
+
+			msg := mockedLcm.GatherAllLogs(mockedLcm.dryrunLog)
+			for i := 0; i < len(msg); i++ {
+				// check for the warning message
+				if strings.Contains(msg[i], localToFileShareWarnMsg) {
+					foundWarnMSg = true
+				}
+			}
+		})
+		a.True(foundWarnMSg)
+	}
 }
