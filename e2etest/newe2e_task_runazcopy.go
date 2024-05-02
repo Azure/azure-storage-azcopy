@@ -199,10 +199,6 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 	}
 }
 
-func RunAzCopyLogin(a Asserter) AzCopyStdout {
-
-}
-
 // RunAzCopy todo define more cleanly, implement
 func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *AzCopyJobPlan) {
 	if a.Dryrun() {

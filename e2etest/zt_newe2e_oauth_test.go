@@ -12,7 +12,8 @@ func init() {
 type DeviceLoginSuite struct{}
 
 func (s *DeviceLoginSuite) SetupSuite(a Asserter) {
-	//a.Log("Setup logging!")
+	a.Log("Setup logging!")
+	RunAzCopyLogin(a)
 }
 
 func (s *DeviceLoginSuite) TeardownSuite(a Asserter) {

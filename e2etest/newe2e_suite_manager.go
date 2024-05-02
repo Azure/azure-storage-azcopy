@@ -46,7 +46,7 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 			}
 			// check that the first input is actually an asserter
 			inName := method.Type.In(1).String()
-			if inName != "*e2etest.ScenarioVariationManager" {
+			if inName != "*e2etest.ScenarioVariationManager" && inName != "e2etest.Asserter" {
 				continue
 			}
 
