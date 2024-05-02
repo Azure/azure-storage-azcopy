@@ -1,0 +1,80 @@
+package e2etest
+
+import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"time"
+)
+
+func init() {
+	suiteManager.RegisterSuite(&DeviceLoginSuite{})
+}
+
+type DeviceLoginSuite struct{}
+
+func (s *DeviceLoginSuite) SetupSuite(a Asserter) {
+	//a.Log("Setup logging!")
+}
+
+func (s *DeviceLoginSuite) TeardownSuite(a Asserter) {
+	//a.Log("Teardown logging!")
+	//a.Error("Oops!")
+}
+
+func (s *DeviceLoginSuite) Scenario_LoginDevice(svm *ScenarioVariationManager) {
+
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Scale up from service to object
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+	// The object must exist already if we're syncing.
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 10)
+		}
+	}
+
+	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionObject{
+		ObjectName: pointerTo("test"),
+		Body:       body,
+	})
+
+	// no file -> blob, no local->local
+	if srcObj.Location().IsLocal() == dstObj.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+	if srcObj.Location() == common.ELocation.File() && dstObj.Location() == common.ELocation.Blob() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, true)
+}
