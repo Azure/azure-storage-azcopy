@@ -97,7 +97,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 			// If we have an existing AuthenticationRecord.
 			rec, err := common.RetrieveRecord()
 			if rec != (azidentity.AuthenticationRecord{}) && err == nil {
-				autoLoginType = "device"
+				autoLoginType = common.AutologinTypeDevice
 			} else {
 				return
 			}
