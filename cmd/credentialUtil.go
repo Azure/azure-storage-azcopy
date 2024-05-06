@@ -345,6 +345,9 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 		name = "Azure AD (Managed Disk)"
 	}
 	message := fmt.Sprintf("Authenticating to %s using %s", resource, name)
+	if ct == common.ECredentialType.Unknown() && location.IsAzure() {
+		message += ", Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL."
+	}
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
 		if jobsAdmin.JobsAdmin != nil {
