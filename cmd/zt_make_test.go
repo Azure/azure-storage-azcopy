@@ -142,7 +142,7 @@ func TestMakeFileShare(t *testing.T) {
 		a.Nil(err)
 		props, err := sc.GetProperties(ctx, nil)
 		a.Nil(err)
-		a.EqualValues(5120, *props.Quota)
+		a.EqualValues(102400, *props.Quota)
 	})
 }
 
