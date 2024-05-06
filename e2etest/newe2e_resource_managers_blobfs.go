@@ -432,12 +432,17 @@ func (b *BlobFSPathResourceProvider) GetPropertiesWithOptions(a Asserter, option
 	a.HelperMarker().Helper()
 	opts := DerefOrZero(options)
 
-	// As far as BlobFS (and it's SDK) are concerned, the REST API call is the same for files and directories. Using the same call doesn't hurt.
-	resp, err := b.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{
-		AccessConditions: opts.AccessConditions,
-		CPKInfo:          opts.CPKInfo,
-	})
-	a.NoError("Get properties", err)
+	var err error
+	var resp file.GetPropertiesResponse
+	// If we're talking about the root, there are no such properties on the blob endpoint. In this case, the only thing that would (or could) be present is access control.
+	if !(b.objectPath == "" || b.objectPath == "/") {
+		// As far as BlobFS (and it's SDK) are concerned, the REST API call is the same for files and directories. Using the same call doesn't hurt.
+		resp, err = b.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{
+			AccessConditions: opts.AccessConditions,
+			CPKInfo:          opts.CPKInfo,
+		})
+		a.NoError("Get properties", err)
+	}
 
 	permResp, err := b.getFileClient().GetAccessControl(ctx, &file.GetAccessControlOptions{
 		UPN:              opts.UPN,
@@ -524,8 +529,10 @@ func (b *BlobFSPathResourceProvider) Download(a Asserter) io.ReadSeeker {
 	a.NoError("Download stream", err)
 
 	buf := &bytes.Buffer{}
-	_, err = io.Copy(buf, resp.Body)
-	a.NoError("Read body", err)
+	if resp.Body != nil {
+		_, err = io.Copy(buf, resp.Body)
+		a.NoError("Read body", err)
+	}
 
 	return bytes.NewReader(buf.Bytes())
 }

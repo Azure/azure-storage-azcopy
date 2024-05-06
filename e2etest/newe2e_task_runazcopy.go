@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
@@ -265,12 +266,14 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 	}
 
+	stderr := &bytes.Buffer{}
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
 		Args: args,
 		Env:  env,
 
 		Stdout: out, // todo
+		Stderr: stderr,
 	}
 	in, err := command.StdinPipe()
 	a.NoError("get stdin pipe", err)
@@ -290,7 +293,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 	a.Cleanup(func(a ScenarioAsserter) {
 		if stdout, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok {
-			UploadLogs(a, stdout, DerefOrZero(commandSpec.Environment.LogLocation))
+			UploadLogs(a, stdout, stderr, DerefOrZero(commandSpec.Environment.LogLocation))
 			_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
 		}
 	})
@@ -298,13 +301,13 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	return out, &AzCopyJobPlan{}
 }
 
-func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, logDir string) {
+func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, stderr *bytes.Buffer, logDir string) {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("Log cleanup failed", err, "\n", string(debug.Stack()))
 		}
 	}()
-  
+
 	logPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
 	if logPath == "" || !a.Failed() {
 		return
@@ -363,6 +366,24 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, lo
 		return err
 	})
 	a.NoError("Failed to copy log files", err)
+
+	// Write stdout to the folder instead of the job log
+	f, err := os.OpenFile(filepath.Join(destLogDir, "stdout.txt"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
+	a.NoError("Failed to create stdout file", err)
+	_, err = f.WriteString(stdout.String())
+	a.NoError("Failed to write stdout file", err)
+	err = f.Close()
+	a.NoError("Failed to close stdout file", err)
+
+	// If stderr is non-zero, output that too!
+	if stderr != nil && stderr.Len() > 0 {
+		f, err := os.OpenFile(filepath.Join(destLogDir, "stderr.txt"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
+		a.NoError("Failed to create stdout file", err)
+		_, err = stderr.WriteTo(f)
+		a.NoError("Failed to write stdout file", err)
+		err = f.Close()
+		a.NoError("Failed to close stdout file", err)
+	}
 
 	a.Log("Uploaded failed run logs for job %s", jobId)
 }

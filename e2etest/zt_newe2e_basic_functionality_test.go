@@ -75,6 +75,8 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload(svm *Scenari
 
 func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Resolve variation early so name makes sense
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
 	// Scale up from service to object
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
 
@@ -86,7 +88,7 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, SizeFromString("10K"))},
 		},
 	}
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), srcDef)
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
 
 	// no s2s, no local->local
 	if srcContainer.Location().IsRemote() == dstContainer.Location().IsRemote() {
@@ -95,6 +97,12 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 	}
 
 	sasOpts := GenericAccountSignatureValues{}
+
+	var asSubdir bool
+	if azCopyVerb == AzCopyVerbCopy {
+		svm.InsertVariationSeparator("-Subdir:")
+		asSubdir = ResolveVariation(svm, []bool{true, false})
+	}
 
 	stdOut, _ := RunAzCopy(
 		svm,
@@ -114,16 +122,27 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 					Recursive: pointerTo(true),
 				},
 
-				AsSubdir: common.Iff(azCopyVerb == AzCopyVerbCopy, PtrOf(true), nil), // defaults true
+				AsSubdir: common.Iff(azCopyVerb == AzCopyVerbCopy, &asSubdir, nil), // defaults true
 			},
 		})
 
+	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
+
 	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
 		// todo: service level resource to object mapping
-		Objects: GeneratePlanFileObjectsFromMapping(srcDef.Objects, GeneratePlanFileObjectsOptions{DestPathProcessor: ParentDirDestPathProcessor(srcContainer.ContainerName())}),
+		Objects: GeneratePlanFileObjectsFromMapping(ObjectResourceMappingOverlay{
+			Base: srcDef.Objects,
+			Overlay: common.Iff(fromTo.AreBothFolderAware() && azCopyVerb == AzCopyVerbCopy, // If we're running copy and in a folder aware , we need to include the root
+				ObjectResourceMappingFlat{"": {ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}},
+				nil),
+		}, GeneratePlanFileObjectsOptions{
+			DestPathProcessor: common.Iff(asSubdir, ParentDirDestPathProcessor(srcContainer.ContainerName()), nil),
+		}),
 	})
 
-	ValidateResource[ContainerResourceManager](svm, dstContainer, srcDef, true)
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: common.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
+	}, true)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm *ScenarioVariationManager) {
