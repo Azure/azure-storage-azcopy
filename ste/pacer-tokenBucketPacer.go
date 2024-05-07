@@ -101,7 +101,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 	if targetBytes == 0 || targetBytes < byteCount {
 		if targetBytes < byteCount {
 			glcm.Info(fmt.Sprintf("Size set by --cap-mbps (%d) is smaller than the object size (%d), so AzCopy will proceed by using the object size. "+
-				"Increase the --cap-mbps size if you would like to cap the bandwith.", targetBytes, byteCount))
+				"Increase the --cap-mbps size if you would like to cap the bandwidth.", targetBytes, byteCount))
 
 		}
 		atomic.AddInt64(&p.atomicGrandTotal, byteCount)
@@ -126,7 +126,7 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
-		
+
 		// If we've updated target to a NULL pacer, we'll return immediately
 		if p.targetBytesPerSecond() == 0 {
 			atomic.AddInt64(&p.atomicGrandTotal, byteCount)
@@ -164,7 +164,7 @@ func (p *tokenBucketPacer) pacerBody() {
 		select {
 		case <-p.done:
 			return
-		case newTarget = <- p.newTargetBytesPerSecond:
+		case newTarget = <-p.newTargetBytesPerSecond:
 		default:
 		}
 
