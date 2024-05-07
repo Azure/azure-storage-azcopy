@@ -22,12 +22,15 @@ package ste
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+// get the lifecycle manager to print messages
+var glcm = common.GetLifecycleMgr()
 
 // pacer is used by callers whose activity must be controlled to a certain pace
 type pacer interface {
@@ -94,13 +97,15 @@ func NewTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest int
 func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
 	targetBytes := p.targetBytesPerSecond()
 	//if targetBytesIsZero, we have a null pacer, we just track GrandTotal
-	if targetBytes == 0 {
+	// if targetBytes is smaller than byteCount, we self-correct by adding byteCount to GrandTotal
+	if targetBytes == 0 || targetBytes < byteCount {
+		if targetBytes < byteCount {
+			glcm.Info(fmt.Sprintf("Size set by --cap-mbps (%d) is smaller than the object size (%d), so AzCopy will proceed by using the object size. "+
+				"Increase the --cap-mbps size if you would like to cap the bandwith.", targetBytes, byteCount))
+
+		}
 		atomic.AddInt64(&p.atomicGrandTotal, byteCount)
 		return nil
-	}
-
-	if targetBytes < byteCount {
-		return errors.New("request size greater than pacer target")
 	}
 
 	// block until tokens are available
