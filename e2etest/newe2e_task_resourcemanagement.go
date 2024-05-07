@@ -114,6 +114,11 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			a.HelperMarker().Helper()
 			cRes := manager.(ContainerResourceManager)
 
+			exists := cRes.Exists()
+			if definition.ShouldExist() != exists {
+				a.Assert(cRes.ContainerName()+": object must "+common.Iff(definition.ShouldExist(), "not exist", "exist"), Equal{}, exists, false)
+				return
+			}
 			if !definition.ShouldExist() {
 				a.Assert("container "+cRes.ContainerName()+" must not exist", Equal{}, cRes.Exists(), false)
 				return
@@ -140,8 +145,9 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			objMan := manager.(ObjectResourceManager)
 			objDef := definition.(ResourceDefinitionObject)
 
-			if !objDef.ShouldExist() {
-				a.Assert(objMan.ObjectName()+": object must not exist", Equal{}, objMan.Exists(), false)
+			exists := objMan.Exists()
+			if objDef.ShouldExist() != exists {
+				a.Assert(objMan.ObjectName()+": object must "+common.Iff(objDef.ShouldExist(), "not exist", "exist"), Equal{}, exists, false)
 				return
 			}
 
