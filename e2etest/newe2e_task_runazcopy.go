@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
@@ -206,6 +207,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	if a.Dryrun() {
 		return nil, &AzCopyJobPlan{}
 	}
+	a.HelperMarker().Helper()
 	var flagMap map[string]string
 	var envMap map[string]string
 
@@ -292,24 +294,22 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		0, command.ProcessState.ExitCode())
 
 	a.Cleanup(func(a ScenarioAsserter) {
-		if stdout, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok {
-			UploadLogs(a, stdout, stderr, DerefOrZero(commandSpec.Environment.LogLocation))
-			_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
-		}
+		UploadLogs(a, out, stderr, DerefOrZero(commandSpec.Environment.LogLocation))
+		_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
 	})
 
 	return out, &AzCopyJobPlan{}
 }
 
-func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, stderr *bytes.Buffer, logDir string) {
+func UploadLogs(a ScenarioAsserter, stdout AzCopyStdout, stderr *bytes.Buffer, logDir string) {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("Log cleanup failed", err, "\n", string(debug.Stack()))
 		}
 	}()
 
-	logPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
-	if logPath == "" || !a.Failed() {
+	logDropPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
+	if logDropPath == "" || !a.Failed() {
 		return
 	}
 
@@ -317,8 +317,11 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, st
 	files, err := os.ReadDir(logDir)
 	a.NoError("Failed to read log dir", err)
 	jobId := ""
-	if stdout.InitMsg.JobID != "" {
-		jobId = stdout.InitMsg.JobID
+
+	if jobStdout, ok := stdout.(*AzCopyParsedCopySyncRemoveStdout); ok {
+		if jobStdout.InitMsg.JobID != "" {
+			jobId = jobStdout.InitMsg.JobID
+		}
 	} else {
 		for _, file := range files { // first, find the job ID
 			if strings.HasSuffix(file.Name(), ".log") {
@@ -328,8 +331,13 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, st
 		}
 	}
 
+	if jobId == "" {
+		// If we still don't have a job ID, let's make one up. Maybe the job never started, or this isn't a copy/sync/remove job anyway.
+		jobId = uuid.NewString()
+	}
+
 	// Create the destination log directory
-	destLogDir := filepath.Join(logPath, jobId)
+	destLogDir := filepath.Join(logDropPath, jobId)
 	err = os.MkdirAll(destLogDir, os.ModePerm|os.ModeDir)
 	a.NoError("Failed to create log dir", err)
 

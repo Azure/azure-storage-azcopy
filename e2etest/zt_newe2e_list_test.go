@@ -18,7 +18,6 @@ func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
 
-	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
@@ -55,7 +54,6 @@ func (s *ListSuite) Scenario_ListRunningTally(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
 
-	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
@@ -93,8 +91,6 @@ func (s *ListSuite) Scenario_ListRunningTally(svm *ScenarioVariationManager) {
 func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
-
-	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
 
 	// Create expected objects

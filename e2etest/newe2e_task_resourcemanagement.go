@@ -116,7 +116,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 			exists := cRes.Exists()
 			if definition.ShouldExist() != exists {
-				a.Assert(cRes.ContainerName()+": object must "+common.Iff(definition.ShouldExist(), "not exist", "exist"), Equal{}, exists, false)
+				a.Assert(cRes.ContainerName()+": object must "+common.Iff(definition.ShouldExist(), "exist", "not exist"), Equal{}, exists, false)
 				return
 			}
 
@@ -147,7 +147,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 			exists := objMan.Exists()
 			if objDef.ShouldExist() != exists {
-				a.Assert(objMan.ObjectName()+": object must "+common.Iff(objDef.ShouldExist(), "not exist", "exist"), Equal{}, objDef.ShouldExist(), exists)
+				a.Assert(objMan.ObjectName()+": object must "+common.Iff(objDef.ShouldExist(), "exist", "not exist"), Equal{}, objDef.ShouldExist(), exists)
 				return
 			}
 
@@ -214,6 +214,7 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
+	a.HelperMarker().Helper()
 
 	listStdout, ok := stdout.(*AzCopyParsedListStdout)
 	a.AssertNow("stdout must be AzCopyParsedListStdout", Equal{}, ok, true)
