@@ -119,8 +119,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				a.Assert(cRes.ContainerName()+": object must "+common.Iff(definition.ShouldExist(), "not exist", "exist"), Equal{}, exists, false)
 				return
 			}
+
 			if !definition.ShouldExist() {
-				a.Assert("container "+cRes.ContainerName()+" must not exist", Equal{}, cRes.Exists(), false)
 				return
 			}
 
@@ -147,8 +147,12 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 
 			exists := objMan.Exists()
 			if objDef.ShouldExist() != exists {
-				a.Assert(objMan.ObjectName()+": object must "+common.Iff(objDef.ShouldExist(), "not exist", "exist"), Equal{}, exists, false)
+				a.Assert(objMan.ObjectName()+": object must "+common.Iff(objDef.ShouldExist(), "not exist", "exist"), Equal{}, objDef.ShouldExist(), exists)
 				return
+			}
+
+			if !objDef.ShouldExist() {
+				return // Don't test objects that should not exist
 			}
 
 			oProps := objMan.GetProperties(a)
