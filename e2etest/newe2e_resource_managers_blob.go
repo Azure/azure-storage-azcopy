@@ -684,8 +684,10 @@ func (b *BlobObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	a.NoError("Download stream", err)
 
 	buf := &bytes.Buffer{}
-	_, err = io.Copy(buf, resp.Body)
-	a.NoError("Read body", err)
+	if err != nil || resp.Body == nil {
+		_, err = io.Copy(buf, resp.Body)
+		a.NoError("Read body", err)
+	}
 
 	return bytes.NewReader(buf.Bytes())
 }
