@@ -12,9 +12,9 @@ func init() {
 
 type WorkloadIdentitySuite struct{}
 
-// Run only in environments that support and are set up for Workload Identity (ex: Azure pipeline, AKS)
+// Run only in environments that support and are set up for Workload Identity (ex: Azure Pipeline, Azure Kubernetes Service)
 func (s *WorkloadIdentitySuite) Scenario_SingleFileUploadDownloadWorkloadIdentity(svm *ScenarioVariationManager) {
-	// Run only in environments that support and are set up for Workload Identity (ex: Azure pipeline, AKS)
+	// Run only in environments that support and are set up for Workload Identity (ex: Azure Pipeline, Azure Kubernetes Service)
 	if os.Getenv("NEW_E2E_ENVIRONMENT") != "AzurePipeline" {
 		svm.InvalidateScenario()
 	}
