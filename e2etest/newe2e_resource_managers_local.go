@@ -244,10 +244,20 @@ func (l *LocalObjectResourceManager) EntityType() common.EntityType {
 	return l.entityType
 }
 
+func (l *LocalObjectResourceManager) CreateParents(a Asserter) {
+	if l.container != nil {
+		l.container.Create(a, ContainerProperties{})
+	}
+
+	err := os.MkdirAll(filepath.Dir(l.getWorkingPath()), 0775)
+	a.NoError("mkdirall", err)
+}
+
 func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
 	a.HelperMarker().Helper()
 	a.AssertNow("Object must be file to have content", Equal{})
 
+	l.CreateParents(a)
 	f, err := os.OpenFile(l.getWorkingPath(), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0774)
 	a.NoError("Open file", err)
 	defer func(f *os.File) {
