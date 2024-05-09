@@ -22,12 +22,15 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/mock_server"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -327,4 +330,81 @@ func TestContainerBlobPropertiesAdapter_LMTAndContentLength(t *testing.T) {
 
 	a.Equal(props2.LastModified(), time)
 	a.Equal(props2.ContentLength(), length)
+}
+
+func TestManagedDiskProperties(t *testing.T) {
+	a := assert.New(t)
+
+	// Setup
+	// Mock the server
+	srv, close := mock_server.NewServer(mock_server.WithTransformAllRequestsToTestServerUrl())
+	defer close()
+
+	pbProp := &blob.GetPropertiesResponse{ContentLength: nil, LastModified: nil}
+	srv.AppendResponse(mock_server.WithStatusCode(200), mock_server.WithBody([]byte(getPageBlobProperties(pbProp))))
+
+	// Create a client
+	// Note: the key below is not a secret, this is the publicly documented Azurite key
+	accountName := "myfakeaccount"
+	accountKey := "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
+
+	credential, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	a.NoError(err)
+
+	client, err := blobservice.NewClientWithSharedKeyCredential(rawURL, credential,
+		&blobservice.ClientOptions{
+			ClientOptions: azcore.ClientOptions{
+				Transport: srv,
+			}})
+	a.NoError(err)
+
+	containerName := generateContainerName()
+	containerClient := client.NewContainerClient(containerName)
+
+	blobName := generateBlobName()
+	blobClient := containerClient.NewPageBlobClient(blobName)
+
+	prop, err := blobClient.GetProperties(ctx, nil)
+	a.NoError(err)
+	a.Nil(prop.LastModified)
+	a.NotNil(prop.ContentLength) // note:content length will never be nil as the service calculates the size of the blob and stores it in this header
+
+	propAdapter := blobPropertiesResponseAdapter{GetPropertiesResponse: &prop}
+	a.Equal(propAdapter.LastModified(), time.Time{})
+	a.NotNil(prop.ContentLength) // see note from above
+}
+
+func getPageBlobProperties(properties *blob.GetPropertiesResponse) string {
+	// these properties have been pulled from https://learn.microsoft.com/en-us/rest/api/storageservices/get-blob-properties
+	// with modification to date, content length and last modified time
+	body := "x-ms-blob-type: PageBlob" +
+		"x-ms-lease-status: unlocked" +
+		"x-ms-lease-state: available" +
+		getContentLength(properties) +
+		"Content-Type: text/plain; charset=UTF-8" +
+		fmt.Sprintf("Date: %s", time.Now().String()) +
+		"ETag: \"0x8CAE97120C1FF22\"" +
+		"Accept-Ranges: bytes" +
+		"x-ms-blob-committed–block-count: 1" +
+		"x-ms-version: 2015-02-21" +
+		getLMT(properties) +
+		"Server: Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0"
+	return body
+}
+
+func getLMT(response *blob.GetPropertiesResponse) string {
+	if response.LastModified == nil {
+		return ""
+	} else {
+		return fmt.Sprintf("Last-Modified: %s", response.LastModified.String())
+	}
+}
+
+func getContentLength(response *blob.GetPropertiesResponse) string {
+	if response.ContentLength == nil {
+		return ""
+	} else {
+		return fmt.Sprintf("Content-Length: %d", response.ContentLength)
+	}
 }
