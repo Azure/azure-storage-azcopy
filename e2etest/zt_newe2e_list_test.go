@@ -230,6 +230,58 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 	ValidateListOutput(svm, stdout, expectedObjects, expectedSummary)
 }
 
+func (s *ListSuite) Scenario_ListFiles(svm *ScenarioVariationManager) {
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	var expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject
+	expectedObjects = map[AzCopyOutputKey]cmd.AzCopyListObject{AzCopyOutputKey{Path: "/"}: {Path: "/", ContentLength: "0.00 B"}}
+
+	// Create objects
+	objects := []ResourceDefinitionObject{
+		{ObjectName: pointerTo("foo.txt"), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"}, // foo.txt
+		{ObjectName: pointerTo("foo"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
+		{ObjectName: pointerTo("foo/foo.txt"), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"}, // foo/foo.txt
+		{ObjectName: pointerTo("test"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
+		{ObjectName: pointerTo("test/foo.txt"), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"}, // test/foo.txt
+		{ObjectName: pointerTo("sub1"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
+		{ObjectName: pointerTo("sub1/test"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
+		{ObjectName: pointerTo("sub1/test/baz.txt"), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"}, // sub1/test/baz.txt
+	}
+
+	// Scale up from service to object
+	for _, o := range objects {
+		obj := CreateResource[ObjectResourceManager](svm, srcContainer, o)
+		name := obj.ObjectName()
+		if o.EntityType == common.EEntityType.Folder() {
+			name += "/"
+		}
+		expectedObjects[AzCopyOutputKey{Path: name}] = cmd.AzCopyListObject{Path: name, ContentLength: o.Size}
+	}
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbList,
+			Targets: []ResourceManager{
+				srcContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: srcContainer.ContainerName(),
+						Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
+					},
+				}),
+			},
+			Flags: ListFlags{
+				RunningTally: to.Ptr(true),
+				GlobalFlags: GlobalFlags{
+					OutputType: to.Ptr(common.EOutputFormat.Json()),
+				},
+			},
+		})
+
+	expectedSummary := &cmd.AzCopyListSummary{FileCount: "9", TotalFileSize: "5.00 KiB"}
+	ValidateListOutput(svm, stdout, expectedObjects, expectedSummary)
+}
+
 func (s *ListSuite) Scenario_ListFilesOAuth(svm *ScenarioVariationManager) {
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
 
@@ -263,7 +315,7 @@ func (s *ListSuite) Scenario_ListFilesOAuth(svm *ScenarioVariationManager) {
 		AzCopyCommand{
 			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
-				srcContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
 			},
 			Flags: ListFlags{
 				RunningTally: to.Ptr(true),
