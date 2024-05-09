@@ -3,15 +3,27 @@ package e2etest
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"strings"
 )
 
 // ResourceTracker tracks resources
 type ResourceTracker interface {
 	TrackCreatedResource(manager ResourceManager)
 	TrackCreatedAccount(account AccountResourceManager)
+}
+
+func TrackResourceCreation(a Asserter, rm any) {
+	if t, ok := a.(ResourceTracker); ok {
+		if arm, ok := rm.(AccountResourceManager); ok {
+			t.TrackCreatedAccount(arm)
+		} else if resMan, ok := rm.(ResourceManager); ok {
+			t.TrackCreatedResource(resMan)
+		}
+	}
 }
 
 func CreateResource[T ResourceManager](a Asserter, base ResourceManager, def MatchedResourceDefinition[T]) T {
@@ -42,6 +54,10 @@ func CreateResource[T ResourceManager](a Asserter, base ResourceManager, def Mat
 
 		cmd.ELocationLevel.Object(): func(a Asserter, manager ResourceManager, definition ResourceDefinition) {
 			objDef := definition.(ResourceDefinitionObject)
+
+			if objDef.Body == nil {
+				objDef.Body = NewZeroObjectContentContainer(0)
+			}
 
 			manager.(ObjectResourceManager).Create(a, objDef.Body, objDef.ObjectProperties)
 		},
@@ -159,7 +175,6 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Page blob access tier", vProps.BlobProperties.PageBlobAccessTier, oProps.BlobProperties.PageBlobAccessTier)
 			case common.ELocation.File():
 				ValidatePropertyPtr(a, "Attributes", vProps.FileProperties.FileAttributes, oProps.FileProperties.FileAttributes)
-				ValidatePropertyPtr(a, "Change time", vProps.FileProperties.FileChangeTime, oProps.FileProperties.FileChangeTime)
 				ValidatePropertyPtr(a, "Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
 				ValidatePropertyPtr(a, "Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
@@ -171,4 +186,37 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			}
 		},
 	})
+}
+
+type AzCopyOutputKey struct {
+	Path       string
+	VersionId  string
+	SnapshotId string
+}
+
+func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject, expectedSummary *cmd.AzCopyListSummary) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	listStdout, ok := stdout.(*AzCopyParsedListStdout)
+	a.AssertNow("stdout must be AzCopyParsedListStdout", Equal{}, ok, true)
+
+	a.AssertNow("stdout and expected objects must not be null", Not{IsNil{}}, a, stdout, expectedObjects)
+	a.Assert("map of objects must be equivalent in size", Equal{}, len(expectedObjects), len(listStdout.Items))
+	a.Assert("map of objects must match", MapContains[AzCopyOutputKey, cmd.AzCopyListObject]{TargetMap: expectedObjects}, listStdout.Items)
+	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
+}
+
+func ValidateErrorOutput(a Asserter, stdout AzCopyStdout, errorMsg string) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	for _, line := range stdout.RawStdout() {
+		if strings.Contains(line, errorMsg) {
+			return
+		}
+	}
+	fmt.Println(stdout.String())
+	a.Error("expected error message not found in azcopy output")
 }

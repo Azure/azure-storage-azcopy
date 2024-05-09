@@ -23,8 +23,12 @@ package cmd
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"strconv"
 	"strings"
 	"time"
@@ -37,7 +41,8 @@ import (
 
 type rawListCmdArgs struct {
 	// obtained from argument
-	sourcePath string
+	src      string
+	location string
 
 	Properties      string
 	MachineReadable bool
@@ -80,15 +85,26 @@ func validProperties() []validProperty {
 		contentType, contentEncoding, contentMD5, leaseState, leaseDuration, leaseStatus, archiveStatus}
 }
 
-func (raw *rawListCmdArgs) parseProperties(rawProperties string) []validProperty {
+// validPropertiesString returns an array of valid properties in string array.
+func validPropertiesString() []string {
+	var propertiesArray []string
+	for _, prop := range validProperties() {
+		propertiesArray = append(propertiesArray, string(prop))
+	}
+	return propertiesArray
+}
+
+func (raw rawListCmdArgs) parseProperties() []validProperty {
 	parsedProperties := make([]validProperty, 0)
-	listProperties := strings.Split(rawProperties, ";")
-	for _, p := range listProperties {
-		for _, vp := range validProperties() {
-			// check for empty string and also ignore the case
-			if len(p) != 0 && strings.EqualFold(string(vp), p) {
-				parsedProperties = append(parsedProperties, vp)
-				break
+	if raw.Properties != "" {
+		listProperties := strings.Split(raw.Properties, ";")
+		for _, p := range listProperties {
+			for _, vp := range validProperties() {
+				// check for empty string and also ignore the case
+				if len(p) != 0 && strings.EqualFold(string(vp), p) {
+					parsedProperties = append(parsedProperties, vp)
+					break
+				}
 			}
 		}
 	}
@@ -99,24 +115,29 @@ func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
-	location := InferArgumentLocation(raw.sourcePath)
-	// Only support listing for Azure locations
-	if location != location.Blob() && location != location.File() && location != location.BlobFS() {
-		return cooked, errors.New("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
-	}
-	cooked.sourcePath = raw.sourcePath
-	cooked.MachineReadable = raw.MachineReadable
-	cooked.RunningTally = raw.RunningTally
-	cooked.MegaUnits = raw.MegaUnits
-	cooked.location = location
-	err := cooked.trailingDot.Parse(raw.trailingDot)
+	var err error
+	cooked.location, err = ValidateArgumentLocation(raw.src, raw.location)
 	if err != nil {
 		return cooked, err
 	}
-
-	if raw.Properties != "" {
-		cooked.properties = raw.parseProperties(raw.Properties)
+	// Only support listing for Azure locations
+	switch cooked.location {
+	case common.ELocation.Blob():
+	case common.ELocation.File():
+	case common.ELocation.BlobFS():
+		break
+	default:
+		return cooked, fmt.Errorf("azcopy only supports Azure resources for listing i.e. Blob, File, BlobFS")
 	}
+	cooked.sourcePath = raw.src
+	cooked.MachineReadable = raw.MachineReadable
+	cooked.RunningTally = raw.RunningTally
+	cooked.MegaUnits = raw.MegaUnits
+	err = cooked.trailingDot.Parse(raw.trailingDot)
+	if err != nil {
+		return cooked, err
+	}
+	cooked.properties = raw.parseProperties()
 
 	return cooked, nil
 }
@@ -150,10 +171,10 @@ func init() {
 
 			// If no argument is passed then it is not valid
 			// lsc expects the container path / virtual directory
-			if len(args) == 0 || len(args) > 2 {
+			if len(args) != 1 {
 				return errors.New("this command only requires container destination")
 			}
-			raw.sourcePath = args[0]
+			raw.src = args[0]
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -162,7 +183,7 @@ func init() {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 				return
 			}
-			err = cooked.HandleListContainerCommand()
+			err = cooked.handleListContainerCommand()
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -171,73 +192,42 @@ func init() {
 		},
 	}
 
-	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "Lists file sizes in bytes.")
-	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "Counts the total number of files and their sizes.")
-	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024.")
-	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "delimiter (;) separated values of properties required in list output.")
-	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. "+
+  listContainerCmd.PersistentFlags().StringVar(&raw.location, "location", "", "Optionally specifies the location. For Example: Blob, File, BlobFS")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "False by default. Lists file sizes in bytes.")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "False by default. Counts the total number of files and their sizes.")
+	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "False by default. Displays units in orders of 1000, not 1024.")
+	listContainerCmd.PersistentFlags().StringVar(&raw.Properties, "properties", "", "Properties to be displayed in list output. "+
+		"Possible properties include: "+strings.Join(validPropertiesString(), ", ")+". "+
+		"Delimiter (;) should be used to separate multiple values of properties (i.e. 'LastModifiedTime;VersionId;BlobType').")
+	listContainerCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
 		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	rootCmd.AddCommand(listContainerCmd)
 }
 
-func (cooked cookedListCmdArgs) processProperties(object StoredObject) string {
-	builder := strings.Builder{}
-	for _, property := range cooked.properties {
-		propertyStr := string(property)
-		switch property {
-		case lastModifiedTime:
-			builder.WriteString(propertyStr + ": " + object.lastModifiedTime.String() + "; ")
-		case versionId:
-			builder.WriteString(propertyStr + ": " + object.blobVersionID + "; ")
-		case blobType:
-			builder.WriteString(propertyStr + ": " + string(object.blobType) + "; ")
-		case blobAccessTier:
-			builder.WriteString(propertyStr + ": " + string(object.blobAccessTier) + "; ")
-		case contentType:
-			builder.WriteString(propertyStr + ": " + object.contentType + "; ")
-		case contentEncoding:
-			builder.WriteString(propertyStr + ": " + object.contentEncoding + "; ")
-		case contentMD5:
-			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(object.md5) + "; ")
-		case leaseState:
-			builder.WriteString(propertyStr + ": " + string(object.leaseState) + "; ")
-		case leaseStatus:
-			builder.WriteString(propertyStr + ": " + string(object.leaseStatus) + "; ")
-		case leaseDuration:
-			builder.WriteString(propertyStr + ": " + string(object.leaseDuration) + "; ")
-		case archiveStatus:
-			builder.WriteString(propertyStr + ": " + string(object.archiveStatus) + "; ")
-		}
-	}
-	return builder.String()
-}
-
-// HandleListContainerCommand handles the list container command
-func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
-	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
+// handleListContainerCommand handles the list container command
+func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	credentialInfo := common.CredentialInfo{}
+	var credentialInfo common.CredentialInfo
 
 	source, err := SplitResourceString(cooked.sourcePath, cooked.location)
 	if err != nil {
 		return err
 	}
 
-	if err := common.VerifyIsURLResolvable(raw.sourcePath); cooked.location.IsRemote() && err != nil {
+	if err := common.VerifyIsURLResolvable(raw.src); cooked.location.IsRemote() && err != nil {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
 	level, err := DetermineLocationLevel(source.Value, cooked.location, true)
-
 	if err != nil {
 		return err
 	}
 
 	// isSource is rather misnomer for canBePublic. We can list public containers, and hence isSource=true
-	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source.Value, source.SAS, true, common.CpkOptions{}); err != nil {
+	if credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cooked.location, source, true, common.CpkOptions{}); err != nil {
 		return fmt.Errorf("failed to obtain credential info: %s", err.Error())
 	} else if cooked.location == cooked.location.File() && source.SAS == "" {
 		return errors.New("azure files requires a SAS token for authentication")
@@ -251,10 +241,9 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	// check if user wants to get version id
-	shouldGetVersionId := containsProperty(cooked.properties, versionId)
+	getVersionId := containsProperty(cooked.properties, versionId)
 
-	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, shouldGetVersionId)
-
+	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, getVersionId)
 	if err != nil {
 		return fmt.Errorf("failed to initialize traverser: %s", err.Error())
 	}
@@ -269,26 +258,22 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	objectVer := make(map[string]versionIdObject)
 
 	processor := func(object StoredObject) error {
-		path := object.relativePath
-		if object.entityType == common.EEntityType.Folder() {
-			path += "/" // TODO: reviewer: same questions as for jobs status: OK to hard code direction of slash? OK to use trailing slash to distinguish dirs from files?
-		}
+		lo := cooked.newListObject(object, level)
+		glcm.Output(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(lo)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return lo.String()
+			}
+		}, common.EOutputMessageType.ListObject())
 
-		properties := "; " + cooked.processProperties(object)
-		objectSummary := path + properties + " Content Length: "
-
-		if level == level.Service() {
-			objectSummary = object.ContainerName + "/" + objectSummary
-		}
-
-		if cooked.MachineReadable {
-			objectSummary += strconv.Itoa(int(object.size))
-		} else {
-			objectSummary += byteSizeToString(object.size)
-		}
-
+		// ensure that versioned objects don't get counted multiple times in the tally
+		// 1. only include the size of the latest version of the object in the sizeCount
+		// 2. only include the object once in the fileCount
 		if cooked.RunningTally {
-			if shouldGetVersionId {
+			if getVersionId {
 				// get new version id object
 				updatedVersionId := versionIdObject{
 					versionId: object.blobVersionID,
@@ -319,10 +304,6 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 			fileCount++
 			sizeCount += object.size
 		}
-
-		glcm.Info(objectSummary)
-
-		// No need to strip away from the name as the traverser has already done so.
 		return nil
 	}
 
@@ -333,17 +314,122 @@ func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	}
 
 	if cooked.RunningTally {
-		glcm.Info("")
-		glcm.Info("File count: " + strconv.Itoa(int(fileCount)))
-
-		if cooked.MachineReadable {
-			glcm.Info("Total file size: " + strconv.Itoa(int(sizeCount)))
-		} else {
-			glcm.Info("Total file size: " + byteSizeToString(sizeCount))
-		}
+		ls := cooked.newListSummary(fileCount, sizeCount)
+		glcm.Output(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(ls)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return ls.String()
+			}
+		}, common.EOutputMessageType.ListSummary())
 	}
 
 	return nil
+}
+
+type AzCopyListObject struct {
+	Path string `json:"Path"`
+
+	LastModifiedTime *time.Time         `json:"LastModifiedTime,omitempty"`
+	VersionId        string             `json:"VersionId,omitempty"`
+	BlobType         blob.BlobType      `json:"BlobType,omitempty"`
+	BlobAccessTier   blob.AccessTier    `json:"BlobAccessTier,omitempty"`
+	ContentType      string             `json:"ContentType,omitempty"`
+	ContentEncoding  string             `json:"ContentEncoding,omitempty"`
+	ContentMD5       []byte             `json:"ContentMD5,omitempty"`
+	LeaseState       lease.StateType    `json:"LeaseState,omitempty"`
+	LeaseStatus      lease.StatusType   `json:"LeaseStatus,omitempty"`
+	LeaseDuration    lease.DurationType `json:"LeaseDuration,omitempty"`
+	ArchiveStatus    blob.ArchiveStatus `json:"ArchiveStatus,omitempty"`
+
+	ContentLength string `json:"ContentLength"` // This is a string to support machine-readable
+
+	StringEncoding string `json:"-"` // this is stored as part of the list object to avoid looping over the properties array twice
+}
+
+func (l AzCopyListObject) String() string {
+	return l.StringEncoding
+}
+
+func (cooked cookedListCmdArgs) newListObject(object StoredObject, level LocationLevel) AzCopyListObject {
+	path := getPath(object.ContainerName, object.relativePath, level, object.entityType)
+	contentLength := sizeToString(object.size, cooked.MachineReadable)
+
+	lo := AzCopyListObject{
+		Path:          path,
+		ContentLength: contentLength,
+	}
+
+	builder := strings.Builder{}
+	builder.WriteString(lo.Path + "; ")
+
+	for _, property := range cooked.properties {
+		propertyStr := string(property)
+		switch property {
+		case lastModifiedTime:
+			lo.LastModifiedTime = to.Ptr(object.lastModifiedTime)
+			builder.WriteString(propertyStr + ": " + lo.LastModifiedTime.String() + "; ")
+		case versionId:
+			lo.VersionId = object.blobVersionID
+			builder.WriteString(propertyStr + ": " + lo.VersionId + "; ")
+		case blobType:
+			lo.BlobType = object.blobType
+			builder.WriteString(propertyStr + ": " + string(lo.BlobType) + "; ")
+		case blobAccessTier:
+			lo.BlobAccessTier = object.blobAccessTier
+			builder.WriteString(propertyStr + ": " + string(lo.BlobAccessTier) + "; ")
+		case contentType:
+			lo.ContentType = object.contentType
+			builder.WriteString(propertyStr + ": " + lo.ContentType + "; ")
+		case contentEncoding:
+			lo.ContentEncoding = object.contentEncoding
+			builder.WriteString(propertyStr + ": " + lo.ContentEncoding + "; ")
+		case contentMD5:
+			lo.ContentMD5 = object.md5
+			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(lo.ContentMD5) + "; ")
+		case leaseState:
+			lo.LeaseState = object.leaseState
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseState) + "; ")
+		case leaseStatus:
+			lo.LeaseStatus = object.leaseStatus
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseStatus) + "; ")
+		case leaseDuration:
+			lo.LeaseDuration = object.leaseDuration
+			builder.WriteString(propertyStr + ": " + string(lo.LeaseDuration) + "; ")
+		case archiveStatus:
+			lo.ArchiveStatus = object.archiveStatus
+			builder.WriteString(propertyStr + ": " + string(lo.ArchiveStatus) + "; ")
+		}
+	}
+	builder.WriteString("Content Length: " + lo.ContentLength)
+	lo.StringEncoding = builder.String()
+
+	return lo
+}
+
+type AzCopyListSummary struct {
+	FileCount     string `json:"FileCount"`
+	TotalFileSize string `json:"TotalFileSize"`
+
+	StringEncoding string `json:"-"`
+}
+
+func (l AzCopyListSummary) String() string {
+	return l.StringEncoding
+}
+
+func (cooked cookedListCmdArgs) newListSummary(fileCount, totalFileSize int64) AzCopyListSummary {
+	fc := strconv.Itoa(int(fileCount))
+	tfs := sizeToString(totalFileSize, cooked.MachineReadable)
+
+	output := "\nFile count: " + fc + "\nTotal file size: " + tfs
+	return AzCopyListSummary{
+		FileCount:      fc,
+		TotalFileSize:  tfs,
+		StringEncoding: output,
+	}
 }
 
 var megaSize = []string{
@@ -382,4 +468,20 @@ func byteSizeToString(size int64) string {
 	}
 
 	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
+}
+
+func getPath(containerName, relativePath string, level LocationLevel, entityType common.EntityType) string {
+	builder := strings.Builder{}
+	if level == level.Service() {
+		builder.WriteString(containerName + "/")
+	}
+	builder.WriteString(relativePath)
+	if entityType == common.EEntityType.Folder() {
+		builder.WriteString("/")
+	}
+	return builder.String()
+}
+
+func sizeToString(size int64, machineReadable bool) string {
+	return common.Iff(machineReadable, strconv.Itoa(int(size)), byteSizeToString(size))
 }

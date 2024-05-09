@@ -57,9 +57,10 @@ func (t *testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 			AllowTrailingDot: true,
 		}
 	}
+
 	client, _ := common.GetServiceClientForLocation(
 		t.fromTo.From(),
-		t.info.Source,
+		common.ResourceString{Value: t.info.Source},
 		t.S2SSourceCredentialInfo().CredentialType,
 		t.S2SSourceCredentialInfo().OAuthTokenInfo.TokenCredential,
 		&options,
@@ -77,9 +78,10 @@ func (t *testJobPartTransferManager) DstServiceClient() *common.ServiceClient {
 			AllowSourceTrailingDot: true,
 		}
 	}
+
 	client, _ := common.GetServiceClientForLocation(
 		t.fromTo.To(),
-		t.info.Destination,
+		common.ResourceString{Value: t.info.Destination},
 		t.CredentialInfo().CredentialType,
 		t.CredentialInfo().OAuthTokenInfo.TokenCredential,
 		&options,

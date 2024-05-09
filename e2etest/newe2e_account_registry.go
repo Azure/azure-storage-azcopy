@@ -10,9 +10,7 @@ import (
 // AccountRegistry is a set of accounts that are intended to be initialized when the tests start running.
 // Suites and tests should not add to this pool.
 // todo: long-term, support flexible static configuration of accounts.
-var AccountRegistry = map[string]AccountResourceManager{
-	//PrimaryStandardAcct: &DummyAccountResourceManager{},
-} // For re-using accounts across testing
+var AccountRegistry = map[string]AccountResourceManager{} // For re-using accounts across testing
 
 func GetAccount(a Asserter, AccountName string) AccountResourceManager {
 	targetAccount, ok := AccountRegistry[AccountName]
@@ -57,7 +55,7 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 	}
 
 	accountARMDefinition := ARMStorageAccountCreateParams{
-		Location: "West US", // todo configurable
+		Location: "West US 2", // todo configurable
 	}
 
 	switch accountType { // https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal#storage-account-type-parameters

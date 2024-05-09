@@ -221,7 +221,8 @@ func (b *BlobContainerResourceManager) ListObjects(a Asserter, prefix string, re
 			},
 			Metadata: v.Metadata,
 			BlobProperties: BlobProperties{
-				Type: v.Properties.BlobType,
+				VersionId: v.VersionID,
+				Type:      v.Properties.BlobType,
 				Tags: func() map[string]string {
 					out := make(map[string]string)
 
@@ -312,8 +313,8 @@ func (b *BlobContainerResourceManager) CreateWithOptions(a Asserter, options *Bl
 	}
 
 	a.NoError("create container", err)
-	if rt, ok := a.(ResourceTracker); ok && created {
-		rt.TrackCreatedResource(b)
+	if created {
+		TrackResourceCreation(a, b)
 	}
 }
 
@@ -585,9 +586,7 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		a.NoError("Upload append blob", msu.UploadContents(body))
 	}
 
-	if rt, ok := a.(ResourceTracker); ok {
-		rt.TrackCreatedResource(b)
-	}
+	TrackResourceCreation(a, b)
 }
 
 func (b *BlobObjectResourceManager) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
@@ -628,7 +627,8 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 		},
 		Metadata: resp.Metadata,
 		BlobProperties: BlobProperties{
-			Type: resp.BlobType,
+			VersionId: resp.VersionID,
+			Type:      resp.BlobType,
 			Tags: func() map[string]string {
 				out := make(map[string]string)
 				resp, err := b.internalClient.GetTags(ctx, nil)

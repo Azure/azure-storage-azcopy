@@ -96,16 +96,19 @@ func TestCheckAuthSafeForTarget(t *testing.T) {
 }
 
 func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthType(t *testing.T) {
-	common.AzcopyJobPlanFolder = os.TempDir()	
+	common.AzcopyJobPlanFolder = os.TempDir()
 	a := assert.New(t)
 	mockGetCredTypeFromEnvVar := func() common.CredentialType {
 		return common.ECredentialType.OAuthToken() // force it to OAuth, which is the case we want to test
 	}
 
+	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
+	a.NoError(err)
+
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
-	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), "http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
+	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
 	a.NotNil(err)
 	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
 }
@@ -116,10 +119,13 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
 		return common.ECredentialType.MDOAuthToken() // force it to OAuth, which is the case we want to test
 	}
 
+	res, err := SplitResourceString("http://notblob.example.com", common.ELocation.Blob())
+	a.NoError(err)
+
 	// Call our core cred type getter function, in a way that will fail the safety check, and assert
 	// that it really does fail.
 	// This checks that our safety check is hooked into the main logic
-	_, _, err := doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), "http://notblob.example.com", "", true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
+	_, _, err = doGetCredentialTypeForLocation(context.Background(), common.ELocation.Blob(), res, true, mockGetCredTypeFromEnvVar, common.CpkOptions{})
 	a.NotNil(err)
 	a.True(strings.Contains(err.Error(), "If this URL is in fact an Azure service, you can enable Azure authentication to notblob.example.com."))
 }
@@ -130,11 +136,11 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
  */
 func TestIsPublic(t *testing.T) {
 	a := assert.New(t)
-	ctx, _ := context.WithTimeout(context.TODO(), 5 * time.Minute)
+	ctx, _ := context.WithTimeout(context.TODO(), 5*time.Minute)
 	bsc := getBlobServiceClient()
 	ctr, _ := getContainerClient(a, bsc)
 	defer ctr.Delete(ctx, nil)
-	
+
 	publicAccess := container.PublicAccessTypeContainer
 
 	// Create a public container

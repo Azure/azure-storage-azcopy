@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
@@ -32,7 +33,7 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 			val = val.Elem()
 		}
 
-		if !val.IsValid() || val.IsZero() {
+		if !val.IsValid() {
 			continue
 		}
 
@@ -41,6 +42,7 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 
 		for i := 0; i < numField; i++ {
 			key, ok := t.Field(i).Tag.Lookup(tagName)
+
 			if ok {
 				field := val.Field(i)
 				// break the key down
@@ -181,6 +183,7 @@ type GlobalFlags struct {
 	TrustedSuffixes  []string `flag:"trusted-microsoft-suffixes"`
 	SkipVersionCheck *bool    `flag:"skip-version-check"`
 
+	// TODO : Flags default seems to be broken; WI#26954065
 	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
 	LogLevel    *common.LogLevel        `flag:"log-level,default:DEBUG"`
 	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
@@ -190,8 +193,12 @@ type GlobalFlags struct {
 
 	// TODO: handle prompting and input; WI#26475441
 	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
-	//AwaitContinue   *bool `flag:"await-continue"`
+	AwaitContinue *bool `flag:"await-continue,defaultfunc:DefaultAwaitContinue"`
 	//AwaitOpen       *bool `flag:"await-open"`
+}
+
+func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter) string {
+	return common.Iff(isLaunchedByDebugger, "true", "false")
 }
 
 type CommonFilterFlags struct {
@@ -273,7 +280,7 @@ type CopyFlags struct {
 	ExcludeBlobType *common.BlobType      `flag:"exclude-blob-type"`
 	BlobType        *common.BlobType      `flag:"blob-type"`
 	BlockBlobTier   *common.BlockBlobTier `flag:"block-blob-tier"`
-	PageBlobTier    *common.BlockBlobTier `flag:"page-blob-tier"`
+	PageBlobTier    *common.PageBlobTier  `flag:"page-blob-tier"`
 	Metadata        common.Metadata       `flag:"metadata,serializer:SerializeMetadata"`
 
 	ContentType        *string `flag:"content-type"`
@@ -394,6 +401,16 @@ func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsser
 	CopyFlags{}.SerializeListingFile(in, scenarioAsserter)
 }
 
+type ListFlags struct {
+	GlobalFlags
+
+	MachineReadable *bool                     `flag:"machine-readable"`
+	RunningTally    *bool                     `flag:"running-tally"`
+	MegaUnits       *bool                     `flag:"mega-units"`
+	Properties      *string                   `flag:"properties"`
+	TrailingDot     *common.TrailingDotOption `flag:"trailing-dot"`
+}
+
 type WindowsAttribute uint32
 
 const (
@@ -440,4 +457,21 @@ var WindowsAttributesByName = map[string]WindowsAttribute{
 	"O": WindowsAttributeOfflineFile,
 	"I": WindowsAttributeNonIndexedFile,
 	"E": WindowsAttributeEncryptedFile,
+}
+
+func ParseNTFSAttributes(attr string) (WindowsAttribute, error) {
+	out := WindowsAttribute(0)
+
+	for _, v := range []rune(attr) {
+		attrName := string(v)
+		attr, ok := WindowsAttributesByName[attrName]
+
+		if !ok {
+			return 0, errors.New("could not parse attribute character " + attrName)
+		}
+
+		out |= attr
+	}
+
+	return out, nil
 }

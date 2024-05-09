@@ -54,8 +54,7 @@ func (s *FileServiceResourceManager) DefaultAuthType() ExplicitCredentialTypes {
 }
 
 func (s *FileServiceResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
-	// OAuth isn't supported *quite yet* in azcopy!
-	return EExplicitCredentialType.With(EExplicitCredentialType.SASToken())
+	return EExplicitCredentialType.With(EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth())
 }
 
 func (s *FileServiceResourceManager) WithSpecificAuthType(cred ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
@@ -226,8 +225,8 @@ func (s *FileShareResourceManager) CreateWithOptions(a Asserter, options *FileSh
 	}
 
 	a.NoError("Create container", err)
-	if rt, ok := a.(ResourceTracker); ok && created {
-		rt.TrackCreatedResource(s)
+	if created {
+		TrackResourceCreation(a, s)
 	}
 }
 
@@ -284,7 +283,6 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 					Metadata:   resp.Metadata,
 					FileProperties: FileProperties{
 						FileAttributes:    v.Attributes,
-						FileChangeTime:    v.Properties.ChangeTime,
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
@@ -320,7 +318,6 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 					Metadata: resp.Metadata,
 					FileProperties: FileProperties{
 						FileAttributes:    v.Attributes,
-						FileChangeTime:    v.Properties.ChangeTime,
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
@@ -479,9 +476,7 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 		a.Error("File Objects only support Files and Folders")
 	}
 
-	if rt, ok := a.(ResourceTracker); ok {
-		rt.TrackCreatedResource(f)
-	}
+	TrackResourceCreation(a, f)
 }
 
 func (f *FileObjectResourceManager) Delete(a Asserter) {
@@ -527,7 +522,6 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			Metadata:   resp.Metadata,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
-				FileChangeTime:    resp.FileChangeTime,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
@@ -558,7 +552,6 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 			Metadata: resp.Metadata,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
-				FileChangeTime:    resp.FileChangeTime,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,

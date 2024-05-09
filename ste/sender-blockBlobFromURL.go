@@ -72,7 +72,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	 * for blobs of all sizes.
 	 */
 	// Small blobs from all sources will be copied over to destination using PutBlobFromUrl
-	if c.NumChunks() == 1 && adjustedChunkSize <= int64(blockblob.MaxUploadBlobBytes) {
+	if c.NumChunks() == 1 && adjustedChunkSize <= int64(common.MaxPutBlobSize) {
 		/*
 		 * siminsavani: FYI: For GCP, if the blob is the entirety of the file, GCP still returns
 		 * invalid error from service due to PutBlockFromUrl.
