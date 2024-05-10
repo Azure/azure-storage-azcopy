@@ -24,8 +24,8 @@ jobs:
       - task: PipAuthenticate@1
 
       - script: |
-          pip install pmc-cli
-          displayName: 'Install pmc-cli'
+          pmc --version
+          displayName: 'Check pmc version'
   - job: Build
     timeoutInMinutes: 360
     strategy:
