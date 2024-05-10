@@ -23,20 +23,8 @@ jobs:
       - checkout: none
       - task: PipAuthenticate@1
         inputs:
-          artifactFeeds: 'AzCopy-NextGen/AzCopyFeed'
+          artifactFeeds: 'BlobFuse/Blobfuse'
         displayName: 'Connect to PMC artifact'
-      
-      - script: |
-        sudo apt-get install python3.6
-      displayName: 'Install python'
-
-      - script: |
-        python -m pip install --upgrade pip
-      displayName: 'Upgrade pip'
-
-      - script: |
-        pip install keyring artifacts-keyring
-      displayName: 'Install keyring'
  
       - script: |
           pip install -vvv pmc-cli
