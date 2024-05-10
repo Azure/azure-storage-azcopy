@@ -22,6 +22,7 @@ var LocalHashStorageMode = EHashStorageMode.Default()
 var LocalHashDir = ""
 
 var hashDataFailureLogOnce = &sync.Once{}
+
 func LogHashStorageFailure() {
 	hashDataFailureLogOnce.Do(func() {
 		lcm.Info("One or more hash storage operations (read/write) have failed. Check the scanning log for details.")
@@ -29,12 +30,13 @@ func LogHashStorageFailure() {
 }
 
 type HashStorageMode uint8
+
 var EHashStorageMode = HashStorageMode(0)
 
 func (HashStorageMode) HiddenFiles() HashStorageMode { return 0 }
 
 func (e *HashStorageMode) Default() HashStorageMode {
-	if defaulter, ok := any(e).(interface{osDefault() HashStorageMode}); ok { // allow specific OSes to override the default functionality
+	if defaulter, ok := any(e).(interface{ osDefault() HashStorageMode }); ok { // allow specific OSes to override the default functionality
 		return defaulter.osDefault()
 	}
 
