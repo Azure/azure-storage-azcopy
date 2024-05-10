@@ -23,7 +23,7 @@ jobs:
       - checkout: none
       - task: PipAuthenticate@1
         inputs:
-          artifactFeeds: 'BlobFuse/Blobfuse'
+          artifactFeeds: 'azstorage/DevExGlobalFeed'
         displayName: 'Connect to PMC artifact'
  
       - script: |
