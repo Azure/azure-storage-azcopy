@@ -24,7 +24,7 @@ jobs:
       - task: PipAuthenticate@1
         inputs:
           artifactFeeds: 'AzCopy-NextGen/AzCopyFeed'
-          displayName: 'Connect to PMC artifact'
+        displayName: 'Connect to PMC artifact'
  
       - script: |
           pip install pmc-cli
