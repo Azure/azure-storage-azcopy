@@ -15,7 +15,17 @@ pr:
       - main
 
 jobs:
+  - job: PMC Test
+    timeoutInMinutes: 360
+    pool:
+      vmImage: 'ubuntu-20.04'
+    steps:
+      - checkout: none
+      - task: PipAuthenticate@1
 
+      - script: |
+          pip install pmc-cli
+          displayName: 'Install pmc-cli'
   - job: Build
     timeoutInMinutes: 360
     strategy:
