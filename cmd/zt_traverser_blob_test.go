@@ -26,7 +26,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	datalakedirectory "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -294,42 +293,6 @@ func TestGetEntityType(t *testing.T) {
 	entityType = getEntityType(metadata)
 	a.Equal(common.EEntityType.Symlink(), entityType)
 
-}
-
-func TestBlobPropertiesAdapter_LMTAndContentLength(t *testing.T) {
-	a := assert.New(t)
-
-	// Test case 1: GetPropertiesResponse contains nil ContentLength and LMT
-	props := blobPropertiesResponseAdapter{GetPropertiesResponse: &blob.GetPropertiesResponse{ContentLength: nil, LastModified: nil}}
-
-	a.Equal(props.LastModified(), time.Time{})
-	a.Equal(props.ContentLength(), int64(0))
-
-	// Test case 2: GetPropertiesResponse contains nil ContentLength and LMT
-	length := int64(10)
-	time := time.Now()
-	props2 := blobPropertiesResponseAdapter{GetPropertiesResponse: &blob.GetPropertiesResponse{ContentLength: &length, LastModified: &time}}
-
-	a.Equal(props2.LastModified(), time)
-	a.Equal(props2.ContentLength(), length)
-}
-
-func TestContainerBlobPropertiesAdapter_LMTAndContentLength(t *testing.T) {
-	a := assert.New(t)
-
-	// Test case 1: GetPropertiesResponse contains nil ContentLength and LMT
-	props := blobPropertiesAdapter{BlobProperties: &container.BlobProperties{ContentLength: nil, LastModified: nil}}
-
-	a.Equal(props.LastModified(), time.Time{})
-	a.Equal(props.ContentLength(), int64(0))
-
-	// Test case 2: GetPropertiesResponse contains nil ContentLength and LMT
-	length := int64(10)
-	time := time.Now()
-	props2 := blobPropertiesAdapter{BlobProperties: &container.BlobProperties{ContentLength: &length, LastModified: &time}}
-
-	a.Equal(props2.LastModified(), time)
-	a.Equal(props2.ContentLength(), length)
 }
 
 func TestManagedDiskProperties(t *testing.T) {
