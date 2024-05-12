@@ -138,7 +138,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			objDef := definition.(ResourceDefinitionObject)
 
 			if !objDef.ShouldExist() {
-				a.AssertNow("object must not exist", Equal{}, objMan.Exists(), false)
+				a.Assert(fmt.Sprintf("object %s must not exist", objMan.ObjectName()), Equal{}, objMan.Exists(), false)
 				return
 			}
 

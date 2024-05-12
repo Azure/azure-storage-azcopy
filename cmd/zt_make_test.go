@@ -158,7 +158,7 @@ func TestMakeFileShareQuota(t *testing.T) {
 
 	args := rawMakeCmdArgs{
 		resourceToCreate: scSAS.String(),
-		quota: 5,
+		quota:            5,
 	}
 
 	runMakeAndVerify(args, func(err error) {
