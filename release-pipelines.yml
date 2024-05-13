@@ -70,8 +70,15 @@ stages:
               go vet 
             displayName: 'Golang Vet - Linux'
             workingDirectory: $(System.DefaultWorkingDirectory)
+              echo 'Running GO Vet'
+              go vet 
+            displayName: 'Golang Vet - Linux'
+            workingDirectory: $(System.DefaultWorkingDirectory)
 
           - script: |
+              GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+            displayName: 'Generate Linux AMD64'
+            condition: eq(variables.type, 'linux')
               GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
             displayName: 'Generate Linux AMD64'
             condition: eq(variables.type, 'linux')
@@ -80,8 +87,14 @@ stages:
               GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
             displayName: 'Generate Linux AMD64 SE Integration'
             condition: eq(variables.type, 'linux')
+              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+            displayName: 'Generate Linux AMD64 SE Integration'
+            condition: eq(variables.type, 'linux')
 
           - script: |
+              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+            displayName: 'Generate Linux ARM64'
+            condition: eq(variables.type, 'linux')
               GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
             displayName: 'Generate Linux ARM64'
             condition: eq(variables.type, 'linux')
@@ -94,8 +107,22 @@ stages:
               GOARCH: amd64
               GOOS: windows
               CGO_ENABLED: 0
+              go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+            displayName: 'Generate Windows AMD64'
+            condition: eq(variables.type, 'windows')
+            env:
+              GOARCH: amd64
+              GOOS: windows
+              CGO_ENABLED: 0
 
           - script: |
+              go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+            displayName: 'Generate Windows i386'
+            condition: eq(variables.type, 'windows')
+            env:
+              GOARCH: 386
+              GOOS: windows
+              CGO_ENABLED: 0
               go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
             displayName: 'Generate Windows i386'
             condition: eq(variables.type, 'windows')
@@ -113,13 +140,27 @@ stages:
               GOARM: 7
               GOOS: windows
               CGO_ENABLED: 0
+              go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
+            displayName: 'Generate Windows ARM'
+            condition: eq(variables.type, 'windows')
+            env:
+              GOARCH: arm
+              GOARM: 7
+              GOOS: windows
+              CGO_ENABLED: 0
 
           - script: |
               cp NOTICE.txt $(Build.ArtifactStagingDirectory)
             displayName: 'Copy NOTICE.txt'
             condition: eq(variables.type, 'linux')
+              cp NOTICE.txt $(Build.ArtifactStagingDirectory)
+            displayName: 'Copy NOTICE.txt'
+            condition: eq(variables.type, 'linux')
 
           - script: |
+              CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+            displayName: 'Generate MacOS Build with AMD64'
+            condition: eq(variables.type, 'mac-os')
               CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
             displayName: 'Generate MacOS Build with AMD64'
             condition: eq(variables.type, 'mac-os')
@@ -137,6 +178,8 @@ stages:
             condition: eq(variables.type, 'mac-os')
 
           - task: PublishBuildArtifacts@1
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
             displayName: 'Publish Artifacts'
             condition: succeededOrFailed()
         
