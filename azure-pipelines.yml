@@ -15,24 +15,6 @@ pr:
       - main
 
 jobs:
-  - job: PMC_Test
-    timeoutInMinutes: 360
-    pool:
-      vmImage: 'ubuntu-20.04'
-    steps:
-      - checkout: none
-      - task: PipAuthenticate@1
-        inputs:
-          artifactFeeds: 'BlobFuse/Blobfuse'
-        displayName: 'Connect to PMC artifact'
- 
-      - script: |
-          pip install -vvv pmc-cli
-        displayName: 'Install pmc-cli'
-
-      - script: |
-          pmc --version
-        displayName: 'Check pmc version'
   - job: Build
     timeoutInMinutes: 360
     strategy:

@@ -31,16 +31,16 @@ jobs:
         displayName: 'Install pmc-cli'
 
       - task: DownloadSecureFile@1
-              name: pmcCertificate
-              displayName: 'Download pmc pem file'
-              inputs:
-                secureFile: 'blobfusebuildvault-blobfuse-release-pmc1-20230911.pem'
+        name: pmcCertificate
+        displayName: 'Download pmc pem file'
+        inputs:
+          secureFile: 'blobfusebuildvault-blobfuse-release-pmc1-20230911.pem'
 
       - task: DownloadSecureFile@1
-              name: settings
-              displayName: 'Download settings.toml file'
-              inputs:
-                secureFile: 'settings.toml'
+        name: settings
+        displayName: 'Download settings.toml file'
+        inputs:
+          secureFile: 'settings.toml'
 
       - script: |
           pmc --version
