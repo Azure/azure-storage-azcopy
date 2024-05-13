@@ -37,7 +37,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var localToFileShareWarnMsg = "AzCopy sync is supported but not fully recommended for Azure Files. AzCopy sync doesn't support differential copies at scale, and some file fidelity might be lost."
+var LocalToFileShareWarnMsg = "AzCopy sync is supported but not fully recommended for Azure Files. AzCopy sync doesn't support differential copies at scale, and some file fidelity might be lost."
 
 type rawSyncCmdArgs struct {
 	src       string
@@ -154,18 +154,17 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
-	// TODO: check if the warn message should be displayed for syncing from file share to local as well.
-	// display a warning message to console and job log file if there is a sync happening from local to file share and vice versa
+	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
 	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
-	if cooked.fromTo == common.EFromTo.LocalFile() || cooked.fromTo == common.EFromTo.FileLocal() {
+	if cooked.fromTo == common.EFromTo.LocalFile() {
 
-		glcm.Warn(localToFileShareWarnMsg)
+		glcm.Warn(LocalToFileShareWarnMsg)
 		if jobsAdmin.JobsAdmin != nil {
-			jobsAdmin.JobsAdmin.LogToJobLog(localToFileShareWarnMsg, common.LogWarning)
+			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
 		}
 		if raw.dryrun {
 			glcm.Dryrun(func(_ common.OutputFormat) string {
-				return fmt.Sprintf("DRYRUN: warn %s", localToFileShareWarnMsg)
+				return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
 			})
 		}
 	}
