@@ -132,6 +132,7 @@ stages:
 
       # cross compile to make sure nothing broke
           - script: |
+<<<<<<< HEAD
               GOARCH=arm64 CGO_ENABLED=1 go build
             displayName: 'Test Cross-compiled MacOS Build with ARM64'
             condition: eq(variables.type, 'mac-os')
@@ -145,6 +146,21 @@ stages:
               scanType: 'Register'
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
+=======
+            GOARCH=arm64 CGO_ENABLED=1 go build
+          displayName: 'Test Cross-compiled MacOS Build with ARM64'
+          condition: eq(variables.type, 'mac-os')
+
+          - task: PublishBuildArtifacts@1
+          displayName: 'Publish Artifacts'
+          condition: succeededOrFailed()
+        
+          - task: ComponentGovernanceComponentDetection@0
+          inputs:
+            scanType: 'Register'
+            verbosity: 'Verbose'
+            alertWarningLevel: 'High'
+>>>>>>> 2044c3bda2e61678e2a7d39d3f3c6d54946c0ee6
  
 # BuildArtifacts end here
 
