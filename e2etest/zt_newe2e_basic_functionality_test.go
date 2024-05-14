@@ -135,7 +135,7 @@ func (s *BasicFunctionalitySuite) Scenario_CapBandwidth_SingleFileUploadDownload
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					GlobalFlags: GlobalFlags{
-						CapMbps: to.Ptr(float64(10)), // very small bandwidth
+						CapMbps: to.Ptr(float64(0.001)), // very small bandwidth
 					},
 					Recursive: pointerTo(true),
 				},
