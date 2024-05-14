@@ -302,9 +302,9 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 
 		switch strings.ToLower(oauthMode) {
-		case "", common.AutologinTypeSPN:
+		case "", common.EAutoLoginType.SPN().String():
 			env = append(env,
-				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.AutologinTypeSPN, oauthMode),
+				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.EAutoLoginType.SPN().String(), oauthMode),
 				"AZCOPY_SPA_APPLICATION_ID="+appId,
 				"AZCOPY_SPA_CLIENT_SECRET="+clientSecret,
 			)
@@ -312,7 +312,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 			if tenId != "" {
 				env = append(env, "AZCOPY_TENANT_ID="+tenId)
 			}
-		case common.AutologinTypeAzCLI:
+		case common.EAutoLoginType.AzCLI():
 			args := []string{
 				"login",
 				"--service-principal",

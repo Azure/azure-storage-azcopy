@@ -16,7 +16,7 @@ type WorkloadIdentitySuite struct{}
 func (s *WorkloadIdentitySuite) Scenario_SingleFileUploadDownloadWorkloadIdentity(svm *ScenarioVariationManager) {
 	// Run only in environments that support and are set up for Workload Identity (ex: Azure Pipeline, Azure Kubernetes Service)
 	if os.Getenv("NEW_E2E_ENVIRONMENT") != "AzurePipeline" {
-		svm.InvalidateScenario()
+		svm.Skip("Workload Identity is only supported in environments specifically set up for it.")
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
@@ -59,7 +59,7 @@ func (s *WorkloadIdentitySuite) Scenario_SingleFileUploadDownloadWorkloadIdentit
 				},
 			},
 			Environment: &AzCopyEnvironment{
-				AutoLoginMode:      pointerTo(common.AutologinTypeWorkload),
+				AutoLoginMode:      pointerTo(common.EAutoLoginType.Workload().String()),
 				InheritEnvironment: true,
 			},
 		})

@@ -74,7 +74,7 @@ func init() {
 	_ = lgCmd.PersistentFlags().MarkHidden("identity")
 	_ = lgCmd.PersistentFlags().MarkHidden("service-principal")
 
-	lgCmd.PersistentFlags().StringVar(&loginCmdArg.loginType, "login-type", common.AutologinTypeDevice, "Default value is DEVICE. Specify the credential type to access Azure Resource, available values SPN, MSI, DEVICE, AZCLI, and PSCRED, WORKLOAD  - sequentially for Service Principal, Managed Service Identity, Device workflow, Azure CLI, Azure PowerShell. or Workload Identity.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.loginType, "login-type", common.EAutoLoginType.Device().String(), "Default value is "+common.EAutoLoginType.Device().String()+". Specify the credential type to access Azure Resource, available values are "+strings.Join(common.ValidAutoLoginTypes(), ", ")+".")
 
 	// Managed Identity flags
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityClientID, "identity-client-id", "", "Client ID of user-assigned identity.")
@@ -120,20 +120,21 @@ func (lca loginCmdArgs) process() error {
 		glcm.Warn("The flags --service-principal and --identity will be deprecated in a future release. Please use --login-type=SPN or --login-type=MSI instead.")
 	}
 	if lca.servicePrincipal {
-		lca.loginType = common.AutologinTypeSPN
+		lca.loginType = common.EAutoLoginType.SPN().String()
 	} else if lca.identity {
-		lca.loginType = common.AutologinTypeMSI
+		lca.loginType = common.EAutoLoginType.MSI().String()
 	} else if lca.servicePrincipal && lca.identity {
 		// This isn't necessary, but stands as a sanity check. It will never be hit.
 		return errors.New("you can only log in with one type of auth at once")
 	}
 	// Any required variables for login type will be validated by the Azure Identity SDK.
+	lca.loginType = strings.ToLower(lca.loginType)
 
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
 
 	switch lca.loginType {
-	case common.AutologinTypeSPN:
+	case common.EAutoLoginType.SPN().String():
 		if lca.certPath != "" {
 			if err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
 				return err
@@ -145,7 +146,7 @@ func (lca loginCmdArgs) process() error {
 			}
 			glcm.Info("SPN Auth via secret succeeded.")
 		}
-	case common.AutologinTypeMSI:
+	case common.EAutoLoginType.MSI().String():
 		if err := uotm.MSILogin(common.IdentityInfo{
 			ClientID: lca.identityClientID,
 			ObjectID: lca.identityObjectID,
@@ -155,17 +156,17 @@ func (lca loginCmdArgs) process() error {
 		}
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
-	case common.AutologinTypeAzCLI:
+	case common.EAutoLoginType.AzCLI().String():
 		if err := uotm.AzCliLogin(lca.tenantID); err != nil {
 			return err
 		}
 		glcm.Info("Login with AzCliCreds succeeded")
-	case common.AutologinTypePsCred:
+	case common.EAutoLoginType.PsCred().String():
 		if err := uotm.PSContextToken(lca.tenantID); err != nil {
 			return err
 		}
 		glcm.Info("Login with Powershell context succeeded")
-	case common.AutologinTypeWorkload:
+	case common.EAutoLoginType.Workload().String():
 		if err := uotm.WorkloadIdentityLogin(lca.persistToken); err != nil {
 			return err
 		}

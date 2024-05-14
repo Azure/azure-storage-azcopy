@@ -193,7 +193,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
 			}
 		} else if c.Environment.AutoLoginMode != nil {
-			if strings.ToLower(*c.Environment.AutoLoginMode) == common.AutologinTypeWorkload {
+			if strings.ToLower(*c.Environment.AutoLoginMode) == common.EAutoLoginType.Workload().String() {
 				c.Environment.InheritEnvironment = true
 				// Get the value of the AZURE_FEDERATED_TOKEN environment variable
 				token := os.Getenv("AZURE_FEDERATED_TOKEN")
