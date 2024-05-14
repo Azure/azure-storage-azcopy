@@ -87,17 +87,19 @@ func (t *blobVersionsTraverser) Traverse(preprocessor objectMorpher, processor o
 		if blobProperties == nil {
 			panic("isBlob should never be set if getting properties is an error")
 		}
+
+		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
 		blobURLParts.VersionID = versionID
 		storedObject := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)),
 			"",
 			common.EEntityType.File(),
-			*blobProperties.LastModified,
-			*blobProperties.ContentLength,
-			blobPropertiesResponseAdapter{blobProperties},
-			blobPropertiesResponseAdapter{blobProperties},
-			blobProperties.Metadata,
+			blobPropsAdapter.LastModified(),
+			blobPropsAdapter.ContentLength(),
+			blobPropsAdapter,
+			blobPropsAdapter,
+			blobPropsAdapter.Metadata,
 			blobURLParts.ContainerName,
 		)
 		storedObject.blobVersionID = versionID
