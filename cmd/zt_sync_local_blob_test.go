@@ -22,14 +22,13 @@ package cmd
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
