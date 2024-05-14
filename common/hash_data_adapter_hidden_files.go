@@ -14,7 +14,7 @@ type HiddenFileDataAdapter struct {
 }
 
 func (a *HiddenFileDataAdapter) GetMode() HashStorageMode {
-	return EHashStorageMode.Default()
+	return EHashStorageMode.HiddenFiles()
 }
 
 func (a *HiddenFileDataAdapter) getHashPath(relativePath string) string {
@@ -25,6 +25,12 @@ func (a *HiddenFileDataAdapter) getHashPath(relativePath string) string {
 
 	dir, fName := filepath.Split(relativePath)
 	fName = fmt.Sprintf(".%s%s", fName, AzCopyHashDataStream)
+
+	// Try to create the directory
+	err := os.Mkdir(filepath.Join(basePath, dir), 0775)
+	if err != nil && !os.IsExist(err) {
+		lcm.Warn("Failed to create hash data directory")
+	}
 
 	return filepath.Join(basePath, dir, fName)
 }
@@ -76,7 +82,7 @@ func (a *HiddenFileDataAdapter) SetHashData(relativePath string, data *SyncHashD
 	}
 
 	// Push types around to check for OS-specific hide file method
-	if adapter, canHide := any(a).(interface{HideFile(string) error}); canHide {
+	if adapter, canHide := any(a).(interface{ HideFile(string) error }); canHide {
 		dataFile := a.getDataPath(relativePath)
 
 		err := adapter.HideFile(dataFile)
