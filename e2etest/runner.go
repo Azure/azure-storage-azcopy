@@ -312,7 +312,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 			if tenId != "" {
 				env = append(env, "AZCOPY_TENANT_ID="+tenId)
 			}
-		case common.EAutoLoginType.AzCLI():
+		case common.EAutoLoginType.AzCLI().String():
 			args := []string{
 				"login",
 				"--service-principal",
