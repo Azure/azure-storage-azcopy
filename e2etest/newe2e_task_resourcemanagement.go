@@ -221,7 +221,7 @@ func ValidateErrorOutput(a Asserter, stdout AzCopyStdout, errorMsg string) {
 	a.Error("expected error message not found in azcopy output")
 }
 
-func ValidateMultipleErrors(a Asserter, stdout AzCopyStdout, errorMsg []string) {
+func ValidateContainsError(a Asserter, stdout AzCopyStdout, errorMsg []string) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}

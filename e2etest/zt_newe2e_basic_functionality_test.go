@@ -99,10 +99,8 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 	ValidateErrorOutput(svm, stdout, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL.")
 }
 
-func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySASErrorCodes(svm *ScenarioVariationManager) {
-	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
-
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+func (s *BasicFunctionalitySuite) Scenario_Sync_EmptySASErrorCodes(svm *ScenarioVariationManager) {
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
 
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{})
@@ -116,7 +114,7 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySASErro
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb: azCopyVerb,
+			Verb: AzCopyVerbSync,
 			Targets: []ResourceManager{
 				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
 				AzCopyTarget{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
@@ -130,5 +128,36 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySASErro
 		})
 
 	// Validate that the stdout contains these error URLs
-	ValidateMultipleErrors(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+	ValidateErrorOutput(svm, stdout, "ERROR DETAILS: https://aka.ms/AzCopyError/NoAuthenticationInformation")
+}
+
+func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *ScenarioVariationManager) {
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionObject{})
+
+	if srcObj.Location().IsLocal() == dstObj.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				AzCopyTarget{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+			},
+			ShouldFail: true,
+		})
+
+	// Validate that the stdout contains these error URLs
+	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
 }
