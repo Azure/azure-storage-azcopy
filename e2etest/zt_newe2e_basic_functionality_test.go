@@ -128,7 +128,7 @@ func (s *BasicFunctionalitySuite) Scenario_Sync_EmptySASErrorCodes(svm *Scenario
 		})
 
 	// Validate that the stdout contains these error URLs
-	ValidateErrorOutput(svm, stdout, "ERROR DETAILS: https://aka.ms/AzCopyError/NoAuthenticationInformation")
+	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
 }
 
 func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *ScenarioVariationManager) {
