@@ -53,6 +53,8 @@ const ( // initially supporting a limited set of verbs
 	AzCopyVerbSync   AzCopyVerb = "sync"
 	AzCopyVerbRemove AzCopyVerb = "remove"
 	AzCopyVerbList   AzCopyVerb = "list"
+	AzCopyVerbLogin  AzCopyVerb = "login"
+	AzCopyVerbLogout AzCopyVerb = "logout"
 )
 
 type AzCopyTarget struct {
