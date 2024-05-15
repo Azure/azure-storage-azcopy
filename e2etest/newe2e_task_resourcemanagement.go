@@ -297,6 +297,7 @@ func toString(lo cmd.AzCopyListObject) string {
 		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.LastModifiedTime, lo.LastModifiedTime.String()))
 	}
 	if lo.VersionId != "" {
+		fmt.Println("version id exists: " + lo.VersionId)
 		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.VersionId, lo.VersionId))
 	}
 	if lo.BlobType != "" {
