@@ -97,7 +97,11 @@ stages:
           # place the generated binary files & any additional files in appropriate locations
           - script: |
               mkdir -p pkgDir/usr/bin/
+<<<<<<< HEAD
               cp -r $(work_dir) pkgDir/usr/bin/
+=======
+              cp $(work_dir) pkgDir/usr/bin/azCopy
+>>>>>>> 5937b8f68e5058874c77def015544e0b7d721166
             displayName: 'Accumulate pkg files'
             #workingDirectory: $(root_dir)
             
