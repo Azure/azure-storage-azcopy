@@ -1652,9 +1652,9 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if err != nil {
 		if err == NothingToRemoveError || err == NothingScheduledError {
 			return err // don't wrap it with anything that uses the word "error"
-		} else if cca.S2sPreserveBlobTags {
+		} else if cca.S2sPreserveBlobTags && strings.Contains(err.Error(), "AuthorizationPermissionMismatch") {
 			// If S2sPreserveBlobTags is true, return a more descriptive error message indicating permission issue.
-			return fmt.Errorf("Failed to set blob tags due to permission error")
+			return fmt.Errorf("Failed to set blob tags due to permission error: %s.\n", err)
 		} else {
 			return fmt.Errorf("cannot start job due to error: %s.\n", err)
 		}

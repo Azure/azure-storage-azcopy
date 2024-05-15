@@ -24,7 +24,6 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -287,54 +286,6 @@ func TestBasic_CopyS2SDir(t *testing.T) {
 			f("folder2/file3"),
 		},
 	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
-
-// TestBasic_CopyS2SwithPreserveBlobTags validates that copy operation with PreserveBlobTags set to true returns informative error message to the user: Failed to set blob tags due to permission error.
-func TestBasic_CopyS2SwithPreserveBlobTags(t *testing.T) {
-	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.AllS2S(), eValidate.AutoPlusContent(), anonymousAuthOnly, anonymousAuthOnly, params{
-		recursive:           true,
-		s2sPreserveBlobTags: true,
-	}, &hooks{
-		afterValidation: func(h hookHelper) {
-			a := h.GetAsserter()
-			logDir := os.Getenv("AZCOPY_E2E_LOG_OUTPUT")
-			dir, err := os.Open(logDir)
-			a.Assert(err, equals(), nil)
-			defer dir.Close()
-
-			entries, err := dir.Readdir(-1)
-			a.Assert(err, equals(), nil)
-			foundErrorMSg := false
-			for _, entry := range entries {
-				if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".log") {
-					logFilePath := filepath.Join(logDir, entry.Name())
-					// Parse the logs
-					fileContent, err := ioutil.ReadFile(logFilePath)
-					a.Assert(err, equals(), nil)
-					// Convert log content bytes to string
-					logContent := string(fileContent)
-					if strings.Contains(logContent, "Failed to set blob tags due to permission error") {
-						foundErrorMSg = true
-					}
-
-				}
-			}
-			a.Assert(foundErrorMSg, equals(), true)
-		},
-	},
-		testFiles{
-			defaultSize: "1M",
-			shouldTransfer: []interface{}{
-				folder(""),
-				f("file1"),
-				f("file2"),
-				folder("folder1"),
-				folder("folder2"),
-				f("folder1/file1"),
-				f("folder1/file2"),
-				f("folder2/file3"),
-			},
-		}, EAccountType.Standard(), EAccountType.Standard(), "")
 }
 
 // ================================  Remove: File, Folder, and Container  ==============================================

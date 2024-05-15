@@ -1,8 +1,9 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -97,4 +98,35 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 
 	// Validate that the stdout contains the missing sas message
 	ValidateErrorOutput(svm, stdout, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL.")
+}
+
+func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *ScenarioVariationManager) {
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "abc", common.EEntityType.File())
+
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionObject{})
+
+	if srcObj.Location().IsLocal() == dstObj.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				AzCopyTarget{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:           pointerTo(true),
+					S2SPreserveBlobTags: pointerTo(true),
+				},
+			},
+			ShouldFail: true,
+		})
+
+	// Validate that the stdout contains blob tags permission error
+	ValidateErrorOutput(svm, stdout, "Failed to set blob tags due to permission error")
 }
