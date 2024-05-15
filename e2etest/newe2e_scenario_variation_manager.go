@@ -89,13 +89,22 @@ func (svm *ScenarioVariationManager) DeleteCreatedResources() {
 
 // Assertions
 
-func (svm *ScenarioVariationManager) NoError(comment string, err error) {
+func (svm *ScenarioVariationManager) NoError(comment string, err error, failNow ...bool) {
 	if svm.Dryrun() {
 		return
 	}
 	svm.t.Helper()
+	failFast := FirstOrZero(failNow)
 
-	svm.AssertNow(comment, IsNil{}, err)
+	//svm.AssertNow(comment, IsNil{}, err)
+	if err != nil {
+		svm.t.Logf("Error was not nil (%s): %v", comment, err)
+		svm.isInvalid = true // Flip the failed flag
+
+		if failFast {
+			svm.t.FailNow()
+		}
+	}
 }
 
 func (svm *ScenarioVariationManager) Assert(comment string, assertion Assertion, items ...any) {
@@ -121,8 +130,14 @@ func (svm *ScenarioVariationManager) AssertNow(comment string, assertion Asserti
 	}
 	svm.t.Helper()
 
-	svm.Assert(comment, assertion, items...)
-	if svm.Failed() {
+	if !assertion.Assert(items...) {
+		if fa, ok := assertion.(FormattedAssertion); ok {
+			svm.t.Logf("Assertion %s failed: %s (%s)", fa.Name(), fa.Format(items...), comment)
+		} else {
+			svm.t.Logf("Assertion %s failed with items %v (%s)", assertion.Name(), items, comment)
+		}
+
+		svm.isInvalid = true // We've now failed, so we flip the shared bad flag
 		svm.t.FailNow()
 	}
 }
@@ -162,6 +177,14 @@ func (svm *ScenarioVariationManager) Log(format string, a ...any) {
 
 func (svm *ScenarioVariationManager) Failed() bool {
 	return svm.isInvalid // This is actually technically safe during dryruns.
+}
+
+func (svm *ScenarioVariationManager) HelperMarker() HelperMarker {
+	if svm.t != nil {
+		return svm.t
+	}
+
+	return NilHelperMarker{}
 }
 
 // =========== Variation Handling ==========
@@ -300,6 +323,7 @@ func (svm *ScenarioVariationManager) Cleanup(cleanupFunc func(a ScenarioAsserter
 		return
 	}
 
+	//svm.CleanupFuncs = append(svm.CleanupFuncs, cleanupFunc)
 	svm.t.Cleanup(func() {
 		cleanupFunc(svm)
 	})

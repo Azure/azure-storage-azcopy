@@ -6,10 +6,13 @@ import (
 	"testing"
 )
 
+var _ Asserter = &FrameworkAsserter{}
+var _ ScenarioAsserter = &ScenarioVariationManager{} // covers all 3 interfaces
+
 // ====== Asserter ======
 
 type Asserter interface {
-	NoError(comment string, err error)
+	NoError(comment string, err error, failNow ...bool)
 	// Assert fails the test, but does not exit.
 	Assert(comment string, assertion Assertion, items ...any)
 	// AssertNow wraps Assert, and exits if failed.
@@ -23,6 +26,8 @@ type Asserter interface {
 
 	// Failed returns if the test has already failed.
 	Failed() bool
+	// HelperMarker returns the associated *testing.T, and if there is none, a NilHelperMarker.
+	HelperMarker() HelperMarker
 }
 
 type DryrunAsserter interface {
@@ -38,6 +43,15 @@ type ScenarioAsserter interface {
 
 	Cleanup(func(a ScenarioAsserter))
 }
+
+// HelperMarker handles the fact that testing.T can be sometimes nil, and that we can't indicate a depth to ignore with Helper()
+type HelperMarker interface {
+	Helper()
+}
+
+type NilHelperMarker struct{}
+
+func (NilHelperMarker) Helper() {}
 
 // ====== Assertion ======
 
@@ -118,15 +132,35 @@ func (ta *FrameworkAsserter) Log(format string, a ...any) {
 	ta.t.Log(fmt.Sprintf(format, a...))
 }
 
-func (ta *FrameworkAsserter) NoError(comment string, err error) {
+func (ta *FrameworkAsserter) NoError(comment string, err error, failNow ...bool) {
 	ta.t.Helper()
-	ta.AssertNow(comment, IsNil{}, err)
+
+	if err != nil {
+		ta.t.Logf("Error was not nil (%s): %v", comment, err)
+
+		if FirstOrZero(failNow) {
+			ta.t.FailNow()
+		} else {
+			ta.t.Fail()
+		}
+	}
 }
 
 func (ta *FrameworkAsserter) AssertNow(comment string, assertion Assertion, items ...any) {
 	ta.t.Helper()
-	ta.Assert(comment, assertion, items...)
-	if ta.Failed() {
+
+	if (assertion.MinArgs() > 0 && len(items) < assertion.MinArgs()) || (assertion.MaxArgs() > 0 && len(items) > assertion.MaxArgs()) {
+		ta.PrintFinalizingMessage("Failed to assert: Assertion %s supports argument counts between %d and %d, but received %d args.", assertion.Name(), assertion.MinArgs(), assertion.MaxArgs(), len(items))
+		ta.t.FailNow()
+	}
+
+	if !assertion.Assert(items...) {
+		if fa, ok := assertion.(FormattedAssertion); ok {
+			ta.PrintFinalizingMessage("Failed assertion %s: %s; %s", fa.Name(), fa.Format(items...), comment)
+		} else {
+			ta.PrintFinalizingMessage("Failed assertion %s with item(s): %v; %s", assertion.Name(), items, comment)
+		}
+
 		ta.t.FailNow()
 	}
 }
@@ -164,4 +198,12 @@ func (ta *FrameworkAsserter) Skip(reason string) {
 func (ta *FrameworkAsserter) Failed() bool {
 	ta.t.Helper()
 	return ta.t.Failed()
+}
+
+func (ta *FrameworkAsserter) HelperMarker() HelperMarker {
+	if ta.t != nil {
+		return ta.t
+	}
+
+	return NilHelperMarker{}
 }
