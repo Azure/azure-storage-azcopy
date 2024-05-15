@@ -34,20 +34,20 @@ func SetupOAuthCache(a Asserter) {
 	if dynamicLoginInfo.Environment == AzurePipeline {
 		// Get the value of the AZURE_FEDERATED_TOKEN environment variable
 		token := os.Getenv("AZURE_FEDERATED_TOKEN")
-		a.Assert("AZURE_FEDERATED_TOKEN must be specified to authenticate with workload identity")
+		a.AssertNow("AZURE_FEDERATED_TOKEN must be specified to authenticate with workload identity", Empty{Invert: true}, token)
 		// Write the token to a temporary file
 		// Create a temporary file to store the token
 		file, err := os.CreateTemp("", "azure_federated_token.txt")
-		a.Nil(err, "Error creating temporary file")
+		a.AssertNow("Error creating temporary file", IsNil{}, err)
 		defer file.Close()
 
 		// Write the token to the temporary file
 		_, err = file.WriteString(token)
-		a.Nil(err, "Error writing to temporary file")
+		a.AssertNow("Error writing to temporary file", IsNil{}, err)
 
 		// Set the AZURE_FEDERATED_TOKEN_FILE environment variable
 		err = os.Setenv("AZURE_FEDERATED_TOKEN_FILE", file.Name())
-		a.Nil(err, "Error setting AZURE_FEDERATED_TOKEN_FILE environment variable")
+		a.AssertNow("Error setting AZURE_FEDERATED_TOKEN_FILE environment variable", IsNil{}, err)
 		cred, err = azidentity.NewWorkloadIdentityCredential(nil)
 	} else {
 		cred, err = azidentity.NewClientSecretCredential(
