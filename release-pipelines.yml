@@ -118,8 +118,10 @@ stages:
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           # TODO check for every exe
           - script: |
-              fpm -s dir -t deb -n azcopy -C pkgDir/ -v `./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` -d $(depends) \
-              --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" --url "https://github.com/Azure/azure-storage-azcopy" \
+              fpm -s dir -t deb -n azcopy -C pkgDir/ \
+              -v `./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
+              --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
               mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
               cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
