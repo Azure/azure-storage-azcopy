@@ -110,7 +110,7 @@ stages:
 
           - script: |
               sudo ls -lRt pkgDir/usr/bin/
-              displayName: 'List the binaries'
+            displayName: 'List the binaries'
             #workingDirectory: $(root_dir)
             
           
