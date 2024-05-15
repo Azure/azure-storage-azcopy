@@ -37,7 +37,29 @@ import (
 )
 
 // This is to be used only for testing reasons
-func getE2ESPNCredential(a *assert.Assertions) azcore.TokenCredential {
+func getE2ETokenCredential(a *assert.Assertions) azcore.TokenCredential {
+	if os.Getenv("NEW_E2E_ENVIRONMENT") == "AzurePipeline" {
+		// Get the value of the AZURE_FEDERATED_TOKEN environment variable
+		token := os.Getenv("AZURE_FEDERATED_TOKEN")
+		a.Empty(token, "AZURE_FEDERATED_TOKEN must be specified to authenticate with workload identity")
+		// Write the token to a temporary file
+		// Create a temporary file to store the token
+		file, err := os.CreateTemp("", "azure_federated_token.txt")
+		a.Nil(err, "Error creating temporary file")
+		defer file.Close()
+
+		// Write the token to the temporary file
+		_, err = file.WriteString(token)
+		a.Nil(err, "Error writing to temporary file")
+
+		// Set the AZURE_FEDERATED_TOKEN_FILE environment variable
+		err = os.Setenv("AZURE_FEDERATED_TOKEN_FILE", file.Name())
+		a.Nil(err, "Error setting AZURE_FEDERATED_TOKEN_FILE environment variable")
+
+		cred, err := azidentity.NewWorkloadIdentityCredential(nil)
+		a.Nil(err)
+		return cred
+	}
 	tenantId := os.Getenv("AZCOPY_E2E_TENANT_ID")
 	appID := os.Getenv("AZCOPY_E2E_APPLICATION_ID")
 	clientSecret := os.Getenv("AZCOPY_E2E_CLIENT_SECRET")
@@ -51,7 +73,7 @@ func getE2ESPNCredential(a *assert.Assertions) azcore.TokenCredential {
 
 func TestSrcAuthPolicy(t *testing.T) {
 	a := assert.New(t)
-	cred := getE2ESPNCredential(a)
+	cred := getE2ETokenCredential(a)
 	cred = common.NewScopedCredential(cred, common.ECredentialType.OAuthToken())
 	srcAuthPolicy := NewSourceAuthPolicy(cred)
 	req, err := runtime.NewRequest(context.Background(), http.MethodGet, "https://127.0.0.1/")
@@ -74,8 +96,8 @@ func TestSrcAuthPolicy(t *testing.T) {
 	//4. forcefully expire the token and verify a new token is obtained
 	s := srcAuthPolicy.(*sourceAuthPolicy)
 	expTime := time.Now()
-	s.token.ExpiresOn  = time.Now()
-	time.Sleep(10*time.Second)
+	s.token.ExpiresOn = time.Now()
+	time.Sleep(10 * time.Second)
 	_, _ = srcAuthPolicy.Do(req)
 
 	// Disabled below statement, sometimes calling GetToken frequently results in same token
@@ -87,7 +109,7 @@ func TestSrcAuthPolicy(t *testing.T) {
 
 func TestSrcAuthPolicyMultipleRefresh(t *testing.T) {
 	a := assert.New(t)
-	cred := getE2ESPNCredential(a)
+	cred := getE2ETokenCredential(a)
 	cred = common.NewScopedCredential(cred, common.ECredentialType.OAuthToken())
 	srcAuthPolicy := NewSourceAuthPolicy(cred)
 
@@ -107,7 +129,7 @@ func TestSrcAuthPolicyMultipleRefresh(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func(r *policy.Request) {
-			<- ch
+			<-ch
 			srcAuthPolicy.Do(r)
 			wg.Done()
 		}(req[i])

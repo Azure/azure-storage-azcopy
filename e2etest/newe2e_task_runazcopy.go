@@ -186,30 +186,19 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				c.Environment.ServicePrincipalClientSecret = &oAuthInfo.ClientSecret
 				c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
 			} else {
-				// oauth should reliably work
-				oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-				c.Environment.ServicePrincipalAppID = &oAuthInfo.ApplicationID
-				c.Environment.ServicePrincipalClientSecret = &oAuthInfo.ClientSecret
-				c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
+				if GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.Environment == AzurePipeline {
+					c.applyWorkloadIdentity(a)
+				} else {
+					// oauth should reliably work
+					oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
+					c.Environment.ServicePrincipalAppID = &oAuthInfo.DynamicOauth.ApplicationID
+					c.Environment.ServicePrincipalClientSecret = &oAuthInfo.DynamicOauth.ClientSecret
+					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOauth.TenantID != "", &oAuthInfo.DynamicOauth.TenantID, nil)
+				}
 			}
 		} else if c.Environment.AutoLoginMode != nil {
 			if strings.ToLower(*c.Environment.AutoLoginMode) == common.EAutoLoginType.Workload().String() {
-				c.Environment.InheritEnvironment = true
-				// Get the value of the AZURE_FEDERATED_TOKEN environment variable
-				token := os.Getenv("AZURE_FEDERATED_TOKEN")
-				a.AssertNow("AZURE_FEDERATED_TOKEN must be specified to authenticate with workload identity", Empty{Invert: true}, token)
-				// Write the token to a temporary file
-				// Create a temporary file to store the token
-				file, err := os.CreateTemp("", "azure_federated_token.txt")
-				a.AssertNow("Error creating temporary file", IsNil{}, err)
-				defer file.Close()
-
-				// Write the token to the temporary file
-				_, err = file.WriteString(token)
-				a.AssertNow("Error writing to temporary file", IsNil{}, err)
-
-				// Set the AZURE_FEDERATED_TOKEN_FILE environment variable
-				c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
+				c.applyWorkloadIdentity(a)
 			}
 		}
 
@@ -218,6 +207,25 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 		a.Error("unsupported credential type")
 		return target.URI()
 	}
+}
+
+func (c *AzCopyCommand) applyWorkloadIdentity(a Asserter) {
+	c.Environment.InheritEnvironment = true
+	// Get the value of the AZURE_FEDERATED_TOKEN environment variable
+	token := os.Getenv("AZURE_FEDERATED_TOKEN")
+	a.AssertNow("AZURE_FEDERATED_TOKEN must be specified to authenticate with workload identity", Empty{Invert: true}, token)
+	// Write the token to a temporary file
+	// Create a temporary file to store the token
+	file, err := os.CreateTemp("", "azure_federated_token.txt")
+	a.AssertNow("Error creating temporary file", IsNil{}, err)
+	defer file.Close()
+
+	// Write the token to the temporary file
+	_, err = file.WriteString(token)
+	a.AssertNow("Error writing to temporary file", IsNil{}, err)
+
+	// Set the AZURE_FEDERATED_TOKEN_FILE environment variable
+	c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
 }
 
 // RunAzCopy todo define more cleanly, implement
