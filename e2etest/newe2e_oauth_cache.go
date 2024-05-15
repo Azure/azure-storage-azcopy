@@ -51,7 +51,7 @@ func SetupOAuthCache(a Asserter) {
 		cred, err = azidentity.NewWorkloadIdentityCredential(nil)
 	} else {
 		cred, err = azidentity.NewClientSecretCredential(
-			common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicOauth.TenantID),
+			common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.TenantID),
 			common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.DynamicOauth.ApplicationID),
 			common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.DynamicOauth.ClientSecret),
 			nil, // Hopefully the defaults should be OK?
@@ -60,7 +60,7 @@ func SetupOAuthCache(a Asserter) {
 
 	a.NoError("create credentials", err)
 
-	PrimaryOAuthCache = NewOAuthCache(cred, GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.DynamicOauth.TenantID)
+	PrimaryOAuthCache = NewOAuthCache(cred, GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.TenantID)
 }
 
 /*

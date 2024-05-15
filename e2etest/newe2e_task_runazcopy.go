@@ -177,7 +177,6 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 		// Alternatively, we may have already configured it here once before.
 		if c.Environment.AutoLoginMode == nil && c.Environment.ServicePrincipalAppID == nil && c.Environment.ServicePrincipalClientSecret == nil && c.Environment.AutoLoginTenantID == nil {
 			// TODO! There are two other modes for this. These probably can't apply in automated scenarios, but it's worth having tests for that we run before every release! WI#26625161
-
 			if GlobalConfig.StaticResources() {
 				c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.SPN().String())
 				oAuthInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
@@ -196,7 +195,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
 					c.Environment.ServicePrincipalAppID = &oAuthInfo.DynamicOauth.ApplicationID
 					c.Environment.ServicePrincipalClientSecret = &oAuthInfo.DynamicOauth.ClientSecret
-					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOauth.TenantID != "", &oAuthInfo.DynamicOauth.TenantID, nil)
+					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
 				}
 			}
 		} else if c.Environment.AutoLoginMode != nil {
