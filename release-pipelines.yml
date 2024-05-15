@@ -72,32 +72,32 @@ stages:
               echo 'Running GO Vet'
               go vet 
             displayName: 'Golang Vet - Linux'
-            workingDirectory: $root_dir
+            #workingDirectory: $root_dir
 
           - script: |
-              GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$work_dir/azcopy_linux_amd64"
+              GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
             displayName: 'Generate Linux AMD64'
             condition: eq(variables.type, 'linux')
 
           - script: |
-              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$$work_dir/azcopy_linux_se_amd64"
+              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
             displayName: 'Generate Linux AMD64 SE Integration'
             condition: eq(variables.type, 'linux')
 
           - script: |
-              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$work_dir/azcopy_linux_arm64"
+              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
             displayName: 'Generate Linux ARM64'
             condition: eq(variables.type, 'linux')
 
           - script: |
-              cp NOTICE.txt $work_dir
+              cp NOTICE.txt $(work_dir)
             displayName: 'Copy NOTICE.txt'
             condition: eq(variables.type, 'linux')
 
           # place the generated binary files & any additional files in appropriate locations
           - script: |
               mkdir -p pkgDir/usr/bin/
-              cp $work_dir pkgDir/usr/bin/azCopy
+              cp $(work_dir) pkgDir/usr/bin/azCopy
             displayName: 'Accumulate pkg files'
             #workingDirectory: $(root_dir)
             
