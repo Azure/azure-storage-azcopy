@@ -49,13 +49,11 @@ stages:
         timeoutInMinutes: 360
         strategy:
           matrix:
-            Ubuntu-22:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
+            Ubuntu-20:
+              imageName: 'ubuntu-20.04'
+              type: 'linux'
         pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+          vmImage: $(imageName)
 
         steps:
           - task: GoTool@0
