@@ -52,6 +52,8 @@ stages:
             Ubuntu-20:
               imageName: 'ubuntu-20.04'
               type: 'linux'
+              tags: 'tags'
+              depends: 'depends'
         pool:
           vmImage: $(imageName)
 
@@ -73,6 +75,12 @@ stages:
               go vet 
             displayName: 'Golang Vet - Linux'
             #workingDirectory: $root_dir
+
+          # install dependencies required for compiling azcopy
+          - script: |
+              sudo apt-get update --fix-missing
+              sudo gem install fpm -V
+            displayName: "Installing Dependencies"
 
           - script: |
               GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
@@ -99,6 +107,10 @@ stages:
               mkdir -p pkgDir/usr/bin/
               cp -r $(work_dir) pkgDir/usr/bin/
             displayName: 'Accumulate pkg files'
+
+          - script: |
+              sudo ls -lRt pkgDir/usr/bin/
+              displayName: 'List the binaries'
             #workingDirectory: $(root_dir)
             
           
@@ -109,7 +121,7 @@ stages:
               fpm -s dir -t deb -n azcopy -C pkgDir/ -v `./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` -d $(depends) \
               --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azCopy --version | cut -d " " -f 3`-$(tags).x86_64.deb
+              mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
               cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
             displayName: 'Make deb Package'
             #workingDirectory: $(root_dir)
@@ -119,7 +131,7 @@ stages:
               fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ -v `./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` -d $(depends) \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azCopy --version | cut -d " " -f 3`-$(tags).x86_64.rpm
+              mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
               cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
             displayName: 'Make rpm Package'
             #workingDirectory: $(root_dir)
