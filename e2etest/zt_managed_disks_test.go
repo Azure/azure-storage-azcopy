@@ -150,3 +150,63 @@ func TestManagedDisks_OAuthRequired(t *testing.T) {
 		"",
 	)
 }
+
+// Test a managed disk of size 7.9 TB
+func TestManagedDisks_LargeManagedDisk(t *testing.T) {
+	if runLocallyOnly != nil && !*runLocallyOnly {
+		t.Skip("This test runs locally only. Set up config for managed disk of size 7.9 TB " +
+			"(AZCOPY_E2E_LARGE_MANAGED_DISK_CONFIG) and run this test.")
+		return
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			disableParallelTesting: true,
+		},
+		nil,
+		testFiles{
+			shouldTransfer: []interface{}{
+				"", // Managed disks will always have a transfer target of ""
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.LargeManagedDisk(),
+		"",
+	)
+}
+
+// Test a managed disk snapshot of size 7.9 TB
+func TestManagedDisks_LargeSnapshot(t *testing.T) {
+	if runLocallyOnly != nil && !*runLocallyOnly {
+		t.Skip("This test runs locally only. Set up config for managed disk snapshot of size 7.9 TB " +
+			"(AZCOPY_E2E_LARGE_MANAGED_DISK_SNAPSHOT_CONFIG) and run this test.")
+		return
+	}
+
+	RunScenarios(
+		t,
+		eOperation.Copy(),
+		eTestFromTo.Other(common.EFromTo.BlobLocal(), common.EFromTo.BlobBlob()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			disableParallelTesting: true,
+		},
+		nil,
+		testFiles{
+			shouldTransfer: []interface{}{
+				"", // Managed disks will always have a transfer target of ""
+			},
+		},
+		EAccountType.Standard(),
+		EAccountType.LargeManagedDiskSnapshot(),
+		"",
+	)
+}
