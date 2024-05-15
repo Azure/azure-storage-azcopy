@@ -55,6 +55,12 @@ stages:
         pool:
           vmImage: $(imageName)
 
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+
         steps:
           - task: GoTool@0
             env:
@@ -66,45 +72,48 @@ stages:
               echo 'Running GO Vet'
               go vet 
             displayName: 'Golang Vet - Linux'
-            workingDirectory: $(System.DefaultWorkingDirectory)
+            workingDirectory: $root_dir
 
           - script: |
-              GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+              GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$work_dir/azcopy_linux_amd64"
             displayName: 'Generate Linux AMD64'
             condition: eq(variables.type, 'linux')
 
           - script: |
-              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$$work_dir/azcopy_linux_se_amd64"
             displayName: 'Generate Linux AMD64 SE Integration'
             condition: eq(variables.type, 'linux')
 
           - script: |
-              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$work_dir/azcopy_linux_arm64"
             displayName: 'Generate Linux ARM64'
             condition: eq(variables.type, 'linux')
 
           - script: |
-              cp NOTICE.txt $(Build.ArtifactStagingDirectory)
+              cp NOTICE.txt $work_dir
             displayName: 'Copy NOTICE.txt'
             condition: eq(variables.type, 'linux')
 
           # place the generated binary files & any additional files in appropriate locations
           - script: |
               mkdir -p pkgDir/usr/bin/
-              cp azure-storage-fuse/azCopy pkgDir/usr/bin/azCopy
-            workingDirectory: $(root_dir)
+              cp $work_dir pkgDir/usr/bin/azCopy
             displayName: 'Accumulate pkg files'
+            #workingDirectory: $(root_dir)
+            
           
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+          # TODO check for every exe
           - script: |
-              fpm -s dir -t deb -n azcopy -C pkgDir/ -v `./pkgDir/usr/bin/azCopy --version | cut -d " " -f 3` -d $(depends) \
+              fpm -s dir -t deb -n azcopy -C pkgDir/ -v `./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` -d $(depends) \
               --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
               mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azCopy --version | cut -d " " -f 3`-$(tags).x86_64.deb
               cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
             displayName: 'Make deb Package'
+            #workingDirectory: $(root_dir)
+            
 
           - script: |
               fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ -v `./pkgDir/usr/bin/azCopy --version | cut -d " " -f 3` -d $(depends) \
@@ -112,8 +121,9 @@ stages:
               --description "Add description" 
               mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azCopy --version | cut -d " " -f 3`-$(tags).x86_64.rpm
               cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
             displayName: 'Make rpm Package'
+            #workingDirectory: $(root_dir)
+            
 
 
           - task: PublishBuildArtifacts@1
