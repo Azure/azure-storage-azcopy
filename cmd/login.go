@@ -48,6 +48,8 @@ var lgCmd = &cobra.Command{
 			glcm.Info(environmentVariableNotice)
 		}
 
+		loginCmdArg.loginType = strings.ToLower(loginCmdArg.loginType)
+
 		err := loginCmdArg.process()
 		if err != nil {
 			// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
@@ -65,16 +67,19 @@ func init() {
 
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use. The default ("+common.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. Set this parameter when authenticating in a national cloud. Not needed for Managed Service Identity")
-	// Use identity which aligns to Azure powershell and CLI.
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.identity, "identity", false, "Log in using virtual machine's identity, also known as managed service identity (MSI).")
-	// Use SPN certificate to log in.
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.servicePrincipal, "service-principal", false, "Log in via Service Principal Name (SPN) by using a certificate or a secret. The client secret or certificate password must be placed in the appropriate environment variable. Type AzCopy env to see names and descriptions of environment variables.")
-	// Client ID of user-assigned identity.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityClientID, "identity-client-id", "", "Client ID of user-assigned identity.")
-	// Resource ID of user-assigned identity.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityResourceID, "identity-resource-id", "", "Resource ID of user-assigned identity.")
 
-	//login with SPN
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.identity, "identity", false, "Deprecated. Please use --login-type=MSI. Log in using virtual machine's identity, also known as managed service identity (MSI).")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.servicePrincipal, "service-principal", false, "Deprecated. Please use --login-type=SPN. Log in via Service Principal Name (SPN) by using a certificate or a secret. The client secret or certificate password must be placed in the appropriate environment variable. Type AzCopy env to see names and descriptions of environment variables.")
+	// Deprecate these flags in favor of a new login type flag
+	_ = lgCmd.PersistentFlags().MarkHidden("identity")
+	_ = lgCmd.PersistentFlags().MarkHidden("service-principal")
+
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.loginType, "login-type", common.EAutoLoginType.Device().String(), "Default value is "+common.EAutoLoginType.Device().String()+". Specify the credential type to access Azure Resource, available values are "+strings.Join(common.ValidAutoLoginTypes(), ", ")+".")
+
+	// Managed Identity flags
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityClientID, "identity-client-id", "", "Client ID of user-assigned identity.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityResourceID, "identity-resource-id", "", "Resource ID of user-assigned identity.")
+	// SPN flags
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.applicationID, "application-id", "", "Application ID of user-assigned identity. Required for service principal auth.")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.certPath, "certificate-path", "", "Path to certificate for SPN authentication. Required for certificate-based service principal auth.")
 
@@ -91,8 +96,8 @@ type loginCmdArgs struct {
 
 	identity         bool // Whether to use MSI.
 	servicePrincipal bool
-	azCliCred        bool
-	psCred           bool
+
+	loginType string
 
 	// Info of VM's user assigned identity, client or object ids of the service identity are required if
 	// your VM has multiple user-assigned managed identities.
@@ -109,75 +114,39 @@ type loginCmdArgs struct {
 	persistToken  bool
 }
 
-func (lca loginCmdArgs) validate() error {
-	// Only support one kind of oauth login at same time.
-	switch {
-	case lca.identity:
-		if lca.servicePrincipal {
-			return errors.New("you can only log in with one type of auth at once")
-		}
-
-		// Consider only command-line parameters as env vars are a hassle to change and it's not like we'll use them here.
-		if lca.tenantID != "" || lca.applicationID != "" || lca.certPath != "" {
-			return errors.New("tenant ID/application ID/cert path/client secret cannot be used with identity")
-		}
-	case lca.servicePrincipal:
-		if lca.identity {
-			return errors.New("you can only log in with one type of auth at once")
-		}
-
-		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" {
-			return errors.New("identity client/object/resource ID are exclusive to managed service identity auth and are not compatible with service principal auth")
-		}
-
-		if lca.applicationID == "" || (lca.clientSecret == "" && lca.certPath == "") {
-			return errors.New("service principal auth requires an application ID, and client secret/certificate")
-		}
-	default: // OAuth login.
-		// This isn't necessary, but stands as a sanity check. It will never be hit.
-		if lca.servicePrincipal || lca.identity {
-			return errors.New("you can only log in with one type of auth at once")
-		}
-
-		// Consider only command-line parameters as env vars are a hassle to change and it's not like we'll use them here.
-		if lca.applicationID != "" || lca.certPath != "" {
-			return errors.New("application ID and certificate paths are exclusive to service principal auth and are not compatible with OAuth")
-		}
-
-		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" {
-			return errors.New("identity client/object/resource IDs are exclusive to managed service identity auth and are not compatible with OAuth")
-		}
-	}
-
-	return nil
-}
-
 func (lca loginCmdArgs) process() error {
-	// Validate login parameters.
-	if err := lca.validate(); err != nil {
-		return err
+	// Login type consolidation to allow backward compatibility.
+	if lca.servicePrincipal || lca.identity {
+		glcm.Warn("The flags --service-principal and --identity will be deprecated in a future release. Please use --login-type=SPN or --login-type=MSI instead.")
 	}
+	if lca.servicePrincipal {
+		lca.loginType = common.EAutoLoginType.SPN().String()
+	} else if lca.identity {
+		lca.loginType = common.EAutoLoginType.MSI().String()
+	} else if lca.servicePrincipal && lca.identity {
+		// This isn't necessary, but stands as a sanity check. It will never be hit.
+		return errors.New("you can only log in with one type of auth at once")
+	}
+	// Any required variables for login type will be validated by the Azure Identity SDK.
+	lca.loginType = strings.ToLower(lca.loginType)
 
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
 
-	switch {
-	case lca.servicePrincipal:
-
+	switch lca.loginType {
+	case common.EAutoLoginType.SPN().String():
 		if lca.certPath != "" {
 			if err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
-
 			glcm.Info("SPN Auth via cert succeeded.")
 		} else {
 			if err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
-
 			glcm.Info("SPN Auth via secret succeeded.")
 		}
-	case lca.identity:
+	case common.EAutoLoginType.MSI().String():
 		if err := uotm.MSILogin(common.IdentityInfo{
 			ClientID: lca.identityClientID,
 			ObjectID: lca.identityObjectID,
@@ -187,16 +156,21 @@ func (lca loginCmdArgs) process() error {
 		}
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
-	case lca.azCliCred:
+	case common.EAutoLoginType.AzCLI().String():
 		if err := uotm.AzCliLogin(lca.tenantID); err != nil {
 			return err
 		}
 		glcm.Info("Login with AzCliCreds succeeded")
-	case lca.psCred:
+	case common.EAutoLoginType.PsCred().String():
 		if err := uotm.PSContextToken(lca.tenantID); err != nil {
 			return err
 		}
 		glcm.Info("Login with Powershell context succeeded")
+	case common.EAutoLoginType.Workload().String():
+		if err := uotm.WorkloadIdentityLogin(lca.persistToken); err != nil {
+			return err
+		}
+		glcm.Info("Login with Workload Identity succeeded")
 	default:
 		if err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
 			return err
