@@ -51,3 +51,23 @@ func (s *RemoveSuite) Scenario_SingleFileRemoveBlobFSEncodedPath(svm *ScenarioVa
 		ObjectShouldExist: to.Ptr(false),
 	}, false)
 }
+
+func (s *RemoveSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
+	// Scale up from service to object
+	// File - ShareNotFound error
+	// BlobFS - errors out in log file, not stdout
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()})), ResourceDefinitionObject{})
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbRemove,
+			Targets: []ResourceManager{
+				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+			},
+			ShouldFail: true,
+		})
+
+	// Validate that the stdout contains these error URLs
+	ValidateErrorOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
+}

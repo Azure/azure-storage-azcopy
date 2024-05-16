@@ -332,3 +332,25 @@ func toString(lo cmd.AzCopyListObject) string {
 
 	return builder.String()
 }
+
+func ValidateContainsError(a Asserter, stdout AzCopyStdout, errorMsg []string) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	for _, line := range stdout.RawStdout() {
+		if checkMultipleErrors(errorMsg, line) {
+			return
+		}
+	}
+	a.Error("expected error message not found in azcopy output")
+}
+
+func checkMultipleErrors(errorMsg []string, line string) bool {
+	for _, e := range errorMsg {
+		if strings.Contains(line, e) {
+			return true
+		}
+	}
+
+	return false
+}
