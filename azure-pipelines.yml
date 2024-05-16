@@ -322,6 +322,7 @@ jobs:
             echo "##vso[task.setvariable variable=AZURE_CLIENT_ID]$servicePrincipalId" 
             echo "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN]$idToken"
             echo "##vso[task.setvariable variable=AZURE_TENANT_ID]$tenantId"
+        condition: succeededOrFailed()
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'ste'
