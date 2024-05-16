@@ -125,20 +125,19 @@ stages:
               --description "Add description" 
               mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
               cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
             displayName: 'Make deb Package'
-            #workingDirectory: $(root_dir)
             
-
-          # - script: |
-          #     fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ -v `./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` -d $(depends) \
-          #     --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" --url "https://github.com/Azure/azure-storage-azcopy" \
-          #     --description "Add description" 
-          #     mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
-          #     cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-          #   displayName: 'Make rpm Package'
-            #workingDirectory: $(root_dir)
-            
-
+          - script: |
+              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+              -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3` \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "Add description" 
+              mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
+              cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Make rpm Package'
 
           - task: PublishBuildArtifacts@1
             inputs:
