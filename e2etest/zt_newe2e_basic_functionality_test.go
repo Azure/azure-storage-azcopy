@@ -163,3 +163,32 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
 
 }
+
+// Scenario_Copy_S2SwithPreserveBlobTags validates that copy operation with PreserveBlobTags set to true returns informative error message to the user: Failed to set blob tags due to permission error.
+func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *ScenarioVariationManager) {
+	// Calculate verb early to create the destination object early
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy})
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionContainer{}).GetObject(svm, "abc", common.EEntityType.File())
+
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionObject{})
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:           pointerTo(true),
+					S2SPreserveBlobTags: pointerTo(true),
+				},
+			},
+			ShouldFail: false,
+		})
+
+	// Validate that the stdout contains blob tags permission error
+	ValidateErrorOutput(svm, stdout, "Failed to set blob tags due to permission error")
+}
