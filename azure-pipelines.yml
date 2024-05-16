@@ -135,6 +135,7 @@ jobs:
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
           go_build: 'GOARCH=amd64 GOOS=linux go build -tags "netgo" -o $(build_name)'
+          set_export: 'export'
         Windows:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
@@ -147,6 +148,7 @@ jobs:
           save_exit_code: 'set exit_code=%errorlevel%'
           return_exit_code: 'exit %exit_code%'
           go_build: 'go build -cover -o $(build_name)'
+          set_export: 'set'
         MacOS:
           imageName: 'macos-11'
           build_name: 'azcopy_darwin_amd64'
@@ -158,6 +160,7 @@ jobs:
           save_exit_code: 'exit_code=${PIPESTATUS[0]}'
           return_exit_code: 'exit "$exit_code"'
           go_build: 'CGO_ENABLED=1 go build -cover -o $(build_name)'
+          set_export: 'export'
     pool:
       vmImage: $(imageName)
 
@@ -194,9 +197,9 @@ jobs:
           scriptType: bash
           scriptLocation: inlineScript
           inlineScript: |
-            echo "##vso[task.setvariable variable=AZURE_CLIENT_ID]$servicePrincipalId" 
-            echo "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN]$idToken"
-            echo "##vso[task.setvariable variable=AZURE_TENANT_ID]$tenantId"
+            $(set_export) AZURE_CLIENT_ID=$servicePrincipalId
+            $(set_export) AZURE_FEDERATED_TOKEN=$idToken
+            $(set_export) AZURE_TENANT_ID=$tenantId
             mkdir coverage
             echo 'Building executable'
             $(go_build)
