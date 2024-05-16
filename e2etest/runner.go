@@ -319,14 +319,29 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 			}
 
 		case common.EAutoLoginType.AzCLI().String():
-			tenId, clientId, token, _ := GlobalInputManager{}.GetWorkloadIdentity()
-			args := []string{
-				"login",
-				"--federated-token",
-				token,
-				"--service-principal",
-				"-u=" + clientId,
-				"-t=" + tenId,
+			var args []string
+			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
+				tenId, clientId, token, _ := GlobalInputManager{}.GetWorkloadIdentity()
+				args = []string{
+					"login",
+					"--federated-token",
+					token,
+					"--service-principal",
+					"-u=" + clientId,
+					"-t=" + tenId,
+				}
+			} else {
+				tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
+				args = []string{
+					"login",
+					"--service-principal",
+					"-u=" + appId,
+					"-p=" + clientSecret,
+				}
+				if tenId != "" {
+					args = append(args, "--tenant="+tenId)
+					env = append(env, "AZCOPY_TENANT_ID="+tenId)
+				}
 			}
 
 			out, err := exec.Command("az", args...).Output()
@@ -341,15 +356,22 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 
 			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE="+oauthMode)
 		case "pscred":
-			tenId, clientId, token, _ := GlobalInputManager{}.GetWorkloadIdentity()
-			cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
+			var script string
+			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
+				tenId, clientId, token, _ := GlobalInputManager{}.GetWorkloadIdentity()
+				cmd := `Connect-AzAccount -ApplicationId %s -Tenant %s -FederatedToken %s`
+				script = fmt.Sprintf(cmd, clientId, tenId, token)
+			} else {
+				tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
+				cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
 				$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList %s, $secret;
 				Connect-AzAccount -ServicePrincipal -Credential $cred`
-			if tenId != "" {
-				cmd += " -Tenant " + tenId
+				if tenId != "" {
+					cmd += " -Tenant " + tenId
+				}
+				script = fmt.Sprintf(cmd, clientSecret, appId)
 			}
 
-			script := fmt.Sprintf(cmd, clientSecret, appId)
 			out, err := exec.Command("pwsh", "-Command", script).Output()
 			if err != nil {
 				e := err.(*exec.ExitError)
