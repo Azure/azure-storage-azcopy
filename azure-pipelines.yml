@@ -192,7 +192,7 @@ jobs:
       - task: AzureCLI@2
         displayName: 'Set Up Workload Identity Environment Variables and Run E2E Test $(display_name) - AMD64'
         inputs:
-          azureSubscription: azcopyworkloadidentity
+          azureSubscription: azcopytestworkloadidentity
           addSpnToEnvironment: true
           scriptType: bash
           scriptLocation: inlineScript
@@ -311,7 +311,7 @@ jobs:
       - task: AzureCLI@2
         displayName: 'Set Up Workload Identity Environment Variables'
         inputs:
-          azureSubscription: azcopyworkloadidentity
+          azureSubscription: azcopytestworkloadidentity
           addSpnToEnvironment: true
           scriptType: bash
           scriptLocation: inlineScript
