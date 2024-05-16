@@ -45,7 +45,7 @@ pr: none
 stages:
   - stage: BuildArtifacts
     jobs:
-      - job: Linux_Amd64
+      - job: Set_1
         timeoutInMinutes: 120
         strategy:
           matrix:
@@ -78,7 +78,7 @@ stages:
               echo 'Running GO Vet'
               go vet 
             displayName: 'Golang Vet - Linux'
-            workingDirectory: $root_dir
+            workingDirectory: $(root_dir)
 
           # install dependencies required for compiling azcopy
           - script: |
@@ -143,7 +143,7 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-      - job: Linux_SE_Amd64
+      - job: Set_2
         timeoutInMinutes: 120
         strategy:
           matrix:
@@ -176,7 +176,7 @@ stages:
               echo 'Running GO Vet'
               go vet 
             displayName: 'Golang Vet - Linux'
-            workingDirectory: $root_dir
+            workingDirectory: $(root_dir)
 
           # install dependencies required for compiling azcopy
           - script: |
@@ -240,7 +240,7 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-      - job: Linux_Arm64
+      - job: Set_3
         timeoutInMinutes: 120
         strategy:
           matrix:
@@ -273,7 +273,7 @@ stages:
               echo 'Running GO Vet'
               go vet 
             displayName: 'Golang Vet - Linux'
-            workingDirectory: $root_dir
+            workingDirectory: $(root_dir)
 
           # install dependencies required for compiling azcopy
           - script: |
