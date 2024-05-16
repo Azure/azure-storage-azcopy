@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -77,6 +78,8 @@ const (
 	blobfsPrefix                 = "blobfs"
 	defaultBlobFSFileSizeInBytes = 1000
 )
+
+var runLocallyOnly = flag.Bool("local-tests", false, "Tests with this flag are run locally only")
 
 func pointerTo[T any](in T) *T {
 	return &in

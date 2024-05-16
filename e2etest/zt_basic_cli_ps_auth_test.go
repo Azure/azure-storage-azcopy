@@ -30,7 +30,7 @@ import (
 func TestBasic_AzCLIAuth(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
 		recursive:     true,
-		AutoLoginType: common.AutologinTypeAzCLI,
+		AutoLoginType: common.EAutoLoginType.AzCLI().String(),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
@@ -60,7 +60,7 @@ func TestBasic_AzCLIAuthLowerCase(t *testing.T) {
 func TestBasic_PSAuth(t *testing.T) {
 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
 		recursive:     true,
-		AutoLoginType: common.AutologinTypePsCred,
+		AutoLoginType: common.EAutoLoginType.PsCred().String(),
 	}, nil, testFiles{
 		defaultSize: "1K",
 		shouldTransfer: []interface{}{
