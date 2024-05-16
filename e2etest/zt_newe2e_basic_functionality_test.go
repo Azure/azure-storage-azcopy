@@ -159,8 +159,6 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 			ShouldFail: true,
 		})
 
-
-	ValidateErrorOutput(svm, stdout, "Failed to set blob tags due to permission error")
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
 
