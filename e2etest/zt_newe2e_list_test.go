@@ -229,3 +229,27 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 	expectedSummary := &cmd.AzCopyListSummary{FileCount: "4", TotalFileSize: "6.00 KiB"}
 	ValidateListOutput(svm, stdout, expectedObjects, expectedSummary)
 }
+
+func (s *ListSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
+	// Scale up from service to object
+	// TODO: update this test once File OAuth PR is merged bc current output is "azure files requires a SAS token for authentication"
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS()})), ResourceDefinitionObject{})
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbList,
+			Targets: []ResourceManager{
+				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+			},
+			Flags: ListFlags{
+				GlobalFlags: GlobalFlags{
+					OutputType: to.Ptr(common.EOutputFormat.Json()),
+				},
+			},
+			ShouldFail: true,
+		})
+
+	// Validate that the stdout contains these error URLs
+	ValidateErrorOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
+}
