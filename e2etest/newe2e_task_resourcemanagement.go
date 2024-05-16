@@ -284,7 +284,6 @@ func expectedObjectsToString(expectedObjects map[AzCopyOutputKey]cmd.AzCopyListO
 	for _, val := range expectedObjects {
 		stringArray = append(stringArray, toString(val))
 	}
-
 	return stringArray
 }
 
@@ -329,7 +328,6 @@ func toString(lo cmd.AzCopyListObject) string {
 	}
 
 	builder.WriteString("Content Length: " + lo.ContentLength)
-
 	return builder.String()
 }
 
@@ -351,6 +349,5 @@ func checkMultipleErrors(errorMsg []string, line string) bool {
 			return true
 		}
 	}
-
 	return false
 }

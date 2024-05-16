@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
@@ -147,8 +146,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersionsText(svm *Scenario
 			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
-		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
-		fmt.Println("version: " + versionId)
+		versionId := *props.BlobProperties.VersionId
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "1.00 KiB", VersionId: versionId}
 	}
 
