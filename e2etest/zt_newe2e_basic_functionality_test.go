@@ -100,11 +100,48 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 	ValidateErrorOutput(svm, stdout, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL.")
 }
 
-// CopyS2SwithPreserveBlobTags validates that copy operation with PreserveBlobTags set to true returns informative error message to the user: Failed to set blob tags due to permission error.
-func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *ScenarioVariationManager) {
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionContainer{}).GetObject(svm, "abc", common.EEntityType.File())
+func (s *BasicFunctionalitySuite) Scenario_Sync_EmptySASErrorCodes(svm *ScenarioVariationManager) {
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
 
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionObject{})
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{})
+
+	// no local <-> local
+	if srcObj.Location().IsLocal() == dstObj.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbSync,
+			Targets: []ResourceManager{
+				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+				AzCopyTarget{dstObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+			},
+			ShouldFail: true,
+		})
+
+	// Validate that the stdout contains these error URLs
+	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+}
+
+func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *ScenarioVariationManager) {
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionObject{})
+
+	if srcObj.Location().IsLocal() == dstObj.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
 
 	stdout, _ := RunAzCopy(
 		svm,
@@ -116,13 +153,15 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *Sce
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:           pointerTo(true),
-					S2SPreserveBlobTags: pointerTo(true),
+					Recursive: pointerTo(true),
 				},
 			},
 			ShouldFail: true,
 		})
 
-	// Validate that the stdout contains blob tags permission error
+
 	ValidateErrorOutput(svm, stdout, "Failed to set blob tags due to permission error")
+	// Validate that the stdout contains these error URLs
+	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+
 }
