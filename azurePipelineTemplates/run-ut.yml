@@ -28,6 +28,7 @@ steps:
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
       GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+      NEW_E2E_ENVIRONMENT: "AzurePipeline"
     condition: succeededOrFailed()
   - task: PublishTestResults@2
     condition: succeededOrFailed()

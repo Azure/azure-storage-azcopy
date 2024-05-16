@@ -311,6 +311,17 @@ jobs:
         parameters:
           directory: 'common/parallel'
           coverage_name: 'parallel'
+      - task: AzureCLI@2
+        displayName: 'Set Up Workload Identity Environment Variables'
+        inputs:
+          azureSubscription: azcopyworkloadidentity
+          addSpnToEnvironment: true
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            echo "##vso[task.setvariable variable=AZURE_CLIENT_ID]$servicePrincipalId" 
+            echo "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN]$idToken"
+            echo "##vso[task.setvariable variable=AZURE_TENANT_ID]$tenantId"
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'ste'

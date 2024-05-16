@@ -50,6 +50,31 @@ func (GlobalInputManager) GetServicePrincipalAuth() (tenantID string, applicatio
 	return
 }
 
+func (GlobalInputManager) GetWorkloadIdentity() (tenantID string, clientID string, token string, tokenfile string) {
+	tenantID = os.Getenv("AZURE_TENANT_ID")
+	clientID = os.Getenv("AZURE_CLIENT_ID")
+	token = os.Getenv("AZURE_FEDERATED_TOKEN")
+	if token == "" || tenantID == "" || clientID == "" {
+		panic("AZURE_FEDERATED_TOKEN, AZURE_TENANT_ID and AZURE_CLIENT_ID must be specified to authenticate with workload identity")
+	}
+
+	// This is needed for authenticating with the identity Go SDK
+	file, err := os.CreateTemp("", "azure_federated_token.txt")
+	if err != nil {
+		panic("Error creating temporary file")
+	}
+	defer file.Close()
+
+	// Write the token to the temporary file
+	_, err = file.WriteString(token)
+	if err != nil {
+		panic("Error writing to temporary file")
+	}
+	tokenfile = file.Name()
+
+	return
+}
+
 func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, string) {
 	var name, key string
 

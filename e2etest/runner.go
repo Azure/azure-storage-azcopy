@@ -299,12 +299,17 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 	copy(env, os.Environ())
 
 	if needsOAuth {
-		tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
-
 		switch strings.ToLower(oauthMode) {
-		case "", common.EAutoLoginType.SPN().String():
+		case "", common.EAutoLoginType.Workload().String():
+			_, _, _, tokenfile := GlobalInputManager{}.GetWorkloadIdentity()
 			env = append(env,
-				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.EAutoLoginType.SPN().String(), oauthMode),
+				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.EAutoLoginType.Workload().String(), oauthMode),
+				"AZURE_FEDERATED_TOKEN_FILE="+tokenfile)
+
+		case common.EAutoLoginType.SPN().String():
+			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
+			env = append(env,
+				"AzCOPY_AUTO_LOGIN_TYPE="+oauthMode,
 				"AZCOPY_SPA_APPLICATION_ID="+appId,
 				"AZCOPY_SPA_CLIENT_SECRET="+clientSecret,
 			)
@@ -312,16 +317,16 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 			if tenId != "" {
 				env = append(env, "AZCOPY_TENANT_ID="+tenId)
 			}
+
 		case common.EAutoLoginType.AzCLI().String():
+			tenId, clientId, token, _ := GlobalInputManager{}.GetWorkloadIdentity()
 			args := []string{
 				"login",
+				"--federated-token",
+				token,
 				"--service-principal",
-				"-u=" + appId,
-				"-p=" + clientSecret,
-			}
-			if tenId != "" {
-				args = append(args, "--tenant="+tenId)
-				env = append(env, "AZCOPY_TENANT_ID="+tenId)
+				"-u=" + clientId,
+				"-t=" + tenId,
 			}
 
 			out, err := exec.Command("az", args...).Output()
@@ -336,7 +341,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 
 			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE="+oauthMode)
 		case "pscred":
-			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
+			tenId, clientId, token, _ := GlobalInputManager{}.GetWorkloadIdentity()
 			cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
 				$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList %s, $secret;
 				Connect-AzAccount -ServicePrincipal -Credential $cred`
