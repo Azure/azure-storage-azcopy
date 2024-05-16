@@ -770,13 +770,13 @@ func init() {
 
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
+				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("Cannot perform sync due to error: " + err.Error())
+				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 			if cooked.dryrunMode {
 				glcm.Exit(nil, common.EExitCode.Success())

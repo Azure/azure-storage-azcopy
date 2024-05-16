@@ -168,6 +168,17 @@ jobs:
           script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
           pwsh: 'true'
         displayName: 'Install Powershell Az Module'
+      - task: AzureCLI@2
+        displayName: 'Set Up Workload Identity Environment Variables'
+        inputs:
+          azureSubscription: azcopyworkloadidentity
+          addSpnToEnvironment: true
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            echo "##vso[task.setvariable variable=AZURE_CLIENT_ID]$servicePrincipalId" 
+            echo "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN]$idToken"
+            echo "##vso[task.setvariable variable=AZURE_TENANT_ID]$tenantId"
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
@@ -228,6 +239,7 @@ jobs:
           NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
           NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
           NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
+          NEW_E2E_ENVIRONMENT: "AzurePipeline"
         displayName: 'E2E Test $(display_name) - AMD64'
 
       - task: PublishBuildArtifacts@1

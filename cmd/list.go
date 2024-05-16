@@ -187,7 +187,7 @@ func init() {
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
-				glcm.Error(err.Error())
+				glcm.Error(err.Error() + getErrorCodeUrl(err))
 			}
 		},
 	}
