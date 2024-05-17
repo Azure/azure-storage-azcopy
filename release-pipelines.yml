@@ -49,17 +49,23 @@ stages:
         timeoutInMinutes: 120
         strategy:
           matrix:
-            Linux_amd64:
+            Ubuntu-20:
               imageName: 'ubuntu-20.04'
-              type: 'linux_amd64'
-              tags: 'tags'
-              depends: 'depends'
-              container: 'test-cnt-ubn-20'
-              AgentName: "blobfuse-ubuntu20"
+              type: 'linux'
+            # Linux_amd64:
+            #   imageName: 'ubuntu-20.04'
+            #   type: 'linux_amd64'
+            #   tags: 'tags'
+            #   depends: 'depends'
+            #   container: 'test-cnt-ubn-20'
+            #   AgentName: "blobfuse-ubuntu20"
+        # pool:
+        #   name: "blobfuse-ubuntu-pool"
+        #   demands:
+        #     - ImageOverride -equals $(agentName) 
+
         pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(agentName)  
+          vmImage: $(imageName) 
 
         variables:
           - name: root_dir
@@ -83,7 +89,6 @@ stages:
           # install dependencies required for compiling azcopy
           - script: |
               sudo apt-get update --fix-missing
-              sudo apt-get install ruby ruby-dev rubygems build-essential
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
             displayName: "Installing Dependencies"
