@@ -3,6 +3,7 @@ package e2etest
 import (
 	"time"
 
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -170,15 +171,29 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *Sce
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionContainer{}).GetObject(svm, "abc", common.EEntityType.File())
 
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionObject{})
+	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionObject{
+		ObjectName: pointerTo("test"),
+		Body:       body,
+	})
 
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
-				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: srcObj.ContainerName(),
+						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
+					},
+				}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: dstObj.ContainerName(),
+						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
+					},
+				}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
