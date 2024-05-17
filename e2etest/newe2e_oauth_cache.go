@@ -31,7 +31,9 @@ func SetupOAuthCache(a Asserter) {
 	var cred azcore.TokenCredential
 	var err error
 	if dynamicLoginInfo.Environment == AzurePipeline {
-		cred, err = azidentity.NewAzureCLICredential(nil)
+		cred, err = azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{
+			TenantID: dynamicLoginInfo.TenantID,
+		})
 	} else {
 		cred, err = azidentity.NewClientSecretCredential(
 			common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.TenantID),
