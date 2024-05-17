@@ -197,10 +197,6 @@ jobs:
           pwsh: true
           ScriptType: InlineScript
           Inline: >-
-            $(set_export) AZURE_CLIENT_ID=$servicePrincipalId
-            $(set_export) AZURE_FEDERATED_TOKEN=$idToken
-            $(set_export) AZURE_TENANT_ID=$tenantId
-            mkdir coverage
             echo 'Building executable'
             $(go_build)
             echo 'Running tests'
