@@ -23,8 +23,6 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
@@ -229,19 +227,13 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 }
 
 func (gim GlobalInputManager) SetupClassicOAuthCache() error {
-	tenantID, applicationID, secret := gim.GetServicePrincipalAuth()
-	activeDirectoryEndpoint := "https://login.microsoftonline.com"
-
-	spn, err := azidentity.NewClientSecretCredential(tenantID, applicationID, secret, &azidentity.ClientSecretCredentialOptions{
-		ClientOptions: azcore.ClientOptions{
-			Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: activeDirectoryEndpoint},
-		},
-	})
+	tenantId := os.Getenv("AZURE_TENANT_ID")
+	cred, err := azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{TenantID: tenantId})
 	if err != nil {
 		return fmt.Errorf("failed to create credential: %w", err)
 	}
 
-	ClassicE2EOAuthCache = NewOAuthCache(spn, tenantID)
+	ClassicE2EOAuthCache = NewOAuthCache(cred, tenantId)
 
 	return nil
 }
