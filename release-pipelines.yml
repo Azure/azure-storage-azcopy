@@ -157,15 +157,12 @@ stages:
         strategy:
           matrix:
             Linux_arm64:
-              imageName: 'ubuntu-20.04'
-              type: 'linux_arm64'
-              tags: 'tags'
-              depends: 'depends'
-              container: 'test-cnt-ubn-20'
-              AgentName: "blobfuse-ubuntu20"
+              vmImage: 'ubuntu-22.04'
+              container: 'test-cnt-ubn-22-arm64'
+              AgentName: 'blobfuse-ubn22-arm64'
 
         pool:
-          name: "blobfuse-ubuntu-pool"
+          name: "blobfuse-ubn-arm64-pool"
           demands:
             - ImageOverride -equals $(agentName)
 
