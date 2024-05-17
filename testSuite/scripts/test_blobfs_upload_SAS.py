@@ -5,14 +5,14 @@ import utility as util
 class BlobFs_Upload_SAS_User_Scenarios(unittest.TestCase):
     def setUp(self):
         # ensure OAuth is not being used
-        self.cachedAzCopyClientSecret = os.environ['AZCOPY_SPA_CLIENT_SECRET']
-        os.environ['AZCOPY_SPA_CLIENT_SECRET'] = ''
+        self.cachedAzCopyLoginType = os.environ['AZCOPY_AUTO_LOGIN_TYPE']
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = ''
         # ensure account key is not being used
         self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
         os.environ['ACCOUNT_KEY'] = ''
 
     def tearDown(self):
-        os.environ['AZCOPY_SPA_CLIENT_SECRET'] = self.cachedAzCopyClientSecret
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = self.cachedAzCopyLoginType
         os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
 
     def test_blobfs_sas_upload_1Kb_file(self):

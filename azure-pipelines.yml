@@ -308,6 +308,10 @@ jobs:
         parameters:
           directory: 'common/parallel'
           coverage_name: 'parallel'
+      - template: azurePipelineTemplates/run-ut.yml
+        parameters:
+          directory: 'sddl'
+          coverage_name: 'sddl'
       - task: AzureCLI@2
         displayName: 'Set Up Workload Identity Environment Variables'
         inputs:
@@ -324,10 +328,6 @@ jobs:
         parameters:
           directory: 'ste'
           coverage_name: 'ste'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'sddl'
-          coverage_name: 'sddl'
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
           go build -tags "netgo" -o test-validator ./testSuite/
@@ -353,8 +353,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
           GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
           GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-          ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
           CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
           CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
@@ -370,6 +368,7 @@ jobs:
           S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
           SHARE_SAS_URL: $(SHARE_SAS_URL)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+          NEW_E2E_ENVIRONMENT: "AzurePipeline"
         condition: succeededOrFailed()
       # Smoke Tests Publishing
       - task: PublishCodeCoverageResults@1
