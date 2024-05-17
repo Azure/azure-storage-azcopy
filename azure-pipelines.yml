@@ -205,17 +205,6 @@ jobs:
             $(go_build)
             echo 'Running tests'
             $(run_e2e)
-            $(save_exit_code)
-            echo "Generating junit report"
-            cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
-            echo 'Formatting coverage directory to legacy txt format'
-            go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
-            $(output_test_logs)
-            echo 'Formatting coverage to json format'
-            $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
-            echo 'Formatting coverage to xml format'
-            $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
-            $(return_exit_code)
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
