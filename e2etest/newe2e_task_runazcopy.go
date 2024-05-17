@@ -187,8 +187,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
 			} else {
 				if GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.Environment == AzurePipeline {
-					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.Workload().String())
-					c.applyWorkloadIdentity(a)
+					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
 				} else {
 					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.SPN().String())
 					// oauth should reliably work

@@ -300,12 +300,6 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 
 	if needsOAuth {
 		switch strings.ToLower(oauthMode) {
-		case "", common.EAutoLoginType.Workload().String():
-			_, _, _, tokenfile := GlobalInputManager{}.GetWorkloadIdentity()
-			env = append(env,
-				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.EAutoLoginType.Workload().String(), oauthMode),
-				"AZURE_FEDERATED_TOKEN_FILE="+tokenfile)
-
 		case common.EAutoLoginType.SPN().String():
 			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 			env = append(env,
@@ -318,18 +312,10 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 				env = append(env, "AZCOPY_TENANT_ID="+tenId)
 			}
 
-		case common.EAutoLoginType.AzCLI().String():
+		case "", common.EAutoLoginType.AzCLI().String():
 			var args []string
 			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
-				tenId, clientId, token, _ := GlobalInputManager{}.GetWorkloadIdentity()
-				args = []string{
-					"login",
-					"--federated-token",
-					token,
-					"--service-principal",
-					"-u=" + clientId,
-					"-t=" + tenId,
-				}
+				// We are already logged in with AzCLI in Azure Pipeline
 			} else {
 				tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 				args = []string{
@@ -354,7 +340,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 				}
 			}
 
-			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE="+oauthMode)
+			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE=AzCLI")
 		case "pscred":
 			var script string
 			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {

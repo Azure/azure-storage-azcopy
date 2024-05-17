@@ -7,7 +7,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"os"
 	"sync"
 	"time"
 )
@@ -32,23 +31,7 @@ func SetupOAuthCache(a Asserter) {
 	var cred azcore.TokenCredential
 	var err error
 	if dynamicLoginInfo.Environment == AzurePipeline {
-		// Get the value of the AZURE_FEDERATED_TOKEN environment variable
-		token := os.Getenv("AZURE_FEDERATED_TOKEN")
-		a.AssertNow("AZURE_FEDERATED_TOKEN must be specified to authenticate with workload identity", Empty{Invert: true}, token)
-		// Write the token to a temporary file
-		// Create a temporary file to store the token
-		file, err := os.CreateTemp("", "azure_federated_token.txt")
-		a.AssertNow("Error creating temporary file", IsNil{}, err)
-		defer file.Close()
-
-		// Write the token to the temporary file
-		_, err = file.WriteString(token)
-		a.AssertNow("Error writing to temporary file", IsNil{}, err)
-
-		// Set the AZURE_FEDERATED_TOKEN_FILE environment variable
-		err = os.Setenv("AZURE_FEDERATED_TOKEN_FILE", file.Name())
-		a.AssertNow("Error setting AZURE_FEDERATED_TOKEN_FILE environment variable", IsNil{}, err)
-		cred, err = azidentity.NewWorkloadIdentityCredential(nil)
+		cred, err = azidentity.NewAzureCLICredential(nil)
 	} else {
 		cred, err = azidentity.NewClientSecretCredential(
 			common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.TenantID),
