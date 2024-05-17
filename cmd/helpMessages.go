@@ -324,19 +324,18 @@ Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's passw
    --certificate-path is mandatory when doing cert-based service principal auth.
 
 Log in using a Device:
-Set the environment variable AZCOPY_AUTO_LOGIN_TYPE=DEVICE to initiate Device login.
-   - azcopy login
-   Please note that you will be provided with a code to authenticate via a web browser. For example, you may see a message like this:
-   To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code AWRKVXE8P.
+    Set the environment variable AZCOPY_AUTO_LOGIN_TYPE=DEVICE to initiate Device login.
+      - azcopy login
+      Please note that you will be provided with a code to authenticate via a web browser. For example, you may see a message like this:
+      To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code ABCD12345.
 
 Log in using Managed Identity
-Set the environment variable AZCOPY_AUTO_LOGIN_TYPE to MSI.
-Set additional parameters based on your identity type:
-To use Client ID, set AZCOPY_MSI_CLIENT_ID.
-To use Object ID, set AZCOPY_MSI_OBJECT_ID.
-To use Resource string, set AZCOPY_MSI_RESOURCE_STRING.
-   - azcopy login
-   Upon successful authentication, you will see messages indicating login with identity succeeded and authenticating to the destination using Azure AD.
+    Set the environment variable AZCOPY_AUTO_LOGIN_TYPE to MSI.
+    Set additional parameters based on your identity type:
+    To use Client ID, set AZCOPY_MSI_CLIENT_ID.
+    To use Resource string, set AZCOPY_MSI_RESOURCE_STRING.
+      - azcopy login
+      Upon successful authentication, you will see messages indicating login with identity succeeded and authenticating to the destination using Microsoft Entra ID.
 
 Subcommand for login to check the login status of your current session.
 	- azcopy login status 
