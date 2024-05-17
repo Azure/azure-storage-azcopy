@@ -85,7 +85,7 @@ stages:
               sudo apt-get update --fix-missing
               sudo apt-get install ruby-dev
               sudo gem install dotenv -v 2.8.1
-              gem install fpm -V
+              sudo gem install fpm -V
             displayName: "Installing Dependencies"
 
           - script: |
@@ -145,104 +145,104 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-      - job: Set_2
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Linux_amd64_se:
-              imageName: 'ubuntu-20.04'
-              type: 'linux_se_amd64'
-              tags: 'tags'
-              depends: 'depends'
-              container: 'test-cnt-ubn-20'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(agentName)  
+      # - job: Set_2
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Linux_amd64_se:
+      #         imageName: 'ubuntu-20.04'
+      #         type: 'linux_se_amd64'
+      #         tags: 'tags'
+      #         depends: 'depends'
+      #         container: 'test-cnt-ubn-20'
+      #         AgentName: "blobfuse-ubuntu20"
+      #   pool:
+      #     name: "blobfuse-ubuntu-pool"
+      #     demands:
+      #       - ImageOverride -equals $(agentName)  
 
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+      #   variables:
+      #     - name: root_dir
+      #       value: '$(System.DefaultWorkingDirectory)'
+      #     - name: work_dir
+      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
-        steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
+      #   steps:
+      #     - task: GoTool@0
+      #       env:
+      #         GO111MODULE: 'on'
+      #       inputs:
+      #         version: $(AZCOPY_GOLANG_VERSION)
 
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Linux'
-            workingDirectory: $(root_dir)
+      #     - script: |
+      #         echo 'Running GO Vet'
+      #         go vet 
+      #       displayName: 'Golang Vet - Linux'
+      #       workingDirectory: $(root_dir)
 
-          # install dependencies required for compiling azcopy
-          - script: |
-              sudo apt-get update --fix-missing
-              sudo gem install fpm -V
-            displayName: "Installing Dependencies"
+      #     # install dependencies required for compiling azcopy
+      #     - script: |
+      #         sudo apt-get update --fix-missing
+      #         sudo gem install fpm -V
+      #       displayName: "Installing Dependencies"
 
-          - script: |
-              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
-            displayName: 'Generate Linux AMD64 SE Integration'
+      #     - script: |
+      #         GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
+      #       displayName: 'Generate Linux AMD64 SE Integration'
 
-          - script: |
-              cp NOTICE.txt $(work_dir)
-            displayName: 'Copy NOTICE.txt'
+      #     - script: |
+      #         cp NOTICE.txt $(work_dir)
+      #       displayName: 'Copy NOTICE.txt'
 
-          # place the generated binary files & any additional files in appropriate locations
-          - script: |
-              mkdir -p pkgDir/usr/bin/
-              cp -r $(work_dir) pkgDir/usr/bin/
-            displayName: 'Accumulate pkg files'
+      #     # place the generated binary files & any additional files in appropriate locations
+      #     - script: |
+      #         mkdir -p pkgDir/usr/bin/
+      #         cp -r $(work_dir) pkgDir/usr/bin/
+      #       displayName: 'Accumulate pkg files'
 
-          - script: |
-              sudo ls -lRt pkgDir/usr/bin/
-            displayName: 'List the binaries'
-            workingDirectory: $(root_dir)
+      #     - script: |
+      #         sudo ls -lRt pkgDir/usr/bin/
+      #       displayName: 'List the binaries'
+      #       workingDirectory: $(root_dir)
             
           
-          # using fpm tool for packaging of our binary & performing post-install operations
-          # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-          - script: |
-              fpm -s dir -t deb -n azcopy -C pkgDir/ \
-              -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_se_amd64 --version | cut -d " " -f 3` \
-              --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
-              --url "https://github.com/Azure/azure-storage-azcopy" \
-              --description "Add description" 
-              mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_se_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
-              cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
-            displayName: 'Make deb Package'
+      #     # using fpm tool for packaging of our binary & performing post-install operations
+      #     # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+      #     - script: |
+      #         fpm -s dir -t deb -n azcopy -C pkgDir/ \
+      #         -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_se_amd64 --version | cut -d " " -f 3` \
+      #         --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
+      #         --url "https://github.com/Azure/azure-storage-azcopy" \
+      #         --description "Add description" 
+      #         mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_se_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
+      #         cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+      #       workingDirectory: $(root_dir)
+      #       displayName: 'Make deb Package'
             
-          - script: |
-              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
-              -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_se_amd64 --version | cut -d " " -f 3` \
-              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-              --url "https://github.com/Azure/azure-storage-azcopy" \
-              --description "Add description" 
-              mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_se_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
-              cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
-            displayName: 'Make rpm Package'
+      #     - script: |
+      #         fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+      #         -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_se_amd64 --version | cut -d " " -f 3` \
+      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+      #         --url "https://github.com/Azure/azure-storage-azcopy" \
+      #         --description "Add description" 
+      #         mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_se_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
+      #         cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+      #       workingDirectory: $(root_dir)
+      #       displayName: 'Make rpm Package'
 
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-temp'
-            displayName: 'Publish Artifacts'
-            condition: succeededOrFailed()
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-temp'
+      #       displayName: 'Publish Artifacts'
+      #       condition: succeededOrFailed()
         
-          - task: ComponentGovernanceComponentDetection@0
-            inputs:
-              scanType: 'Register'
-              verbosity: 'Verbose'
-              alertWarningLevel: 'High'
+      #     - task: ComponentGovernanceComponentDetection@0
+      #       inputs:
+      #         scanType: 'Register'
+      #         verbosity: 'Verbose'
+      #         alertWarningLevel: 'High'
 
-      - job: Set_3
+      # - job: Set_3
         timeoutInMinutes: 120
         strategy:
           matrix:
