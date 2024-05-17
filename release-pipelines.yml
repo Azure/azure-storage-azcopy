@@ -83,7 +83,7 @@ stages:
           # install dependencies required for compiling azcopy
           - script: |
               sudo apt-get update --fix-missing
-              sudo gem install dotenv -v 2.8.1
+              sudo apt-get install gem -y
               sudo gem install fpm -V
             displayName: "Installing Dependencies"
 
