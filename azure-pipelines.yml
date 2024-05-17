@@ -189,18 +189,33 @@ jobs:
           mkdir azurite
           azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
-      - task: AzurePowerShell@5
+      - task: AzureCLI@2
         displayName: 'Set Up Workload Identity Environment Variables and Run E2E Test $(display_name) - AMD64'
         inputs:
           azureSubscription: azcopytestworkloadidentity
-          azurePowerShellVersion: LatestVersion
-          pwsh: true
-          ScriptType: InlineScript
-          Inline: >-
+          addSpnToEnvironment: true
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            $(set_export) AZURE_CLIENT_ID=$servicePrincipalId
+            $(set_export) AZURE_FEDERATED_TOKEN=$idToken
+            $(set_export) AZURE_TENANT_ID=$tenantId
+            mkdir coverage
             echo 'Building executable'
             $(go_build)
             echo 'Running tests'
             $(run_e2e)
+            $(save_exit_code)
+            echo "Generating junit report"
+            cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
+            echo 'Formatting coverage directory to legacy txt format'
+            go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
+            $(output_test_logs)
+            echo 'Formatting coverage to json format'
+            $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
+            echo 'Formatting coverage to xml format'
+            $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
+            $(return_exit_code)
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
@@ -221,54 +236,6 @@ jobs:
           NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
           NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           NEW_E2E_ENVIRONMENT: "AzurePipeline"
-#      - task: AzureCLI@2
-#        displayName: 'Set Up Workload Identity Environment Variables and Run E2E Test $(display_name) - AMD64'
-#        inputs:
-#          azureSubscription: azcopytestworkloadidentity
-#          addSpnToEnvironment: true
-#          scriptType: bash
-#          scriptLocation: inlineScript
-#          inlineScript: |
-#            $(set_export) AZURE_CLIENT_ID=$servicePrincipalId
-#            $(set_export) AZURE_FEDERATED_TOKEN=$idToken
-#            $(set_export) AZURE_TENANT_ID=$tenantId
-#            mkdir coverage
-#            echo 'Building executable'
-#            $(go_build)
-#            echo 'Running tests'
-#            $(run_e2e)
-#            $(save_exit_code)
-#            echo "Generating junit report"
-#            cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
-#            echo 'Formatting coverage directory to legacy txt format'
-#            go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
-#            $(output_test_logs)
-#            echo 'Formatting coverage to json format'
-#            $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
-#            echo 'Formatting coverage to xml format'
-#            $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
-#            $(return_exit_code)
-#        env:
-#          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-#          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-#          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
-#          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
-#          AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
-#          AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
-#          AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
-#          AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
-#          AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG)
-#          AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
-#          AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG)
-#          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-#          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-#          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-#          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-#          NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
-#          NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-#          NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-#          NEW_E2E_ENVIRONMENT: "AzurePipeline"
-
       - task: PublishBuildArtifacts@1
         displayName: 'Publish logs'
         condition: succeededOrFailed()
@@ -356,10 +323,41 @@ jobs:
             echo "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN]$idToken"
             echo "##vso[task.setvariable variable=AZURE_TENANT_ID]$tenantId"
         condition: succeededOrFailed()
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'ste'
-          coverage_name: 'ste'
+      - script: |
+          set -e
+          echo "Running tests in ste"
+          go test -timeout=1h -v -coverprofile=ste_coverage.txt ./ste | tee ste.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "Generating junit report for ste"
+          cat ste.txt | $(go env GOPATH)/bin/go-junit-report > ste_report.xml
+          echo "Generating json coverage report for ste"
+          $(go env GOPATH)/bin/gocov convert ste_coverage.txt > ste_coverage.json
+          echo "Generating xml coverage report for ste"
+          $(go env GOPATH)/bin/gocov-xml < ste_coverage.json > ste_coverage.xml
+          exit "$exit_code"
+        displayName: 'Run ste tests'
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+          GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+          NEW_E2E_ENVIRONMENT: "AzurePipeline"
+        condition: succeededOrFailed()
+      - task: PublishTestResults@2
+        condition: succeededOrFailed()
+        inputs:
+          testRunner: JUnit
+          testResultsFiles: $(System.DefaultWorkingDirectory)/**/ste_report.xml
+          testRunTitle: 'ste Tests'
+      - task: PublishCodeCoverageResults@1
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/ste_coverage.xml
       - script: |
           GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
           go build -tags "netgo" -o test-validator ./testSuite/
