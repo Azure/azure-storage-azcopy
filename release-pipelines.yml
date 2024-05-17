@@ -89,7 +89,7 @@ stages:
           # install dependencies required for compiling azcopy
           - script: |
               sudo apt-get update --fix-missing
-              sudo apt-get install ruby ruby-dev rubygems build-essential -y
+              sudo apt-get install ruby ruby-dev rubygems build-essential rpm -y
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
             displayName: "Installing Dependencies"
@@ -152,27 +152,22 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-      - job: Set_3
+      - job: Set_2
         timeoutInMinutes: 120
         strategy:
           matrix:
-            Ubuntu-20:
+            Linux_arm64:
               imageName: 'ubuntu-20.04'
-              type: 'linux'
-            # Linux_arm64:
-            #   imageName: 'ubuntu-20.04'
-            #   type: 'linux_arm64'
-            #   tags: 'tags'
-            #   depends: 'depends'
-            #   container: 'test-cnt-ubn-20'
-            #   AgentName: "blobfuse-ubuntu20"
-        # pool:
-        #   name: "blobfuse-ubuntu-pool"
-        #   demands:
-        #     - ImageOverride -equals $(agentName)  
+              type: 'linux_arm64'
+              tags: 'tags'
+              depends: 'depends'
+              container: 'test-cnt-ubn-20'
+              AgentName: "blobfuse-ubuntu20"
 
         pool:
-          vmImage: $(imageName)
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(agentName)
 
         variables:
           - name: root_dir
@@ -196,6 +191,8 @@ stages:
           # install dependencies required for compiling azcopy
           - script: |
               sudo apt-get update --fix-missing
+              sudo apt-get install ruby ruby-dev rubygems build-essential rpm -y
+              sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
             displayName: "Installing Dependencies"
 
@@ -375,230 +372,230 @@ stages:
             displayName: 'Publish Signed Artifacts'
   # SignArtifacts end here
 
-  # - stage: TestArtifacts
-  #   dependsOn: SignArtifacts
-  #   condition: succeeded('SignArtifacts')
-  #   jobs:
-  #     - job: Set_1
-  #       timeoutInMinutes: 120
-  #       strategy:
-  #         matrix:
-  #           Ubuntu-22:
-  #             agentName: "blobfuse-ubuntu22"
-  #             vmImage: 'Ubuntu-22.04'
-  #             tags: 'fuse3'
-  #             container: 'test-cnt-ubn-22'
-  #       pool:
-  #         vmImage: $(vmImage)
+  - stage: TestArtifacts
+    dependsOn: SignArtifacts
+    condition: succeeded('SignArtifacts')
+    jobs:
+      - job: Set_1
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu-22:
+              agentName: "blobfuse-ubuntu22"
+              vmImage: 'Ubuntu-22.04'
+              tags: 'fuse3'
+              container: 'test-cnt-ubn-22'
+        pool:
+          vmImage: $(vmImage)
 
-  #       variables:
-  #         - group: AZCOPY_ESRP_SECRET
-  #         - name: root_dir
-  #           value: '$(System.DefaultWorkingDirectory)'
-  #         - name: work_dir
-  #           value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
-  #         - name: mount_dir
-  #           value: '$(System.DefaultWorkingDirectory)/azcopy-temp'
-  #         - name: temp_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
+        variables:
+          - group: AZCOPY_ESRP_SECRET
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
+          - name: mount_dir
+            value: '$(System.DefaultWorkingDirectory)/azcopy-temp'
+          - name: temp_dir
+            value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
 
-  #       steps:
-  #         - checkout: none
+        steps:
+          - checkout: none
 
-  #         - script: |
-  #             git clone https://github.com/Azure/azure-storage-fuse
-  #           displayName: 'Checkout Code'
-  #           workingDirectory: $(root_dir)
-  #         - script: |
-  #             git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-  #           displayName: 'Checkout Branch'
-  #           workingDirectory: $(root_dir)/azure-storage-fuse
+          - script: |
+              git clone https://github.com/Azure/azure-storage-fuse
+            displayName: 'Checkout Code'
+            workingDirectory: $(root_dir)
+          - script: |
+              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+            displayName: 'Checkout Branch'
+            workingDirectory: $(root_dir)/azure-storage-fuse
 
-  #         # Custom script to install Go-lang
-  #         - task: ShellScript@2
-  #           inputs:
-  #             scriptPath: "$(work_dir)/go_installer.sh"
-  #             args: "$(root_dir)/"
-  #           displayName: "GoTool Custom Setup"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "GoTool Custom Setup"
           
-  #         # get glibc version with which build is done
-  #         - script: |
-  #            ldd --version
-  #           displayName: "GLIBC Version"
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
             
-  #         - task: DownloadBuildArtifacts@0
-  #           displayName: 'Download Build Artifacts'
-  #           inputs:
-  #             artifactName: 'blobfuse2-signed'
-  #             downloadPath: $(root_dir)
-  #             itemPattern: blobfuse2-signed/blobfuse2*$(tags)*x86_64.deb
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'blobfuse2-signed'
+              downloadPath: $(root_dir)
+              itemPattern: blobfuse2-signed/blobfuse2*$(tags)*x86_64.deb
 
-  #         - script: |
-  #             ls -l
-  #             result=$(ls -1 | wc -l)
-  #             if [ $result -ne 1 ]; then
-  #               exit 1
-  #             fi
-  #           displayName: 'List Downloaded Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed      
+          - script: |
+              ls -l
+              result=$(ls -1 | wc -l)
+              if [ $result -ne 1 ]; then
+                exit 1
+              fi
+            displayName: 'List Downloaded Package'
+            workingDirectory: $(root_dir)/blobfuse2-signed      
 
-  #         - script: |
-  #             for f in ./blobfuse2*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
-  #             cp ./blobfuse2*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
-  #           displayName: 'Rename Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed
+          - script: |
+              for f in ./blobfuse2*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
+              cp ./blobfuse2*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
+            displayName: 'Rename Package'
+            workingDirectory: $(root_dir)/blobfuse2-signed
             
-  #         - script: |
-  #             sudo dpkg --info blobfuse2*.deb
-  #             sudo dpkg -i blobfuse2*.deb
-  #             sudo apt-get install $(fuse-version) build-essential -y
-  #           displayName: 'Install Package'
-  #           workingDirectory: $(Build.ArtifactStagingDirectory)
-  #         - template: 'azure-pipeline-templates/release-distro-tests.yml'
-  #           parameters:
-  #             root_dir: $(root_dir)
-  #             work_dir: $(work_dir)
-  #             mount_dir: $(mount_dir)
-  #             temp_dir: $(temp_dir)
-  #             container: $(container)
+          - script: |
+              sudo dpkg --info blobfuse2*.deb
+              sudo dpkg -i blobfuse2*.deb
+              sudo apt-get install $(fuse-version) build-essential -y
+            displayName: 'Install Package'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
+          - template: 'azure-pipeline-templates/release-distro-tests.yml'
+            parameters:
+              root_dir: $(root_dir)
+              work_dir: $(work_dir)
+              mount_dir: $(mount_dir)
+              temp_dir: $(temp_dir)
+              container: $(container)
 
-  #         # Create container for blobfuse and publish it
-  #         - script: |
-  #             sudo apt-get install $(tags) $(fuselib) -y
-  #             chmod 777 *.sh
-  #             ./dockerinstall.sh
-  #             ./buildcontainer.sh Dockerfile x86_64
-  #             ./publishcontainer.sh $(AZTEST_DOCKER_REG_USER)  $(AZTEST_DOCKER_REG_PWD) x86_64
-  #             ./buildcontainer.sh DockerfileMariner mariner-x86_64
-  #             ./publishcontainer.sh $(AZTEST_DOCKER_REG_USER)  $(AZTEST_DOCKER_REG_PWD) mariner-x86_64
-  #           displayName: "Create and publish container"
-  #           workingDirectory: $(work_dir)/docker
+          # Create container for blobfuse and publish it
+          - script: |
+              sudo apt-get install $(tags) $(fuselib) -y
+              chmod 777 *.sh
+              ./dockerinstall.sh
+              ./buildcontainer.sh Dockerfile x86_64
+              ./publishcontainer.sh $(AZTEST_DOCKER_REG_USER)  $(AZTEST_DOCKER_REG_PWD) x86_64
+              ./buildcontainer.sh DockerfileMariner mariner-x86_64
+              ./publishcontainer.sh $(AZTEST_DOCKER_REG_USER)  $(AZTEST_DOCKER_REG_PWD) mariner-x86_64
+            displayName: "Create and publish container"
+            workingDirectory: $(work_dir)/docker
 
-  #         # publishing the artifacts generated
-  #         - task: PublishBuildArtifacts@1
-  #           inputs:
-  #             artifactName: 'blobfuse2'
-  #           displayName: 'Publish Artifacts' 
+          # publishing the artifacts generated
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'blobfuse2'
+            displayName: 'Publish Artifacts' 
 
-  #     - job: Set_1
-  #       timeoutInMinutes: 120
-  #       strategy:
-  #         matrix:
-  #           Ubuntu-18:
-  #             vmImage: 'Ubuntu-18.04'
-  #             fuselib: 'libfuse-dev'
-  #             fuse-version: 'fuse'
-  #             tags: 'fuse2'
-  #             container: 'test-cnt-ubn-18'
-  #             AgentName: "blobfuse-ubuntu18"
-  #           Ubuntu-20:
-  #             vmImage: 'Ubuntu-20.04'
-  #             fuse-version: 'fuse3'
-  #             fuselib: 'libfuse3-dev'
-  #             tags: 'fuse3'
-  #             container: 'test-cnt-ubn-20'
-  #             AgentName: "blobfuse-ubuntu20"
-  #       pool:
-  #         name: "blobfuse-ubuntu-pool"
-  #         demands:
-  #           - ImageOverride -equals $(AgentName)
+      - job: Set_1
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu-18:
+              vmImage: 'Ubuntu-18.04'
+              fuselib: 'libfuse-dev'
+              fuse-version: 'fuse'
+              tags: 'fuse2'
+              container: 'test-cnt-ubn-18'
+              AgentName: "blobfuse-ubuntu18"
+            Ubuntu-20:
+              vmImage: 'Ubuntu-20.04'
+              fuse-version: 'fuse3'
+              fuselib: 'libfuse3-dev'
+              tags: 'fuse3'
+              container: 'test-cnt-ubn-20'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
 
-  #       variables:
-  #         - group: NightlyBlobFuse
-  #         - name: root_dir
-  #           value: '$(System.DefaultWorkingDirectory)'
-  #         - name: work_dir
-  #           value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
-  #         - name: mount_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmp'
-  #         - name: temp_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
+        variables:
+          - group: NightlyBlobFuse
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
+          - name: mount_dir
+            value: '$(System.DefaultWorkingDirectory)/fusetmp'
+          - name: temp_dir
+            value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
 
-  #       steps:
-  #         - checkout: none
+        steps:
+          - checkout: none
 
-  #         - script: |
-  #             git clone https://github.com/Azure/azure-storage-fuse
-  #           displayName: 'Checkout Code'
-  #           workingDirectory: $(root_dir)
+          - script: |
+              git clone https://github.com/Azure/azure-storage-fuse
+            displayName: 'Checkout Code'
+            workingDirectory: $(root_dir)
       
-  #         - script: |
-  #             git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-  #           displayName: 'Checkout Branch'
-  #           workingDirectory: $(root_dir)/azure-storage-fuse
+          - script: |
+              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+            displayName: 'Checkout Branch'
+            workingDirectory: $(root_dir)/azure-storage-fuse
           
-  #         # Custom script to install Go-lang
-  #         - task: ShellScript@2
-  #           inputs:
-  #             scriptPath: "$(work_dir)/go_installer.sh"
-  #             args: "$(root_dir)/"
-  #           displayName: "GoTool Custom Setup"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "GoTool Custom Setup"
 
-  #         # get glibc version with which build is done
-  #         - script: |
-  #            sudo apt update
-  #            sudo apt --fix-broken install
-  #            ldd --version
-  #           displayName: "GLIBC Version"
+          # get glibc version with which build is done
+          - script: |
+             sudo apt update
+             sudo apt --fix-broken install
+             ldd --version
+            displayName: "GLIBC Version"
 
-  #         - task: DownloadBuildArtifacts@0
-  #           displayName: 'Download Build Artifacts'
-  #           inputs:
-  #             artifactName: 'blobfuse2-signed'
-  #             downloadPath: $(root_dir)
-  #             itemPattern: blobfuse2-signed/blobfuse2*$(tags)*x86_64.deb
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'blobfuse2-signed'
+              downloadPath: $(root_dir)
+              itemPattern: blobfuse2-signed/blobfuse2*$(tags)*x86_64.deb
 
-  #         - script: |
-  #             ls -l
-  #             result=$(ls -1 | wc -l)
-  #             if [ $result -ne 1 ]; then
-  #               exit 1
-  #             fi
-  #           displayName: 'List Downloaded Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed
+          - script: |
+              ls -l
+              result=$(ls -1 | wc -l)
+              if [ $result -ne 1 ]; then
+                exit 1
+              fi
+            displayName: 'List Downloaded Package'
+            workingDirectory: $(root_dir)/blobfuse2-signed
 
-  #         - script: |
-  #             for f in ./blobfuse2*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
-  #             cp ./blobfuse2*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
-  #             if [ $(AgentName) == "blobfuse-ubuntu18" ]; then
-  #               echo "Generating for Debian 9/10"
-  #               f=`ls ./blobfuse2*$(vmImage)*.deb`
-  #               cp "$f" $(sed 's:Ubuntu-18.04:Debian-9.0:' <<< "$f")
-  #               cp "$f" $(sed 's:Ubuntu-18.04:Debian-10.0:' <<< "$f")
-  #               cp ./blobfuse2*Debian-*.deb $(Build.ArtifactStagingDirectory)
-  #               ls -l $(Build.ArtifactStagingDirectory)
-  #               rm -rf ./blobfuse2*Debian-*.deb
-  #             else
-  #               echo "Generating for Debian 11"
-  #               f=`ls ./blobfuse2*$(vmImage)*.deb`
-  #               cp "$f" $(sed 's:Ubuntu-20.04:Debian-11.0:' <<< "$f")
-  #               cp ./blobfuse2*Debian-*.deb $(Build.ArtifactStagingDirectory)
-  #               ls -l $(Build.ArtifactStagingDirectory)
-  #               rm -rf ./blobfuse2*Debian-*.deb
-  #             fi
-  #           displayName: 'Rename Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed
+          - script: |
+              for f in ./blobfuse2*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
+              cp ./blobfuse2*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
+              if [ $(AgentName) == "blobfuse-ubuntu18" ]; then
+                echo "Generating for Debian 9/10"
+                f=`ls ./blobfuse2*$(vmImage)*.deb`
+                cp "$f" $(sed 's:Ubuntu-18.04:Debian-9.0:' <<< "$f")
+                cp "$f" $(sed 's:Ubuntu-18.04:Debian-10.0:' <<< "$f")
+                cp ./blobfuse2*Debian-*.deb $(Build.ArtifactStagingDirectory)
+                ls -l $(Build.ArtifactStagingDirectory)
+                rm -rf ./blobfuse2*Debian-*.deb
+              else
+                echo "Generating for Debian 11"
+                f=`ls ./blobfuse2*$(vmImage)*.deb`
+                cp "$f" $(sed 's:Ubuntu-20.04:Debian-11.0:' <<< "$f")
+                cp ./blobfuse2*Debian-*.deb $(Build.ArtifactStagingDirectory)
+                ls -l $(Build.ArtifactStagingDirectory)
+                rm -rf ./blobfuse2*Debian-*.deb
+              fi
+            displayName: 'Rename Package'
+            workingDirectory: $(root_dir)/blobfuse2-signed
 
-  #         - script: |
-  #             sudo dpkg --info blobfuse2*.deb
-  #             sudo apt-get install $(fuse-version) build-essential -y
-  #             sudo dpkg -i blobfuse2*.deb
-  #           displayName: 'Install Package'
-  #           workingDirectory: $(Build.ArtifactStagingDirectory)
+          - script: |
+              sudo dpkg --info blobfuse2*.deb
+              sudo apt-get install $(fuse-version) build-essential -y
+              sudo dpkg -i blobfuse2*.deb
+            displayName: 'Install Package'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
 
-  #         - template: 'azure-pipeline-templates/release-distro-tests.yml'
-  #           parameters:
-  #             root_dir: $(root_dir)
-  #             work_dir: $(work_dir)
-  #             mount_dir: $(mount_dir)
-  #             temp_dir: $(temp_dir)
-  #             container: $(container)
+          - template: 'azure-pipeline-templates/release-distro-tests.yml'
+            parameters:
+              root_dir: $(root_dir)
+              work_dir: $(work_dir)
+              mount_dir: $(mount_dir)
+              temp_dir: $(temp_dir)
+              container: $(container)
 
-  #         # publishing the artifacts generated
-  #         - task: PublishBuildArtifacts@1
-  #           inputs:
-  #             artifactName: 'blobfuse2'
-  #           displayName: 'Publish Artifacts' 
+          # publishing the artifacts generated
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'blobfuse2'
+            displayName: 'Publish Artifacts' 
 
   #     - job: Set_2_ARM
   #       timeoutInMinutes: 120
