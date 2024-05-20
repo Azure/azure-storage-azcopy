@@ -148,7 +148,7 @@ jobs:
           save_exit_code: 'set exit_code=%errorlevel%'
           return_exit_code: 'exit %exit_code%'
           go_build: 'go build -cover -o $(build_name)'
-          set_export: 'set'
+          set_export: 'setx'
         MacOS:
           imageName: 'macos-11'
           build_name: 'azcopy_darwin_amd64'
