@@ -435,13 +435,13 @@ stages:
                 exit 1
               fi
             displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-signed      
+            #workingDirectory: $(root_dir)/azCopy-signed      
 
           - script: |
               for f in ./azcopy*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
               cp ./azcopy*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
             displayName: 'Rename Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            #workingDirectory: $(root_dir)/azCopy-signed
             
           - script: |
               sudo dpkg --info azcopy*.deb
