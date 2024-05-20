@@ -408,11 +408,16 @@ stages:
             workingDirectory: $(root_dir)/azure-storage-azcopy
 
           # Custom script to install Go-lang
-          - task: ShellScript@2
+          - task: GoTool@0
+            env:
+              GO111MODULE: 'on'
             inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "GoTool Custom Setup"
+              version: $(AZCOPY_GOLANG_VERSION)
+          # - task: ShellScript@2
+          #   inputs:
+          #     scriptPath: "$(work_dir)/go_installer.sh"
+          #     args: "$(root_dir)/"
+          #   displayName: "GoTool Custom Setup"
           
             
           - task: DownloadBuildArtifacts@0
