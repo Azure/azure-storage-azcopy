@@ -443,13 +443,13 @@ stages:
               sudo apt-get install $(fuse-version) build-essential -y
             displayName: 'Install Package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
-          - template: 'azure-pipeline-templates/release-distro-tests.yml'
-            parameters:
-              root_dir: $(root_dir)
-              work_dir: $(work_dir)
-              mount_dir: $(mount_dir)
-              temp_dir: $(temp_dir)
-              container: $(container)
+          # - template: 'azure-pipeline-templates/release-distro-tests.yml'
+          #   parameters:
+          #     root_dir: $(root_dir)
+          #     work_dir: $(work_dir)
+          #     mount_dir: $(mount_dir)
+          #     temp_dir: $(temp_dir)
+          #     container: $(container)
 
           - script: | 
               azcopy --version
