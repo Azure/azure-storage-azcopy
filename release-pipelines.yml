@@ -452,8 +452,8 @@ stages:
               container: $(container)
 
           - script: | 
-            azcopy --version
-          displayName: 'Check Version'
+              azcopy --version
+            displayName: 'Check Version'
 
           # # Create container for azcopy and publish it
           # - script: |
