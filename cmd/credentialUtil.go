@@ -104,35 +104,21 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		}
 
 		// Fill up lca
+		lca.loginType = autoLoginType
 		switch autoLoginType {
-		case common.AutologinTypeSPN:
+		case common.EAutoLoginType.SPN().String():
 			lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
 			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
 			lca.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-			lca.servicePrincipal = true
-
-		case common.AutologinTypeMSI:
+		case common.EAutoLoginType.MSI().String():
 			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
 			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
 			lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
-			lca.identity = true
-
-		case common.AutologinTypeDevice:
-			lca.identity = false
-
-		case common.AutologinTypeAzCLI:
-			lca.identity = false
-			lca.servicePrincipal = false
-			lca.psCred = false
-			lca.azCliCred = true
-
-		case common.AutologinTypePsCred:
-			lca.identity = false
-			lca.servicePrincipal = false
-			lca.azCliCred = false
-			lca.psCred = true
-
+		case common.EAutoLoginType.Device().String():
+		case common.EAutoLoginType.AzCLI().String():
+		case common.EAutoLoginType.PsCred().String():
+		case common.EAutoLoginType.Workload().String():
 		default:
 			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
 			return

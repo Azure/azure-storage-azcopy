@@ -135,7 +135,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			objDef := definition.(ResourceDefinitionObject)
 
 			if !objDef.ShouldExist() {
-				a.AssertNow("object must not exist", Equal{}, objMan.Exists(), false)
+				a.Assert(fmt.Sprintf("object %s must not exist", objMan.ObjectName()), Equal{}, objMan.Exists(), false)
 				return
 			}
 
@@ -230,4 +230,27 @@ func ValidateStatsReturned(a Asserter, stdout AzCopyStdout) {
 	// Check for any of the stats. It's possible for average iops, server busy percentage, network error percentage to be 0, but average e2e milliseconds should never be 0.
 	statsFound := csrStdout.FinalStatus.AverageIOPS != 0 || csrStdout.FinalStatus.AverageE2EMilliseconds != 0 || csrStdout.FinalStatus.ServerBusyPercentage != 0 || csrStdout.FinalStatus.NetworkErrorPercentage != 0
 	a.Assert("stats must be returned", Equal{}, statsFound, true)
+}
+
+func ValidateContainsError(a Asserter, stdout AzCopyStdout, errorMsg []string) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	for _, line := range stdout.RawStdout() {
+		if checkMultipleErrors(errorMsg, line) {
+			return
+		}
+	}
+	fmt.Println(stdout.String())
+	a.Error("expected error message not found in azcopy output")
+}
+
+func checkMultipleErrors(errorMsg []string, line string) bool {
+	for _, e := range errorMsg {
+		if strings.Contains(line, e) {
+			return true
+		}
+	}
+
+	return false
 }
