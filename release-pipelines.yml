@@ -381,6 +381,7 @@ stages:
               agentName: "blobfuse-ubuntu22"
               vmImage: 'Ubuntu-22.04'
               container: 'test-cnt-ubn-22'
+              tags: 'tags'
         pool:
           vmImage: $(vmImage)
 
