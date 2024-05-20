@@ -339,7 +339,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 				}
 			}
 
-			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE="+oauthMode)
+			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE=AzCLI")
 		case "pscred":
 			var script string
 			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
