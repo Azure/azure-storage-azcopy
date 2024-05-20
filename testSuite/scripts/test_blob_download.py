@@ -13,10 +13,6 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         cmd = util.Command("login").add_arguments("--login-type=AzCLI").add_flags("tenant-id", os.environ['tenantId'])
         cmd.execute_azcopy_copy_command()
 
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
     # test_download_1kb_blob_to_null verifies that a 1kb blob can be downloaded to null and the md5 can be checked successfully
     def test_download_1kb_blob_to_null(self):
         # create file of size 1kb

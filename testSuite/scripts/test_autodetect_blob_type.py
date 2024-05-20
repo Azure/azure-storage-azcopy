@@ -8,10 +8,6 @@ class Autodetect_Blob_Type_Scenario(unittest.TestCase):
         cmd = util.Command("login").add_arguments("--login-type=AzCLI").add_flags("tenant-id", os.environ['tenantId'])
         cmd.execute_azcopy_copy_command()
 
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
     # Currently, the only auto-detected blob type is page blob.
     # Copy a VHD without specifying page blob and see what it does.
     def test_auto_infer_blob_type_vhd(self):

@@ -10,10 +10,6 @@ class Azcopy_Operation_User_Scenario(unittest.TestCase):
         cmd = util.Command("login").add_arguments("--login-type=AzCLI").add_flags("tenant-id", os.environ['tenantId'])
         cmd.execute_azcopy_copy_command()
 
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
 
     # test_remove_virtual_directory  creates a virtual directory, removes the virtual directory created
     # and then verifies the contents of virtual directory.

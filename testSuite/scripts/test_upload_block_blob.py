@@ -12,10 +12,6 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         cmd = util.Command("login").add_arguments("--login-type=AzCLI").add_flags("tenant-id", os.environ['tenantId'])
         cmd.execute_azcopy_copy_command()
 
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
     def util_test_1kb_blob_upload(self, use_oauth_session=False):
         # Creating a single File Of size 1 KB
         filename = "test1KB.txt"
