@@ -12,14 +12,12 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
         # ensure account key is not being used
         self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
         os.environ['ACCOUNT_KEY'] = ''
-        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = 'SPN'
-        os.environ['AZCOPY_SPA_APPLICATION_ID'] = os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']
-        os.environ['AZCOPY_TENANT_ID'] = os.environ['OAUTH_TENANT_ID']
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = 'AzCLI'
+        os.environ['AZCOPY_TENANT_ID'] = os.environ['tenantId']
 
     def tearDown(self):
         os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
         os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = ''
-        os.environ['AZCOPY_SPA_APPLICATION_ID'] = ''
         os.environ['AZCOPY_TENANT_ID'] = ''
 
     def util_test_blobfs_upload_1Kb_file(

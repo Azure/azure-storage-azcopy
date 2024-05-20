@@ -37,21 +37,28 @@ import (
 )
 
 // This is to be used only for testing reasons
-func getE2ESPNCredential(a *assert.Assertions) azcore.TokenCredential {
-	tenantId := os.Getenv("AZCOPY_E2E_TENANT_ID")
-	appID := os.Getenv("AZCOPY_E2E_APPLICATION_ID")
-	clientSecret := os.Getenv("AZCOPY_E2E_CLIENT_SECRET")
-	a.NotZero(tenantId)
-	a.NotZero(appID)
-	a.NotZero(clientSecret)
-	cred, err := azidentity.NewClientSecretCredential(tenantId, appID, clientSecret, nil)
-	a.Nil(err)
-	return cred
+func getE2ETokenCredential(a *assert.Assertions) azcore.TokenCredential {
+	if os.Getenv("NEW_E2E_ENVIRONMENT") != "AzurePipeline" {
+		tenantId := os.Getenv("AZCOPY_E2E_TENANT_ID")
+		appID := os.Getenv("AZCOPY_E2E_APPLICATION_ID")
+		clientSecret := os.Getenv("AZCOPY_E2E_CLIENT_SECRET")
+		a.NotZero(tenantId)
+		a.NotZero(appID)
+		a.NotZero(clientSecret)
+		cred, err := azidentity.NewClientSecretCredential(tenantId, appID, clientSecret, nil)
+		a.Nil(err)
+		return cred
+	} else {
+		tenantId := os.Getenv("tenantId")
+		cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{TenantID: tenantId})
+		a.Nil(err)
+		return cred
+	}
 }
 
 func TestSrcAuthPolicy(t *testing.T) {
 	a := assert.New(t)
-	cred := getE2ESPNCredential(a)
+	cred := getE2ETokenCredential(a)
 	cred = common.NewScopedCredential(cred, common.ECredentialType.OAuthToken())
 	srcAuthPolicy := NewSourceAuthPolicy(cred)
 	req, err := runtime.NewRequest(context.Background(), http.MethodGet, "https://127.0.0.1/")
@@ -74,8 +81,8 @@ func TestSrcAuthPolicy(t *testing.T) {
 	//4. forcefully expire the token and verify a new token is obtained
 	s := srcAuthPolicy.(*sourceAuthPolicy)
 	expTime := time.Now()
-	s.token.ExpiresOn  = time.Now()
-	time.Sleep(10*time.Second)
+	s.token.ExpiresOn = time.Now()
+	time.Sleep(10 * time.Second)
 	_, _ = srcAuthPolicy.Do(req)
 
 	// Disabled below statement, sometimes calling GetToken frequently results in same token
@@ -87,7 +94,7 @@ func TestSrcAuthPolicy(t *testing.T) {
 
 func TestSrcAuthPolicyMultipleRefresh(t *testing.T) {
 	a := assert.New(t)
-	cred := getE2ESPNCredential(a)
+	cred := getE2ETokenCredential(a)
 	cred = common.NewScopedCredential(cred, common.ECredentialType.OAuthToken())
 	srcAuthPolicy := NewSourceAuthPolicy(cred)
 
@@ -107,7 +114,7 @@ func TestSrcAuthPolicyMultipleRefresh(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func(r *policy.Request) {
-			<- ch
+			<-ch
 			srcAuthPolicy.Do(r)
 			wg.Done()
 		}(req[i])

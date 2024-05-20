@@ -23,8 +23,6 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
@@ -37,6 +35,31 @@ import (
 // it's ok to panic if the inputs are absolutely required
 // the general guidance is to take in as few parameters as possible
 type GlobalInputManager struct{}
+
+func (GlobalInputManager) GetWorkloadIdentity() (tenantID string, clientID string, token string, tokenfile string) {
+	tenantID = os.Getenv("tenantId")
+	clientID = os.Getenv("clientId")
+	token = os.Getenv("idToken")
+	if token == "" || tenantID == "" || clientID == "" {
+		panic("AZURE_FEDERATED_TOKEN, AZURE_TENANT_ID and AZURE_CLIENT_ID must be specified to authenticate with workload identity")
+	}
+
+	// This is needed for authenticating with the identity Go SDK
+	file, err := os.CreateTemp("", "azure_federated_token.txt")
+	if err != nil {
+		panic("Error creating temporary file")
+	}
+	defer file.Close()
+
+	// Write the token to the temporary file
+	_, err = file.WriteString(token)
+	if err != nil {
+		panic("Error writing to temporary file")
+	}
+	tokenfile = file.Name()
+
+	return
+}
 
 func (GlobalInputManager) GetServicePrincipalAuth() (tenantID string, applicationID string, clientSecret string) {
 	tenantID = os.Getenv("AZCOPY_E2E_TENANT_ID")
@@ -204,19 +227,13 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 }
 
 func (gim GlobalInputManager) SetupClassicOAuthCache() error {
-	tenantID, applicationID, secret := gim.GetServicePrincipalAuth()
-	activeDirectoryEndpoint := "https://login.microsoftonline.com"
-
-	spn, err := azidentity.NewClientSecretCredential(tenantID, applicationID, secret, &azidentity.ClientSecretCredentialOptions{
-		ClientOptions: azcore.ClientOptions{
-			Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: activeDirectoryEndpoint},
-		},
-	})
+	tenantId := os.Getenv("tenantId")
+	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{TenantID: tenantId})
 	if err != nil {
 		return fmt.Errorf("failed to create credential: %w", err)
 	}
 
-	ClassicE2EOAuthCache = NewOAuthCache(spn, tenantID)
+	ClassicE2EOAuthCache = NewOAuthCache(cred, tenantId)
 
 	return nil
 }

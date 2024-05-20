@@ -75,12 +75,6 @@ def parse_config_file_set_env():
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
 
-    # set oauth tenant ID
-    os.environ['OAUTH_TENANT_ID'] = config['CREDENTIALS']['OAUTH_TENANT_ID']
-
-    # set oauth aad endpoint
-    os.environ['OAUTH_AAD_ENDPOINT'] = config['CREDENTIALS']['OAUTH_AAD_ENDPOINT']
-
 def check_env_not_exist(key):
     if os.environ.get(key, '-1') == '-1':
         print('Environment variable: ' + key + ' not set.')
@@ -120,12 +114,6 @@ def init():
 
     # get the filesystem url
     filesystem_url = os.environ.get('FILESYSTEM_URL')
-
-    # oauth tenant ID
-    oauth_tenant_id = os.environ.get('OAUTH_TENANT_ID')
-
-    # oauth aad encpoint
-    oauth_aad_endpoint = os.environ.get('OAUTH_AAD_ENDPOINT')
 
     # deleting the log files.
     cleanup()

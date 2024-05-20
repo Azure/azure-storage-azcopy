@@ -11,11 +11,11 @@ class BlobFs_Upload_ShareKey_User_Scenarios(unittest.TestCase):
 
     def setUp(self):
         # ensure oauth is not being used
-        self.cachedAzCopyClientSecret = os.environ['AZCOPY_SPA_CLIENT_SECRET']
-        os.environ['AZCOPY_SPA_CLIENT_SECRET'] = ''
+        self.cachedAzCopyAutoLoginType = os.environ['AZCOPY_AUTO_LOGIN_TYPE']
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = ''
 
     def tearDown(self):
-        os.environ['AZCOPY_SPA_CLIENT_SECRET'] = self.cachedAzCopyClientSecret
+        os.environ['AZCOPY_AUTO_LOGIN_TYPE'] = self.cachedAzCopyAutoLoginType
 
     def util_test_blobfs_upload_1Kb_file(
         self,

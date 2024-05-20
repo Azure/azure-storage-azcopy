@@ -100,7 +100,6 @@ def parse_config_file_set_env():
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = config['CREDENTIALS']['GOOGLE_APPLICATION_CREDENTIALS']
     os.environ['GOOGLE_CLOUD_PROJECT'] = config['CREDENTIALS']['GOOGLE_CLOUD_PROJECT']
 
-    os.environ['OAUTH_AAD_ENDPOINT'] = config['CREDENTIALS']['OAUTH_AAD_ENDPOINT']
     os.environ['S3_TESTS_OFF'] = config['CREDENTIALS']['S3_TESTS_OFF']
     os.environ['GCP_TESTS_OFF'] = config['CREDENTIALS']['GCP_TESTS_OFF']
 
@@ -179,9 +178,6 @@ def init():
 
     # don't log, it will just get redacted by DevOps logging system: get_env_logged("AWS_ACCESS_KEY_ID")
     # do NOT log AWS_SECRET_ACCESS_KEY
-
-    get_env_logged("OAUTH_AAD_ENDPOINT")
-    # don't log, it will just get redacted by DevOps logging system: get_env_logged("OAUTH_TENANT_ID")
 
     get_env_logged("S3_TESTS_OFF")
 
