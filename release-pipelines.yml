@@ -279,26 +279,26 @@ stages:
               NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
             displayName: 'E2E Test $(display_name) - AMD64'
 
-      - task: PublishBuildArtifacts@1
-        displayName: 'Publish logs'
-        condition: succeededOrFailed()
-        inputs:
-          pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
-          artifactName: logs
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish logs'
+            condition: succeededOrFailed()
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
+              artifactName: logs
 
-      - task: PublishTestResults@2
-        condition: succeededOrFailed()
-        inputs:
-          testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_report.xml
-          testRunTitle: 'Go on $(display_name)'
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testRunner: JUnit
+              testResultsFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_report.xml
+              testRunTitle: 'Go on $(display_name)'
 
-      - task: PublishCodeCoverageResults@1
-        condition: succeededOrFailed()
-        inputs:
-          codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
+          - task: PublishCodeCoverageResults@1
+            condition: succeededOrFailed()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
+              additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
 
   - stage: BuildArtifacts
     jobs:
