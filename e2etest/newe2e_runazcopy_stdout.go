@@ -151,6 +151,9 @@ type AzCopyParsedCopySyncRemoveStdout struct {
 	AzCopyParsedStdout
 	listenChan chan<- common.JsonOutputTemplate
 
+	JobPlanFolder string
+	LogFolder     string
+  
 	InitMsg     common.InitMsgJsonTemplate
 	FinalStatus common.ListJobSummaryResponse
 }

@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+var _ Assertion = NoError{}
+var _ Assertion = IsNil{}
+var _ Assertion = Not{}
+var _ Assertion = Empty{}
+var _ Assertion = Equal{}
+var _ Assertion = MapContains[bool, bool]{}
+var _ Assertion = Always{}
+
 // ====== NoError ======
 
 // NoError works like IsNil but only asserts when there is an error, and formats errors
@@ -265,4 +273,29 @@ func (m MapContains[K, V]) Assert(items ...any) bool {
 	}
 
 	return true
+}
+
+// ====== Always ======
+
+// Always asserts. It's designed to throw quick errors.
+type Always struct{}
+
+func (a Always) Name() string {
+	return ""
+}
+
+func (a Always) MaxArgs() int {
+	return 0
+}
+
+func (a Always) MinArgs() int {
+	return 0
+}
+
+func (a Always) Assert(items ...any) bool {
+	return false
+}
+
+func (a Always) Format(items ...any) string {
+	return ""
 }

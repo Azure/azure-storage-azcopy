@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 )
@@ -26,6 +25,8 @@ func init() {
 }
 
 func NewLocalContainer(a Asserter) ContainerResourceManager {
+	a.HelperMarker().Helper()
+
 	if d, ok := a.(DryrunAsserter); ok && d.Dryrun() {
 		return &MockContainerResourceManager{
 			containerName:    "mockContainer",
@@ -75,6 +76,7 @@ func (l *LocalContainerResourceManager) ContainerName() string {
 }
 
 func (l *LocalContainerResourceManager) Create(a Asserter, props ContainerProperties) {
+	a.HelperMarker().Helper()
 	err := os.Mkdir(l.RootPath, 0777)
 	if !os.IsExist(err) {
 		a.NoError("Create local root directory", err)
@@ -88,6 +90,7 @@ func (l *LocalContainerResourceManager) GetProperties(a Asserter) ContainerPrope
 }
 
 func (l *LocalContainerResourceManager) Delete(a Asserter) {
+	a.HelperMarker().Helper()
 	time.Sleep(time.Second)
 
 	err := os.RemoveAll(l.RootPath)
@@ -97,6 +100,7 @@ func (l *LocalContainerResourceManager) Delete(a Asserter) {
 }
 
 func (l *LocalContainerResourceManager) ListObjects(a Asserter, prefixOrDirectory string, recursive bool) map[string]ObjectProperties {
+	a.HelperMarker().Helper()
 	out := make(map[string]ObjectProperties)
 
 	root := l.GetObject(a, prefixOrDirectory, common.EEntityType.Folder()).(*LocalObjectResourceManager)
@@ -194,7 +198,7 @@ func (l *LocalObjectResourceManager) getWorkingPath() string {
 	}
 
 	// l.objectPath can be "", indicating it is the folder at the root of the container.
-	return path.Join(l.container.RootPath, l.objectPath)
+	return filepath.Join(l.container.RootPath, l.objectPath)
 }
 
 func (l *LocalObjectResourceManager) getRelPath(fullPath string) (string, error) {
@@ -250,6 +254,7 @@ func (l *LocalObjectResourceManager) CreateParents(a Asserter) {
 }
 
 func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContainer, properties ObjectProperties) {
+	a.HelperMarker().Helper()
 	a.AssertNow("Object must be file to have content", Equal{})
 
 	l.CreateParents(a)
@@ -269,6 +274,7 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 }
 
 func (l *LocalObjectResourceManager) Delete(a Asserter) {
+	a.HelperMarker().Helper()
 	err := os.RemoveAll(l.getWorkingPath())
 	if !os.IsNotExist(err) {
 		a.NoError("Could not remove local object "+l.getWorkingPath(), err)
@@ -276,6 +282,7 @@ func (l *LocalObjectResourceManager) Delete(a Asserter) {
 }
 
 func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
+	a.HelperMarker().Helper()
 	a.AssertNow("Entity type must be folder to have children", Equal{}, l.entityType, common.EEntityType.Folder())
 	out := make(map[string]ObjectProperties)
 
@@ -295,6 +302,8 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 }
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
+	a.HelperMarker().Helper()
+
 	out := ObjectProperties{}
 
 	// OS-triggered code, implemented in newe2e_resource_managers_local_windows.go
@@ -327,6 +336,8 @@ func (l *LocalObjectResourceManager) SetMetadata(a Asserter, metadata common.Met
 }
 
 func (l *LocalObjectResourceManager) SetObjectProperties(a Asserter, props ObjectProperties) {
+	a.HelperMarker().Helper()
+
 	// todo: set SMB properties
 	if smb, ok := any(l).(localSMBPropertiesManager); ok {
 		if props.FileProperties.FilePermissions != nil {
@@ -336,6 +347,7 @@ func (l *LocalObjectResourceManager) SetObjectProperties(a Asserter, props Objec
 }
 
 func (l *LocalObjectResourceManager) Download(a Asserter) io.ReadSeeker {
+	a.HelperMarker().Helper()
 	a.AssertNow("Entity type must be file to have content to download", Equal{}, l.entityType, common.EEntityType.File())
 
 	f, err := os.Open(l.getWorkingPath())

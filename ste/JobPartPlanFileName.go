@@ -23,7 +23,11 @@ func (jppfn *JobPartPlanFileName) Exists() bool {
 }
 
 func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
-	return fmt.Sprintf("%s%s%s", common.AzcopyJobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
+	if common.AzcopyJobPlanFolder != "" {
+		return fmt.Sprintf("%s%s%s", common.AzcopyJobPlanFolder, common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
+	} else {
+		return string(*jppfn)
+	}
 }
 
 const JobPartPlanFileNameFormat = "%v--%05d.steV%d"

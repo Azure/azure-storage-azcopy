@@ -107,3 +107,13 @@ func ListContains[I comparable](item I, in []I) bool {
 
 	return false
 }
+
+func ClonePointer[T any](in *T) *T {
+	if in == nil {
+		return nil
+	}
+
+	out := *in
+
+	return &out
+}

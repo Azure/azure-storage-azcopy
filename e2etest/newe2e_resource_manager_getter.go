@@ -18,6 +18,10 @@ func GetRootResource(a Asserter, location common.Location, varOpts ...GetResourc
 
 	switch location {
 	case common.ELocation.Local():
+		if da, ok := a.(DryrunAsserter); ok && da.Dryrun() {
+			return &MockContainerResourceManager{overrideLocation: location.Local(), containerName: ""}
+		}
+
 		return NewLocalContainer(a)
 	case common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File():
 		// acct handles the dryrun case for us

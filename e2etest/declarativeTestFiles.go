@@ -113,6 +113,21 @@ func (h *contentHeaders) ToBlobFS() *bfsfile.HTTPHeaders {
 	}
 }
 
+func (h *contentHeaders) ToCommonHeaders() common.ResourceHTTPHeaders {
+	if h == nil {
+		return common.ResourceHTTPHeaders{}
+	}
+
+	return common.ResourceHTTPHeaders{
+		ContentType:        DerefOrZero(h.contentType),
+		ContentMD5:         h.contentMD5,
+		ContentEncoding:    DerefOrZero(h.contentEncoding),
+		ContentLanguage:    DerefOrZero(h.contentLanguage),
+		ContentDisposition: DerefOrZero(h.contentDisposition),
+		CacheControl:       DerefOrZero(h.cacheControl),
+	}
+}
+
 func (h *contentHeaders) String() string {
 	var ret string
 	if h == nil {

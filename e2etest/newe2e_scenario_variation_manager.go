@@ -35,6 +35,7 @@ type ScenarioVariationManager struct {
 
 	// wetrun data
 	CreatedResources *PathTrie[createdResource]
+	CleanupFuncs     []func(a ScenarioAsserter)
 }
 
 type createdResource struct {
@@ -103,6 +104,8 @@ func (svm *ScenarioVariationManager) NoError(comment string, err error, failNow 
 
 		if failFast {
 			svm.t.FailNow()
+		} else {
+			svm.t.Fail()
 		}
 	}
 }
@@ -121,6 +124,7 @@ func (svm *ScenarioVariationManager) Assert(comment string, assertion Assertion,
 		}
 
 		svm.isInvalid = true // We've now failed, so we flip the shared bad flag
+		svm.t.Fail()
 	}
 }
 
