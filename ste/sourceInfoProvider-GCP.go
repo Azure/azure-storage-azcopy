@@ -2,6 +2,7 @@ package ste
 
 import (
 	gcpUtils "cloud.google.com/go/storage"
+	"context"
 	"crypto/md5"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -21,6 +22,7 @@ type gcpSourceInfoProvider struct {
 
 	gcpClient   *gcpUtils.Client
 	gcpURLParts common.GCPURLParts
+	ctx         context.Context
 }
 
 var gcpClientFactory = common.NewGCPClientFactory()
@@ -39,8 +41,12 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 		return nil, err
 	}
 
+	ctx := jptm.Context()
+	ctx = withPipelineNetworkStats(ctx, nil)
+	p.ctx = ctx
+
 	p.gcpClient, err = gcpClientFactory.GetGCPClient(
-		p.jptm.Context(),
+		p.ctx,
 		common.CredentialInfo{
 			CredentialType:    common.ECredentialType.GoogleAppCredentials(),
 			GCPCredentialInfo: common.GCPCredentialInfo{},
@@ -88,7 +94,7 @@ func (p *gcpSourceInfoProvider) Properties() (*SrcProperties, error) {
 		SrcMetadata:    p.transferInfo.SrcMetadata,
 	}
 	if p.transferInfo.S2SGetPropertiesInBackend {
-		objectInfo, err := p.gcpClient.Bucket(p.gcpURLParts.BucketName).Object(p.gcpURLParts.ObjectKey).Attrs(p.jptm.Context())
+		objectInfo, err := p.gcpClient.Bucket(p.gcpURLParts.BucketName).Object(p.gcpURLParts.ObjectKey).Attrs(p.ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +157,7 @@ func (p *gcpSourceInfoProvider) IsLocal() bool {
 }
 
 func (p *gcpSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
-	objectInfo, err := p.gcpClient.Bucket(p.gcpURLParts.BucketName).Object(p.gcpURLParts.ObjectKey).Attrs(p.jptm.Context())
+	objectInfo, err := p.gcpClient.Bucket(p.gcpURLParts.BucketName).Object(p.gcpURLParts.ObjectKey).Attrs(p.ctx)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -164,7 +170,7 @@ func (p *gcpSourceInfoProvider) EntityType() common.EntityType {
 
 func (p *gcpSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	// gcp does not support getting range md5
-	body, err := p.gcpClient.Bucket(p.gcpURLParts.BucketName).Object(p.gcpURLParts.ObjectKey).NewRangeReader(p.jptm.Context(), offset, count)
+	body, err := p.gcpClient.Bucket(p.gcpURLParts.BucketName).Object(p.gcpURLParts.ObjectKey).NewRangeReader(p.ctx, offset, count)
 	if err != nil {
 		return nil, err
 	}
