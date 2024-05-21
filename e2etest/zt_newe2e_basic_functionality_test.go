@@ -197,8 +197,9 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *Sce
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:           pointerTo(true),
-					S2SPreserveBlobTags: pointerTo(true),
+					Recursive:             pointerTo(true),
+					S2SPreserveBlobTags:   pointerTo(true),
+					S2SPreserveAccessTier: pointerTo(false),
 				},
 			},
 			ShouldFail: true,
