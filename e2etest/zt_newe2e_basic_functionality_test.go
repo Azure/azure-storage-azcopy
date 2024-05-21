@@ -201,7 +201,7 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *Sce
 					S2SPreserveBlobTags: pointerTo(true),
 				},
 			},
-			ShouldFail: false,
+			ShouldFail: true,
 		})
 
 	// Validate that the stdout contains blob tags permission error
