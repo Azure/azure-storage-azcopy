@@ -347,6 +347,11 @@ stages:
               sudo gem install fpm -V
             displayName: "Installing Dependencies"
 
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
+
           - script: |
               GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
             displayName: 'Generate Linux AMD64'
