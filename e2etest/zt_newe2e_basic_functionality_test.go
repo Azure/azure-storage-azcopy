@@ -11,7 +11,7 @@ func init() {
 
 type BasicFunctionalitySuite struct{}
 
-func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload(svm *ScenarioVariationManager) {
+func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
@@ -32,15 +32,15 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload(svm *Scenari
 		Body:       body,
 	})
 
-	// no s2s, no local->local
-	if srcObj.Location().IsRemote() == dstObj.Location().IsRemote() {
+	// no local->local
+	if srcObj.Location().IsLocal() && dstObj.Location().IsLocal() {
 		svm.InvalidateScenario()
 		return
 	}
 
 	sasOpts := GenericAccountSignatureValues{}
 
-	RunAzCopy(
+	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
@@ -63,6 +63,9 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload(svm *Scenari
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 	}, true)
+
+	// Validate that the network stats were updated
+	ValidateStatsReturned(svm, stdout)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm *ScenarioVariationManager) {
