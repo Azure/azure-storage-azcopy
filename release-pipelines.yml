@@ -354,8 +354,8 @@ stages:
             displayName: 'Generate Linux AMD64 SE Integration'
 
           - script: |
-            GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
-          displayName: 'Generate Linux ARM64'
+              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+            displayName: 'Generate Linux ARM64'
 
           - script: |
               cp NOTICE.txt $(work_dir)
