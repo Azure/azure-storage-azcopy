@@ -43,7 +43,7 @@ trigger: none
 pr: none
 
 stages:
-  - stage: Run_Tests
+  - stage: RunTests
     jobs:
       - job: UT_On_Ubuntu
         variables:
@@ -301,6 +301,8 @@ stages:
               additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
 
   - stage: BuildArtifacts
+    dependsOn: RunTests
+    condition: succeeded('RunTests')
     jobs:
       - job: Ubuntu
         timeoutInMinutes: 120
