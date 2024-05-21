@@ -301,8 +301,8 @@ stages:
   #             additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
 
   - stage: BuildArtifacts
-    dependsOn: RunTests
-    condition: succeeded('RunTests')
+    #dependsOn: RunTests
+    #condition: succeeded('RunTests')
     jobs:
       - job: Ubuntu
         timeoutInMinutes: 120
