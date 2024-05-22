@@ -342,10 +342,9 @@ stages:
           # install dependencies required for compiling azcopy
           - script: |
               sudo apt-get update --fix-missing
-              sudo apt-get install ruby ruby-dev rubygems pkg-config build-essential rpm -y
+              sudo apt-get install ruby ruby-dev rubygems pkg-config libglib2.0-dev build-essential rpm -y
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
-              sudo apt-get install libglib2.0-dev
             displayName: "Installing Dependencies"
 
           # get glibc version with which build is done
