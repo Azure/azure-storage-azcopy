@@ -30,7 +30,7 @@ stages:
         
         - task: GoTool@0
           inputs:
-            version: '1.21.8'
+            version: '1.22.3'
 
         - script: |
             go build -o $GOROOT/bin/azcopy
