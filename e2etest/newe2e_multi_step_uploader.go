@@ -72,9 +72,8 @@ func (m *MultiStepUploader) UploadContents(content ObjectContentContainer) error
 		n, err := reader.Read(buf)
 		if err != nil && err != io.EOF {
 			return fmt.Errorf("failed to read content (offset %d (block %d/%d), total %d): %w", offset, blockIndex, blockCount, size, err)
-		} else if err == io.EOF {
-			buf = buf[:n] // reduce buffer size for final block
 		}
+		buf = buf[:n] // reduce buffer size for block
 
 		wg.Add(1)
 		thread := pool.Get().(*struct{ threadID int })

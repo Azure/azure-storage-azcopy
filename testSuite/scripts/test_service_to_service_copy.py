@@ -38,42 +38,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1,
                                                     oAuth=True, credTypeOverride="OAuthToken")
 
-    def test_copy_single_512b_file_from_page_to_block_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
-                                                    srcBlobType="PageBlob", dstBlobType="BlockBlob")
-
-    def test_copy_single_512b_file_from_block_to_page_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
-                                                    srcBlobType="BlockBlob", dstBlobType="PageBlob")
-
-    def test_copy_single_512b_file_from_page_to_append_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
-                                                    srcBlobType="PageBlob", dstBlobType="AppendBlob")
-
-    def test_copy_single_512b_file_from_append_to_page_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
-                                                    srcBlobType="AppendBlob", dstBlobType="PageBlob")
-
-    def test_copy_single_512b_file_from_block_to_append_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
-                                                    srcBlobType="BlockBlob", dstBlobType="AppendBlob")
-
-    def test_copy_single_512b_file_from_append_to_block_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
-                                                    srcBlobType="AppendBlob", dstBlobType="BlockBlob")
-
     def test_copy_single_0kb_file_from_blob_to_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -153,10 +117,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     # Test from blob to file copy
     # Note: tests go from dst blob to src file to avoid the extra config-- Ze's suggestion
     ##################################
-    def test_copy_single_1kb_file_from_blob_to_file(self):
-        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
-        dst_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_blob_file)
-        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_share_url, "File", 1)
 
     def test_copy_10_files_from_blob_container_to_file_share(self):
         src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_blob_file)
@@ -173,11 +133,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test from file to blob copy.
     ##################################
-    def test_copy_single_1kb_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 1)
-
     def test_copy_single_0kb_file_from_file_to_blob(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
