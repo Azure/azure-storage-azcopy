@@ -668,7 +668,6 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
@@ -756,7 +755,6 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZURE_ESRP_SECRET
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
