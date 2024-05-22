@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	//suiteManager.RegisterSuite(&AutoDetectBlobTypeSuite{})
+	suiteManager.RegisterSuite(&AutoDetectBlobTypeSuite{})
 }
 
 type AutoDetectBlobTypeSuite struct{}

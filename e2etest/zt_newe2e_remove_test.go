@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	//suiteManager.RegisterSuite(&RemoveSuite{})
+	suiteManager.RegisterSuite(&RemoveSuite{})
 }
 
 type RemoveSuite struct{}

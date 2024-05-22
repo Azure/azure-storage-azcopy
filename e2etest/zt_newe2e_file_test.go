@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	//suiteManager.RegisterSuite(&FileTestSuite{})
+	suiteManager.RegisterSuite(&FileTestSuite{})
 }
 
 type FileTestSuite struct{}

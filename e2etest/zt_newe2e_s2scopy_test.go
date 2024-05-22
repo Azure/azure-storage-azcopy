@@ -11,67 +11,67 @@ func init() {
 
 type S2SCopySuite struct{}
 
-//func (s *S2SCopySuite) Scenario_OverwriteSingleFile(svm *ScenarioVariationManager) {
-//	srcFileName := "test_1kb_copy.txt"
-//	dstFileName := "test_copy.txt"
-//	srcBody := NewRandomObjectContentContainer(svm, common.KiloByte)
-//	dstBody := NewRandomObjectContentContainer(svm, 2*common.KiloByte)
-//
-//	// TODO : Add S3 to source
-//	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
-//	srcObj := srcContainer.GetObject(svm, srcFileName, common.EEntityType.File())
-//	srcObj.Create(svm, srcBody, ObjectProperties{})
-//
-//	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
-//	dstObj := dstContainer.GetObject(svm, dstFileName, common.EEntityType.File())
-//	dstObj.Create(svm, dstBody, ObjectProperties{})
-//
-//	RunAzCopy(svm, AzCopyCommand{
-//		Verb:    AzCopyVerbCopy,
-//		Targets: []ResourceManager{srcObj, dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
-//		Flags: CopyFlags{
-//			CopySyncCommonFlags: CopySyncCommonFlags{
-//				Recursive: pointerTo(true),
-//			},
-//			// Overwrite behavior is default
-//		},
-//	})
-//
-//	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, dstFileName, common.EEntityType.File()), ResourceDefinitionObject{
-//		Body: srcBody,
-//	}, true)
-//}
-//
-//func (s *S2SCopySuite) Scenario_NonOverwriteSingleFile(svm *ScenarioVariationManager) {
-//	srcFileName := "test_1kb_copy.txt"
-//	dstFileName := "test_copy.txt"
-//	srcBody := NewRandomObjectContentContainer(svm, common.KiloByte)
-//	dstBody := NewRandomObjectContentContainer(svm, 2*common.KiloByte)
-//
-//	// TODO : Add S3 to source
-//	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
-//	srcObj := srcContainer.GetObject(svm, srcFileName, common.EEntityType.File())
-//	srcObj.Create(svm, srcBody, ObjectProperties{})
-//
-//	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
-//	dstObj := dstContainer.GetObject(svm, dstFileName, common.EEntityType.File())
-//	dstObj.Create(svm, dstBody, ObjectProperties{})
-//
-//	RunAzCopy(svm, AzCopyCommand{
-//		Verb:    AzCopyVerbCopy,
-//		Targets: []ResourceManager{srcObj, dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
-//		Flags: CopyFlags{
-//			CopySyncCommonFlags: CopySyncCommonFlags{
-//				Recursive: pointerTo(true),
-//			},
-//			Overwrite: pointerTo(false),
-//		},
-//	})
-//
-//	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, dstFileName, common.EEntityType.File()), ResourceDefinitionObject{
-//		Body: dstBody,
-//	}, true)
-//}
+func (s *S2SCopySuite) Scenario_OverwriteSingleFile(svm *ScenarioVariationManager) {
+	srcFileName := "test_1kb_copy.txt"
+	dstFileName := "test_copy.txt"
+	srcBody := NewRandomObjectContentContainer(svm, common.KiloByte)
+	dstBody := NewRandomObjectContentContainer(svm, 2*common.KiloByte)
+
+	// TODO : Add S3 to source
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, srcFileName, common.EEntityType.File())
+	srcObj.Create(svm, srcBody, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	dstObj := dstContainer.GetObject(svm, dstFileName, common.EEntityType.File())
+	dstObj.Create(svm, dstBody, ObjectProperties{})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{srcObj, dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+			// Overwrite behavior is default
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, dstFileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: srcBody,
+	}, true)
+}
+
+func (s *S2SCopySuite) Scenario_NonOverwriteSingleFile(svm *ScenarioVariationManager) {
+	srcFileName := "test_1kb_copy.txt"
+	dstFileName := "test_copy.txt"
+	srcBody := NewRandomObjectContentContainer(svm, common.KiloByte)
+	dstBody := NewRandomObjectContentContainer(svm, 2*common.KiloByte)
+
+	// TODO : Add S3 to source
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, srcFileName, common.EEntityType.File())
+	srcObj.Create(svm, srcBody, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	dstObj := dstContainer.GetObject(svm, dstFileName, common.EEntityType.File())
+	dstObj.Create(svm, dstBody, ObjectProperties{})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{srcObj, dstObj.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+			Overwrite: pointerTo(false),
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, dstFileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: dstBody,
+	}, true)
+}
 
 func (s *S2SCopySuite) Scenario_SingleFileCopyBlobTypeVariations(svm *ScenarioVariationManager) {
 	srcBlobType := ResolveVariation(svm, []blob.BlobType{blob.BlobTypeBlockBlob, blob.BlobTypePageBlob, blob.BlobTypeAppendBlob})
