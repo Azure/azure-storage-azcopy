@@ -172,26 +172,26 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *ScenarioVariationManager) {
 	// Calculate verb early to create the destination object early
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy})
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionContainer{}).GetObject(svm, "abc", common.EEntityType.File())
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionContainer{})
+	dstObj := dstContainer.GetObject(svm, "abc", common.EEntityType.File())
 
 	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionObject{
-		ObjectName: pointerTo("test"),
-		Body:       body,
-	})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, "test", common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
 
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
 						ContainerName: srcObj.ContainerName(),
 						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
 					},
 				}),
-				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
 						ContainerName: dstObj.ContainerName(),
 						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
