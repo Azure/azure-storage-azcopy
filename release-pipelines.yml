@@ -345,6 +345,7 @@ stages:
               sudo apt-get install ruby ruby-dev rubygems pkg-config build-essential rpm -y
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
+              sudo apt-get install libglib2.0-dev
             displayName: "Installing Dependencies"
 
           # get glibc version with which build is done
@@ -356,9 +357,9 @@ stages:
               GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
             displayName: 'Generate Linux AMD64'
 
-          # - script: |
-          #     GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
-          #   displayName: 'Generate Linux AMD64 SE Integration'
+          - script: |
+              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
+            displayName: 'Generate Linux AMD64 SE Integration'
 
           - script: |
               GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
@@ -384,7 +385,7 @@ stages:
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           # TODO: Add description
           - script: |
-              fpm -s dir -t deb -n azcopy -C pkgDir/ \
+              fpm -s dir -t deb -n azcopy_linux_amd64 -C pkgDir/ \
               -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3` \
               --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -395,7 +396,7 @@ stages:
             displayName: 'Make AMD64 deb Package'
             
           - script: |
-              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+              fpm -s dir -t rpm -n azcopy_linux_amd64 --rpm-digest sha256 -C pkgDir/ \
               -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -410,7 +411,7 @@ stages:
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           # TODO: Add description
           - script: |
-              fpm -s dir -t deb -n azcopy -C pkgDir/ \
+              fpm -s dir -t deb -n azcopy_linux_arm64 -C pkgDir/ \
               -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_arm64 --version | cut -d " " -f 3` \
               --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -421,7 +422,7 @@ stages:
             displayName: 'Make ARM64 deb Package'
             
           - script: |
-              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+              fpm -s dir -t rpm -n azcopy_linux_arm64 --rpm-digest sha256 -C pkgDir/ \
               -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_arm64 --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -626,31 +627,24 @@ stages:
             workingDirectory: $(root_dir)/azCopy-signed      
 
           - script: |
-              for f in ./azcopy*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
-              cp ./azcopy*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
+              for f in ./azcopy_linux_arm64*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
+              cp ./azcopy_linux_arm64*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
             displayName: 'Rename Package'
             workingDirectory: $(root_dir)/azCopy-signed
             
           - script: |
-              sudo dpkg --info azcopy*.deb
-              sudo dpkg -i azcopy*.deb
+              sudo dpkg --info azcopy_linux_arm64*.deb
+              sudo dpkg -i azcopy_linux_arm64*.deb
               sudo apt-get install build-essential -y
-            displayName: 'Install Package'
+            displayName: 'Install deb Package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
-          # - template: 'azure-pipeline-templates/release-distro-tests.yml'
-          #   parameters:
-          #     root_dir: $(root_dir)
-          #     work_dir: $(work_dir)
-          #     mount_dir: $(mount_dir)
-          #     temp_dir: $(temp_dir)
-          #     container: $(container)
 
           - script: | 
-              azcopy --version
+              azcopy_linux_arm64 --version
             displayName: 'Check Version'
 
           - script: | 
-              azcopy --help
+              azcopy_linux_arm64 --help
             displayName: 'Check Help'
 
           # # publishing the artifacts generated
@@ -659,324 +653,195 @@ stages:
           #     artifactName: 'blobfuse2'
           #   displayName: 'Publish Artifacts' 
 
-  #     - job: Set_1
-  #       timeoutInMinutes: 120
-  #       strategy:
-  #         matrix:
-  #           Ubuntu-18:
-  #             vmImage: 'Ubuntu-18.04'
-  #             fuselib: 'libfuse-dev'
-  #             fuse-version: 'fuse'
-  #             tags: 'fuse2'
-  #             container: 'test-cnt-ubn-18'
-  #             AgentName: "blobfuse-ubuntu18"
-  #           Ubuntu-20:
-  #             vmImage: 'Ubuntu-20.04'
-  #             fuse-version: 'fuse3'
-  #             fuselib: 'libfuse3-dev'
-  #             tags: 'fuse3'
-  #             container: 'test-cnt-ubn-20'
-  #             AgentName: "blobfuse-ubuntu20"
-  #       pool:
-  #         name: "blobfuse-ubuntu-pool"
-  #         demands:
-  #           - ImageOverride -equals $(AgentName)
+  
+      - job: Set_2_ARM
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu-22-ARM64:
+              vmImage: 'Ubuntu-22.04'
+              fuse-version: 'fuse3'
+              fuselib: 'libfuse3-dev'
+              tags: 'fuse3'
+              container: 'test-cnt-ubn-22-arm64'
+              AgentName: "blobfuse-ubn22-arm64"
+        pool:
+          name: "blobfuse-ubn-arm64-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
 
-  #       variables:
-  #         - group: NightlyBlobFuse
-  #         - name: root_dir
-  #           value: '$(System.DefaultWorkingDirectory)'
-  #         - name: work_dir
-  #           value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
-  #         - name: mount_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmp'
-  #         - name: temp_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
+        variables:
+          - group: NightlyBlobFuse
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
+          - name: mount_dir
+            value: '$(System.DefaultWorkingDirectory)/fusetmp'
+          - name: temp_dir
+            value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
 
-  #       steps:
-  #         - checkout: none
+        steps:
+          - checkout: none
 
-  #         - script: |
-  #             git clone https://github.com/Azure/azure-storage-fuse
-  #           displayName: 'Checkout Code'
-  #           workingDirectory: $(root_dir)
+          - script: |
+              git clone https://github.com/Azure/azure-storage-fuse
+            displayName: 'Checkout Code'
+            workingDirectory: $(root_dir)
       
-  #         - script: |
-  #             git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-  #           displayName: 'Checkout Branch'
-  #           workingDirectory: $(root_dir)/azure-storage-fuse
+          - script: |
+              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+            displayName: 'Checkout Branch'
+            workingDirectory: $(root_dir)/azure-storage-fuse
           
-  #         # Custom script to install Go-lang
-  #         - task: ShellScript@2
-  #           inputs:
-  #             scriptPath: "$(work_dir)/go_installer.sh"
-  #             args: "$(root_dir)/"
-  #           displayName: "GoTool Custom Setup"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "GoTool Custom Setup"
 
-  #         # get glibc version with which build is done
-  #         - script: |
-  #            sudo apt update
-  #            sudo apt --fix-broken install
-  #            ldd --version
-  #           displayName: "GLIBC Version"
+          # get glibc version with which build is done
+          - script: |
+             sudo apt update
+             sudo apt --fix-broken install
+             ldd --version
+            displayName: "GLIBC Version"
 
-  #         - task: DownloadBuildArtifacts@0
-  #           displayName: 'Download Build Artifacts'
-  #           inputs:
-  #             artifactName: 'blobfuse2-signed'
-  #             downloadPath: $(root_dir)
-  #             itemPattern: blobfuse2-signed/blobfuse2*$(tags)*x86_64.deb
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'blobfuse2-signed'
+              downloadPath: $(root_dir)
+              itemPattern: blobfuse2-signed/blobfuse2*$(tags)*arm64.deb
 
-  #         - script: |
-  #             ls -l
-  #             result=$(ls -1 | wc -l)
-  #             if [ $result -ne 1 ]; then
-  #               exit 1
-  #             fi
-  #           displayName: 'List Downloaded Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed
+          - script: |
+              ls -l
+              result=$(ls -1 | wc -l)
+              if [ $result -ne 1 ]; then
+                exit 1
+              fi
+            displayName: 'List Downloaded Package'
+            workingDirectory: $(root_dir)/blobfuse2-signed
 
-  #         - script: |
-  #             for f in ./blobfuse2*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
-  #             cp ./blobfuse2*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
-  #             if [ $(AgentName) == "blobfuse-ubuntu18" ]; then
-  #               echo "Generating for Debian 9/10"
-  #               f=`ls ./blobfuse2*$(vmImage)*.deb`
-  #               cp "$f" $(sed 's:Ubuntu-18.04:Debian-9.0:' <<< "$f")
-  #               cp "$f" $(sed 's:Ubuntu-18.04:Debian-10.0:' <<< "$f")
-  #               cp ./blobfuse2*Debian-*.deb $(Build.ArtifactStagingDirectory)
-  #               ls -l $(Build.ArtifactStagingDirectory)
-  #               rm -rf ./blobfuse2*Debian-*.deb
-  #             else
-  #               echo "Generating for Debian 11"
-  #               f=`ls ./blobfuse2*$(vmImage)*.deb`
-  #               cp "$f" $(sed 's:Ubuntu-20.04:Debian-11.0:' <<< "$f")
-  #               cp ./blobfuse2*Debian-*.deb $(Build.ArtifactStagingDirectory)
-  #               ls -l $(Build.ArtifactStagingDirectory)
-  #               rm -rf ./blobfuse2*Debian-*.deb
-  #             fi
-  #           displayName: 'Rename Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed
+          - script: |
+              for f in ./blobfuse2*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
+              cp ./blobfuse2*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
+            displayName: 'Rename Package'
+            workingDirectory: $(root_dir)/blobfuse2-signed
 
-  #         - script: |
-  #             sudo dpkg --info blobfuse2*.deb
-  #             sudo apt-get install $(fuse-version) build-essential -y
-  #             sudo dpkg -i blobfuse2*.deb
-  #           displayName: 'Install Package'
-  #           workingDirectory: $(Build.ArtifactStagingDirectory)
+          - script: |
+              sudo dpkg --info blobfuse2*.deb
+              sudo apt-get install $(fuse-version) build-essential -y
+              sudo dpkg -i blobfuse2*.deb
+            displayName: 'Install Package'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
 
-  #         - template: 'azure-pipeline-templates/release-distro-tests.yml'
-  #           parameters:
-  #             root_dir: $(root_dir)
-  #             work_dir: $(work_dir)
-  #             mount_dir: $(mount_dir)
-  #             temp_dir: $(temp_dir)
-  #             container: $(container)
-
-  #         # publishing the artifacts generated
-  #         - task: PublishBuildArtifacts@1
-  #           inputs:
-  #             artifactName: 'blobfuse2'
-  #           displayName: 'Publish Artifacts' 
-
-  #     - job: Set_2_ARM
-  #       timeoutInMinutes: 120
-  #       strategy:
-  #         matrix:
-  #           Ubuntu-22-ARM64:
-  #             vmImage: 'Ubuntu-22.04'
-  #             fuse-version: 'fuse3'
-  #             fuselib: 'libfuse3-dev'
-  #             tags: 'fuse3'
-  #             container: 'test-cnt-ubn-22-arm64'
-  #             AgentName: "blobfuse-ubn22-arm64"
-  #       pool:
-  #         name: "blobfuse-ubn-arm64-pool"
-  #         demands:
-  #           - ImageOverride -equals $(AgentName)
-
-  #       variables:
-  #         - group: NightlyBlobFuse
-  #         - name: root_dir
-  #           value: '$(System.DefaultWorkingDirectory)'
-  #         - name: work_dir
-  #           value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
-  #         - name: mount_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmp'
-  #         - name: temp_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
-
-  #       steps:
-  #         - checkout: none
-
-  #         - script: |
-  #             git clone https://github.com/Azure/azure-storage-fuse
-  #           displayName: 'Checkout Code'
-  #           workingDirectory: $(root_dir)
-      
-  #         - script: |
-  #             git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-  #           displayName: 'Checkout Branch'
-  #           workingDirectory: $(root_dir)/azure-storage-fuse
-          
-  #         # Custom script to install Go-lang
-  #         - task: ShellScript@2
-  #           inputs:
-  #             scriptPath: "$(work_dir)/go_installer.sh"
-  #             args: "$(root_dir)/"
-  #           displayName: "GoTool Custom Setup"
-
-  #         # get glibc version with which build is done
-  #         - script: |
-  #            sudo apt update
-  #            sudo apt --fix-broken install
-  #            ldd --version
-  #           displayName: "GLIBC Version"
-
-  #         - task: DownloadBuildArtifacts@0
-  #           displayName: 'Download Build Artifacts'
-  #           inputs:
-  #             artifactName: 'blobfuse2-signed'
-  #             downloadPath: $(root_dir)
-  #             itemPattern: blobfuse2-signed/blobfuse2*$(tags)*arm64.deb
-
-  #         - script: |
-  #             ls -l
-  #             result=$(ls -1 | wc -l)
-  #             if [ $result -ne 1 ]; then
-  #               exit 1
-  #             fi
-  #           displayName: 'List Downloaded Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed
-
-  #         - script: |
-  #             for f in ./blobfuse2*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
-  #             cp ./blobfuse2*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
-  #           displayName: 'Rename Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed
-
-  #         - script: |
-  #             sudo dpkg --info blobfuse2*.deb
-  #             sudo apt-get install $(fuse-version) build-essential -y
-  #             sudo dpkg -i blobfuse2*.deb
-  #           displayName: 'Install Package'
-  #           workingDirectory: $(Build.ArtifactStagingDirectory)
-
-  #         - template: 'azure-pipeline-templates/release-distro-tests.yml'
-  #           parameters:
-  #             root_dir: $(root_dir)
-  #             work_dir: $(work_dir)
-  #             mount_dir: $(mount_dir)
-  #             temp_dir: $(temp_dir)
-  #             container: $(container)
+          - template: 'azure-pipeline-templates/release-distro-tests.yml'
+            parameters:
+              root_dir: $(root_dir)
+              work_dir: $(work_dir)
+              mount_dir: $(mount_dir)
+              temp_dir: $(temp_dir)
+              container: $(container)
               
-  #         # Create container for blobfuse and publish it
-  #         - script: |
-  #             sudo apt-get install $(tags) $(fuselib) -y
-  #             chmod 777 *.sh
-  #             ./dockerinstall.sh
-  #             ./buildcontainer.sh DockerfileARM arm64
-  #             ./publishcontainer.sh $(AZTEST_DOCKER_REG_USER)  $(AZTEST_DOCKER_REG_PWD) arm64
-  #           displayName: "Create and publish ARM container"
-  #           workingDirectory: $(work_dir)/docker
+          # Create container for blobfuse and publish it
+          - script: |
+              sudo apt-get install $(tags) $(fuselib) -y
+              chmod 777 *.sh
+              ./dockerinstall.sh
+              ./buildcontainer.sh DockerfileARM arm64
+              ./publishcontainer.sh $(AZTEST_DOCKER_REG_USER)  $(AZTEST_DOCKER_REG_PWD) arm64
+            displayName: "Create and publish ARM container"
+            workingDirectory: $(work_dir)/docker
 
-  #         # publishing the artifacts generated
-  #         - task: PublishBuildArtifacts@1
-  #           inputs:
-  #             artifactName: 'blobfuse2'
-  #           displayName: 'Publish Artifacts' 
+          # publishing the artifacts generated
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'blobfuse2'
+            displayName: 'Publish Artifacts' 
 
-  #     - job: Set_8
-  #       timeoutInMinutes: 120
-  #       strategy:
-  #         matrix:
-  #           Mariner2:
-  #             agentName: "blobfuse-mariner2"
-  #             DistroVer: "Mariner2"
-  #             Description: "CBL-Mariner2 Linux"
-  #             fuselib: 'libfuse3-dev'
-  #             fuse-version: 'fuse3'
-  #             tags: 'fuse3'
-  #             container: "test-cnt-mari-2"
+      - job: Set_3
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Mariner2:
+              agentName: "blobfuse-mariner2"
+              DistroVer: "Mariner2"
+              Description: "CBL-Mariner2 Linux"
+              tags: 'tags'
+              container: "test-cnt-mari-2"
 
-  #       pool:
-  #         name: "blobfuse-mariner-pool"
-  #         demands:
-  #           - ImageOverride -equals $(AgentName)
+        pool:
+          name: "blobfuse-mariner-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
 
-  #       variables:
-  #         - group: NightlyBlobFuse
-  #         - name: root_dir
-  #           value: '$(System.DefaultWorkingDirectory)'
-  #         - name: work_dir
-  #           value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
-  #         - name: mount_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmp'
-  #         - name: temp_dir
-  #           value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
+        variables:
+          - group: AZURE_ESRP_SECRET
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+          - name: mount_dir
+            value: '$(System.DefaultWorkingDirectory)/azcopytmp'
+          - name: temp_dir
+            value: '$(System.DefaultWorkingDirectory)/azcopytmpcache'
 
-  #       steps:
-  #         - checkout: none
+        steps:
+          - checkout: none
 
-  #         - script: |
-  #             sudo tdnf update -y
-  #             sudo tdnf install git -y
-  #           displayName: 'Install Git'
+          - script: |
+              sudo tdnf update -y
+              sudo tdnf install git -y
+            displayName: 'Install Git'
 
-  #         - script: |
-  #             git clone https://github.com/Azure/azure-storage-fuse
-  #           displayName: 'Checkout Code'
-  #           workingDirectory: $(root_dir)
+          - script: |
+              git clone https://github.com/Azure/azure-storage-azcopy
+            displayName: 'Checkout Code'
+            workingDirectory: $(root_dir)
 
-  #         - script: |
-  #             git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-  #           displayName: 'Checkout Branch'
-  #           workingDirectory: $(root_dir)/azure-storage-fuse
+          - script: |
+              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+            displayName: 'Checkout Branch'
+            workingDirectory: $(root_dir)/azure-storage-fuse
 
-  #         # Custom script to install Go-lang
-  #         - task: ShellScript@2
-  #           inputs:
-  #             scriptPath: "$(work_dir)/go_installer.sh"
-  #             args: "$(root_dir)/"
-  #           displayName: "GoTool Custom Setup"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "GoTool Custom Setup"
 
-  #         # get glibc version with which build is done
-  #         - script: |
-  #            ldd --version
-  #           displayName: "GLIBC Version"
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
 
-  #         - task: DownloadBuildArtifacts@0
-  #           displayName: 'Download Build Artifacts'
-  #           inputs:
-  #             artifactName: 'blobfuse2-signed'
-  #             downloadPath: $(root_dir)
-  #             itemPattern: blobfuse2-signed/mariner/blobfuse2*$(tags)*x86_64.rpm
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-signed'
+              downloadPath: $(root_dir)
+              itemPattern: azCopy-signed/mariner/azcopy*$(tags)*x86_64.rpm
 
-  #         - script: |
-  #             ls -l
-  #             result=$(ls -1 | wc -l)
-  #             if [ $result -ne 1 ]; then
-  #               exit 1
-  #             fi
-  #           displayName: 'List Downloaded Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed/mariner              
+          - script: |
+              ls -l
+              result=$(ls -1 | wc -l)
+              if [ $result -ne 1 ]; then
+                exit 1
+              fi
+            displayName: 'List Downloaded Package'
+            workingDirectory: $(root_dir)/azCopy-signed/mariner              
 
-  #         - script: |
-  #             sudo rpm -qip blobfuse2*.rpm
-  #             sudo tdnf install gcc build-essential fuse3 fuse3-devel -y
-  #             sudo rpm -i blobfuse2*.rpm
-  #           displayName: 'Install Package'
-  #           workingDirectory: $(root_dir)/blobfuse2-signed/mariner
+          - script: |
+              sudo rpm -qip blobfuse2*.rpm
+              sudo tdnf install gcc build-essential fuse3 fuse3-devel -y
+              sudo rpm -i azcopy*.rpm
+            displayName: 'Install Package'
+            workingDirectory: $(root_dir)/azCopy-signed/mariner
 
-  #         - template: 'azure-pipeline-templates/release-distro-tests.yml'
-  #           parameters:
-  #             root_dir: $(root_dir)
-  #             work_dir: $(work_dir)
-  #             mount_dir: $(mount_dir)
-  #             temp_dir: $(temp_dir)
-  #             container: $(container)
-
-  # # TestArtifacts ends here
+  # TestArtifacts ends here
   
   # - stage: ReleaseArtifacts
   #   dependsOn: TestArtifacts
