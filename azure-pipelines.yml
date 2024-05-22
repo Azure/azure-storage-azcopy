@@ -1,6 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.21.8'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
+  AZCOPY_GOLANG_VERSION: '1.22.3'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.22.3'
 
 trigger:
   branches:
@@ -165,7 +165,7 @@ jobs:
       - task: PowerShell@2
         inputs: 
           targetType: 'inline'
-          script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+          script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
           pwsh: 'true'
         displayName: 'Install Powershell Az Module'
       - task: AzureCLI@2
