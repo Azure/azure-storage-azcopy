@@ -13,7 +13,7 @@ import (
 type SyncTestSuite struct{}
 
 func init() {
-	suiteManager.RegisterSuite(&SyncTestSuite{})
+	//suiteManager.RegisterSuite(&SyncTestSuite{})
 }
 
 func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationManager) {

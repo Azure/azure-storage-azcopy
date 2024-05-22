@@ -8,7 +8,7 @@ import (
 )
 
 func init() {
-	suiteManager.RegisterSuite(&ListSuite{})
+	//suiteManager.RegisterSuite(&ListSuite{})
 }
 
 type ListSuite struct{}

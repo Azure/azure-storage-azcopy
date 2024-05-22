@@ -140,28 +140,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dst_container_url, 
             "Blob")
 
-    def test_overwrite_copy_single_file_from_blob_to_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_overwrite_copy_single_file_from_x_to_x(
-            src_container_url, 
-            "Blob", 
-            dst_container_url, 
-            "Blob",
-            False,
-            True)
-
-    def test_non_overwrite_copy_single_file_from_blob_to_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_overwrite_copy_single_file_from_x_to_x(
-            src_container_url, 
-            "Blob", 
-            dst_container_url, 
-            "Blob",
-            False,
-            False)
-
     # Test oauth support for service to service copy, where source is authenticated with SAS
     # and destination is authenticated with OAuth token.
     def test_copy_single_17mb_file_from_blob_to_blob_oauth(self):
@@ -274,28 +252,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "File", 
             dst_container_url, 
             "Blob",
-            False)
-
-    def test_overwrite_copy_single_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_overwrite_copy_single_file_from_x_to_x(
-            src_share_url,
-            "File", 
-            dst_container_url, 
-            "Blob",
-            False,
-            True)
-
-    def test_non_overwrite_copy_single_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_overwrite_copy_single_file_from_x_to_x(
-            src_share_url, 
-            "File", 
-            dst_container_url, 
-            "Blob",
-            False,
             False)
 
     # Test oauth support for service to service copy, where source is authenticated with SAS

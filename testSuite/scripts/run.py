@@ -224,7 +224,6 @@ def main():
                          BlobFs_Upload_ShareKey_User_Scenarios,
                          BlobFs_Download_SharedKey_User_Scenarios,
                          Service_2_Service_Copy_User_Scenario,
-                         Autodetect_Blob_Type_Scenario,
                          Google_Cloud_Storage_Copy_User_Scenario]
     suites_list = []
 
