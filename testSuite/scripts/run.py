@@ -14,7 +14,6 @@ from test_service_to_service_copy import *
 from test_google_cloud_storage_copy import *
 from test_blobfs_download_SAS import *
 from test_blobfs_upload_SAS import *
-from test_autodetect_blob_type import *
 from test_file_sync import *
 from test_file_copy import *
 from test_google_cloud_storage_copy import *
