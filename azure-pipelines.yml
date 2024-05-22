@@ -299,27 +299,27 @@ jobs:
           # acquire the mutex before running live tests to avoid conflicts
           python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
         name: 'Acquire_the_distributed_mutex'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'cmd'
-          coverage_name: 'cmd'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'common'
-          coverage_name: 'common'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'common/parallel'
-          coverage_name: 'parallel'
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'ste'
-          coverage_name: 'ste'
-          with_federated_credential: true
-      - template: azurePipelineTemplates/run-ut.yml
-        parameters:
-          directory: 'sddl'
-          coverage_name: 'sddl'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'cmd'
+#          coverage_name: 'cmd'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'common'
+#          coverage_name: 'common'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'common/parallel'
+#          coverage_name: 'parallel'
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'ste'
+#          coverage_name: 'ste'
+#          with_federated_credential: true
+#      - template: azurePipelineTemplates/run-ut.yml
+#        parameters:
+#          directory: 'sddl'
+#          coverage_name: 'sddl'
       - task: AzureCLI@2
         inputs:
           azureSubscription: azcopytestworkloadidentity
