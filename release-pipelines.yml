@@ -660,9 +660,6 @@ stages:
           matrix:
             Ubuntu-22-ARM64:
               vmImage: 'Ubuntu-22.04'
-              fuse-version: 'fuse3'
-              fuselib: 'libfuse3-dev'
-              tags: 'fuse3'
               container: 'test-cnt-ubn-22-arm64'
               AgentName: "blobfuse-ubn22-arm64"
         pool:
@@ -671,28 +668,28 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: NightlyBlobFuse
+          - group: AZCOPY_ESRP_SECRET
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-fuse'
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
           - name: mount_dir
-            value: '$(System.DefaultWorkingDirectory)/fusetmp'
+            value: '$(System.DefaultWorkingDirectory)/azcopytmp'
           - name: temp_dir
-            value: '$(System.DefaultWorkingDirectory)/fusetmpcache'
+            value: '$(System.DefaultWorkingDirectory)/azcopytmpcache'
 
         steps:
           - checkout: none
 
           - script: |
-              git clone https://github.com/Azure/azure-storage-fuse
+              git clone https://github.com/Azure/azure-storage-azcopy
             displayName: 'Checkout Code'
             workingDirectory: $(root_dir)
       
           - script: |
               git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
             displayName: 'Checkout Branch'
-            workingDirectory: $(root_dir)/azure-storage-fuse
+            workingDirectory: $(root_dir)/azure-storage-azcopy
           
           # Custom script to install Go-lang
           - task: ShellScript@2
@@ -711,9 +708,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'blobfuse2-signed'
+              artifactName: 'azCopy-signed'
               downloadPath: $(root_dir)
-              itemPattern: blobfuse2-signed/blobfuse2*$(tags)*arm64.deb
+              itemPattern: azCopy-signed/azcopy_linux_arm64*$(tags)*arm64.deb
 
           - script: |
               ls -l
@@ -722,44 +719,25 @@ stages:
                 exit 1
               fi
             displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/blobfuse2-signed
+            workingDirectory: $(root_dir)/azCopy-signed
 
           - script: |
-              for f in ./blobfuse2*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
-              cp ./blobfuse2*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
+              for f in ./azcopy_linux_arm64*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
+              cp ./azcopy_linux_arm64*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
             displayName: 'Rename Package'
-            workingDirectory: $(root_dir)/blobfuse2-signed
+            workingDirectory: $(root_dir)/azCopy-signed
 
           - script: |
-              sudo dpkg --info blobfuse2*.deb
-              sudo apt-get install $(fuse-version) build-essential -y
-              sudo dpkg -i blobfuse2*.deb
+              sudo dpkg --info azcopy_linux_arm64*.deb
+              sudo dpkg -i azcopy_linux_arm64*.deb
             displayName: 'Install Package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
 
-          - template: 'azure-pipeline-templates/release-distro-tests.yml'
-            parameters:
-              root_dir: $(root_dir)
-              work_dir: $(work_dir)
-              mount_dir: $(mount_dir)
-              temp_dir: $(temp_dir)
-              container: $(container)
-              
-          # Create container for blobfuse and publish it
-          - script: |
-              sudo apt-get install $(tags) $(fuselib) -y
-              chmod 777 *.sh
-              ./dockerinstall.sh
-              ./buildcontainer.sh DockerfileARM arm64
-              ./publishcontainer.sh $(AZTEST_DOCKER_REG_USER)  $(AZTEST_DOCKER_REG_PWD) arm64
-            displayName: "Create and publish ARM container"
-            workingDirectory: $(work_dir)/docker
-
-          # publishing the artifacts generated
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'blobfuse2'
-            displayName: 'Publish Artifacts' 
+          # # publishing the artifacts generated
+          # - task: PublishBuildArtifacts@1
+          #   inputs:
+          #     artifactName: 'blobfuse2'
+          #   displayName: 'Publish Artifacts' 
 
       - job: Set_3
         timeoutInMinutes: 120
@@ -804,7 +782,7 @@ stages:
           - script: |
               git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
             displayName: 'Checkout Branch'
-            workingDirectory: $(root_dir)/azure-storage-fuse
+            workingDirectory: $(root_dir)/azure-storage-azcopy
 
           # Custom script to install Go-lang
           - task: ShellScript@2
@@ -835,8 +813,7 @@ stages:
             workingDirectory: $(root_dir)/azCopy-signed/mariner              
 
           - script: |
-              sudo rpm -qip blobfuse2*.rpm
-              sudo tdnf install gcc build-essential fuse3 fuse3-devel -y
+              sudo rpm -qip azcopy*.rpm
               sudo rpm -i azcopy*.rpm
             displayName: 'Install Package'
             workingDirectory: $(root_dir)/azCopy-signed/mariner
