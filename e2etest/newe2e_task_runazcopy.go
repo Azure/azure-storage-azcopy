@@ -191,13 +191,13 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
 				if oAuthInfo.Environment == AzurePipeline {
 					c.Environment.InheritEnvironment = true
-					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicWorkload.TenantId != "", &oAuthInfo.DynamicWorkload.TenantId, nil)
+					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.Workload.TenantId != "", &oAuthInfo.DynamicOAuth.Workload.TenantId, nil)
 					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
 				} else {
 					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.SPN().String())
-					c.Environment.ServicePrincipalAppID = &oAuthInfo.DynamicSPNSecret.ApplicationID
-					c.Environment.ServicePrincipalClientSecret = &oAuthInfo.DynamicSPNSecret.ClientSecret
-					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicSPNSecret.TenantID != "", &oAuthInfo.DynamicSPNSecret.TenantID, nil)
+					c.Environment.ServicePrincipalAppID = &oAuthInfo.DynamicOAuth.SPNSecret.ApplicationID
+					c.Environment.ServicePrincipalClientSecret = &oAuthInfo.DynamicOAuth.SPNSecret.ClientSecret
+					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.SPNSecret.TenantID != "", &oAuthInfo.DynamicOAuth.SPNSecret.TenantID, nil)
 				}
 			}
 		} else if c.Environment.AutoLoginMode != nil {
@@ -205,7 +205,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 			if strings.ToLower(*c.Environment.AutoLoginMode) == common.EAutoLoginType.Workload().String() {
 				c.Environment.InheritEnvironment = true
 				// Get the value of the AZURE_FEDERATED_TOKEN environment variable
-				token := oAuthInfo.DynamicWorkload.FederatedToken
+				token := oAuthInfo.DynamicOAuth.Workload.FederatedToken
 				a.AssertNow("idToken must be specified to authenticate with workload identity", Empty{Invert: true}, token)
 				// Write the token to a temporary file
 				// Create a temporary file to store the token
@@ -219,8 +219,8 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 				// Set the AZURE_FEDERATED_TOKEN_FILE environment variable
 				c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
-				c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicWorkload.TenantId)
-				c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicWorkload.ClientId)
+				c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicOAuth.Workload.TenantId)
+				c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicOAuth.Workload.ClientId)
 			}
 		}
 

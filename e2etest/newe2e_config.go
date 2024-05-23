@@ -33,19 +33,21 @@ const AzurePipeline = "AzurePipeline"
 type NewE2EConfig struct {
 	E2EAuthConfig struct { // mutually exclusive
 		SubscriptionLoginInfo struct {
-			SubscriptionID   string `env:"NEW_E2E_SUBSCRIPTION_ID,required"`
-			DynamicSPNSecret struct {
-				ApplicationID string `env:"NEW_E2E_APPLICATION_ID,required"`
-				ClientSecret  string `env:"NEW_E2E_CLIENT_SECRET,required"`
-				TenantID      string `env:"NEW_E2E_TENANT_ID"`
-			} `env:",required"`
-			DynamicWorkload struct {
-				ClientId       string `env:"servicePrincipalId,required"`
-				FederatedToken string `env:"idToken,required"`
-				TenantId       string `env:"tenantId,required"`
-			}
+			SubscriptionID string `env:"NEW_E2E_SUBSCRIPTION_ID,required"`
+			DynamicOAuth   struct {
+				SPNSecret struct {
+					ApplicationID string `env:"NEW_E2E_APPLICATION_ID,required"`
+					ClientSecret  string `env:"NEW_E2E_CLIENT_SECRET,required"`
+					TenantID      string `env:"NEW_E2E_TENANT_ID"`
+				} `env:",required"`
+				Workload struct {
+					ClientId       string `env:"servicePrincipalId,required"`
+					FederatedToken string `env:"idToken,required"`
+					TenantId       string `env:"tenantId,required"`
+				} `env:",required"`
+			} `env:",required,minimum_required=1"`
 			Environment string `env:"NEW_E2E_ENVIRONMENT,required"`
-		} `env:",required,minimum_required=3"`
+		} `env:",required"`
 
 		StaticStgAcctInfo struct {
 			StaticOAuth struct {

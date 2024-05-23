@@ -32,16 +32,16 @@ func SetupOAuthCache(a Asserter) {
 	var err error
 	var tenantId string
 	if dynamicLoginInfo.Environment == AzurePipeline {
-		tenantId = dynamicLoginInfo.DynamicWorkload.TenantId
+		tenantId = dynamicLoginInfo.DynamicOAuth.Workload.TenantId
 		cred, err = azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
 			TenantID: tenantId,
 		})
 	} else {
-		tenantId = common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicSPNSecret.TenantID)
+		tenantId = common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicOAuth.SPNSecret.TenantID)
 		cred, err = azidentity.NewClientSecretCredential(
 			tenantId,
-			common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.DynamicSPNSecret.ApplicationID),
-			common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.DynamicSPNSecret.ClientSecret),
+			common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID),
+			common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret),
 			nil, // Hopefully the defaults should be OK?
 		)
 	}
