@@ -168,17 +168,6 @@ jobs:
           script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
           pwsh: 'true'
         displayName: 'Install Powershell Az Module'
-      - task: AzureCLI@2
-        displayName: 'Set Up Workload Identity Environment Variables'
-        inputs:
-          azureSubscription: azcopyworkloadidentity
-          addSpnToEnvironment: true
-          scriptType: bash
-          scriptLocation: inlineScript
-          inlineScript: |
-            echo "##vso[task.setvariable variable=AZURE_CLIENT_ID]$servicePrincipalId" 
-            echo "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN]$idToken"
-            echo "##vso[task.setvariable variable=AZURE_TENANT_ID]$tenantId"
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
@@ -198,31 +187,34 @@ jobs:
           azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
       # Running E2E Tests on AMD64
-      - script: |
-          mkdir coverage
-          echo 'Building executable'
-          $(go_build)
-          echo 'Running tests'
-          $(run_e2e)
-          $(save_exit_code)
-          echo "Generating junit report"
-          cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
-          echo 'Formatting coverage directory to legacy txt format'
-          go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
-          $(output_test_logs)
-          echo 'Formatting coverage to json format'
-          $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
-          echo 'Formatting coverage to xml format'
-          $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
-          $(return_exit_code)
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: azcopytestworkloadidentity
+          addSpnToEnvironment: true
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            mkdir coverage
+            echo 'Building executable'
+            $(go_build)
+            echo 'Running tests'
+            $(run_e2e)
+            $(save_exit_code)
+            echo "Generating junit report"
+            cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
+            echo 'Formatting coverage directory to legacy txt format'
+            go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
+            $(output_test_logs)
+            echo 'Formatting coverage to json format'
+            $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
+            echo 'Formatting coverage to xml format'
+            $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
+            $(return_exit_code)
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
           AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
-          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
           AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
@@ -235,12 +227,9 @@ jobs:
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
           NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
-          NEW_E2E_APPLICATION_ID: $(AZCOPY_NEW_E2E_APPLICATION_ID)
-          NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
-          NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
           NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           NEW_E2E_ENVIRONMENT: "AzurePipeline"
-        displayName: 'E2E Test $(display_name) - AMD64'
+        displayName: 'E2E Test $(display_name) - AMD64 with Workload Identity'
 
       - task: PublishBuildArtifacts@1
         displayName: 'Publish logs'
@@ -317,6 +306,7 @@ jobs:
         parameters:
           directory: 'ste'
           coverage_name: 'ste'
+          with_federated_credential: true
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'sddl'
