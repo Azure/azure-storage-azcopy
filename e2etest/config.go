@@ -41,9 +41,9 @@ func (GlobalInputManager) GetWorkloadIdentity() (tenantID string, clientID strin
 	if tenantID == "" {
 		panic("tenantId must be specified to authenticate with workload identity")
 	}
-	clientID = os.Getenv("clientId")
+	clientID = os.Getenv("servicePrincipalId")
 	if clientID == "" {
-		panic("clientId must be specified to authenticate with workload identity")
+		panic("servicePrincipalId must be specified to authenticate with workload identity")
 	}
 	token = os.Getenv("idToken")
 	if token == "" {
