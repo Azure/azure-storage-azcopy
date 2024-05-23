@@ -343,7 +343,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 		case "pscred":
 			var script string
 			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
-				tenId, clientId, token, _ := GlobalInputManager{}.GetWorkloadIdentity()
+				tenId, clientId, token := GlobalInputManager{}.GetWorkloadIdentity()
 				cmd := `Connect-AzAccount -ApplicationId %s -Tenant %s -FederatedToken %s`
 				script = fmt.Sprintf(cmd, clientId, tenId, token)
 			} else {

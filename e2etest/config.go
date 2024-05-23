@@ -36,28 +36,19 @@ import (
 // the general guidance is to take in as few parameters as possible
 type GlobalInputManager struct{}
 
-func (GlobalInputManager) GetWorkloadIdentity() (tenantID string, clientID string, token string, tokenfile string) {
+func (GlobalInputManager) GetWorkloadIdentity() (tenantID string, clientID string, token string) {
 	tenantID = os.Getenv("tenantId")
+	if tenantID == "" {
+		panic("tenantId must be specified to authenticate with workload identity")
+	}
 	clientID = os.Getenv("clientId")
+	if clientID == "" {
+		panic("clientId must be specified to authenticate with workload identity")
+	}
 	token = os.Getenv("idToken")
-	if token == "" || tenantID == "" || clientID == "" {
-		panic("AZURE_FEDERATED_TOKEN, AZURE_TENANT_ID and AZURE_CLIENT_ID must be specified to authenticate with workload identity")
+	if token == "" {
+		panic("idToken must be specified to authenticate with workload identity")
 	}
-
-	// This is needed for authenticating with the identity Go SDK
-	file, err := os.CreateTemp("", "azure_federated_token.txt")
-	if err != nil {
-		panic("Error creating temporary file")
-	}
-	defer file.Close()
-
-	// Write the token to the temporary file
-	_, err = file.WriteString(token)
-	if err != nil {
-		panic("Error writing to temporary file")
-	}
-	tokenfile = file.Name()
-
 	return
 }
 
