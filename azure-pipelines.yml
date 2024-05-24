@@ -220,13 +220,13 @@ jobs:
             Write-Output "Running tests"
             
             # Run tests and pipe output to test.txt
-            go test -timeout=2h -v ./e2etest > test.txt
+            go test -timeout=2h -v ./e2etest | Tee-Object -FilePath test.txt
             
             # Save the exit code from the previous command
             $exitCode = $LASTEXITCODE
             
             # Print the contents of test.txt
-            Get-Content test.txt
+            # Get-Content test.txt
             
             # Print "Generating junit report"
             Write-Output "Generating junit report"
