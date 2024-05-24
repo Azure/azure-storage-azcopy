@@ -225,6 +225,9 @@ jobs:
             # Save the exit code from the previous command
             $exitCode = $LASTEXITCODE
             
+            # Print the contents of test.txt
+            Get-Content test.txt
+            
             # Print "Generating junit report"
             Write-Output "Generating junit report"
             
