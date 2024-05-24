@@ -191,12 +191,21 @@ jobs:
           scriptType: pscore
           scriptLocation: inlineScript
           inlineScript: |
-            New-Item -Path "./coverage" -ItemType Directory
+            # Create coverage directory
+            if (-Not (Test-Path -Path "./coverage")) {
+              New-Item -Path "./coverage" -ItemType Directory
+            }
+            
+            # Print "Building executable"
             Write-Output "Building executable"
+            
+            # Set platform-specific environment variables and tags
             $tags = ""
+            $suffix = ""
             if ($IsWindows) {
               $env:GOOS = "windows"
               $env:GOARCH = "amd64"
+              $suffix = ".exe"
             } elseif ($IsLinux) {
               $env:GOOS = "linux"
               $env:GOARCH = "amd64"
@@ -205,19 +214,52 @@ jobs:
               $env:GOOS = "darwin"
               $env:GOARCH = "amd64"
               $env:CGO_ENABLED = "1"
+            } else {
+              Write-Error "Unsupported operating system"
+              exit 1
             }
-            go build -cover $(tags) -o $(build_name) 
+            
+            # Set custom build name and display name
+            $build_name = "customExecutable"
+            $display_name = "customExecutable"
+            
+            # Build the Go program
+            go build -cover $tags -o $build_name
+            
+            # Print "Running tests"
             Write-Output "Running tests"
+            
+            # Run tests and pipe output to test.txt
             go test -timeout=2h -v ./e2etest > test.txt
+            
+            # Save the exit code from the previous command
             $exitCode = $LASTEXITCODE
+            
+            # Print "Generating junit report"
             Write-Output "Generating junit report"
-            Get-Content test.txt | $(go env GOPATH)/bin/go-junit-report > $(display_name)_report.xml
+            
+            # Pipe info in test.txt to go-junit-report and save output to report.xml
+            Get-Content test.txt | & "$(go env GOPATH)/bin/go-junit-report" > "${display_name}_report.xml"
+            
+            # Print "Formatting coverage directory to legacy txt format"
             Write-Output "Formatting coverage directory to legacy txt format"
-            go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
+            
+            # Format coverage data to text format
+            go tool covdata textfmt -i=coverage -o "${display_name}_coverage.txt"
+            
+            # Print "Formatting coverage to json format"
             Write-Output "Formatting coverage to json format"
-            $(go env GOPATH)/bin/gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
+            
+            # Convert coverage.txt to coverage.json
+            & "$(go env GOPATH)/bin/gocov$suffix" convert "${display_name}_coverage.txt" > "${display_name}_coverage.json"
+            
+            # Print "Formatting coverage to xml format"
             Write-Output "Formatting coverage to xml format"
-            $(go env GOPATH)/bin/gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
+            
+            # Convert coverage.json to coverage.xml
+            & "$(go env GOPATH)/bin/gocov-xml$suffix" < "${display_name}_coverage.json" > "${display_name}_coverage.xml"
+            
+            # Return the exit code from step 5
             exit $exitCode
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
