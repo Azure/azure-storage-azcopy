@@ -209,7 +209,7 @@ jobs:
             } elseif ($IsLinux) {
               $env:GOOS = "linux"
               $env:GOARCH = "amd64"
-              $tags = "-tags 'netgo'"
+              $tags = "-tags netgo"
             } elseif ($IsMacOS) {
               $env:GOOS = "darwin"
               $env:GOARCH = "amd64"
@@ -220,7 +220,11 @@ jobs:
             }
             
             # Build the Go program
-            go build -cover $tags -o $build_name
+            if ($tags -ne "") {
+              go build -cover $tags -o $build_name
+            } else {
+              go build -cover -o $build_name
+            }
             
             # Print "Running tests"
             Write-Output "Running tests"
