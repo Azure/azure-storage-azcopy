@@ -128,33 +128,15 @@ jobs:
           imageName: 'ubuntu-20.04'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
-          go_path: '$(go env GOPATH)/bin/'
-          suffix: ''
-          run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
-          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-          return_exit_code: 'exit "$exit_code"'
-          go_build: 'GOARCH=amd64 GOOS=linux go build -tags "netgo" -o $(build_name)'
         Windows:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
           display_name: "Windows"
           type: 'windows'
-          go_path: 'C:\Users\VssAdministrator\go\bin\'
-          suffix: '.exe'
-          run_e2e: 'go test -timeout=2h -v ./e2etest > test.txt'
-          save_exit_code: 'set exit_code=%errorlevel%'
-          return_exit_code: 'exit %exit_code%'
-          go_build: 'go build -cover -o $(build_name)'
         MacOS:
           imageName: 'macos-11'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
-          go_path: '$(go env GOPATH)/bin/'
-          suffix: ''
-          run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
-          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-          return_exit_code: 'exit "$exit_code"'
-          go_build: 'CGO_ENABLED=1 go build -cover -o $(build_name)'
     pool:
       vmImage: $(imageName)
 
