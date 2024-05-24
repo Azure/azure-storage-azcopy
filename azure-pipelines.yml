@@ -219,10 +219,6 @@ jobs:
               exit 1
             }
             
-            # Set custom build name and display name
-            $build_name = "customExecutable"
-            $display_name = "customExecutable"
-            
             # Build the Go program
             go build -cover $tags -o $build_name
             
@@ -257,7 +253,7 @@ jobs:
             Write-Output "Formatting coverage to xml format"
             
             # Convert coverage.json to coverage.xml
-            & "$(go env GOPATH)/bin/gocov-xml$suffix" < "${display_name}_coverage.json" > "${display_name}_coverage.xml"
+            Get-Content "${display_name}_coverage.json" | & "$(go env GOPATH)/bin/gocov-xml$suffix" > "${display_name}_coverage.xml"
             
             # Return the exit code from step 5
             exit $exitCode
