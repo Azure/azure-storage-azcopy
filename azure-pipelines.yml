@@ -202,18 +202,26 @@ jobs:
             # Set platform-specific environment variables and tags
             $tags = ""
             $suffix = ""
+            $build_name = ""
+            $display_name = ""
             if ($IsWindows) {
               $env:GOOS = "windows"
               $env:GOARCH = "amd64"
               $suffix = ".exe"
+              $build_name = "azcopy_windows_amd64.exe"
+              $display_name = "Windows"
             } elseif ($IsLinux) {
               $env:GOOS = "linux"
               $env:GOARCH = "amd64"
-              $tags = "-tags netgo"
+              $tags = "netgo"
+              $build_name = "azcopy_linux_amd64"
+              $display_name = "Linux"
             } elseif ($IsMacOS) {
               $env:GOOS = "darwin"
               $env:GOARCH = "amd64"
               $env:CGO_ENABLED = "1"
+              $build_name = "azcopy_darwin_amd64"
+              $display_name = "MacOS"
             } else {
               Write-Error "Unsupported operating system"
               exit 1
@@ -221,7 +229,7 @@ jobs:
             
             # Build the Go program
             if ($tags -ne "") {
-              go build -cover $tags -o $build_name
+              go build -cover -tags $tags -o $build_name
             } else {
               go build -cover -o $build_name
             }
