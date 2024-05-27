@@ -22,13 +22,14 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 // regular file->file sync
@@ -619,10 +620,13 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 		for i := 0; i < len(msg); i++ {
 			if strings.Contains(msg[i], "DRYRUN: remove") {
 				a.True(strings.Contains(msg[i], dstShareClient.URL()))
-			} else {
+			} else if strings.Contains(msg[i], "DRYRUN: copy") {
 				a.True(strings.Contains(msg[i], "DRYRUN: copy"))
 				a.True(strings.Contains(msg[i], srcDirName))
 				a.True(strings.Contains(msg[i], dstShareClient.URL()))
+			} else {
+				a.True(strings.Contains(msg[i], "DRYRUN: warn"))
+				a.True(strings.Contains(msg[i], LocalToFileShareWarnMsg))
 			}
 		}
 
