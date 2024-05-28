@@ -354,13 +354,13 @@ stages:
              ldd --version
             displayName: "GLIBC Version"
 
-          - script: |
-              GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
-            displayName: 'Generate Linux AMD64'
+          # - script: |
+          #     GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
+          #   displayName: 'Generate Linux AMD64'
 
-          - script: |
-              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
-            displayName: 'Generate Linux AMD64 SE Integration'
+          # - script: |
+          #     GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
+          #   displayName: 'Generate Linux AMD64 SE Integration'
 
           - script: |
               GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
@@ -370,11 +370,6 @@ stages:
               sudo ls -lRt $(work_dir)/
             displayName: 'List the binaries from WD'
             workingDirectory: $(root_dir)
-          
-          - script: |
-              ./$(work_dir)/azcopy_linux_amd64 --version
-              ./$(work_dir)/azcopy_linux_arm64 --version
-            displayName: 'Check version'
 
           - script: |
               cp NOTICE.txt $(work_dir)
