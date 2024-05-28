@@ -372,6 +372,7 @@ stages:
             workingDirectory: $(root_dir)
           
           - script: |
+              ./$(work_dir)/azcopy_linux_amd64 --version
               ./$(work_dir)/azcopy_linux_arm64 --version
             displayName: 'Check version'
 
