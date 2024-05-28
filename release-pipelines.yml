@@ -408,7 +408,7 @@ stages:
           - script: |
               fpm -s dir -t deb -n azcopy -C pkgDirAmd64/ \
               -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
-              --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
               mv ./azcopy*.deb ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
@@ -434,7 +434,7 @@ stages:
           - script: |
               fpm -s dir -t deb -n azcopy -C pkgDirArm64/ \
               -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
-              --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
               mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.deb
@@ -454,7 +454,7 @@ stages:
             displayName: 'Make ARM64 rpm Package'
 
           - script: |
-              cp ./($work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
+              cp ./$(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Add SE binary to signing stage'
 
