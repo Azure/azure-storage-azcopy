@@ -411,7 +411,7 @@ stages:
               --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy*.deb ./azcopy_linux_amd64-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
+              mv ./azcopy*.deb ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
               cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make AMD64 deb Package'
@@ -437,7 +437,7 @@ stages:
               --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
+              mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.deb
               cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make ARM64 deb Package'
@@ -448,7 +448,7 @@ stages:
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy*.rpm ./azcopy_linux_arm64-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
+              mv ./azcopy*.rpm ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.rpm
               cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make ARM64 rpm Package'
