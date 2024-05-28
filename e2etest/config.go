@@ -23,6 +23,8 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
@@ -218,14 +220,29 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 }
 
 func (gim GlobalInputManager) SetupClassicOAuthCache() error {
-	tenantId := os.Getenv("tenantId")
 
-	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{TenantID: tenantId})
-	if err != nil {
-		return fmt.Errorf("failed to create credential: %w", err)
+	if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
+		tenantId := os.Getenv("tenantId")
+
+		cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{TenantID: tenantId})
+		if err != nil {
+			return fmt.Errorf("failed to create credential: %w", err)
+		}
+		ClassicE2EOAuthCache = NewOAuthCache(cred, tenantId)
+	} else {
+		tenantId, applicationID, secret := gim.GetServicePrincipalAuth()
+		activeDirectoryEndpoint := "https://login.microsoftonline.com"
+
+		cred, err := azidentity.NewClientSecretCredential(tenantId, applicationID, secret, &azidentity.ClientSecretCredentialOptions{
+			ClientOptions: azcore.ClientOptions{
+				Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: activeDirectoryEndpoint},
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create credential: %w", err)
+		}
+		ClassicE2EOAuthCache = NewOAuthCache(cred, tenantId)
 	}
-
-	ClassicE2EOAuthCache = NewOAuthCache(cred, tenantId)
 
 	return nil
 }
