@@ -387,30 +387,30 @@ stages:
             workingDirectory: $(root_dir)
             
           
-          # # using fpm tool for packaging of our binary & performing post-install operations
-          # # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-          # # TODO: Add description
-          # - script: |
-          #     fpm -s dir -t deb -n azcopy_linux_amd64 -C pkgDir/ \
-          #     -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3` \
-          #     --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
-          #     --url "https://github.com/Azure/azure-storage-azcopy" \
-          #     --description "Add description" 
-          #     mv ./azcopy_linux_amd64*.deb ./azcopy_linux_amd64-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
-          #     cp ./azcopy_linux_amd64*.deb $(Build.ArtifactStagingDirectory)
-          #   workingDirectory: $(root_dir)
-          #   displayName: 'Make AMD64 deb Package'
+          # using fpm tool for packaging of our binary & performing post-install operations
+          # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+          # TODO: Add description
+          - script: |
+              fpm -s dir -t deb -n azcopy_linux_amd64 -C pkgDir/ \
+              -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3` \
+              --maintainer "AzCopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "Add description" 
+              mv ./azcopy_linux_amd64*.deb ./azcopy_linux_amd64-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
+              cp ./azcopy_linux_amd64*.deb $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Make AMD64 deb Package'
             
-          # - script: |
-          #     fpm -s dir -t rpm -n azcopy_linux_amd64 --rpm-digest sha256 -C pkgDir/ \
-          #     -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3` \
-          #     --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-          #     --url "https://github.com/Azure/azure-storage-azcopy" \
-          #     --description "Add description" 
-          #     mv ./azcopy_linux_amd64*.rpm ./azcopy_linux_amd64-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
-          #     cp ./azcopy_linux_amd64*.rpm $(Build.ArtifactStagingDirectory)
-          #   workingDirectory: $(root_dir)
-          #   displayName: 'Make AMD64 rpm Package'
+          - script: |
+              fpm -s dir -t rpm -n azcopy_linux_amd64 --rpm-digest sha256 -C pkgDir/ \
+              -v `./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3` \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "Add description" 
+              mv ./azcopy_linux_amd64*.rpm ./azcopy_linux_amd64-`./pkgDir/usr/bin/azure-storage-azcopy/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
+              cp ./azcopy_linux_amd64*.rpm $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Make AMD64 rpm Package'
 
 
           # using fpm tool for packaging of our binary & performing post-install operations
