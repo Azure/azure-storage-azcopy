@@ -309,14 +309,16 @@ stages:
         strategy:
           matrix:
             Linux_amd64:
-              imageName: 'ubuntu-20.04'
-              type: 'linux_amd64'
-              tags: 'tags'
-              depends: 'depends'
-              container: 'test-cnt-ubn-20'
-              AgentName: "blobfuse-ubuntu20"
+              imageName: 'ubuntu-22.04'
+              container: 'test-cnt-ubn-22-arm64'
+              AgentName: 'blobfuse-ubn22-arm64'
+              # imageName: 'ubuntu-20.04'
+              # container: 'test-cnt-ubn-20'
+              # AgentName: "blobfuse-ubuntu20"
+              
         pool:
-          name: "blobfuse-ubuntu-pool"
+          name: "blobfuse-ubn-arm64-pool"
+          # name: "blobfuse-ubuntu-pool"
           demands:
             - ImageOverride -equals $(agentName)
 
@@ -361,9 +363,10 @@ stages:
           # - script: |
           #     GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
           #   displayName: 'Generate Linux AMD64 SE Integration'
+          # GOARCH=arm64 GOOS=linux
 
           - script: |
-              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
+              go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
             displayName: 'Generate Linux ARM64'
 
           - script: |
