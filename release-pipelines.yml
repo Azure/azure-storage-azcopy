@@ -365,6 +365,11 @@ stages:
           - script: |
               GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
             displayName: 'Generate Linux ARM64'
+
+          - script: |
+              sudo ls -lRt $(work_dir)/
+            displayName: 'List the binaries from WD'
+            workingDirectory: $(root_dir)
           
           - script: |
               ./$(work_dir)/azcopy_linux_arm64 --version
