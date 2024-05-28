@@ -343,7 +343,7 @@ stages:
           # install dependencies required for compiling azcopy
           - script: |
               sudo apt-get update --fix-missing
-              sudo apt-get install pkg-config libsecret-1 -y
+              sudo apt-get install pkg-config libsecret-1-dev -y
               sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
