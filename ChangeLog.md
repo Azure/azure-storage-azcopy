@@ -1,6 +1,33 @@
 
 # Change Log
 
+## Version 10.25.0
+
+### Security fixes
+
+1. Updated Golang version to 1.22.3 to address security vulnerabilities
+
+### New Features
+
+1. Workload Identity authentication is now available (#2619)
+2. `azcopy list` now supports a `--location` flag, to support ambiguous URIs (#2595)
+3. `azcopy list` now properly supports `--output-type=json` for users in automated scenarios. (#2629)
+
+### Bug Fixes
+
+1. Fixed a bug where AzCopy was not reporting performance info in `-output-type=json` (#2636)
+2. Fixed a bug AzCopy would crash when operating on extremely large (16.5+TB) managed disks (#2635)
+3. Fixed a bug with hash-based sync where the directory structure would not be replicated when using `--local-hash-storage-mode=HiddenFiles` with `--hash-meta-dir` (#2611)
+4. Fixed a bug where attempting to use a non-S3/GCP/Azure storage URI would result in treating the URI as a local path (#2652)
+
+### Documentation changes
+
+1. Updated inaccurate helptext and filled in missing helptext (#2649)
+2. Many important errors now include a link to relevant documentation to assist users in troubleshooting AzCopy (#2647)
+3. Ambiguous flags (such as `--cpk-by-value`) have improved clarity in documentation (#2615)
+4. A clearer error message is provided when failing a transfer due to authorization. (#2644)
+5. A special error has been created when performing an Azure Files to Azure Blob Storage transfer, indicating present lack of service-side support (#2616)
+
 ## Version 10.25.0-Preview-1
 
 ### Security fixes
