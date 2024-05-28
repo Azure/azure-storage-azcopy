@@ -343,7 +343,8 @@ stages:
           # install dependencies required for compiling azcopy
           - script: |
               sudo apt-get update --fix-missing
-              sudo apt-get install ruby ruby-dev rubygems pkg-config libglib2.0-dev build-essential rpm -y
+              sudo apt-get install pkg-config libsecret-1-0 -y
+              sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
             displayName: "Installing Dependencies"
@@ -667,7 +668,7 @@ stages:
           demands:
             - ImageOverride -equals $(AgentName)
 
-        variables:
+        variables:  
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
