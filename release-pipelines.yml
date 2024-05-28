@@ -406,7 +406,7 @@ stages:
             displayName: 'Check amd64 version'
 
           - script: |
-              ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
+              GOARCH=arm64 GOOS=linux ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
             displayName: 'Check arm64 version'
             
           
