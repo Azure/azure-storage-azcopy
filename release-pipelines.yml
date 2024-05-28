@@ -385,11 +385,11 @@ stages:
 
           - script: |
               cp NOTICE.txt pkgDirAmd64/usr/bin/
-            displayName: 'Copy NOTICE.txt'
+            displayName: 'Copy NOTICE.txt for AMD64'
 
           - script: |
               cp NOTICE.txt pkgDirArm64/usr/bin/
-            displayName: 'Copy NOTICE.txt'
+            displayName: 'Copy NOTICE.txt for Arm64'
 
           - script: |
               sudo ls -lRt pkgDirAmd64/usr/bin/
@@ -400,6 +400,14 @@ stages:
               sudo ls -lRt pkgDirArm64/usr/bin/
             displayName: 'List arm64 binaries'
             workingDirectory: $(root_dir)
+
+          - script: |
+              ./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version
+            displayName: 'Check amd64 version'
+
+          - script: |
+              ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
+            displayName: 'Check arm64 version'
             
           
           # using fpm tool for packaging of our binary & performing post-install operations
@@ -454,7 +462,7 @@ stages:
             displayName: 'Make ARM64 rpm Package'
 
           - script: |
-              cp ./$(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
+              cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Add SE binary to signing stage'
 
