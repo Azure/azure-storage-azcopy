@@ -304,7 +304,7 @@ stages:
     #dependsOn: RunTests
     #condition: succeeded('RunTests')
     jobs:
-      - job: Ubuntu
+      - job: Ubuntu_Arm
         timeoutInMinutes: 120
         strategy:
           matrix:
