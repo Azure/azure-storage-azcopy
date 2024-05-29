@@ -311,7 +311,6 @@ stages:
             Linux_amd64:
               imageName: 'ubuntu-20.04'
               type: 'linux_amd64'
-              tags: 'tags'
               depends: 'depends'
               container: 'test-cnt-ubn-20'
               AgentName: "blobfuse-ubuntu20"
@@ -396,7 +395,7 @@ stages:
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy-linux-amd64*.deb ./azcopy-linux-amd64-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
+              mv ./azcopy-linux-amd64*.deb ./azcopy-linux-amd64-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`.x86_64.deb
               cp ./azcopy-linux-amd64*.deb $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make AMD64 deb Package'
@@ -407,7 +406,7 @@ stages:
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy-linux-amd64*.rpm ./azcopy-linux-amd64-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
+              mv ./azcopy-linux-amd64*.rpm ./azcopy-linux-amd64-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`.x86_64.rpm
               cp ./azcopy-linux-amd64*.rpm $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make AMD64 rpm Package'
@@ -516,24 +515,24 @@ stages:
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           # TODO: Add description
           - script: |
-              fpm -s dir -t deb -n azcopy -C pkgDirArm64/ \
+              fpm -s dir -t deb -n azcopy-linux-arm64 -C pkgDirArm64/ \
               -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.deb
-              cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+              mv ./azcopy-linux-arm64*.deb ./azcopy-linux-arm64-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`.arm64.deb
+              cp ./azcopy-linux-arm64*.deb $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make ARM64 deb Package'
             
           - script: |
-              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirArm64/ \
+              fpm -s dir -t rpm -n azcopy-linux-arm64 --rpm-digest sha256 -C pkgDirArm64/ \
               -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
               --description "Add description" 
-              mv ./azcopy*.rpm ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.rpm
-              cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+              mv ./azcopy-linux-arm64*.rpm ./azcopy-linux-arm64-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`.arm64.rpm
+              cp ./azcopy-linux-arm64*.rpm $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make ARM64 rpm Package'
 
@@ -680,7 +679,6 @@ stages:
               agentName: "blobfuse-ubuntu22"
               vmImage: 'Ubuntu-22.04'
               container: 'test-cnt-ubn-22'
-              tags: 'tags'
         pool:
           vmImage: $(vmImage)
 
@@ -759,89 +757,89 @@ stages:
           #   displayName: 'Publish Artifacts' 
 
   
-      # - job: Set_2_ARM
-      #   timeoutInMinutes: 120
-      #   strategy:
-      #     matrix:
-      #       Ubuntu-22-ARM64:
-      #         vmImage: 'Ubuntu-22.04'
-      #         container: 'test-cnt-ubn-22-arm64'
-      #         AgentName: "blobfuse-ubn22-arm64"
-      #   pool:
-      #     name: "blobfuse-ubn-arm64-pool"
-      #     demands:
-      #       - ImageOverride -equals $(AgentName)
+      - job: Set_2_ARM
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu-22-ARM64:
+              vmImage: 'Ubuntu-22.04'
+              container: 'test-cnt-ubn-22-arm64'
+              AgentName: "blobfuse-ubn22-arm64"
+        pool:
+          name: "blobfuse-ubn-arm64-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
 
-      #   variables:  
-      #     - name: root_dir
-      #       value: '$(System.DefaultWorkingDirectory)'
-      #     - name: work_dir
-      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-      #     - name: mount_dir
-      #       value: '$(System.DefaultWorkingDirectory)/azcopytmp'
-      #     - name: temp_dir
-      #       value: '$(System.DefaultWorkingDirectory)/azcopytmpcache'
+        variables:  
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+          - name: mount_dir
+            value: '$(System.DefaultWorkingDirectory)/azcopytmp'
+          - name: temp_dir
+            value: '$(System.DefaultWorkingDirectory)/azcopytmpcache'
 
-      #   steps:
-      #     - checkout: none
+        steps:
+          - checkout: none
 
-      #     - script: |
-      #         git clone https://github.com/Azure/azure-storage-azcopy
-      #       displayName: 'Checkout Code'
-      #       workingDirectory: $(root_dir)
+          - script: |
+              git clone https://github.com/Azure/azure-storage-azcopy
+            displayName: 'Checkout Code'
+            workingDirectory: $(root_dir)
       
-      #     - script: |
-      #         git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-      #       displayName: 'Checkout Branch'
-      #       workingDirectory: $(root_dir)/azure-storage-azcopy
+          - script: |
+              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+            displayName: 'Checkout Branch'
+            workingDirectory: $(root_dir)/azure-storage-azcopy
           
-      #     # Custom script to install Go-lang
-      #     - task: ShellScript@2
-      #       inputs:
-      #         scriptPath: "$(work_dir)/go_installer.sh"
-      #         args: "$(root_dir)/"
-      #       displayName: "GoTool Custom Setup"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "GoTool Custom Setup"
 
-      #     # get glibc version with which build is done
-      #     - script: |
-      #        sudo apt update
-      #        sudo apt --fix-broken install
-      #        ldd --version
-      #       displayName: "GLIBC Version"
+          # get glibc version with which build is done
+          - script: |
+             sudo apt update
+             sudo apt --fix-broken install
+             ldd --version
+            displayName: "GLIBC Version"
 
-      #     - task: DownloadBuildArtifacts@0
-      #       displayName: 'Download Build Artifacts'
-      #       inputs:
-      #         artifactName: 'azCopy-signed'
-      #         downloadPath: $(root_dir)
-      #         itemPattern: azCopy-signed/azcopy_linux_arm64*$(tags)*arm64.deb
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-signed'
+              downloadPath: $(root_dir)
+              itemPattern: azCopy-signed/azcopy_linux_arm64*$(tags)*arm64.deb
 
-      #     - script: |
-      #         ls -l
-      #         result=$(ls -1 | wc -l)
-      #         if [ $result -ne 1 ]; then
-      #           exit 1
-      #         fi
-      #       displayName: 'List Downloaded Package'
-      #       workingDirectory: $(root_dir)/azCopy-signed
+          - script: |
+              ls -l
+              result=$(ls -1 | wc -l)
+              if [ $result -ne 1 ]; then
+                exit 1
+              fi
+            displayName: 'List Downloaded Package'
+            workingDirectory: $(root_dir)/azCopy-signed
 
-      #     - script: |
-      #         for f in ./azcopy_linux_arm64*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
-      #         cp ./azcopy_linux_arm64*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
-      #       displayName: 'Rename Package'
-      #       workingDirectory: $(root_dir)/azCopy-signed
+          - script: |
+              for f in ./azcopy_linux_arm64*$(tags)*.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
+              cp ./azcopy_linux_arm64*$(vmImage)*.deb $(Build.ArtifactStagingDirectory)
+            displayName: 'Rename Package'
+            workingDirectory: $(root_dir)/azCopy-signed
 
-      #     - script: |
-      #         sudo dpkg --info azcopy_linux_arm64*.deb
-      #         sudo dpkg -i azcopy_linux_arm64*.deb
-      #       displayName: 'Install Package'
-      #       workingDirectory: $(Build.ArtifactStagingDirectory)
+          - script: |
+              sudo dpkg --info azcopy_linux_arm64*.deb
+              sudo dpkg -i azcopy_linux_arm64*.deb
+            displayName: 'Install Package'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
 
-      #     # # publishing the artifacts generated
-      #     # - task: PublishBuildArtifacts@1
-      #     #   inputs:
-      #     #     artifactName: 'blobfuse2'
-      #     #   displayName: 'Publish Artifacts' 
+          # # publishing the artifacts generated
+          # - task: PublishBuildArtifacts@1
+          #   inputs:
+          #     artifactName: 'blobfuse2'
+          #   displayName: 'Publish Artifacts' 
 
       # - job: Set_3
       #   timeoutInMinutes: 120
@@ -851,7 +849,6 @@ stages:
       #         agentName: "blobfuse-mariner2"
       #         DistroVer: "Mariner2"
       #         Description: "CBL-Mariner2 Linux"
-      #         tags: 'tags'
       #         container: "test-cnt-mari-2"
 
       #   pool:
