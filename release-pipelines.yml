@@ -450,6 +450,13 @@ stages:
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
         steps:
+
+          - script: |
+              wget https://github.com/dphulkar-msft/azure-storage-azcopy/blob/az-pipelineTest/go_installer.sh -P $(work_dir)/
+              chmod 777 $(work_dir)/go_installer.sh
+              sudo ls -lRt $(work_dir)/
+            displayName: 'list'
+            
           # Custom script to install Go-lang
           - task: ShellScript@2
             inputs:
@@ -471,12 +478,6 @@ stages:
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
             displayName: "Installing Dependencies"
-
-          - script: |
-              wget https://github.com/dphulkar-msft/azure-storage-azcopy/blob/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
 
           # get glibc version with which build is done
           - script: |
