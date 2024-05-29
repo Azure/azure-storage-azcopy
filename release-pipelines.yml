@@ -363,10 +363,6 @@ stages:
             displayName: 'Generate Linux AMD64 SE Integration'
 
           - script: |
-              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
-            displayName: 'Generate Linux ARM64'
-
-          - script: |
               sudo ls -lRt $(work_dir)/
             displayName: 'List the binaries from WD'
             workingDirectory: $(root_dir)
@@ -375,39 +371,20 @@ stages:
           - script: |
               mkdir -p pkgDirAmd64/usr/bin/
               cp -r $(work_dir)/azcopy_linux_amd64 pkgDirAmd64/usr/bin/
-            displayName: 'Accumulate amd64 pkg files'
-
-          # place the generated binary files & any additional files in appropriate locations
-          - script: |
-              mkdir -p pkgDirArm64/usr/bin/
-              cp -r $(work_dir)/azcopy_linux_arm64 pkgDirArm64/usr/bin/
-            displayName: 'Accumulate arm64 pkg files'
+            displayName: 'Accumulate pkg files'
 
           - script: |
               cp NOTICE.txt pkgDirAmd64/usr/bin/
-            displayName: 'Copy NOTICE.txt for AMD64'
-
-          - script: |
-              cp NOTICE.txt pkgDirArm64/usr/bin/
-            displayName: 'Copy NOTICE.txt for Arm64'
+            displayName: 'Copy NOTICE.txt'
 
           - script: |
               sudo ls -lRt pkgDirAmd64/usr/bin/
-            displayName: 'List amd64 binaries'
-            workingDirectory: $(root_dir)
-
-          - script: |
-              sudo ls -lRt pkgDirArm64/usr/bin/
-            displayName: 'List arm64 binaries'
+            displayName: 'List binaries'
             workingDirectory: $(root_dir)
 
           - script: |
               ./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version
-            displayName: 'Check amd64 version'
-
-          - script: |
-              GOARCH=arm64 GOOS=linux ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
-            displayName: 'Check arm64 version'
+            displayName: 'Check version'
             
           
           # using fpm tool for packaging of our binary & performing post-install operations
@@ -435,6 +412,98 @@ stages:
             workingDirectory: $(root_dir)
             displayName: 'Make AMD64 rpm Package'
 
+          - script: |
+              cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Add SE binary to signing stage'
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-temp'
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
+        
+          - task: ComponentGovernanceComponentDetection@0
+            inputs:
+              scanType: 'Register'
+              verbosity: 'Verbose'
+              alertWarningLevel: 'High'
+
+      - job: Ubuntu
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Linux_arm64:
+              vmImage: 'ubuntu-22.04'
+              container: 'test-cnt-ubn-22-arm64'
+              AgentName: 'blobfuse-ubn22-arm64'
+
+        pool:
+          name: "blobfuse-ubn-arm64-pool"
+          demands:
+            - ImageOverride -equals $(agentName)
+
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+
+        steps:
+          # Custom script to install Go-lang
+          - task: GoTool@0
+            env:
+              GO111MODULE: 'on'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION)
+
+          - script: |
+              echo 'Running GO Vet'
+              go vet 
+            displayName: 'Golang Vet - Linux'
+            workingDirectory: $(root_dir)
+
+          # install dependencies required for compiling azcopy
+          - script: |
+              sudo apt-get update --fix-missing
+              sudo apt-get install pkg-config libsecret-1-dev -y
+              sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+              sudo gem install dotenv -v 2.8.1
+              sudo gem install fpm -V
+            displayName: "Installing Dependencies"
+
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
+
+          - script: |
+              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
+            displayName: 'Generate Linux ARM64'
+
+          - script: |
+              sudo ls -lRt $(work_dir)/
+            displayName: 'List the binaries from WD'
+            workingDirectory: $(root_dir)
+
+          # place the generated binary files & any additional files in appropriate locations
+          - script: |
+              mkdir -p pkgDirArm64/usr/bin/
+              cp -r $(work_dir)/azcopy_linux_arm64 pkgDirArm64/usr/bin/
+            displayName: 'Accumulate arm64 pkg files'
+
+          - script: |
+              cp NOTICE.txt pkgDirArm64/usr/bin/
+            displayName: 'Copy NOTICE.txt for Arm64'
+
+          - script: |
+              sudo ls -lRt pkgDirArm64/usr/bin/
+            displayName: 'List arm64 binaries'
+            workingDirectory: $(root_dir)
+
+          - script: |
+              GOARCH=arm64 GOOS=linux ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
+            displayName: 'Check arm64 version'
 
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
@@ -460,11 +529,6 @@ stages:
               cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make ARM64 rpm Package'
-
-          - script: |
-              cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
-            displayName: 'Add SE binary to signing stage'
 
           - task: PublishBuildArtifacts@1
             inputs:
