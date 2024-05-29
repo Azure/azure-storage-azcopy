@@ -796,7 +796,7 @@ stages:
               wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
               chmod 777 $(work_dir)/go_installer.sh
               sudo ls -lRt $(work_dir)/
-            displayName: 'list'
+            displayName: 'listing'
           
           # Custom script to install Go-lang
           - task: ShellScript@2
