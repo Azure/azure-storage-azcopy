@@ -304,7 +304,7 @@ stages:
     #dependsOn: RunTests
     #condition: succeeded('RunTests')
     jobs:
-      - job: Ubuntu_Arm
+      - job: Ubuntu
         timeoutInMinutes: 120
         strategy:
           matrix:
@@ -429,7 +429,7 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-      - job: Ubuntu
+      - job: Ubuntu_Arm
         timeoutInMinutes: 120
         strategy:
           matrix:
@@ -451,11 +451,11 @@ stages:
 
         steps:
           # Custom script to install Go-lang
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
+          - task: ShellScript@2
             inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "Installing Go tools"
 
           - script: |
               echo 'Running GO Vet'
