@@ -3,8 +3,7 @@ work_dir=$(echo $1 | sed 's:/*$::')
 version="1.21.8"
 arch=`hostnamectl | grep "Arch" | rev | cut -d " " -f 1 | rev`
 
-if [ $arch != "arm64" ]
-then
+if [ $arch != "arm64" ];then
   arch="amd64"
 fi
 
