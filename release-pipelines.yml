@@ -680,6 +680,7 @@ stages:
               agentName: "blobfuse-ubuntu22"
               vmImage: 'Ubuntu-22.04'
               container: 'test-cnt-ubn-22'
+              tags: 'tags'
         pool:
           vmImage: $(vmImage)
 
@@ -766,6 +767,7 @@ stages:
               vmImage: 'Ubuntu-22.04'
               container: 'test-cnt-ubn-22-arm64'
               AgentName: "blobfuse-ubn22-arm64"
+              tags: 'tags'
         pool:
           name: "blobfuse-ubn-arm64-pool"
           demands:
