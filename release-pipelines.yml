@@ -1254,7 +1254,7 @@ stages:
 
             - task: PipAuthenticate@1
               inputs:
-                artifactFeeds: 'BlobFuse/Blobfuse'
+                artifactFeeds: 'DevExGlobalFeed'
               displayName: 'Connect to PMC artifact'
 
             - script: |
@@ -1290,9 +1290,9 @@ stages:
 
             - script: |
                 cd mariner
-                for f in ./azcopy*.rpm; do mv -v "$f" "${f/-fuse3./-cm2.}"; done
+                for f in ./azcopy*.rpm; do mv -v "$f" "${f/-tags./-cm2.}"; done
                 ls -lRt
-                mv blobfuse2*.rpm ..
+                mv azcopy*.rpm ..
                 cd ..
                 rm -r mariner/
               displayName: 'Rename Mariner binaries'
