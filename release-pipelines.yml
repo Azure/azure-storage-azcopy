@@ -1217,7 +1217,7 @@ stages:
               # add release tags & push to github
               - task: GithubRelease@1
                 inputs:
-                  githubConnection: 'dphulkar-msft'
+                  githubConnection: 'github.com_dphulkar-msft'
                   repositoryName: 'dphulkar-msft/azure-storage-azcopy'
                   action: 'edit'
 
