@@ -22,11 +22,12 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/JeffreyRichter/enum/enum"
 	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
+
+	"github.com/JeffreyRichter/enum/enum"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -84,6 +85,37 @@ var fromToHelp = func() string {
 
 var fromToHelpText = fromToHelp
 
+const locationHelpFormat = "Specified to nudge AzCopy when resource detection may not work (e.g. emulator/azure stack); Valid Location are Source words (e.g. Blob, File) that specify the source resource type. All valid Locations are: %s"
+
+var locationHelp = func() string {
+	validLocations := ""
+
+	isSafeToOutput := func(loc common.Location) bool {
+		switch loc {
+		case common.ELocation.Benchmark(),
+			common.ELocation.None(),
+			common.ELocation.Unknown():
+			return false
+		default:
+			return true
+		}
+	}
+
+	enum.GetSymbols(reflect.TypeOf(common.ELocation), func(enumSymbolName string, enumSymbolValue interface{}) (stop bool) {
+		location := enumSymbolValue.(common.Location)
+
+		if isSafeToOutput(location) {
+			validLocations += location.String() + ", "
+		}
+
+		return false
+	})
+
+	return fmt.Sprintf(locationHelpFormat, strings.TrimSuffix(validLocations, ", "))
+}()
+
+var locationHelpText = locationHelp
+
 func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
 	srcLocation := InferArgumentLocation(src)
@@ -132,6 +164,28 @@ func inferFromTo(src, dst string) common.FromTo {
 
 var IPv4Regex = regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`) // simple regex
 
+func ValidateArgumentLocation(src string, userSpecifiedLocation string) (common.Location, error) {
+	if userSpecifiedLocation == "" {
+		inferredLocation := InferArgumentLocation(src)
+
+		// If user didn't explicitly specify Location, use what was inferred (if possible)
+		if inferredLocation == common.ELocation.Unknown() {
+			return common.ELocation.Unknown(), fmt.Errorf("the inferred location could not be identified, or is currently not supported")
+		}
+		return inferredLocation, nil
+	}
+
+	// User explicitly specified Location, therefore, we should respect what they specified.
+	var userLocation common.Location
+	err := userLocation.Parse(userSpecifiedLocation)
+	if err != nil {
+		return common.ELocation.Unknown(), fmt.Errorf("invalid --location value specified: %q. "+locationHelpText, userSpecifiedLocation)
+
+	}
+
+	return userLocation, nil
+}
+
 func InferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
 		return common.ELocation.Pipe()
@@ -164,6 +218,9 @@ func InferArgumentLocation(arg string) common.Location {
 			if common.IsGCPURL(*u) {
 				return common.ELocation.GCP()
 			}
+      
+			// If none of the above conditions match, return Unknown 
+			return common.ELocation.Unknown()
 		}
 	}
 

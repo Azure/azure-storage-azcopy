@@ -104,35 +104,21 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		}
 
 		// Fill up lca
+		lca.loginType = autoLoginType
 		switch autoLoginType {
-		case common.AutologinTypeSPN:
+		case common.EAutoLoginType.SPN().String():
 			lca.applicationID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
 			lca.certPath = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
 			lca.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			lca.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-			lca.servicePrincipal = true
-
-		case common.AutologinTypeMSI:
+		case common.EAutoLoginType.MSI().String():
 			lca.identityClientID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
 			lca.identityObjectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
 			lca.identityResourceID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
-			lca.identity = true
-
-		case common.AutologinTypeDevice:
-			lca.identity = false
-
-		case common.AutologinTypeAzCLI:
-			lca.identity = false
-			lca.servicePrincipal = false
-			lca.psCred = false
-			lca.azCliCred = true
-
-		case common.AutologinTypePsCred:
-			lca.identity = false
-			lca.servicePrincipal = false
-			lca.azCliCred = false
-			lca.psCred = true
-
+		case common.EAutoLoginType.Device().String():
+		case common.EAutoLoginType.AzCLI().String():
+		case common.EAutoLoginType.PsCred().String():
+		case common.EAutoLoginType.Workload().String():
 		default:
 			glcm.Error("Invalid Auto-login type specified: " + autoLoginType)
 			return
@@ -345,6 +331,9 @@ func logAuthType(ct common.CredentialType, location common.Location, isSource bo
 		name = "Azure AD (Managed Disk)"
 	}
 	message := fmt.Sprintf("Authenticating to %s using %s", resource, name)
+	if ct == common.ECredentialType.Unknown() && location.IsAzure() {
+		message += ", Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL."
+	}
 	if _, exists := authMessagesAlreadyLogged.Load(message); !exists {
 		authMessagesAlreadyLogged.Store(message, struct{}{}) // dedup because source is auth'd by both enumerator and STE
 		if jobsAdmin.JobsAdmin != nil {
@@ -376,7 +365,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, nil, nil, ste.LogOptions{}, nil)
+	}, nil, ste.LogOptions{}, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(bURLParts.String(), &blob.ClientOptions{ClientOptions: clientOptions})
 	bURLParts.BlobName = ""
@@ -409,7 +398,7 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, nil, nil, ste.LogOptions{}, nil)
+	}, nil, ste.LogOptions{}, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
 	_, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
@@ -603,7 +592,7 @@ func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedC
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, srcCred)
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), logOptions, srcCred)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

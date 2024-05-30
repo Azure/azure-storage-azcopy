@@ -23,8 +23,6 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
@@ -37,6 +35,22 @@ import (
 // it's ok to panic if the inputs are absolutely required
 // the general guidance is to take in as few parameters as possible
 type GlobalInputManager struct{}
+
+func (GlobalInputManager) GetWorkloadIdentity() (tenantID string, clientID string, token string) {
+	tenantID = os.Getenv("tenantId")
+	if tenantID == "" {
+		panic("tenantId must be specified to authenticate with workload identity")
+	}
+	clientID = os.Getenv("servicePrincipalId")
+	if clientID == "" {
+		panic("servicePrincipalId must be specified to authenticate with workload identity")
+	}
+	token = os.Getenv("idToken")
+	if token == "" {
+		panic("idToken must be specified to authenticate with workload identity")
+	}
+	return
+}
 
 func (GlobalInputManager) GetServicePrincipalAuth() (tenantID string, applicationID string, clientSecret string) {
 	tenantID = os.Getenv("AZCOPY_E2E_TENANT_ID")
@@ -123,13 +137,16 @@ func (AccountType) GCP() AccountType                          { return AccountTy
 func (AccountType) Azurite() AccountType                      { return AccountType(8) }
 func (AccountType) ManagedDiskSnapshot() AccountType          { return AccountType(9) }
 func (AccountType) ManagedDiskSnapshotOAuth() AccountType     { return AccountType(10) }
+func (AccountType) LargeManagedDiskSnapshot() AccountType     { return AccountType(11) }
+func (AccountType) LargeManagedDisk() AccountType             { return AccountType(12) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }
 
 func (o AccountType) IsManagedDisk() bool {
-	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk() || o == o.ManagedDiskSnapshot() || o == o.ManagedDiskSnapshotOAuth()
+	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk() || o == o.ManagedDiskSnapshot() || o == o.ManagedDiskSnapshotOAuth() ||
+		o == o.LargeManagedDiskSnapshot() || o == o.LargeManagedDisk()
 }
 
 func (o AccountType) IsBlobOnly() bool {
@@ -144,7 +161,7 @@ type ManagedDiskConfig struct {
 	ResourceGroupName string
 	DiskName          string
 
-	oauth             AccessToken
+	oauth      AccessToken
 	isSnapshot bool
 }
 
@@ -159,11 +176,16 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_CONFIG"
 	case EAccountType.OAuthManagedDisk():
 		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG"
+	case EAccountType.LargeManagedDisk():
+		mdConfigVar = "AZCOPY_E2E_LARGE_MANAGED_DISK_CONFIG"
 	case EAccountType.ManagedDiskSnapshot():
 		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG"
 		isSnapshot = true
 	case EAccountType.ManagedDiskSnapshotOAuth():
 		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG"
+		isSnapshot = true
+	case EAccountType.LargeManagedDiskSnapshot():
+		mdConfigVar = "AZCOPY_E2E_LARGE_MANAGED_DISK_SNAPSHOT_CONFIG"
 		isSnapshot = true
 	default:
 		return nil, fmt.Errorf("account type %s is invalid for GetMDConfig", accountType.String())
@@ -196,19 +218,14 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 }
 
 func (gim GlobalInputManager) SetupClassicOAuthCache() error {
-	tenantID, applicationID, secret := gim.GetServicePrincipalAuth()
-	activeDirectoryEndpoint := "https://login.microsoftonline.com"
+	tenantId := os.Getenv("tenantId")
 
-	spn, err := azidentity.NewClientSecretCredential(tenantID, applicationID, secret, &azidentity.ClientSecretCredentialOptions{
-		ClientOptions: azcore.ClientOptions{
-			Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: activeDirectoryEndpoint},
-		},
-	})
+	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{TenantID: tenantId})
 	if err != nil {
 		return fmt.Errorf("failed to create credential: %w", err)
 	}
 
-	ClassicE2EOAuthCache = NewOAuthCache(spn, tenantID)
+	ClassicE2EOAuthCache = NewOAuthCache(cred, tenantId)
 
 	return nil
 }

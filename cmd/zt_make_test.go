@@ -142,7 +142,7 @@ func TestMakeFileShare(t *testing.T) {
 		a.Nil(err)
 		props, err := sc.GetProperties(ctx, nil)
 		a.Nil(err)
-		a.EqualValues(5120, *props.Quota)
+		a.EqualValues(102400, *props.Quota)
 	})
 }
 
@@ -158,7 +158,7 @@ func TestMakeFileShareQuota(t *testing.T) {
 
 	args := rawMakeCmdArgs{
 		resourceToCreate: scSAS.String(),
-		quota: 5,
+		quota:            5,
 	}
 
 	runMakeAndVerify(args, func(err error) {
