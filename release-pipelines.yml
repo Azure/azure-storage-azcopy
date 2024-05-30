@@ -428,126 +428,126 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-      - job: Ubuntu_Arm
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Linux_arm64:
-              vmImage: 'ubuntu-22.04'
-              container: 'test-cnt-ubn-22-arm64'
-              AgentName: 'blobfuse-ubn22-arm64'
-              tags: 'tags'
+      # - job: Ubuntu_Arm
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Linux_arm64:
+      #         vmImage: 'ubuntu-22.04'
+      #         container: 'test-cnt-ubn-22-arm64'
+      #         AgentName: 'blobfuse-ubn22-arm64'
+      #         tags: 'tags'
 
-        pool:
-          name: "blobfuse-ubn-arm64-pool"
-          demands:
-            - ImageOverride -equals $(agentName)
+      #   pool:
+      #     name: "blobfuse-ubn-arm64-pool"
+      #     demands:
+      #       - ImageOverride -equals $(agentName)
 
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+      #   variables:
+      #     - name: root_dir
+      #       value: '$(System.DefaultWorkingDirectory)'
+      #     - name: work_dir
+      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
-        steps:
+      #   steps:
 
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
+      #     - script: |
+      #         wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
+      #         chmod 777 $(work_dir)/go_installer.sh
+      #         sudo ls -lRt $(work_dir)/
+      #       displayName: 'list'
 
-          # Custom script to install Go-lang
-          - task: ShellScript@2
-            inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "Installing Go tools"
+      #     # Custom script to install Go-lang
+      #     - task: ShellScript@2
+      #       inputs:
+      #         scriptPath: "$(work_dir)/go_installer.sh"
+      #         args: "$(root_dir)/"
+      #       displayName: "Installing Go tools"
 
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Linux'
-            workingDirectory: $(root_dir)
+      #     - script: |
+      #         echo 'Running GO Vet'
+      #         go vet 
+      #       displayName: 'Golang Vet - Linux'
+      #       workingDirectory: $(root_dir)
 
-          # install dependencies required for compiling azcopy
-          - script: |
-              sudo apt-get update --fix-missing
-              sudo apt-get install pkg-config libsecret-1-dev wget -y
-              sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
-              sudo gem install dotenv -v 2.8.1
-              sudo gem install fpm -V
-            displayName: "Installing Dependencies"
+      #     # install dependencies required for compiling azcopy
+      #     - script: |
+      #         sudo apt-get update --fix-missing
+      #         sudo apt-get install pkg-config libsecret-1-dev wget -y
+      #         sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+      #         sudo gem install dotenv -v 2.8.1
+      #         sudo gem install fpm -V
+      #       displayName: "Installing Dependencies"
 
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"
+      #     # get glibc version with which build is done
+      #     - script: |
+      #        ldd --version
+      #       displayName: "GLIBC Version"
 
-          - script: |
-              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
-            displayName: 'Generate Linux ARM64'
+      #     - script: |
+      #         GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
+      #       displayName: 'Generate Linux ARM64'
 
-          - script: |
-              sudo ls -lRt $(work_dir)/
-            displayName: 'List the binaries from WD'
-            workingDirectory: $(root_dir)
+      #     - script: |
+      #         sudo ls -lRt $(work_dir)/
+      #       displayName: 'List the binaries from WD'
+      #       workingDirectory: $(root_dir)
 
-          # place the generated binary files & any additional files in appropriate locations
-          - script: |
-              mkdir -p pkgDirArm64/usr/bin/
-              cp -r $(work_dir)/azcopy_linux_arm64 pkgDirArm64/usr/bin/
-            displayName: 'Accumulate arm64 pkg files'
+      #     # place the generated binary files & any additional files in appropriate locations
+      #     - script: |
+      #         mkdir -p pkgDirArm64/usr/bin/
+      #         cp -r $(work_dir)/azcopy_linux_arm64 pkgDirArm64/usr/bin/
+      #       displayName: 'Accumulate arm64 pkg files'
 
-          - script: |
-              cp NOTICE.txt pkgDirArm64/usr/bin/
-            displayName: 'Copy NOTICE.txt for Arm64'
+      #     - script: |
+      #         cp NOTICE.txt pkgDirArm64/usr/bin/
+      #       displayName: 'Copy NOTICE.txt for Arm64'
 
-          - script: |
-              sudo ls -lRt pkgDirArm64/usr/bin/
-            displayName: 'List arm64 binaries'
-            workingDirectory: $(root_dir)
+      #     - script: |
+      #         sudo ls -lRt pkgDirArm64/usr/bin/
+      #       displayName: 'List arm64 binaries'
+      #       workingDirectory: $(root_dir)
 
-          - script: |
-              GOARCH=arm64 GOOS=linux ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
-            displayName: 'Check arm64 version'
+      #     - script: |
+      #         GOARCH=arm64 GOOS=linux ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
+      #       displayName: 'Check arm64 version'
 
-          # using fpm tool for packaging of our binary & performing post-install operations
-          # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-          # TODO: Add description
-          - script: |
-              fpm -s dir -t deb -n azcopy -C pkgDirArm64/ \
-              -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
-              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-              --url "https://github.com/Azure/azure-storage-azcopy" \
-              --description "Add description" 
-              mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.deb
-              cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
-            displayName: 'Make ARM64 deb Package'
+      #     # using fpm tool for packaging of our binary & performing post-install operations
+      #     # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+      #     # TODO: Add description
+      #     - script: |
+      #         fpm -s dir -t deb -n azcopy -C pkgDirArm64/ \
+      #         -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
+      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+      #         --url "https://github.com/Azure/azure-storage-azcopy" \
+      #         --description "Add description" 
+      #         mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.deb
+      #         cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+      #       workingDirectory: $(root_dir)
+      #       displayName: 'Make ARM64 deb Package'
             
-          - script: |
-              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirArm64/ \
-              -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
-              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-              --url "https://github.com/Azure/azure-storage-azcopy" \
-              --description "Add description" 
-              mv ./azcopy*.rpm ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.rpm
-              cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
-            displayName: 'Make ARM64 rpm Package'
+      #     - script: |
+      #         fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirArm64/ \
+      #         -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
+      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+      #         --url "https://github.com/Azure/azure-storage-azcopy" \
+      #         --description "Add description" 
+      #         mv ./azcopy*.rpm ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.rpm
+      #         cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+      #       workingDirectory: $(root_dir)
+      #       displayName: 'Make ARM64 rpm Package'
 
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-temp'
-            displayName: 'Publish Artifacts'
-            condition: succeededOrFailed()
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-temp'
+      #       displayName: 'Publish Artifacts'
+      #       condition: succeededOrFailed()
         
-          - task: ComponentGovernanceComponentDetection@0
-            inputs:
-              scanType: 'Register'
-              verbosity: 'Verbose'
-              alertWarningLevel: 'High'
+      #     - task: ComponentGovernanceComponentDetection@0
+      #       inputs:
+      #         scanType: 'Register'
+      #         verbosity: 'Verbose'
+      #         alertWarningLevel: 'High'
 
 # BuildArtifacts end here
 
@@ -759,103 +759,103 @@ stages:
             displayName: 'Publish Artifacts' 
 
   
-      - job: Set_Ubuntu_ARM64
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Ubuntu-22-ARM64:
-              vmImage: 'Ubuntu-22.04'
-              container: 'test-cnt-ubn-22-arm64'
-              AgentName: "blobfuse-ubn22-arm64"
-              tags: 'tags'
-        pool:
-          name: "blobfuse-ubn-arm64-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      # - job: Set_Ubuntu_ARM64
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Ubuntu-22-ARM64:
+      #         vmImage: 'Ubuntu-22.04'
+      #         container: 'test-cnt-ubn-22-arm64'
+      #         AgentName: "blobfuse-ubn22-arm64"
+      #         tags: 'tags'
+      #   pool:
+      #     name: "blobfuse-ubn-arm64-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
 
-        variables:  
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: temp_dir
-            value: '$(System.DefaultWorkingDirectory)/azcopytmpcache'
+      #   variables:  
+      #     - name: root_dir
+      #       value: '$(System.DefaultWorkingDirectory)'
+      #     - name: work_dir
+      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+      #     - name: temp_dir
+      #       value: '$(System.DefaultWorkingDirectory)/azcopytmpcache'
 
-        steps:
-          - checkout: none
+      #   steps:
+      #     - checkout: none
 
-          - script: |
-              git clone https://github.com/Azure/azure-storage-azcopy
-            displayName: 'Checkout Code'
-            workingDirectory: $(root_dir)
+      #     - script: |
+      #         git clone https://github.com/Azure/azure-storage-azcopy
+      #       displayName: 'Checkout Code'
+      #       workingDirectory: $(root_dir)
       
-          - script: |
-              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-            displayName: 'Checkout Branch'
-            workingDirectory: $(root_dir)/azure-storage-azcopy
+      #     - script: |
+      #         git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+      #       displayName: 'Checkout Branch'
+      #       workingDirectory: $(root_dir)/azure-storage-azcopy
             
-          #TODO Removed listing
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'listing'
+      #     #TODO Removed listing
+      #     - script: |
+      #         wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
+      #         chmod 777 $(work_dir)/go_installer.sh
+      #         sudo ls -lRt $(work_dir)/
+      #       displayName: 'listing'
           
-          # Custom script to install Go-lang
-          - task: ShellScript@2
-            inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "GoTool Custom Setup"
+      #     # Custom script to install Go-lang
+      #     - task: ShellScript@2
+      #       inputs:
+      #         scriptPath: "$(work_dir)/go_installer.sh"
+      #         args: "$(root_dir)/"
+      #       displayName: "GoTool Custom Setup"
 
-          # get glibc version with which build is done
-          - script: |
-             sudo apt update
-             sudo apt --fix-broken install
-             ldd --version
-            displayName: "GLIBC Version"
+      #     # get glibc version with which build is done
+      #     - script: |
+      #        sudo apt update
+      #        sudo apt --fix-broken install
+      #        ldd --version
+      #       displayName: "GLIBC Version"
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-signed'
-              downloadPath: $(root_dir)
-              itemPattern: azCopy-signed/azcopy-*$(tags)*.arm64.deb
+      #     - task: DownloadBuildArtifacts@0
+      #       displayName: 'Download Build Artifacts'
+      #       inputs:
+      #         artifactName: 'azCopy-signed'
+      #         downloadPath: $(root_dir)
+      #         itemPattern: azCopy-signed/azcopy-*$(tags)*.arm64.deb
 
-          - script: |
-              ls -l
-              result=$(ls -1 | wc -l)
-              if [ $result -ne 1 ]; then
-                exit 1
-              fi
-            displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+      #     - script: |
+      #         ls -l
+      #         result=$(ls -1 | wc -l)
+      #         if [ $result -ne 1 ]; then
+      #           exit 1
+      #         fi
+      #       displayName: 'List Downloaded Package'
+      #       workingDirectory: $(root_dir)/azCopy-signed
 
-          - script: |
-              for f in ./azcopy*$(tags)*.arm64.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
-              cp ./azcopy*$(vmImage)*.arm64.deb $(Build.ArtifactStagingDirectory)
-            displayName: 'Rename Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+      #     - script: |
+      #         for f in ./azcopy*$(tags)*.arm64.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
+      #         cp ./azcopy*$(vmImage)*.arm64.deb $(Build.ArtifactStagingDirectory)
+      #       displayName: 'Rename Package'
+      #       workingDirectory: $(root_dir)/azCopy-signed
 
-          - script: |
-              sudo dpkg --info azcopy*.arm64.deb
-              sudo dpkg -i azcopy*.arm64.deb
-            displayName: 'Install Package'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
+      #     - script: |
+      #         sudo dpkg --info azcopy*.arm64.deb
+      #         sudo dpkg -i azcopy*.arm64.deb
+      #       displayName: 'Install Package'
+      #       workingDirectory: $(Build.ArtifactStagingDirectory)
 
-          - script: | 
-              azcopy_linux_arm64 --version
-            displayName: 'Check Version'
+      #     - script: | 
+      #         azcopy_linux_arm64 --version
+      #       displayName: 'Check Version'
 
-          - script: | 
-              azcopy_linux_arm64 --help
-            displayName: 'Check Help'
+      #     - script: | 
+      #         azcopy_linux_arm64 --help
+      #       displayName: 'Check Help'
 
-          # publishing the artifacts generated
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy'
-            displayName: 'Publish Artifacts' 
+      #     # publishing the artifacts generated
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy'
+      #       displayName: 'Publish Artifacts' 
 
       # - job: Set_Rhel_ARM64
       #   timeoutInMinutes: 120
@@ -1198,11 +1198,11 @@ stages:
               artifactName: 'azCopy-signed'
               downloadPath: $(Build.ArtifactStagingDirectory)
           
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azcopy/*.deb
-              md5sum $(Build.ArtifactStagingDirectory)/azcopy/*.rpm
-            displayName: 'List Artifacts'
+          # - script: |
+          #     sudo ls -lRt $(Build.ArtifactStagingDirectory)
+          #     md5sum $(Build.ArtifactStagingDirectory)/azcopy/*.deb
+          #     md5sum $(Build.ArtifactStagingDirectory)/azcopy/*.rpm
+          #   displayName: 'List Artifacts'
 
           - script: |
               sudo apt-get update
