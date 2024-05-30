@@ -1072,7 +1072,7 @@ stages:
             displayName: 'Install Package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
 
-           script: | 
+          - script: | 
               azcopy_linux_amd64 --version
             displayName: 'Check Version'
 
