@@ -38,4 +38,4 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
                 
       - name: Upload to AzCopy to M1 container
-        run: ./azcopy_darwin_arm64 copy "azcopy_darwin_arm64" "${{ inputs.m1_url }}"
+        run: AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_darwin_arm64 copy "azcopy_darwin_arm64" "${{ inputs.m1_url }}"
