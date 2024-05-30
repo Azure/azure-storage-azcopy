@@ -1245,7 +1245,7 @@ stages:
           pool:
             vmImage: 'ubuntu-22.04'
           variables:
-            - group: AZURE_ESRP_SECRET
+            - group: AZCOPY_ESRP_SECRET
             - name: root_dir
               value: '$(System.DefaultWorkingDirectory)'
           
