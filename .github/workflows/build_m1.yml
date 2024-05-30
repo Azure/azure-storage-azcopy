@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       m1_url:
-        description: 'URL with SAS to upload M1 build'
+        description: 'Target object in storage without SAS'
         required: true
         type: string
 
