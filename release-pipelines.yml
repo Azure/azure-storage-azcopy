@@ -928,75 +928,75 @@ stages:
 
   # TestArtifacts ends here
   
-  # - stage: ReleaseArtifacts
-  #   dependsOn: TestArtifacts
-  #   condition: succeeded('TestArtifacts')
-  #   jobs:
-  #     - job: ReleaseAzcopy
-  #       timeoutInMinutes: 120
-  #       strategy:
-  #         matrix:
-  #           Ubuntu-22:
-  #             vmImage: 'Ubuntu-20.04'
-  #             AgentName: "blobfuse-ubuntu20"
-  #       pool:
-  #         name: "blobfuse-ubuntu-pool"
-  #         demands:
-  #           - ImageOverride -equals $(AgentName)
+  - stage: ReleaseArtifacts
+    dependsOn: TestArtifacts
+    condition: succeeded('TestArtifacts')
+    jobs:
+      - job: ReleaseAzcopy
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu-22:
+              vmImage: 'Ubuntu-20.04'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
 
-  #       variables:
-  #         - group: AZCOPY_ESRP_SECRET
+        variables:
+          - group: AZCOPY_ESRP_SECRET
 
-  #       steps:
-  #         - checkout: none
+        steps:
+          - checkout: none
           
-  #         - script: |
-  #             echo ${{ parameters.tag }}
-  #           displayName: 'Tag Name'
+          - script: |
+              echo ${{ parameters.tag }}
+            displayName: 'Tag Name'
           
-  #         # download artifacts that need to be published
-  #         - task: DownloadBuildArtifacts@0
-  #           displayName: 'Download Build Artifacts'
-  #           inputs:
-  #             artifactName: 'azCopy-signed'
-  #             downloadPath: $(Build.ArtifactStagingDirectory)
+          # download artifacts that need to be published
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-signed'
+              downloadPath: $(Build.ArtifactStagingDirectory)
           
-  #         - script: |
-  #             sudo ls -lRt $(Build.ArtifactStagingDirectory)
-  #             md5sum $(Build.ArtifactStagingDirectory)/azcopy/*.deb
-  #             md5sum $(Build.ArtifactStagingDirectory)/azcopy/*.rpm
-  #           displayName: 'List Artifacts'
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/azcopy/*.deb
+              md5sum $(Build.ArtifactStagingDirectory)/azcopy/*.rpm
+            displayName: 'List Artifacts'
 
-  #         - script: |
-  #             sudo apt-get update
-  #             wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-  #             sudo dpkg -i packages-microsoft-prod.deb 
-  #             sudo apt update 
-  #             sudo apt install apt-transport-https -y
-  #             sudo apt install dotnet-sdk-3.1 -y
-  #           displayName: "Update dependencies"
+          - script: |
+              sudo apt-get update
+              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+              sudo dpkg -i packages-microsoft-prod.deb 
+              sudo apt update 
+              sudo apt install apt-transport-https -y
+              sudo apt install dotnet-sdk-3.1 -y
+            displayName: "Update dependencies"
             
-  #         - ${{ if eq(parameters.post_release, true) }}:
-  #             # add release tags & push to github
-  #             - task: GithubRelease@1
-  #               inputs:
-  #                 githubConnection: 'dphulkar-msft'
-  #                 repositoryName: 'dphulkar-msft/azure-storage-azcopy'
-  #                 action: 'edit'
+          - ${{ if eq(parameters.post_release, true) }}:
+              # add release tags & push to github
+              - task: GithubRelease@1
+                inputs:
+                  githubConnection: 'dphulkar-msft'
+                  repositoryName: 'dphulkar-msft/azure-storage-azcopy'
+                  action: 'edit'
 
-  #                 target: '$(Build.SourceVersion)'
-  #                 tagSource: 'userSpecifiedTag'
+                  target: '$(Build.SourceVersion)'
+                  tagSource: 'userSpecifiedTag'
 
-  #                 title: ${{ parameters.tag }}
-  #                 tag: ${{ parameters.tag }}
+                  title: ${{ parameters.tag }}
+                  tag: ${{ parameters.tag }}
 
-  #                 assets: |
-  #                   $(Build.ArtifactStagingDirectory)/azcopy/*
-  #                 changeLogCompareToRelease: 'lastFullRelease'
-  #                 changeLogType: 'commitBased'
-  #                 isDraft: ${{ parameters.draft }}
-  #                 isPreRelease: ${{ parameters.prerelease }}
-  #                 assetUploadMode: replace
+                  assets: |
+                    $(Build.ArtifactStagingDirectory)/azcopy/*
+                  changeLogCompareToRelease: 'lastFullRelease'
+                  changeLogType: 'commitBased'
+                  isDraft: ${{ parameters.draft }}
+                  isPreRelease: ${{ parameters.prerelease }}
+                  assetUploadMode: replace
 
   # # - ${{ if eq(parameters.publish_artifacts, true) }}:
   #   - stage: PublishArtifacts
