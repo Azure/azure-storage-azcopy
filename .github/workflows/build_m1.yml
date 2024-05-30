@@ -26,5 +26,16 @@ jobs:
       - name: Build
         run: CGO_ENABLED=1 go build -o azcopy_darwin_arm64
 
+      - name: Azure Login
+        uses: Azure/login@v2.1.0
+        with:
+          # ClientId of the Azure Service principal created.
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          # TenantId of the Azure Service principal created.
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          # Azure subscriptionId
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          auth-type: IDENTITY
+                
       - name: Upload to AzCopy to M1 container
         run: ./azcopy_darwin_arm64 copy "azcopy_darwin_arm64" "${{ inputs.m1_url }}"
