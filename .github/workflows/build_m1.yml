@@ -18,6 +18,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-14
+    environment: Release
     steps:
       - uses: actions/checkout@v3
 
@@ -32,11 +33,8 @@ jobs:
       - name: Azure Login
         uses: Azure/login@v2.1.0
         with:
-          # ClientId of the Azure Service principal created.
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          # TenantId of the Azure Service principal created.
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          # Azure subscriptionId
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
                 
       - name: Upload to AzCopy to M1 container
