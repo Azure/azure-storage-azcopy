@@ -739,7 +739,7 @@ stages:
             
           - script: |
               sudo dpkg --info azcopy-*.x86_64.deb
-              sudo dpkg -i azcopy-*.x86-64_deb
+              sudo dpkg -i azcopy-*.x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Install deb Package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
@@ -832,7 +832,7 @@ stages:
             workingDirectory: $(root_dir)/azCopy-signed
 
           - script: |
-              for f in ./azcopy*.$(tags)*.arm64.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
+              for f in ./azcopy*$(tags)*.arm64.deb; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
               cp ./azcopy*$(vmImage)*.arm64.deb $(Build.ArtifactStagingDirectory)
             displayName: 'Rename Package'
             workingDirectory: $(root_dir)/azCopy-signed
@@ -980,7 +980,7 @@ stages:
   #             # add release tags & push to github
   #             - task: GithubRelease@1
   #               inputs:
-  #                 githubConnection: 'blobfuse-git-rel'
+  #                 githubConnection: 'dphulkar-msft'
   #                 repositoryName: 'dphulkar-msft/azure-storage-azcopy'
   #                 action: 'edit'
 
