@@ -1315,27 +1315,6 @@ stages:
                 azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*tags.x86_64.deb`
                 echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
 
-  #               fuse3ArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload blobfuse2*fuse3.arm64.deb`
-  #               echo "Fuse3 ARM DEB ID: $fuse3ArmDeb"
-
-  #               fuse3AmdRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload blobfuse2*fuse3.x86_64.rpm`
-  #               echo "Fuse3 AMD RPM ID: $fuse3AmdRpm"
-
-  #               fuse3ArmRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload blobfuse2*fuse3.aarch64.rpm`
-  #               echo "Fuse3 ARM RPM ID: $fuse3ArmRpm"
-
-  #               fuse2AmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload blobfuse2*fuse2.x86_64.deb`
-  #               echo "Fuse2 AMD DEB ID: $fuse2AmdDeb"
-
-  #               fuse2AmdRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload blobfuse2*fuse2.x86_64.rpm`
-  #               echo "Fuse2 AMD RPM ID: $fuse2AmdRpm"
-
-  #               marinerFuse3AmdRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload blobfuse2*cm2.x86_64.rpm`
-  #               echo "Mariner fuse3 AMD RPM ID: $marinerFuse3AmdRpm"
-
-  #               marinerFuse3AarchRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload blobfuse2*cm2.aarch64.rpm`
-  #               echo "Mariner fuse3 ARM RPM ID: $marinerFuse3AarchRpm"
-
                 while IFS=, read -r distro fuseArchType repoName releaseName; do
                   echo "Uploading packages for $distro"
                   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
