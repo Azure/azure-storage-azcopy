@@ -2,11 +2,14 @@ package e2etest
 
 import (
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -190,4 +193,111 @@ func checkMultipleErrors(errorMsg []string, line string) bool {
 	}
 
 	return false
+}
+
+func ValidateListTextOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject, expectedSummary *cmd.AzCopyListSummary) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	expectedObj := expectedObjectsToString(expectedObjects)
+	rawObj, rawSum := cleanupRaw(stdout.RawStdout(), expectedSummary != nil)
+
+	// sort to avoid out of order arrays
+	sort.Strings(rawObj)
+	sort.Strings(expectedObj)
+
+	if !reflect.DeepEqual(rawObj, expectedObj) {
+		a.Error(fmt.Sprintf("Does not match - raw:%s. expectedObj:%s.", rawObj, expectedObj))
+	}
+
+	// if expectedObj summary is provided, the last two elements of raw are part of the summary
+	if expectedSummary != nil {
+		validateSummary(a, rawSum, expectedSummary)
+	}
+}
+
+func cleanupRaw(raw []string, hasSummary bool) ([]string, []string) {
+	var objectRaw []string
+	var summaryRaw []string
+	var tempRaw []string
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != "" {
+			tempRaw = append(tempRaw, raw[i])
+		}
+	}
+
+	index := len(tempRaw) - 2 // last two values of raw output should be summary
+	if hasSummary {
+		objectRaw = tempRaw[:index]
+		summaryRaw = tempRaw[index:]
+	} else {
+		objectRaw = tempRaw
+	}
+	return objectRaw, summaryRaw
+}
+
+func validateSummary(a Asserter, rawSummary []string, expectedSummary *cmd.AzCopyListSummary) {
+	expectedSum := [2]string{fmt.Sprintf("File count: %s", expectedSummary.FileCount), fmt.Sprintf("Total file size: %s", expectedSummary.TotalFileSize)}
+
+	if rawSummary[0] != expectedSum[0] {
+		a.Error(fmt.Sprintf("File count does not match - raw:%s. expected:%s.", rawSummary[0], expectedSum[0]))
+	}
+
+	if rawSummary[1] != expectedSum[1] {
+		a.Error(fmt.Sprintf("Total file size does not match - raw:%s. expected:%s.", rawSummary[1], expectedSum[1]))
+	}
+}
+
+func expectedObjectsToString(expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject) []string {
+	var stringArray []string
+
+	for _, val := range expectedObjects {
+		stringArray = append(stringArray, toString(val))
+	}
+	return stringArray
+}
+
+func toString(lo cmd.AzCopyListObject) string {
+	builder := strings.Builder{}
+	builder.WriteString(lo.Path + "; ")
+
+	// set up azcopy list object string array
+	if lo.LastModifiedTime != nil {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.LastModifiedTime, lo.LastModifiedTime.String()))
+	}
+	if lo.VersionId != "" {
+		fmt.Println("version id exists: " + lo.VersionId)
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.VersionId, lo.VersionId))
+	}
+	if lo.BlobType != "" {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.BlobType, string(lo.BlobType)))
+	}
+	if lo.BlobAccessTier != "" {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.BlobAccessTier, string(lo.BlobAccessTier)))
+	}
+	if lo.ContentType != "" {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.ContentType, lo.ContentType))
+	}
+	if lo.ContentEncoding != "" {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.ContentType, lo.ContentEncoding))
+	}
+	if lo.ContentMD5 != nil {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.ContentMD5, base64.StdEncoding.EncodeToString(lo.ContentMD5)))
+	}
+	if lo.LeaseState != "" {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.LeaseState, string(lo.LeaseState)))
+	}
+	if lo.LeaseStatus != "" {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.LeaseStatus, string(lo.LeaseStatus)))
+	}
+	if lo.LeaseDuration != "" {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.LeaseDuration, string(lo.LeaseDuration)))
+	}
+	if lo.ArchiveStatus != "" {
+		builder.WriteString(fmt.Sprintf("%s: %s; ", cmd.ArchiveStatus, string(lo.ArchiveStatus)))
+	}
+
+	builder.WriteString("Content Length: " + lo.ContentLength)
+	return builder.String()
 }
