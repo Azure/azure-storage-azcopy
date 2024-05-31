@@ -112,6 +112,8 @@ type AzCopyEnvironment struct {
 	ServicePrincipalClientSecret *string `env:"AZCOPY_SPA_CLIENT_SECRET"`
 
 	AzureFederatedTokenFile *string `env:"AZURE_FEDERATED_TOKEN_FILE"`
+	AzureTenantId           *string `env:"AZURE_TENANT_ID"`
+	AzureClientId           *string `env:"AZURE_CLIENT_ID"`
 
 	InheritEnvironment bool
 }
@@ -176,9 +178,8 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 		// special testing may be occurring, and this may be indicated to just get a SAS-less URI.
 		// Alternatively, we may have already configured it here once before.
 		if c.Environment.AutoLoginMode == nil && c.Environment.ServicePrincipalAppID == nil && c.Environment.ServicePrincipalClientSecret == nil && c.Environment.AutoLoginTenantID == nil {
-			c.Environment.AutoLoginMode = pointerTo("SPN") // TODO! There are two other modes for this. These probably can't apply in automated scenarios, but it's worth having tests for that we run before every release! WI#26625161
-
 			if GlobalConfig.StaticResources() {
+				c.Environment.AutoLoginMode = pointerTo("SPN")
 				oAuthInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
 				a.AssertNow("At least NEW_E2E_STATIC_APPLICATION_ID and NEW_E2E_STATIC_CLIENT_SECRET must be specified to use OAuth.", Empty{true}, oAuthInfo.ApplicationID, oAuthInfo.ClientSecret)
 
@@ -188,16 +189,24 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 			} else {
 				// oauth should reliably work
 				oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-				c.Environment.ServicePrincipalAppID = &oAuthInfo.ApplicationID
-				c.Environment.ServicePrincipalClientSecret = &oAuthInfo.ClientSecret
-				c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
+				if oAuthInfo.Environment == AzurePipeline {
+					c.Environment.InheritEnvironment = true
+					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.Workload.TenantId != "", &oAuthInfo.DynamicOAuth.Workload.TenantId, nil)
+					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
+				} else {
+					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.SPN().String())
+					c.Environment.ServicePrincipalAppID = &oAuthInfo.DynamicOAuth.SPNSecret.ApplicationID
+					c.Environment.ServicePrincipalClientSecret = &oAuthInfo.DynamicOAuth.SPNSecret.ClientSecret
+					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.SPNSecret.TenantID != "", &oAuthInfo.DynamicOAuth.SPNSecret.TenantID, nil)
+				}
 			}
 		} else if c.Environment.AutoLoginMode != nil {
+			oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
 			if strings.ToLower(*c.Environment.AutoLoginMode) == common.EAutoLoginType.Workload().String() {
 				c.Environment.InheritEnvironment = true
 				// Get the value of the AZURE_FEDERATED_TOKEN environment variable
-				token := os.Getenv("AZURE_FEDERATED_TOKEN")
-				a.AssertNow("AZURE_FEDERATED_TOKEN must be specified to authenticate with workload identity", Empty{Invert: true}, token)
+				token := oAuthInfo.DynamicOAuth.Workload.FederatedToken
+				a.AssertNow("idToken must be specified to authenticate with workload identity", Empty{Invert: true}, token)
 				// Write the token to a temporary file
 				// Create a temporary file to store the token
 				file, err := os.CreateTemp("", "azure_federated_token.txt")
@@ -210,6 +219,8 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 				// Set the AZURE_FEDERATED_TOKEN_FILE environment variable
 				c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
+				c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicOAuth.Workload.TenantId)
+				c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicOAuth.Workload.ClientId)
 			}
 		}
 

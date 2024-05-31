@@ -46,7 +46,7 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 			}
 			// check that the first input is actually an asserter
 			inName := method.Type.In(1).String()
-			if inName != "*e2etest.ScenarioVariationManager" {
+			if inName != "*e2etest.ScenarioVariationManager" && inName != "e2etest.Asserter" {
 				continue
 			}
 
@@ -66,13 +66,11 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 
 			if setupIdx != -1 {
 				// todo: call setup with suite manager
-				t.Run("Setup", func(t *testing.T) {
-					defer func() {
-						NewFrameworkAsserter(t).AssertNow("Scenario setup panicked (recovered)", NoError{stackTrace: true}, recover())
-					}()
+				defer func() {
+					NewFrameworkAsserter(t).AssertNow("Scenario setup panicked (recovered)", NoError{stackTrace: true}, recover())
+				}()
 
-					sVal.Method(setupIdx).Call([]reflect.Value{reflect.ValueOf(&ScenarioVariationManager{t: t})})
-				})
+				sVal.Method(setupIdx).Call([]reflect.Value{reflect.ValueOf(&ScenarioVariationManager{t: t})})
 			}
 
 			if !t.Failed() {
@@ -98,13 +96,11 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 
 			if teardownIdx != -1 {
 				t.Cleanup(func() {
-					t.Run("Teardown", func(t *testing.T) {
-						defer func() {
-							NewFrameworkAsserter(t).AssertNow("Scenario teardown panicked (recovered; you probably need to manually clean up resources)", NoError{stackTrace: true}, recover())
-						}()
+					defer func() {
+						NewFrameworkAsserter(t).AssertNow("Scenario teardown panicked (recovered; you probably need to manually clean up resources)", NoError{stackTrace: true}, recover())
+					}()
 
-						sVal.Method(teardownIdx).Call([]reflect.Value{reflect.ValueOf(&FrameworkAsserter{t: t, SuiteName: sName, ScenarioName: "Teardown"})})
-					})
+					sVal.Method(teardownIdx).Call([]reflect.Value{reflect.ValueOf(&FrameworkAsserter{t: t, SuiteName: sName, ScenarioName: "Teardown"})})
 				})
 			}
 		})
