@@ -1,0 +1,3 @@
+# Do not remove these comments
+# Format of the file : <Distro Name>,<Fuse Version, Architecture, File Type>,<Repo Name>,<Release Name(for deb repos only)>
+Ubuntu-20.04,azcopyAmdDeb,microsoft-ubuntu-focal-prod-apt,testing
