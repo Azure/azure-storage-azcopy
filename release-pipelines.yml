@@ -1199,7 +1199,7 @@ stages:
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/azCopy/*.deb
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy/*.rpm
+            # md5sum $(Build.ArtifactStagingDirectory)/azCopy/*.rpm
             displayName: 'List Artifacts'
 
           - script: |
