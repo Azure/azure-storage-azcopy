@@ -365,7 +365,7 @@ func isPublic(ctx context.Context, blobResourceURL string, cpkOptions common.Cpk
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, nil, nil, ste.LogOptions{}, nil)
+	}, nil, ste.LogOptions{}, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(bURLParts.String(), &blob.ClientOptions{ClientOptions: clientOptions})
 	bURLParts.BlobName = ""
@@ -398,7 +398,7 @@ func mdAccountNeedsOAuth(ctx context.Context, blobResourceURL string, cpkOptions
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, nil, nil, ste.LogOptions{}, nil)
+	}, nil, ste.LogOptions{}, nil)
 
 	blobClient, _ := blob.NewClientWithNoCredential(blobResourceURL, &blob.ClientOptions{ClientOptions: clientOptions})
 	_, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
@@ -592,7 +592,7 @@ func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedC
 		MaxRetryDelay: ste.UploadMaxRetryDelay,
 	}, policy.TelemetryOptions{
 		ApplicationID: glcm.AddUserAgentPrefix(common.UserAgent),
-	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), nil, logOptions, srcCred)
+	}, ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost), logOptions, srcCred)
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

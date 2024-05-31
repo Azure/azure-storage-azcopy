@@ -1,6 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.21.8'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
+  AZCOPY_GOLANG_VERSION: '1.22.3'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.22.3'
 
 trigger:
   branches:
@@ -128,36 +128,15 @@ jobs:
           imageName: 'ubuntu-20.04'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
-          go_path: '$(go env GOPATH)/bin/'
-          suffix: ''
-          run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
-          output_test_logs: ''
-          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-          return_exit_code: 'exit "$exit_code"'
-          go_build: 'GOARCH=amd64 GOOS=linux go build -tags "netgo" -o $(build_name)'
         Windows:
           imageName: 'windows-2019'
           build_name: 'azcopy_windows_amd64.exe'
           display_name: "Windows"
           type: 'windows'
-          go_path: 'C:\Users\VssAdministrator\go\bin\'
-          suffix: '.exe'
-          run_e2e: 'go test -timeout=2h -v ./e2etest > test.txt'
-          output_test_logs: 'cat test.txt'
-          save_exit_code: 'set exit_code=%errorlevel%'
-          return_exit_code: 'exit %exit_code%'
-          go_build: 'go build -cover -o $(build_name)'
         MacOS:
           imageName: 'macos-11'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
-          go_path: '$(go env GOPATH)/bin/'
-          suffix: ''
-          run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
-          output_test_logs: ''
-          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-          return_exit_code: 'exit "$exit_code"'
-          go_build: 'CGO_ENABLED=1 go build -cover -o $(build_name)'
     pool:
       vmImage: $(imageName)
 
@@ -165,20 +144,9 @@ jobs:
       - task: PowerShell@2
         inputs: 
           targetType: 'inline'
-          script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+          script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
           pwsh: 'true'
         displayName: 'Install Powershell Az Module'
-      - task: AzureCLI@2
-        displayName: 'Set Up Workload Identity Environment Variables'
-        inputs:
-          azureSubscription: azcopyworkloadidentity
-          addSpnToEnvironment: true
-          scriptType: bash
-          scriptLocation: inlineScript
-          inlineScript: |
-            echo "##vso[task.setvariable variable=AZURE_CLIENT_ID]$servicePrincipalId" 
-            echo "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN]$idToken"
-            echo "##vso[task.setvariable variable=AZURE_TENANT_ID]$tenantId"
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
@@ -198,31 +166,99 @@ jobs:
           azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
       # Running E2E Tests on AMD64
-      - script: |
-          mkdir coverage
-          echo 'Building executable'
-          $(go_build)
-          echo 'Running tests'
-          $(run_e2e)
-          $(save_exit_code)
-          echo "Generating junit report"
-          cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
-          echo 'Formatting coverage directory to legacy txt format'
-          go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
-          $(output_test_logs)
-          echo 'Formatting coverage to json format'
-          $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
-          echo 'Formatting coverage to xml format'
-          $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
-          $(return_exit_code)
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: azcopytestworkloadidentity
+          addSpnToEnvironment: true
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            # Create coverage directory
+            if (-Not (Test-Path -Path "./coverage")) {
+              New-Item -Path "./coverage" -ItemType Directory
+            }
+            
+            # Print "Building executable"
+            Write-Output "Building executable"
+            
+            # Set platform-specific environment variables and tags
+            $tags = ""
+            $suffix = ""
+            $build_name = ""
+            $display_name = ""
+            if ($IsWindows) {
+              $env:GOOS = "windows"
+              $env:GOARCH = "amd64"
+              $suffix = ".exe"
+              $build_name = "azcopy_windows_amd64.exe"
+              $display_name = "Windows"
+            } elseif ($IsLinux) {
+              $env:GOOS = "linux"
+              $env:GOARCH = "amd64"
+              $tags = "netgo"
+              $build_name = "azcopy_linux_amd64"
+              $display_name = "Linux"
+            } elseif ($IsMacOS) {
+              $env:GOOS = "darwin"
+              $env:GOARCH = "amd64"
+              $env:CGO_ENABLED = "1"
+              $build_name = "azcopy_darwin_amd64"
+              $display_name = "MacOS"
+            } else {
+              Write-Error "Unsupported operating system"
+              exit 1
+            }
+            
+            # Build the Go program
+            if ($tags -ne "") {
+              go build -cover -tags $tags -o $build_name
+            } else {
+              go build -cover -o $build_name
+            }
+            
+            # Print "Running tests"
+            Write-Output "Running tests"
+            
+            # Run tests and pipe output to test.txt
+            go test -timeout=2h -v ./e2etest | Tee-Object -FilePath test.txt
+            
+            # Save the exit code from the previous command
+            $exitCode = $LASTEXITCODE
+            
+            # Print the contents of test.txt
+            # Get-Content test.txt
+            
+            # Print "Generating junit report"
+            Write-Output "Generating junit report"
+            
+            # Pipe info in test.txt to go-junit-report and save output to report.xml
+            Get-Content test.txt | & "$(go env GOPATH)/bin/go-junit-report" > "${display_name}_report.xml"
+            
+            # Print "Formatting coverage directory to legacy txt format"
+            Write-Output "Formatting coverage directory to legacy txt format"
+            
+            # Format coverage data to text format
+            go tool covdata textfmt -i=coverage -o "${display_name}_coverage.txt"
+            
+            # Print "Formatting coverage to json format"
+            Write-Output "Formatting coverage to json format"
+            
+            # Convert coverage.txt to coverage.json
+            & "$(go env GOPATH)/bin/gocov$suffix" convert "${display_name}_coverage.txt" > "${display_name}_coverage.json"
+            
+            # Print "Formatting coverage to xml format"
+            Write-Output "Formatting coverage to xml format"
+            
+            # Convert coverage.json to coverage.xml
+            Get-Content "${display_name}_coverage.json" | & "$(go env GOPATH)/bin/gocov-xml$suffix" > "${display_name}_coverage.xml"
+            
+            # Return the exit code from step 5
+            exit $exitCode
         env:
           AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
           AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
           AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
           AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
-          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
           AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
           AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
           AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
@@ -235,12 +271,9 @@ jobs:
           AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
           NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
-          NEW_E2E_APPLICATION_ID: $(AZCOPY_NEW_E2E_APPLICATION_ID)
-          NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
-          NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
           NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
           NEW_E2E_ENVIRONMENT: "AzurePipeline"
-        displayName: 'E2E Test $(display_name) - AMD64'
+        displayName: 'E2E Test $(display_name) - AMD64 with Workload Identity'
 
       - task: PublishBuildArtifacts@1
         displayName: 'Publish logs'
@@ -317,6 +350,7 @@ jobs:
         parameters:
           directory: 'ste'
           coverage_name: 'ste'
+          with_federated_credential: true
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'sddl'
