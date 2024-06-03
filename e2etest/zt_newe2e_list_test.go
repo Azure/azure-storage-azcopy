@@ -14,8 +14,7 @@ func init() {
 type ListSuite struct{}
 
 func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
-	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()}))
+	srcService := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
 
 	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
@@ -46,6 +45,7 @@ func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 					},
 				}),
 			},
+			Flags: ListFlags{},
 		})
 
 	ValidateListOutput(svm, stdout, expectedObjects, nil)
@@ -105,6 +105,7 @@ func (s *ListSuite) Scenario_ListHierarchy(svm *ScenarioVariationManager) {
 					},
 				}),
 			},
+			Flags: ListFlags{},
 		})
 
 	ValidateListOutput(svm, stdout, expectedObjects, nil)
