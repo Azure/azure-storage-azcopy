@@ -135,6 +135,9 @@ func TestCheckAuthSafeForTargetIsCalledWhenGettingAuthTypeMDOAuth(t *testing.T) 
  * Two cases are considered, a blob is public or a container is public.
  */
 func TestIsPublic(t *testing.T) {
+	// TODO: Migrate this test to mocked UT.
+	t.Skip("Public access is sometimes turned off due to organization policy. This test should ideally be migrated to a mocked UT.")
+
 	a := assert.New(t)
 	ctx, _ := context.WithTimeout(context.TODO(), 5*time.Minute)
 	bsc := getBlobServiceClient()
