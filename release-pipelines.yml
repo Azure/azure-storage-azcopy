@@ -774,8 +774,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: temp_dir
-            value: '$(System.DefaultWorkingDirectory)/azcopytmpcache'
 
         steps:
           - checkout: none
@@ -904,7 +902,7 @@ stages:
             inputs:
               artifactName: 'azCopy-signed'
               downloadPath: $(root_dir)
-              itemPattern: azCopy-signed/azCopy-*$(tags)*arm64.rpm
+              itemPattern: azCopy-signed/azcopy-*$(tags)*arm64.rpm
 
           - script: |
               ls -l
@@ -968,18 +966,13 @@ stages:
           - checkout: none
 
           - script: |
-              sudo touch /etc/yum.repos.d/centos.repo
-              sudo sh -c 'echo -e "[centos-extras]\nname=Centos extras - $basearch\nbaseurl=http://mirror.centos.org/centos/7/extras/x86_64\nenabled=1\ngpgcheck=1\ngpgkey=http://centos.org/keys/RPM-GPG-KEY-CentOS-7" > /etc/yum.repos.d/centos.repo'
-            condition: or(eq(variables['AgentName'], 'blobfuse-rhel7_5'),eq(variables['AgentName'], 'blobfuse-rhel7_8'))
-            displayName: "Update OS mirrors"
-
-          - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
 
+          #TODO: replace org name from dphulkar-msft to Azure
           - script: |
-              git clone https://github.com/Azure/azure-storage-fuse
+              git clone https://github.com/dphulkar-msft/azure-storage-fuse
             displayName: 'Checkout Code'
             workingDirectory: $(root_dir)
 
@@ -987,13 +980,6 @@ stages:
               git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
             displayName: 'Checkout Branch'
             workingDirectory: $(root_dir)/azure-storage-azcopy
-
-          #TODO Removed listing
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'listing'
 
           # Custom script to install Go-lang
           - task: ShellScript@2
@@ -1010,9 +996,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'blobfuse2-signed'
+              artifactName: 'azCopy-signed'
               downloadPath: $(root_dir)
-              itemPattern: blobfuse2-signed/azcopy*$(tags)*x86_64.rpm
+              itemPattern: azCopy-signed/azcopy*$(tags)*x86_64.rpm
 
           - script: |
               ls -l
@@ -1026,16 +1012,6 @@ stages:
           - script: |
               for f in ./azcopy*$(tags)*.rpm; do mv -v "$f" "${f/-$(tags)./-$(vmImage).}"; done;
               cp ./azcopy*$(vmImage)*.rpm $(Build.ArtifactStagingDirectory)
-              if [ $(agentName) == "blobfuse-rhel7_5" ]; then
-                f=`ls ./blobfuse2*$(vmImage)*.rpm`
-                cp "$f" $(sed 's:RHEL-7.5:RHEL-7.8:' <<< "$f")
-                cp "$f" $(sed 's:RHEL-7.5:RHEL-8.1:' <<< "$f")
-                cp "$f" $(sed 's:RHEL-7.5:RHEL-8.2:' <<< "$f")
-                cp ./azcopy*RHEL-7.8*.rpm $(Build.ArtifactStagingDirectory)
-                cp ./azcopy*RHEL-8*.rpm $(Build.ArtifactStagingDirectory)
-                rm -rf ./azcopy*RHEL-7.8*.rpm
-                rm -rf ./azcopy*RHEL-8*.rpm
-              fi
             displayName: 'Rename Package'
             workingDirectory: $(root_dir)/azCopy-signed
 
