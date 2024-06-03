@@ -590,7 +590,8 @@ stages:
 
           - script: |
               mkdir mariner && chmod 755 mariner
-              cp azCopy-temp/* mariner
+              cp azCopy-temp/*arm64.rpm mariner
+              cp azCopy-temp/*x86_64.rpm mariner
               sudo ls -lRt mariner
               md5sum mariner/*
             displayName: 'Copy artifacts for Mariner'
@@ -938,7 +939,7 @@ stages:
           # publishing the artifacts generated
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azcopy'
+              artifactName: 'azCopy'
             displayName: 'Publish Artifacts'
       
       - job: Set_Rhel_AMD64
@@ -1034,7 +1035,7 @@ stages:
           # publishing the artifacts generated
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azcopy'
+              artifactName: 'azCopy'
             displayName: 'Publish Artifacts'
 
       - job: Set_Mariner
@@ -1111,6 +1112,14 @@ stages:
               sudo rpm -i azcopy*.rpm
             displayName: 'Install Package'
             workingDirectory: $(root_dir)/azCopy-signed/mariner
+
+          - script: | 
+              azcopy_linux_amd64 --version
+            displayName: 'Check Version'
+
+          - script: | 
+              azcopy_linux_amd64 --help
+            displayName: 'Check Help'
 
   # TestArtifacts ends here
   
@@ -1322,7 +1331,7 @@ stages:
   #             - task: DownloadBuildArtifacts@0
   #               displayName: 'Download Build Artifacts'
   #               inputs:
-  #                 artifactName: 'azcopy'
+  #                 artifactName: 'azCopy'
   #                 downloadPath: $(Build.ArtifactStagingDirectory)
               
   #             # install blobfuse2
