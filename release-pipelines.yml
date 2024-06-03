@@ -972,7 +972,7 @@ stages:
 
           #TODO: replace org name from dphulkar-msft to Azure
           - script: |
-              git clone https://github.com/dphulkar-msft/azure-storage-fuse
+              git clone https://github.com/dphulkar-msft/azure-storage-azcopy
             displayName: 'Checkout Code'
             workingDirectory: $(root_dir)
 
@@ -1046,6 +1046,7 @@ stages:
               DistroVer: "Mariner2"
               Description: "CBL-Mariner2 Linux"
               container: "test-cnt-mari-2"
+              tags: 'tags'
 
         pool:
           name: "blobfuse-mariner-pool"
