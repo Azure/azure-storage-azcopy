@@ -46,11 +46,6 @@ func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 					},
 				}),
 			},
-			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
-			},
 		})
 
 	ValidateListOutput(svm, stdout, expectedObjects, nil)
@@ -110,11 +105,6 @@ func (s *ListSuite) Scenario_ListHierarchy(svm *ScenarioVariationManager) {
 					},
 				}),
 			},
-			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
-			},
 		})
 
 	ValidateListOutput(svm, stdout, expectedObjects, nil)
@@ -167,9 +157,6 @@ func (s *ListSuite) Scenario_ListProperties(svm *ScenarioVariationManager) {
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				Properties: to.Ptr("LastModifiedTime;VersionId;BlobType;BlobAccessTier;ContentType;ContentEncoding;ContentMD5;LeaseState;LeaseStatus;LeaseDuration;ArchiveStatus"),
 			},
 		})
@@ -213,9 +200,6 @@ func (s *ListSuite) Scenario_ListPropertiesInvalid(svm *ScenarioVariationManager
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				Properties: to.Ptr("LastModifiedTime;UnsupportedProperty"),
 			},
 		})
@@ -257,9 +241,6 @@ func (s *ListSuite) Scenario_ListMachineReadable(svm *ScenarioVariationManager) 
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				MachineReadable: to.Ptr(true),
 			},
 		})
@@ -301,9 +282,6 @@ func (s *ListSuite) Scenario_ListMegaUnits(svm *ScenarioVariationManager) {
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				MegaUnits: to.Ptr(true),
 			},
 		})
@@ -336,9 +314,6 @@ func (s *ListSuite) Scenario_ListRunningTally(svm *ScenarioVariationManager) {
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				RunningTally: to.Ptr(true),
 			},
 		})
@@ -384,9 +359,6 @@ func (s *ListSuite) Scenario_ListRunningTallyMegaUnits(svm *ScenarioVariationMan
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				MegaUnits:    to.Ptr(true),
 				RunningTally: to.Ptr(true),
 			},
@@ -430,9 +402,6 @@ func (s *ListSuite) Scenario_ListRunningTallyMachineReadable(svm *ScenarioVariat
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				MachineReadable: to.Ptr(true),
 				RunningTally:    to.Ptr(true),
 			},
@@ -475,9 +444,6 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVari
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				RunningTally: to.Ptr(true),
 				Properties:   to.Ptr("VersionId"),
 			},
@@ -526,9 +492,6 @@ func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationMan
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				RunningTally: to.Ptr(true),
 				Properties:   to.Ptr("VersionId"),
 			},
@@ -633,9 +596,6 @@ func (s *ListSuite) Scenario_ListHierarchyTrailingDot(svm *ScenarioVariationMana
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				TrailingDot: to.Ptr(common.ETrailingDotOption.Enable()),
 			},
 		})
@@ -694,9 +654,6 @@ func (s *ListSuite) Scenario_ListHierarchyTrailingDotDisable(svm *ScenarioVariat
 				}),
 			},
 			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 				TrailingDot: to.Ptr(common.ETrailingDotOption.Disable()),
 			},
 		})
@@ -715,11 +672,6 @@ func (s *ListSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
 			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
 				AzCopyTarget{srcObj, EExplicitCredentialType.PublicAuth(), CreateAzCopyTargetOptions{}},
-			},
-			Flags: ListFlags{
-				GlobalFlags: GlobalFlags{
-					OutputType: to.Ptr(common.EOutputFormat.Json()),
-				},
 			},
 			ShouldFail: true,
 		})
