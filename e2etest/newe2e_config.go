@@ -57,6 +57,10 @@ type NewE2EConfig struct {
 			}
 
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
+			FilesOAuth struct {
+				AccountName string `env:"NEW_E2E_FILES_OAUTH_ACCOUNT_NAME,required"`
+				AccountKey  string `env:"NEW_E2E_FILE_OAUTH_ACCOUNT_KEY,required"`
+			} `env:",required"`
 			Standard struct {
 				AccountName string `env:"NEW_E2E_STANDARD_ACCOUNT_NAME,required"`
 				AccountKey  string `env:"NEW_E2E_STANDARD_ACCOUNT_KEY,required"`

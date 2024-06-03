@@ -231,7 +231,9 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 }
 
 func (s *ListSuite) Scenario_ListFilesOAuth(svm *ScenarioVariationManager) {
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	acct := GetAccount(svm, FilesOAuthAcct)
+	srcService := acct.GetService(svm, common.ELocation.File())
+	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
 
 	var expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject
 	expectedObjects = map[AzCopyOutputKey]cmd.AzCopyListObject{AzCopyOutputKey{Path: "/"}: {Path: "/", ContentLength: "0.00 B"}}

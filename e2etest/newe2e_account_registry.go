@@ -123,6 +123,7 @@ func DeleteAccount(a Asserter, arm AccountResourceManager) {
 const (
 	PrimaryStandardAcct string = "PrimaryStandard"
 	PrimaryHNSAcct      string = "PrimaryHNS"
+	FilesOAuthAcct      string = "FilesOAuth"
 )
 
 func AccountRegistryInitHook(a Asserter) {
@@ -138,6 +139,11 @@ func AccountRegistryInitHook(a Asserter) {
 			accountName: acctInfo.HNS.AccountName,
 			accountKey:  acctInfo.HNS.AccountKey,
 			accountType: EAccountType.HierarchicalNamespaceEnabled(),
+		}
+		AccountRegistry[FilesOAuthAcct] = &AzureAccountResourceManager{
+			accountName: acctInfo.FilesOAuth.AccountName,
+			accountKey:  acctInfo.FilesOAuth.AccountKey,
+			accountType: EAccountType.Standard(),
 		}
 	} else {
 		// Create standard accounts
