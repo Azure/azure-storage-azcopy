@@ -522,6 +522,8 @@ stages:
               --description "Add description" 
               mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`-$(tags).arm64.deb
               cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+              version = ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3
+              echo "Version : $version"
             workingDirectory: $(root_dir)
             displayName: 'Make ARM64 deb Package'
             
@@ -1261,10 +1263,12 @@ stages:
               displayName: 'List Artifacts'
 
             - script: |
-                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy*.arm64.deb
-                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy*.arm64.rpm
-                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy*.x86_64.deb
-                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy*.x86_64.rpm
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-10.25.0-Preview-1-cm2.x86_64.rpm
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-10.25.0-Preview-1-tags.x86_64.rpm
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-10.25.0-Preview-1-tags.x86_64.deb
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-10.25.0-Preview-1-cm2.arm64.rpm
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-10.25.0-Preview-1-tags.arm64.rpm
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-10.25.0-Preview-1-tags.arm64.deb
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)/
 
