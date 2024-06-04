@@ -524,6 +524,7 @@ stages:
               cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
               version = ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3
               echo "Version : $version"
+              echo `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`
             workingDirectory: $(root_dir)
             displayName: 'Make ARM64 deb Package'
             
@@ -1270,7 +1271,7 @@ stages:
                 pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-10.25.0-Preview-1-tags.arm64.rpm
                 pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-10.25.0-Preview-1-tags.arm64.deb
               displayName: 'Upload files'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/
+              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
 
             - script: |
                 wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
