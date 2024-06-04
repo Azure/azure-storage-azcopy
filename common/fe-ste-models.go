@@ -530,7 +530,6 @@ func (Location) AzureAccount() Location { return Location(100) } // AzureAccount
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
 }
-
 func (l *Location) Parse(s string) error {
 	val, err := enum.ParseInt(reflect.TypeOf(l), s, true, true)
 	if err == nil {
