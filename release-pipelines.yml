@@ -562,13 +562,13 @@ stages:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+            value: '$(System.DefaultWorkingDirectory)\azure-storage-azcopy'
           - name: windows_amd64
-            value: '$(work_dir)/azcopy_windows_amd64'
+            value: '$(work_dir)\azcopy_windows_amd64'
           - name: windows_386
-            value: '$(work_dir)/azcopy_windows_386'
+            value: '$(work_dir)\azcopy_windows_386'
           - name: archives
-            value: $(root_dir)/archives
+            value: $(root_dir)\archives
           
         steps:
           - task: GoTool@0
@@ -590,8 +590,8 @@ stages:
             displayName: 'Create required directories'
 
           - script: |
-              go build -o "$(windows_amd64)/azcopy_windows_amd64.exe"
-              raw_version_output=(`$(windows_amd64)/azcopy_windows_amd64.exe --version`)
+              go build -o "$(windows_amd64)\azcopy_windows_amd64.exe"
+              raw_version_output=(`$(windows_amd64)\azcopy_windows_amd64.exe --version`)
               azcopy_version=${raw_version_output[2]}
               echo "Version : $azcopy_version"
             displayName: 'Generate Windows AMD64'
@@ -601,7 +601,7 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
-              go build -o "$(windows_386)/azcopy_windows_386.exe"
+              go build -o "$(windows_386)\azcopy_windows_386.exe"
             displayName: 'Generate Windows i386'
             env:
               GOARCH: 386
@@ -609,7 +609,7 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
-              go build -o "$(work_dir)/azcopy_windows_v7_arm.exe"
+              go build -o "$(work_dir)\azcopy_windows_v7_arm.exe"
             displayName: 'Generate Windows ARM'
             env:
               GOARCH: arm
@@ -618,7 +618,7 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
-              sudo ls -lRt $(work_dir)/
+              sudo ls -lRt $(work_dir)
             displayName: 'List the binaries'
             workingDirectory: $(root_dir)
 
