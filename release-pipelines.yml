@@ -704,10 +704,13 @@ stages:
           - script: |
               CGO_ENABLED=1 go build -o "$(work_dir)/azcopy_darwin_amd64"
 
-              raw_version_output=$("$(windows_amd64)/azcopy_windows_amd64.exe" --version)
-              IFS=$'\n' read -rd '' -a raw_version_output_array <<<"$raw_version_output"
-              azcopy_version=${raw_version_output_array[2]}
-              echo "AzCopy Version: $azcopy_version"
+              for /f "tokens=1-3 delims= " %%a in ('"$(windows_amd64)\azcopy_windows_amd64.exe" --version') do (
+                set raw_version_output=%%a %%b %%c
+              )
+              for /f "tokens=3 delims= " %%a in ("%raw_version_output%") do (
+                  set azcopy_version=%%a
+              )
+              echo AzCopy Version: %azcopy_version%
             displayName: 'Generate MacOS Build with AMD64'
 
           - script: |
@@ -727,19 +730,19 @@ stages:
             displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
             inputs:
               rootFolderOrFile: '$(darwin_amd_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
+              archiveFile: '$(archives)/azcopy_darwin_amd64_%azcopy_version%.zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
             displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
             inputs:
               rootFolderOrFile: '$(darwin_arm_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
+              archiveFile: '$(archives)/azcopy_darwin_arm64_%azcopy_version%.zip'
             continueOnError: true
 
           - script: |
-              cp $(archives)/azcopy_darwin_amd64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_darwin_arm64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_darwin_amd64_%azcopy_version%.zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_darwin_arm64_%azcopy_version%.zip $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
           - task: PublishBuildArtifacts@1
