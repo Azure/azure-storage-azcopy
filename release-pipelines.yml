@@ -636,20 +636,20 @@ stages:
             displayName: 'Archive Windows 64 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_amd64)'
-              archiveFile: '$(archives)/azcopy_windows_amd64_%azcopy_version%.zip'
+              archiveFile: '$(archives)/azcopy_windows_amd64*.zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 32 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_386)'
-              archiveFile: '$(archives)/azcopy_windows_386_%azcopy_version%.zip'
+              archiveFile: '$(archives)/azcopy_windows_386*.zip'
             continueOnError: true
 
           - script: |
-              cp $(archives)/azcopy_windows_amd64_%azcopy_version%.zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_windows_386_%azcopy_version%.zip $(Build.ArtifactStagingDirectory)
-              cp $(work_dir)/azcopy_windows_v7_arm.exe $(Build.ArtifactStagingDirectory)
+              copy "%archives%\azcopy_windows_amd64*.zip" "%Build.ArtifactStagingDirectory%"
+              copy "%archives%\azcopy_windows_386*.zip" "%Build.ArtifactStagingDirectory%"
+              copy %work_dir%/azcopy_windows_v7_arm.exe "%Build.ArtifactStagingDirectory%
             displayName: 'Copy zip to staging directory'
 
           - task: PublishBuildArtifacts@1
@@ -711,6 +711,11 @@ stages:
               raw_version_output=$("$(darwin_amd_dir)/azcopy_darwin_amd64" --version)
               IFS=$'\n' read -rd '' -a raw_version_output_array <<<"$raw_version_output"
 
+              for element in "${raw_version_output_array[@]}"; do
+                  echo "Array Element: $element"
+              done
+
+              echo "Array Length: ${#raw_version_output_array[@]}"
               azcopy_version=${raw_version_output_array[2]}
               echo "AzCopy Version: $azcopy_version"
             displayName: 'Generate MacOS Build with AMD64'
