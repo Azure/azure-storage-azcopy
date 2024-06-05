@@ -591,8 +591,9 @@ stages:
 
           - script: |
               go build -o "$(windows_amd64)\azcopy_windows_amd64.exe"
-              raw_version_output=(`$(windows_amd64)\azcopy_windows_amd64.exe --version`)
-              azcopy_version=${raw_version_output[2]}
+              $raw_version_output = & '$(windows_amd64)\azcopy_windows_amd64.exe' --version
+              $raw_version_output_array = $raw_version_output -split "`n"
+              $azcopy_version = $raw_version_output_array[2]
               echo "Version : $azcopy_version"
             displayName: 'Generate Windows AMD64'
             env:
@@ -702,9 +703,11 @@ stages:
 
           - script: |
               CGO_ENABLED=1 go build -o "$(work_dir)/azcopy_darwin_amd64"
-              raw_version_output=(`$(work_dir)/azcopy_darwin_amd64/azcopy_darwin_amd64 --version`)
-              azcopy_version=${raw_version_output[2]}
-              echo "Version : $azcopy_version"
+
+              raw_version_output=$("$(windows_amd64)/azcopy_windows_amd64.exe" --version)
+              IFS=$'\n' read -rd '' -a raw_version_output_array <<<"$raw_version_output"
+              azcopy_version=${raw_version_output_array[2]}
+              echo "AzCopy Version: $azcopy_version"
             displayName: 'Generate MacOS Build with AMD64'
 
           - script: |
