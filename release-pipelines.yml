@@ -571,19 +571,11 @@ stages:
             value: $(root_dir)/archives
           
         steps:
-          #TODO: remove this after merging to main
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
-
-          # Custom script to install Go-lang
-          - task: ShellScript@2
+          - task: GoTool@0
+            env:
+              GO111MODULE: 'on'
             inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "Installing Go tools"
+              version: $(AZCOPY_GOLANG_VERSION)
 
           - script: |
               echo 'Running GO Vet'
@@ -690,19 +682,11 @@ stages:
             value: $(root_dir)/archives
 
         steps:
-          #TODO: remove this after merging to main
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
-
-          # Custom script to install Go-lang
-          - task: ShellScript@2
+          - task: GoTool@0
+            env:
+              GO111MODULE: 'on'
             inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "Installing Go tools"
+              version: $(AZCOPY_GOLANG_VERSION)
 
           - script: |
               echo 'Running GO Vet'
