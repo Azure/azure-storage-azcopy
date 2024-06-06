@@ -833,6 +833,9 @@ stages:
               )
               set "version=!full_version:~0,%position%!"
               echo Version: !version!
+            displayName: 'Get version'
+            condition: eq(variables.type, 'windows')
+
           - script: |
               CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
             displayName: 'Generate MacOS Build with AMD64'
@@ -841,6 +844,13 @@ stages:
           - script: |
               GOARCH=arm64 CGO_ENABLED=1 go build
             displayName: 'Test Cross-compiled MacOS Build with ARM64'
+            condition: eq(variables.type, 'mac-os')
+
+          - script: | 
+              azcopy_output=$($(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64 --version)
+              version=$(echo "$azcopy_output" | awk '{print $3}' | cut -d'-' -f1)
+              echo "Version: $version"
+            displayName: 'Get version'
             condition: eq(variables.type, 'mac-os')
 
           - task: PublishBuildArtifacts@1
