@@ -730,7 +730,7 @@ stages:
             displayName: 'Generate MacOS Build with AMD64'
            
           - script: |
-              GOARCH=arm64 CGO_ENABLED=1 go build "$(darwin_arm_dir)/azcopy_darwin_arm64"
+              GOARCH=arm64 CGO_ENABLED=1 go build -o "$(darwin_arm_dir)/azcopy_darwin_arm64"
             displayName: 'Test Cross-compiled MacOS Build with ARM64'
 
           - task: Bash@3
