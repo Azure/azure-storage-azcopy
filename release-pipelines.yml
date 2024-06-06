@@ -1030,43 +1030,20 @@ stages:
             displayName: 'ESRP CodeSigning azCopy windows'
             inputs:
               ConnectedServiceName: 'PMC ESRP azCopy Signing'
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-temp'
-              Pattern: '*.zip'
+              FolderPath: '$(Build.ArtifactStagingDirectory)/mariner'
+              Pattern: '*.rpm, *.deb'
               signConfigType: inlineSignParams
               VerboseLogin: true
               inlineOperation: |
                 [
                   {
-                    "KeyCode" : "$(ESRP_AZCOPY_WIN_KEY_CODE)",
-                    "OperationSetCode": "SigntoolSign",
-                    "Parameters": [
-                        {
-                          "parameterName": "OpusName",
-                          "parameterValue": "Microsoft"
-                        },
-                        {
-                          "parameterName": "OpusInfo",
-                          "parameterValue": "http://www.microsoft.com"
-                        },
-                        {
-                          "parameterName": "PageHash",
-                          "parameterValue": "/NPH"
-                        },
-                        {
-                          "parameterName": "FileDigest",
-                          "parameterValue": "/fd sha256"
-                        },
-                        {
-                          "parameterName": "TimeStamp",
-                          "parameterValue": "/tr \"http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer\" /td sha256"
-                        }
-                      ],
-                    "ToolName": "signtool.exe",
-                    "ToolVersion": "6.2.9304.0"
-  
+                    "KeyCode" : "$(ESRP_AZCOPY_MARINER_KEY_CODE)",
+                    "OperationCode" : "LinuxSign",
+                    "Parameters" : {},
+                    "ToolName" : "sign",
+                    "ToolVersion" : "1.0"
                   }
                 ]
-
           - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
             displayName: 'ESRP CodeSigning azCopy macos'
             inputs:
