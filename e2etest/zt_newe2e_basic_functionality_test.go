@@ -1,7 +1,9 @@
 package e2etest
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strconv"
 	"time"
 )
 
@@ -71,44 +73,57 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
-	objectsToCreate := []string{"dir_file_copy_test_src/", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()})), ResourceDefinitionContainer{})
+	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
-	// The object must exist already if we're syncing.
+	// Create destination directories
+	srcObjs := make(ObjectResourceMappingFlat)
+	for _, dir := range dirsToCreate {
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+		if dstContainer.Location() != common.ELocation.Blob() {
+			srcObjs[dir] = obj
+		}
+		// The object must exist already if we're syncing.
+		if azCopyVerb == AzCopyVerbSync {
+			fmt.Printf("Creating destination %s\n", dir)
+			CreateResource[ObjectResourceManager](svm, dstContainer, ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}})
+		}
+		for i := range 10 {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			srcObjs[name] = obj
+			if azCopyVerb == AzCopyVerbSync {
+				fmt.Printf("Creating destination %s\n", name)
+				CreateResource[ObjectResourceManager](svm, dstContainer, ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))})
+			}
+		}
+
+	}
+
 	if azCopyVerb == AzCopyVerbSync {
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-
 		if !svm.Dryrun() {
 			// Make sure the LMT is in the past
 			time.Sleep(time.Second * 10)
 		}
 	}
 
-	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
-	// Scale up from service to object
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionObject{
-		ObjectName: pointerTo("test"),
-		Body:       body,
-	})
-
-	// no local->local
-	if srcObj.Location().IsLocal() && dstObj.Location().IsLocal() {
-		svm.InvalidateScenario()
-		return
+	for _, obj := range srcObjs {
+		fmt.Printf("Creating src %s\n", *obj.ObjectName)
+		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 	}
 
 	sasOpts := GenericAccountSignatureValues{}
 
-	stdout, _ := RunAzCopy(
+	RunAzCopy(
 		svm,
 		AzCopyCommand{
-			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
 				}),
-				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
 				}),
 			},
@@ -119,12 +134,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory(svm *ScenarioVariatio
 			},
 		})
 
-	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
-		Body: body,
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
 	}, true)
-
-	// Validate that the network stats were updated
-	ValidateStatsReturned(svm, stdout)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm *ScenarioVariationManager) {

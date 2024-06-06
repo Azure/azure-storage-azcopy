@@ -489,6 +489,7 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 			FilePermissions: perms,
 			Metadata:        props.Metadata,
 		})
+		fmt.Println(client.URL())
 		a.NoError("Create directory", err)
 	default:
 		a.Error("File Objects only support Files and Folders")
