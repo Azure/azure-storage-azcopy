@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
 	"time"
@@ -73,8 +72,8 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()})), ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()})), ResourceDefinitionContainer{})
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
 
 	// Create destination directories
@@ -86,7 +85,6 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory(svm *ScenarioVariatio
 		}
 		// The object must exist already if we're syncing.
 		if azCopyVerb == AzCopyVerbSync {
-			fmt.Printf("Creating destination %s\n", dir)
 			CreateResource[ObjectResourceManager](svm, dstContainer, ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}})
 		}
 		for i := range 10 {
@@ -94,7 +92,6 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory(svm *ScenarioVariatio
 			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
 			srcObjs[name] = obj
 			if azCopyVerb == AzCopyVerbSync {
-				fmt.Printf("Creating destination %s\n", name)
 				CreateResource[ObjectResourceManager](svm, dstContainer, ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))})
 			}
 		}
@@ -109,8 +106,9 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory(svm *ScenarioVariatio
 	}
 
 	for _, obj := range srcObjs {
-		fmt.Printf("Creating src %s\n", *obj.ObjectName)
-		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		if obj.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		}
 	}
 
 	sasOpts := GenericAccountSignatureValues{}
