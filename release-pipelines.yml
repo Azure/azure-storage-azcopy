@@ -1,6 +1,7 @@
 variables:
   AZCOPY_GOLANG_VERSION: '1.21.8'
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
+  AZCOPY_VERSION: '0.0.0'
 
 parameters:
   - name: tag
@@ -304,130 +305,133 @@ stages:
     #dependsOn: RunTests
     #condition: succeeded('RunTests')
     jobs:
-      # - job: Set_1
-      #   timeoutInMinutes: 120
-      #   strategy:
-      #     matrix:
-      #       Ubuntu_amd64:
-      #         imageName: 'ubuntu-20.04'
-      #         tags: 'tags'
-      #         container: 'test-cnt-ubn-20'
-      #         AgentName: "blobfuse-ubuntu20"
-      #   pool:
-      #     name: "blobfuse-ubuntu-pool"
-      #     demands:
-      #       - ImageOverride -equals $(agentName)
+      - job: Set_1
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu_amd64:
+              imageName: 'ubuntu-20.04'
+              tags: 'tags'
+              container: 'test-cnt-ubn-20'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(agentName)
 
-      #   variables:
-      #     - name: root_dir
-      #       value: '$(System.DefaultWorkingDirectory)'
-      #     - name: work_dir
-      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
-      #   steps:
-      #     #TODO: remove this after merging to main
-      #     - script: |
-      #         wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-      #         chmod 777 $(work_dir)/go_installer.sh
-      #         sudo ls -lRt $(work_dir)/
-      #       displayName: 'list'
+        steps:
+          #TODO: remove this after merging to main
+          - script: |
+              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
+              chmod 777 $(work_dir)/go_installer.sh
+              sudo ls -lRt $(work_dir)/
+            displayName: 'list'
 
-      #     # Custom script to install Go-lang
-      #     - task: ShellScript@2
-      #       inputs:
-      #         scriptPath: "$(work_dir)/go_installer.sh"
-      #         args: "$(root_dir)/"
-      #       displayName: "Installing Go tools"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "Installing Go tools"
 
-      #     - script: |
-      #         echo 'Running GO Vet'
-      #         go vet 
-      #       displayName: 'Golang Vet - Linux'
-      #       workingDirectory: $(root_dir)
+          - script: |
+              echo 'Running GO Vet'
+              go vet 
+            displayName: 'Golang Vet - Linux'
+            workingDirectory: $(root_dir)
 
-      #     # install dependencies required for compiling azcopy
-      #     - script: |
-      #         sudo apt-get update --fix-missing
-      #         sudo apt-get install pkg-config libsecret-1-dev -y
-      #         sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
-      #         sudo gem install dotenv -v 2.8.1
-      #         sudo gem install fpm -V
-      #       displayName: "Installing Dependencies"
+          # install dependencies required for compiling azcopy
+          - script: |
+              sudo apt-get update --fix-missing
+              sudo apt-get install pkg-config libsecret-1-dev -y
+              sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+              sudo gem install dotenv -v 2.8.1
+              sudo gem install fpm -V
+            displayName: "Installing Dependencies"
 
-      #     # get glibc version with which build is done
-      #     - script: |
-      #        ldd --version
-      #       displayName: "GLIBC Version"
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
 
-      #     - script: |
-      #         GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
-      #       displayName: 'Generate Linux AMD64'
+          - script: |
+              GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
+            displayName: 'Generate Linux AMD64'
 
-      #     - script: |
-      #         GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
-      #       displayName: 'Generate Linux AMD64 SE Integration'
+          - script: |
+              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
+            displayName: 'Generate Linux AMD64 SE Integration'
 
-      #     - script: |
-      #         sudo ls -lRt $(work_dir)/
-      #       displayName: 'List the binaries'
-      #       workingDirectory: $(root_dir)
+          - script: |
+              sudo ls -lRt $(work_dir)/
+            displayName: 'List the binaries'
+            workingDirectory: $(root_dir)
 
-      #     # place the generated binary files & any additional files in appropriate locations
-      #     - script: |
-      #         mkdir -p pkgDirAmd64/usr/bin/
-      #         cp -r $(work_dir)/azcopy_linux_amd64 pkgDirAmd64/usr/bin/
-      #       displayName: 'Accumulate pkg files'
+          # place the generated binary files & any additional files in appropriate locations
+          - script: |
+              mkdir -p pkgDirAmd64/usr/bin/
+              cp -r $(work_dir)/azcopy_linux_amd64 pkgDirAmd64/usr/bin/
+            displayName: 'Accumulate pkg files'
 
-      #     - script: |
-      #         cp NOTICE.txt pkgDirAmd64/usr/bin/
-      #       displayName: 'Copy NOTICE.txt'
+          - script: |
+              cp NOTICE.txt pkgDirAmd64/usr/bin/
+            displayName: 'Copy NOTICE.txt'
 
-      #     - script: |
-      #         ./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version
-      #       displayName: 'Verify the generated build'
+          - script: |
+              ./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version
+              raw_version_output=(`/pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version`)
+              azcopy_version=${raw_version_output[2]}
+              echo "Version : $azcopy_version"
+            displayName: 'Verify the generated build'
             
           
-      #     # using fpm tool for packaging of our binary & performing post-install operations
-      #     # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-      #     # TODO: Add description
-      #     - script: |
-      #         fpm -s dir -t deb -n azcopy -C pkgDirAmd64/ \
-      #         -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
-      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-      #         --url "https://github.com/Azure/azure-storage-azcopy" \
-      #         --description "Add description" 
-      #         mv ./azcopy*.deb ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
-      #         cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Make AMD64 deb Package'
+          # using fpm tool for packaging of our binary & performing post-install operations
+          # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+          # TODO: Add description
+          - script: |
+              fpm -s dir -t deb -n azcopy -C pkgDirAmd64/ \
+              -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "Add description" 
+              mv ./azcopy*.deb ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.deb
+              cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Make AMD64 deb Package'
             
-      #     - script: |
-      #         fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirAmd64/ \
-      #         -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
-      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-      #         --url "https://github.com/Azure/azure-storage-azcopy" \
-      #         --description "Add description" 
-      #         mv ./azcopy*.rpm ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
-      #         cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Make AMD64 rpm Package'
+          - script: |
+              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirAmd64/ \
+              -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "Add description" 
+              mv ./azcopy*.rpm ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`-$(tags).x86_64.rpm
+              cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Make AMD64 rpm Package'
 
-      #     - script: |
-      #         cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Add SE binary to signing stage'
+          - script: |
+              cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Add SE binary to signing stage'
 
-      #     - task: PublishBuildArtifacts@1
-      #       inputs:
-      #         artifactName: 'azCopy-temp'
-      #       displayName: 'Publish Artifacts'
-      #       condition: succeededOrFailed()
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-temp'
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
         
-      #     - task: ComponentGovernanceComponentDetection@0
-      #       inputs:
-      #         scanType: 'Register'
-      #         verbosity: 'Verbose'
-      #         alertWarningLevel: 'High'
+          - task: ComponentGovernanceComponentDetection@0
+            inputs:
+              scanType: 'Register'
+              verbosity: 'Verbose'
+              alertWarningLevel: 'High'
 
       # - job: Set_2
       #   timeoutInMinutes: 120
@@ -548,28 +552,234 @@ stages:
       #         verbosity: 'Verbose'
       #         alertWarningLevel: 'High'
       
-      - job: Set_3
-        timeoutInMinutes: 120
+      # - job: Set_3
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Windows:
+      #         imageName: 'windows-2019'
+      #         type: 'windows'
+      #   pool:
+      #     vmImage: $(imageName)
+
+      #   variables:
+      #     - name: root_dir
+      #       value: '$(System.DefaultWorkingDirectory)'
+      #     - name: work_dir
+      #       value: '$(System.DefaultWorkingDirectory)\azure-storage-azcopy'
+      #     - name: windows_amd64
+      #       value: '$(work_dir)\azcopy_windows_amd64'
+      #     - name: windows_386
+      #       value: '$(work_dir)\azcopy_windows_386'
+      #     - name: archives
+      #       value: $(root_dir)\archives
+          
+      #   steps:
+      #     - task: GoTool@0
+      #       env:
+      #         GO111MODULE: 'on'
+      #       inputs:
+      #         version: $(AZCOPY_GOLANG_VERSION)
+
+      #     - script: |
+      #         echo 'Running GO Vet'
+      #         go vet 
+      #       displayName: 'Golang Vet - Windows'
+      #       workingDirectory: $(root_dir)
+
+      #     - script: |
+      #         mkdir $(windows_amd64)
+      #         mkdir $(windows_386)
+      #         mkdir $(archives)
+      #       displayName: 'Create required directories'
+
+      #     - script: |
+      #         go build -o "$(windows_amd64)\azcopy_windows_amd64.exe"
+      #         for /f "tokens=1-3 delims= " %%a in ('"$(windows_amd64)\azcopy_windows_amd64.exe" --version') do (
+      #           set raw_version_output=%%a %%b %%c
+      #         )
+      #         for /f "tokens=3 delims= " %%a in ("%raw_version_output%") do (
+      #             set azcopy_version=%%a
+      #         )
+      #         echo AzCopy Version: %azcopy_version%
+      #       displayName: 'Generate Windows AMD64'
+      #       env:
+      #         GOARCH: amd64
+      #         GOOS: windows
+      #         CGO_ENABLED: 0
+
+      #     - script: |
+      #         go build -o "$(windows_386)\azcopy_windows_386.exe"
+      #       displayName: 'Generate Windows i386'
+      #       env:
+      #         GOARCH: 386
+      #         GOOS: windows
+      #         CGO_ENABLED: 0
+
+      #     - script: |
+      #         go build -o "$(work_dir)\azcopy_windows_v7_arm.exe"
+      #       displayName: 'Generate Windows ARM'
+      #       env:
+      #         GOARCH: arm
+      #         GOARM: 7
+      #         GOOS: windows
+      #         CGO_ENABLED: 0
+
+      #     - script: |
+      #         dir $(work_dir)
+      #         dir $(windows_386)
+      #         dir $(windows_amd64)
+      #       displayName: 'List the binaries'
+
+      #     - script: |
+      #         cp NOTICE.txt $(windows_amd64)
+      #         cp NOTICE.txt $(windows_386)
+      #       displayName: 'Copy Notice file'
+
+      #     - task: ArchiveFiles@2
+      #       displayName: 'Archive Windows 64 bit Build'
+      #       inputs:
+      #         rootFolderOrFile: '$(windows_amd64)'
+      #         archiveFile: '$(archives)/azcopy_windows_amd64*.zip'
+      #       continueOnError: true
+
+      #     - task: ArchiveFiles@2
+      #       displayName: 'Archive Windows 32 bit Build'
+      #       inputs:
+      #         rootFolderOrFile: '$(windows_386)'
+      #         archiveFile: '$(archives)/azcopy_windows_386*.zip'
+      #       continueOnError: true
+
+      #     - script: |
+      #         copy "%archives%\azcopy_windows_amd64*.zip" "%Build.ArtifactStagingDirectory%"
+      #         copy "%archives%\azcopy_windows_386*.zip" "%Build.ArtifactStagingDirectory%"
+      #         copy %work_dir%/azcopy_windows_v7_arm.exe "%Build.ArtifactStagingDirectory%
+      #       displayName: 'Copy zip to staging directory'
+
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-temp'
+      #       displayName: 'Publish Artifacts'
+      #       condition: succeededOrFailed()
+        
+      #     - task: ComponentGovernanceComponentDetection@0
+      #       inputs:
+      #         scanType: 'Register'
+      #         verbosity: 'Verbose'
+      #         alertWarningLevel: 'High'
+
+      # - job: Set_4
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       MacOS:
+      #         imageName: 'macos-11'
+      #         type: 'mac-os'
+      #   pool:
+      #     vmImage: $(imageName)
+
+      #   variables:
+      #     - name: root_dir
+      #       value: '$(System.DefaultWorkingDirectory)'
+      #     - name: work_dir
+      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+      #     - name: darwin_amd_dir
+      #       value: '$(work_dir)/azcopy_darwin_amd64'
+      #     - name: darwin_arm_dir
+      #       value: '$(work_dir)/azcopy_darwin_arm64'
+      #     - name: archives
+      #       value: $(root_dir)/archives
+
+      #   steps:
+      #     - task: GoTool@0
+      #       env:
+      #         GO111MODULE: 'on'
+      #       inputs:
+      #         version: $(AZCOPY_GOLANG_VERSION)
+
+      #     - script: |
+      #         echo 'Running GO Vet'
+      #         go vet 
+      #       displayName: 'Golang Vet - Mac'
+      #       workingDirectory: $(root_dir)
+
+      #     - script: |
+      #         mkdir $(darwin_amd_dir)
+      #         mkdir $(darwin_arm_dir)
+      #         mkdir $(archives)
+      #       displayName: 'Create required directories'
+
+      #     - script: |
+      #         CGO_ENABLED=1 go build -o "$(darwin_amd_dir)/azcopy_darwin_amd64"
+
+      #         raw_version_output=$("$(darwin_amd_dir)/azcopy_darwin_amd64" --version)
+      #         IFS=$'\n' read -rd '' -a raw_version_output_array <<<"$raw_version_output"
+
+      #         for element in "${raw_version_output_array[@]}"; do
+      #             echo "Array Element: $element"
+      #         done
+
+      #         echo "Array Length: ${#raw_version_output_array[@]}"
+      #         azcopy_version=${raw_version_output_array[2]}
+      #         echo "AzCopy Version: $azcopy_version"
+      #       displayName: 'Generate MacOS Build with AMD64'
+
+      #     - script: |
+      #         GOARCH=arm64 CGO_ENABLED=1 go build -o "$(work_dir)/azcopy_darwin_arm64"
+      #       displayName: 'Generate MacOS Build with Arm64'
+
+      #     - script: |
+      #         sudo ls -lRt $(work_dir)
+      #       displayName: 'List the amd64 files'
+
+      #     - script: |
+      #         cp NOTICE.txt $(darwin_amd_dir)
+      #         cp NOTICE.txt $(darwin_arm_dir)
+      #       displayName: 'Copy Notice file'
+
+      #     - task: ArchiveFiles@2
+      #       displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
+      #       inputs:
+      #         rootFolderOrFile: '$(darwin_amd_dir)'
+      #         archiveFile: '$(archives)/azcopy_darwin_amd64_$azcopy_version.zip'
+      #       continueOnError: true
+
+      #     - task: ArchiveFiles@2
+      #       displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
+      #       inputs:
+      #         rootFolderOrFile: '$(darwin_arm_dir)'
+      #         archiveFile: '$(archives)/azcopy_darwin_arm64_$azcopy_version.zip'
+      #       continueOnError: true
+
+      #     - script: |
+      #         cp $(archives)/azcopy_darwin_amd64_$azcopy_version.zip $(Build.ArtifactStagingDirectory)
+      #         cp $(archives)/azcopy_darwin_arm64_$azcopy_version.zip $(Build.ArtifactStagingDirectory)
+      #       displayName: 'Copy zip to staging directory'
+
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-temp'
+      #       displayName: 'Publish Artifacts'
+      #       condition: succeededOrFailed()
+        
+      #     - task: ComponentGovernanceComponentDetection@0
+      #       inputs:
+      #         scanType: 'Register'
+      #         verbosity: 'Verbose'
+      #         alertWarningLevel: 'High'
+        
+      - job: Build
+        timeoutInMinutes: 360
         strategy:
           matrix:
+            MacOS:
+              imageName: 'macos-11'
+              type: 'mac-os'
             Windows:
               imageName: 'windows-2019'
               type: 'windows'
         pool:
           vmImage: $(imageName)
-
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)\azure-storage-azcopy'
-          - name: windows_amd64
-            value: '$(work_dir)\azcopy_windows_amd64'
-          - name: windows_386
-            value: '$(work_dir)\azcopy_windows_386'
-          - name: archives
-            value: $(root_dir)\archives
-          
         steps:
           - task: GoTool@0
             env:
@@ -580,41 +790,31 @@ stages:
           - script: |
               echo 'Running GO Vet'
               go vet 
-            displayName: 'Golang Vet - Windows'
-            workingDirectory: $(root_dir)
+            displayName: 'Golang Vet - Linux'
+            workingDirectory: $(System.DefaultWorkingDirectory)
 
           - script: |
-              mkdir $(windows_amd64)
-              mkdir $(windows_386)
-              mkdir $(archives)
-            displayName: 'Create required directories'
-
-          - script: |
-              go build -o "$(windows_amd64)\azcopy_windows_amd64.exe"
-              for /f "tokens=1-3 delims= " %%a in ('"$(windows_amd64)\azcopy_windows_amd64.exe" --version') do (
-                set raw_version_output=%%a %%b %%c
-              )
-              for /f "tokens=3 delims= " %%a in ("%raw_version_output%") do (
-                  set azcopy_version=%%a
-              )
-              echo AzCopy Version: %azcopy_version%
+              go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
             displayName: 'Generate Windows AMD64'
+            condition: eq(variables.type, 'windows')
             env:
               GOARCH: amd64
               GOOS: windows
               CGO_ENABLED: 0
 
           - script: |
-              go build -o "$(windows_386)\azcopy_windows_386.exe"
+              go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
             displayName: 'Generate Windows i386'
+            condition: eq(variables.type, 'windows')
             env:
               GOARCH: 386
               GOOS: windows
               CGO_ENABLED: 0
 
           - script: |
-              go build -o "$(work_dir)\azcopy_windows_v7_arm.exe"
+              go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
             displayName: 'Generate Windows ARM'
+            condition: eq(variables.type, 'windows')
             env:
               GOARCH: arm
               GOARM: 7
@@ -622,57 +822,43 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
-              dir $(work_dir)
-              dir $(windows_386)
-              dir $(windows_amd64)
-            displayName: 'List the binaries'
+              CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+            displayName: 'Generate MacOS Build with AMD64'
+            condition: eq(variables.type, 'mac-os')
 
           - script: |
-              cp NOTICE.txt $(windows_amd64)
-              cp NOTICE.txt $(windows_386)
-            displayName: 'Copy Notice file'
-
-          - task: ArchiveFiles@2
-            displayName: 'Archive Windows 64 bit Build'
-            inputs:
-              rootFolderOrFile: '$(windows_amd64)'
-              archiveFile: '$(archives)/azcopy_windows_amd64*.zip'
-            continueOnError: true
-
-          - task: ArchiveFiles@2
-            displayName: 'Archive Windows 32 bit Build'
-            inputs:
-              rootFolderOrFile: '$(windows_386)'
-              archiveFile: '$(archives)/azcopy_windows_386*.zip'
-            continueOnError: true
-
-          - script: |
-              copy "%archives%\azcopy_windows_amd64*.zip" "%Build.ArtifactStagingDirectory%"
-              copy "%archives%\azcopy_windows_386*.zip" "%Build.ArtifactStagingDirectory%"
-              copy %work_dir%/azcopy_windows_v7_arm.exe "%Build.ArtifactStagingDirectory%
-            displayName: 'Copy zip to staging directory'
+              GOARCH=arm64 CGO_ENABLED=1 go build
+            displayName: 'Test Cross-compiled MacOS Build with ARM64'
+            condition: eq(variables.type, 'mac-os')
 
           - task: PublishBuildArtifacts@1
             inputs:
               artifactName: 'azCopy-temp'
             displayName: 'Publish Artifacts'
             condition: succeededOrFailed()
-        
+            
           - task: ComponentGovernanceComponentDetection@0
             inputs:
               scanType: 'Register'
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
+    # BuildArtifacts end here
 
-      - job: Set_4
+  - stage: CreateZip
+    dependsOn: BuildArtifacts
+    condition: succeeded('BuildArtifacts')
+    jobs:
+      - job: Set_1
         timeoutInMinutes: 120
         strategy:
           matrix:
-            MacOS:
-              imageName: 'macos-11'
-              type: 'mac-os'
+            Ubuntu-22:
+              vmImage: 'Ubuntu-20.04'
+              AgentName: "blobfuse-ubuntu20"
         pool:
-          vmImage: $(imageName)
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
 
         variables:
           - name: root_dir
@@ -685,19 +871,15 @@ stages:
             value: '$(work_dir)/azcopy_darwin_arm64'
           - name: archives
             value: $(root_dir)/archives
-
+        
         steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
+          # download artifacts that need to be published
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
             inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Mac'
-            workingDirectory: $(root_dir)
+              artifactName: 'azCopy-temp'
+              downloadPath: $(Build.ArtifactStagingDirectory)
+              itemPattern: azCopy-signed/azcopy_darwin*
 
           - script: |
               mkdir $(darwin_amd_dir)
@@ -706,50 +888,29 @@ stages:
             displayName: 'Create required directories'
 
           - script: |
-              CGO_ENABLED=1 go build -o "$(darwin_amd_dir)/azcopy_darwin_amd64"
-
-              raw_version_output=$("$(darwin_amd_dir)/azcopy_darwin_amd64" --version)
-              IFS=$'\n' read -rd '' -a raw_version_output_array <<<"$raw_version_output"
-
-              for element in "${raw_version_output_array[@]}"; do
-                  echo "Array Element: $element"
-              done
-
-              echo "Array Length: ${#raw_version_output_array[@]}"
-              azcopy_version=${raw_version_output_array[2]}
-              echo "AzCopy Version: $azcopy_version"
-            displayName: 'Generate MacOS Build with AMD64'
-
-          - script: |
-              GOARCH=arm64 CGO_ENABLED=1 go build -o "$(work_dir)/azcopy_darwin_arm64"
-            displayName: 'Generate MacOS Build with Arm64'
-
-          - script: |
-              sudo ls -lRt $(work_dir)
-            displayName: 'List the amd64 files'
-
-          - script: |
+              cp $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64 $(darwin_amd_dir)
               cp NOTICE.txt $(darwin_amd_dir)
+              cp $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64 $(darwin_arm_dir)
               cp NOTICE.txt $(darwin_arm_dir)
-            displayName: 'Copy Notice file'
+            displayName: 'Copy required file'
 
           - task: ArchiveFiles@2
             displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
             inputs:
               rootFolderOrFile: '$(darwin_amd_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_amd64_$azcopy_version.zip'
+              archiveFile: '$(archives)/azcopy_darwin_amd64.zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
             displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
             inputs:
               rootFolderOrFile: '$(darwin_arm_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_arm64_$azcopy_version.zip'
+              archiveFile: '$(archives)/azcopy_darwin_arm64.zip'
             continueOnError: true
 
           - script: |
-              cp $(archives)/azcopy_darwin_amd64_$azcopy_version.zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_darwin_arm64_$azcopy_version.zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_darwin_amd64.zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_darwin_arm64.zip $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
           - task: PublishBuildArtifacts@1
@@ -763,12 +924,10 @@ stages:
               scanType: 'Register'
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
-
-# BuildArtifacts end here
-
+        
   - stage: SignArtifacts
-    dependsOn: BuildArtifacts
-    condition: succeeded('BuildArtifacts')
+    dependsOn: CreateZip
+    condition: succeeded('CreateZip')
     jobs:
       - job: Set_1
         timeoutInMinutes: 120
