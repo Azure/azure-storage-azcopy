@@ -779,8 +779,8 @@ stages:
     # BuildArtifacts end here
       
   - stage: SignArtifacts
-    dependsOn: CreateZip
-    condition: succeeded('CreateZip')
+    dependsOn: BuildArtifacts
+    condition: succeeded('BuildArtifacts')
     jobs:
       - job: Set_1
         timeoutInMinutes: 120
