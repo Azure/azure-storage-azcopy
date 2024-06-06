@@ -665,11 +665,14 @@ stages:
               archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
             continueOnError: true
 
-          - script: |
-              copy "%archives%\azcopy_windows_amd64_$(azcopy_version).zip" "%Build.ArtifactStagingDirectory%"
-              copy "%archives%\azcopy_windows_386_$(azcopy_version).zip" "%Build.ArtifactStagingDirectory%"
-              copy %work_dir%/azcopy_windows_v7_arm.exe "%Build.ArtifactStagingDirectory%
+          - task: PowerShell@2
             displayName: 'Copy zip to staging directory'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Copy-Item -Path "$(archives)\azcopy_windows_amd64_$(azcopy_version).zip" -Destination "$(Build.ArtifactStagingDirectory)"
+                Copy-Item -Path "$(archives)\azcopy_windows_386_$(azcopy_version).zip" -Destination "$(Build.ArtifactStagingDirectory)"
+                Copy-Item -Path "$(work_dir)\azcopy_windows_v7_arm.exe" -Destination "$(Build.ArtifactStagingDirectory)"
 
           - task: PublishBuildArtifacts@1
             inputs:
