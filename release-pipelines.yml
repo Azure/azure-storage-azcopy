@@ -735,11 +735,11 @@ stages:
 
           - task: Bash@3
             displayName: 'Extract AZCopy version'
-              inputs:
-                targetType: 'inline'
-                script: |
-                  azcopy_version=$($(darwin_amd_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
-                  echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
+            inputs:
+              targetType: 'inline'
+              script: |
+                azcopy_version=$($(darwin_amd_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
+                echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
 
           - script: |
               cp NOTICE.txt $(darwin_amd_dir)
