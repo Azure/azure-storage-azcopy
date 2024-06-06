@@ -821,6 +821,18 @@ stages:
               GOOS: windows
               CGO_ENABLED: 0
 
+          - script: | 
+              for /f "tokens=*" %%i in ('$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe --version') do set "azcopy_output=%%i"
+              set "full_version=!azcopy_output:azcopy version =!"
+              set "position=0"
+              set "temp_string=!full_version!"
+              :find_dash
+              if not "!temp_string:~%position%,1!"=="-" (
+                  set /a position+=1
+                  goto find_dash
+              )
+              set "version=!full_version:~0,%position%!"
+              echo Version: !version!
           - script: |
               CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
             displayName: 'Generate MacOS Build with AMD64'
@@ -879,7 +891,7 @@ stages:
             inputs:
               artifactName: 'azCopy-temp'
               downloadPath: $(Build.ArtifactStagingDirectory)
-              itemPattern: azCopy-signed/azcopy_darwin*
+              itemPattern: azCopy-temp/azcopy_darwin*
 
           - script: |
               mkdir $(darwin_amd_dir)
