@@ -670,9 +670,46 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Copy-Item -Path "$(archives)\azcopy_windows_amd64_$(azcopy_version).zip" -Destination "$(Build.ArtifactStagingDirectory)"
-                Copy-Item -Path "$(archives)\azcopy_windows_386_$(azcopy_version).zip" -Destination "$(Build.ArtifactStagingDirectory)"
-                Copy-Item -Path "$(work_dir)\azcopy_windows_v7_arm.exe" -Destination "$(Build.ArtifactStagingDirectory)"
+                # Ensure the destination directory exists
+                New-Item -ItemType Directory -Path "$(Build.ArtifactStagingDirectory)" -Force
+
+                # Copy the zip files and executable to the artifact staging directory
+                $sourceAmd64Zip = "$(archives)\azcopy_windows_amd64_$(azcopy_version).zip"
+                $source386Zip = "$(archives)\azcopy_windows_386_$(azcopy_version).zip"
+                $sourceArmExe = "$(work_dir)\azcopy_windows_v7_arm.exe"
+                $destinationDir = "$(Build.ArtifactStagingDirectory)"
+
+                # Check if the source files exist before copying
+                if (Test-Path $sourceAmd64Zip) {
+                    Copy-Item -Path $sourceAmd64Zip -Destination $destinationDir -Force -ErrorAction Stop
+                    Write-Output "Copied $sourceAmd64Zip to $destinationDir"
+                } else {
+                    Write-Error "File not found: $sourceAmd64Zip"
+                }
+
+                if (Test-Path $source386Zip) {
+                    Copy-Item -Path $source386Zip -Destination $destinationDir -Force -ErrorAction Stop
+                    Write-Output "Copied $source386Zip to $destinationDir"
+                } else {
+                    Write-Error "File not found: $source386Zip"
+                }
+
+                if (Test-Path $sourceArmExe) {
+                    Copy-Item -Path $sourceArmExe -Destination $destinationDir -Force -ErrorAction Stop
+                    Write-Output "Copied $sourceArmExe to $destinationDir"
+                } else {
+                    Write-Error "File not found: $sourceArmExe"
+                }
+
+
+            #         - task: PowerShell@2
+            # displayName: 'Copy zip to staging directory'
+            # inputs:
+            #   targetType: 'inline'
+            #   script: |
+            #     Copy-Item -Path "$(archives)\azcopy_windows_amd64_$(azcopy_version).zip" -Destination "$(Build.ArtifactStagingDirectory)"
+            #     Copy-Item -Path "$(archives)\azcopy_windows_386_$(azcopy_version).zip" -Destination "$(Build.ArtifactStagingDirectory)"
+            #     Copy-Item -Path "$(work_dir)\azcopy_windows_v7_arm.exe" -Destination "$(Build.ArtifactStagingDirectory)"
 
           - task: PublishBuildArtifacts@1
             inputs:
