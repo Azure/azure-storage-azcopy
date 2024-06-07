@@ -1024,7 +1024,7 @@ stages:
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Install deb Package'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)/azCopy-signed
 
           - script: | 
               azcopy_linux_amd64 --version
@@ -1101,7 +1101,7 @@ stages:
               sudo dpkg --info azcopy-*arm64.deb
               sudo dpkg -i azcopy-*arm64.deb
             displayName: 'Install Package'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)/azCopy-signed
 
           - script: | 
               azcopy_linux_arm64 --version
@@ -1184,7 +1184,7 @@ stages:
               sudo yum groupinstall "Development Tools" -y              
               sudo rpm -i azcopy-*.arm64.rpm
             displayName: 'Install Package'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)/azCopy-signed
 
           - script: | 
               azcopy_linux_arm64 --version
@@ -1267,7 +1267,7 @@ stages:
               sudo yum groupinstall "Development Tools" -y
               sudo rpm -i azcopy-*x86_64.rpm
             displayName: 'Install Package'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)/azCopy-signed
 
           - script: | 
               azcopy_linux_amd64 --version
