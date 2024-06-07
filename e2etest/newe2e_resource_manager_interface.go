@@ -15,6 +15,7 @@ import (
 type GetURIOptions struct {
 	RemoteOpts RemoteURIOpts
 	AzureOpts  AzureURIOpts
+	LocalOpts  LocalURIOpts
 }
 
 type RemoteURIOpts struct {
@@ -27,6 +28,10 @@ type AzureURIOpts struct {
 	WithSAS bool
 	// Defaults to a resource-level specific minimally permissioned SAS token.
 	SASValues GenericSignatureValues
+}
+
+type LocalURIOpts struct {
+	WithWildCard bool
 }
 
 type ResourceManager interface {
