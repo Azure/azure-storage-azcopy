@@ -1020,8 +1020,8 @@ stages:
             workingDirectory: $(root_dir)/azCopy-signed
             
           - script: |
-              sudo dpkg --info azcopy-*.x86_64.deb
-              sudo dpkg -i azcopy-*.x86_64.deb
+              sudo dpkg --info azcopy-*x86_64.deb
+              sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Install deb Package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
@@ -1086,7 +1086,7 @@ stages:
             inputs:
               artifactName: 'azCopy-signed'
               downloadPath: $(root_dir)
-              itemPattern: azCopy-signed/azcopy-*.arm64.deb
+              itemPattern: azCopy-signed/azcopy-*arm64.deb
 
           - script: |
               ls -l
@@ -1098,8 +1098,8 @@ stages:
             workingDirectory: $(root_dir)/azCopy-signed
 
           - script: |
-              sudo dpkg --info azcopy*.arm64.deb
-              sudo dpkg -i azcopy*.arm64.deb
+              sudo dpkg --info azcopy*arm64.deb
+              sudo dpkg -i azcopy*arm64.deb
             displayName: 'Install Package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
 
@@ -1346,8 +1346,8 @@ stages:
             workingDirectory: $(root_dir)/azCopy-signed/mariner              
 
           - script: |
-              sudo rpm -qip azcopy*.rpm
-              sudo rpm -i azcopy*.rpm
+              sudo rpm -qip azcopy*x86_64.rpm
+              sudo rpm -i azcopy*x86_64.rpm
             displayName: 'Install Package'
             workingDirectory: $(root_dir)/azCopy-signed/mariner
 
