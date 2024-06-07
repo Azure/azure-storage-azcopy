@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	blobfscommon "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
@@ -140,7 +141,7 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 	case common.ELocation.File():
 		sharedKey, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
 		a.NoError("Create shared key", err)
-		client, err := fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, nil)
+		client, err := fileservice.NewClientWithSharedKeyCredential(uri, sharedKey, &fileservice.ClientOptions{AllowTrailingDot: to.Ptr(true)})
 		a.NoError("Create File client", err)
 
 		return &FileServiceResourceManager{
