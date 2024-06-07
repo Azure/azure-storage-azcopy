@@ -1484,13 +1484,12 @@ stages:
 
             - task: Bash@3
               displayName: 'Rename Mariner binaries'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
               inputs:
                 targetType: 'inline'
                 script: |
                   cd mariner
-                  marinerArmFileName="$(Build.ArtifactStagingDirectory)/azcopy-10.25.0-Preview-1-cm2.arm64.rpm"
-                  marinerAmdFileName="$(Build.ArtifactStagingDirectory)/azcopy-10.25.0-Preview-1-cm2.x86_64.rpm"
+                  marinerArmFileName="$(Build.ArtifactStagingDirectory)/azcopy*-cm2.arm64.rpm"
+                  marinerAmdFileName="$(Build.ArtifactStagingDirectory)/azcopy*-cm2.x86_64.rpm"
                   mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"; done
                   mv -v ./azcopy*.X86_64.rpm "$marinerAmdFileName"; done
                   ls -lRt
