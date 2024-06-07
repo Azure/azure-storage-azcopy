@@ -1482,18 +1482,18 @@ stages:
                 artifactName: 'azCopy-signed'
                 downloadPath: $(Build.ArtifactStagingDirectory)
 
-               - script: |
-                  cd mariner
-                  marinerArmFileName="$(Build.ArtifactStagingDirectory)/azcopy*-cm2.arm64.rpm"
-                  marinerAmdFileName="$(Build.ArtifactStagingDirectory)/azcopy*-cm2.x86_64.rpm"
-                  mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
-                  mv -v ./azcopy*.X86_64.rpm "$marinerAmdFileName"
-                  ls -lRt
-                  mv azcopy*.rpm ..
-                  cd ..
-                  rm -r mariner/
-                displayName: 'Rename Mariner binaries'
-                workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
+            - script: |
+                cd mariner
+                marinerArmFileName="$(Build.ArtifactStagingDirectory)/azcopy*-cm2.arm64.rpm"
+                marinerAmdFileName="$(Build.ArtifactStagingDirectory)/azcopy*-cm2.x86_64.rpm"
+                mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
+                mv -v ./azcopy*.X86_64.rpm "$marinerAmdFileName"
+                ls -lRt
+                mv azcopy*.rpm ..
+                cd ..
+                rm -r mariner/
+              displayName: 'Rename Mariner binaries'
+              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
 
             - script: |
                 sudo ls -lRt $(Build.ArtifactStagingDirectory)
