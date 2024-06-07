@@ -165,6 +165,63 @@ func (s *ListSuite) Scenario_ListProperties(svm *ScenarioVariationManager) {
 	ValidateListOutput(svm, stdout, expectedObjects, nil)
 }
 
+func (s *ListSuite) Scenario_ListProperties_TextOutput(svm *ScenarioVariationManager) {
+	acct := GetAccount(svm, PrimaryStandardAcct)
+	srcService := acct.GetService(svm, common.ELocation.Blob())
+
+	svm.InsertVariationSeparator(":")
+	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
+
+	// Create expected objects
+	expectedObjects := make(map[AzCopyOutputKey]cmd.AzCopyListObject)
+	blobNames := []string{"AzURE2021.jpeg", "sub1/dir2/HELLO-4.txt", "sub1/test/testing.txt"}
+	for _, blobName := range blobNames {
+		obj := CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
+			ObjectName: pointerTo(blobName),
+			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+		})
+		props := obj.GetProperties(svm)
+		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
+		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{
+			Path:             blobName,
+			ContentLength:    "1.00 KiB",
+			LastModifiedTime: props.BlobProperties.LastModifiedTime,
+			VersionId:        versionId,
+			BlobType:         common.IffNotNil(props.BlobProperties.Type, ""),
+			BlobAccessTier:   common.IffNotNil(props.BlobProperties.BlockBlobAccessTier, ""),
+			ContentType:      common.IffNotNil(props.HTTPHeaders.contentType, ""),
+			ContentEncoding:  common.IffNotNil(props.HTTPHeaders.contentEncoding, ""),
+			ContentMD5:       props.HTTPHeaders.contentMD5,
+			LeaseState:       common.IffNotNil(props.BlobProperties.LeaseState, ""),
+			LeaseDuration:    common.IffNotNil(props.BlobProperties.LeaseDuration, ""),
+			LeaseStatus:      common.IffNotNil(props.BlobProperties.LeaseStatus, ""),
+			ArchiveStatus:    common.IffNotNil(props.BlobProperties.ArchiveStatus, ""),
+		}
+	}
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbList,
+			Targets: []ResourceManager{
+				srcContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: srcContainer.ContainerName(),
+						Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
+					},
+				}),
+			},
+			Flags: ListFlags{
+				GlobalFlags: GlobalFlags{
+					OutputType: to.Ptr(common.EOutputFormat.Text()),
+				},
+				Properties: to.Ptr("LastModifiedTime;VersionId;BlobType;BlobAccessTier;ContentType;ContentEncoding;ContentMD5;LeaseState;LeaseStatus;LeaseDuration;ArchiveStatus"),
+			},
+		})
+
+	ValidateListTextOutput(svm, stdout, expectedObjects, nil)
+}
+
 func (s *ListSuite) Scenario_ListPropertiesInvalid(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
@@ -290,7 +347,7 @@ func (s *ListSuite) Scenario_ListMegaUnits(svm *ScenarioVariationManager) {
 	ValidateListOutput(svm, stdout, expectedObjects, nil)
 }
 
-func (s *ListSuite) Scenario_ListBasicText(svm *ScenarioVariationManager) {
+func (s *ListSuite) Scenario_ListBasic_TextOutput(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
 
@@ -322,7 +379,6 @@ func (s *ListSuite) Scenario_ListBasicText(svm *ScenarioVariationManager) {
 			},
 		})
 
-	// expectedObjects := []string{"test; Content Length: 1.00 KiB"}
 	expectedObjects := map[AzCopyOutputKey]cmd.AzCopyListObject{
 		AzCopyOutputKey{Path: "test"}: {Path: "test", ContentLength: "1.00 KiB"},
 	}
@@ -494,11 +550,10 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVari
 	ValidateListOutput(svm, stdout, expectedObjects, expectedSummary)
 }
 
-func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersionsText(svm *ScenarioVariationManager) {
+func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions_TextOutput(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
 
-	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
 
 	// Create expected objects
@@ -510,7 +565,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersionsText(svm *Scenario
 			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
-		versionId := *props.BlobProperties.VersionId
+		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "1.00 KiB", VersionId: versionId}
 	}
 

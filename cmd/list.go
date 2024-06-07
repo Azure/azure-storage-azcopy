@@ -66,7 +66,8 @@ const (
 	LeaseStatus      validProperty = "LeaseStatus"
 	ArchiveStatus    validProperty = "ArchiveStatus"
 
-	versionIdTimeFormat = "2006-01-02T15:04:05.9999999Z"
+	versionIdTimeFormat    = "2006-01-02T15:04:05.9999999Z"
+	LastModifiedTimeFormat = "2006-01-02 15:04:05 +0000 GMT"
 )
 
 // containsProperty checks if the property array contains a valid property
