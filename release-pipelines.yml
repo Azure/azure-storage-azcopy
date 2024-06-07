@@ -1180,9 +1180,9 @@ stages:
 
           - script: |
               sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
-              sudo rpm -qip azcopy-*arm64.rpm
+              sudo rpm -qip azcopy-*.arm64.rpm
               sudo yum groupinstall "Development Tools" -y              
-              sudo rpm -i azcopy-*arm64.rpm
+              sudo rpm -i azcopy-*.arm64.rpm
             displayName: 'Install Package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
 
