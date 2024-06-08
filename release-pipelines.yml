@@ -1502,15 +1502,15 @@ stages:
               displayName: 'List Artifacts'
 
             - script: |
-                mv azcopy_linux_se_amd64 .
-                mv azcopy*.zip .
-                mv azcopy*.exe .
+                mv azCopy-signed/azcopy_linux_se_amd64 .
+                mv azCopy-signed/azcopy*.zip .
+                mv azCopy-signed/azcopy*.exe .
                 pmc package upload azCopy-signed
-                mv azcopy_linux_se_amd64 azCopy-signed
-                mv azcopy*.zip azCopy-signed
-                mv azcopy*.exe azCopy-signed
+                mv azcopy_linux_se_amd64 azCopy-signed/
+                mv azcopy*.zip azCopy-signed/
+                mv azcopy*.exe azCopy-signed/
                 displayName: 'Upload files'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
+              workingDirectory: $(Build.ArtifactStagingDirectory)
 
             - script: |
                 wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
