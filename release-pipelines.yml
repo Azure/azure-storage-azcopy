@@ -1484,10 +1484,12 @@ stages:
 
             - script: |
                 cd mariner
-                marinerArmFileName="$(Build.ArtifactStagingDirectory)/azcopy*-cm2.arm64.rpm"
-                marinerAmdFileName="$(Build.ArtifactStagingDirectory)/azcopy*-cm2.x86_64.rpm"
+                arm64file=$(ls azcopy*.arm64.rpm)
+                amd64file=$(ls azcopy*.x86_64.rpm)
+                marinerArmFileName="${arm64file/-1/-1-cm2}"
+                marinerAmdFileName="${amd64file/-1/-1-cm2}"
                 mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
-                mv -v ./azcopy*.X86_64.rpm "$marinerAmdFileName"
+                mv -v ./azcopy*.x86_64.rpm "$marinerAmdFileName"
                 ls -lRt
                 mv azcopy*.rpm ..
                 cd ..
@@ -1500,9 +1502,13 @@ stages:
               displayName: 'List Artifacts'
 
             - script: |
-                mv azCopy-signed/azcopy_linux_se_amd64 .
+                mv azcopy_linux_se_amd64 .
+                mv azcopy*.zip .
+                mv azcopy*.exe .
                 pmc package upload azCopy-signed
                 mv azcopy_linux_se_amd64 azCopy-signed
+                mv azcopy*.zip azCopy-signed
+                mv azcopy*.exe azCopy-signed
                 displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
 
