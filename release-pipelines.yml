@@ -1509,7 +1509,7 @@ stages:
                 mv azcopy_linux_se_amd64 azCopy-signed/
                 mv azcopy*.zip azCopy-signed/
                 mv azcopy*.exe azCopy-signed/
-                displayName: 'Upload files'
+              displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
             - script: |
