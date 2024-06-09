@@ -347,6 +347,7 @@ stages:
 
           # install dependencies required for compiling azcopy
           - script: |
+              sudo apt-get clean
               sudo apt-get update --fix-missing
               sudo apt-get install pkg-config libsecret-1-dev -y
               sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
@@ -474,6 +475,7 @@ stages:
 
           # install dependencies required for compiling azcopy
           - script: |
+              sudo apt-get clean
               sudo apt-get update --fix-missing
               sudo apt-get install pkg-config libsecret-1-dev wget -y
               sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
@@ -850,6 +852,7 @@ stages:
             workingDirectory: $(Build.ArtifactStagingDirectory)
           
           - script: |
+              sudo apt-get clean
               sudo apt-get update
               sudo apt-get upgrade -y
               sudo apt-get install -f --fix-missing
@@ -955,6 +958,7 @@ stages:
             displayName: 'List Artifacts'
           
           - script: |
+              sudo apt-get clean
               sudo apt-get update
               sudo apt-get upgrade -y
               sudo apt-get install -f --fix-missing
@@ -1038,6 +1042,7 @@ stages:
             displayName: 'List Artifacts'
           
           - script: |
+              sudo apt-get clean
               sudo apt-get update
               sudo apt-get upgrade -y
               sudo apt-get install -f --fix-missing
@@ -1527,6 +1532,7 @@ stages:
             displayName: 'List Artifacts'
 
           - script: |
+              sudo apt-get clean
               sudo apt-get update --fix-missing
               wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
               sudo dpkg -i packages-microsoft-prod.deb 
