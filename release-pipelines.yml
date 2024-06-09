@@ -810,7 +810,7 @@ stages:
         timeoutInMinutes: 120
         strategy:
           matrix:
-            Ubuntu-22:
+            Linux-Signing:
               vmImage: 'Ubuntu-20.04'
               AgentName: "blobfuse-ubuntu20"
         pool:
@@ -923,7 +923,7 @@ stages:
         timeoutInMinutes: 120
         strategy:
           matrix:
-            Ubuntu-22:
+            Windows-Signing:
               vmImage: 'Ubuntu-20.04'
               AgentName: "blobfuse-ubuntu20"
         pool:
@@ -963,24 +963,24 @@ stages:
             displayName: "Update dependencies"
             
           
-          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
-            displayName: 'ESRP CodeSigning azCopy windows'
-            inputs:
-              ConnectedServiceName: 'PMC ESRP azCopy Signing'
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-windows-temp'
-              Pattern: '*.zip, *.exe'
-              signConfigType: inlineSignParams
-              VerboseLogin: true
-              inlineOperation: |
-                [
-                  {
-                    "KeyCode" : "$(ESRP_AZCOPY_MARINER_KEY_CODE)",
-                    "OperationCode" : "WindowsSign",
-                    "Parameters" : {},
-                    "ToolName" : "sign",
-                    "ToolVersion" : "1.0"
-                  }
-                ]
+          # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+          #   displayName: 'ESRP CodeSigning azCopy windows'
+          #   inputs:
+          #     ConnectedServiceName: 'PMC ESRP azCopy Signing'
+          #     FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-windows-temp'
+          #     Pattern: '*.zip, *.exe'
+          #     signConfigType: inlineSignParams
+          #     VerboseLogin: true
+          #     inlineOperation: |
+          #       [
+          #         {
+          #           "KeyCode" : "$(ESRP_AZCOPY_MARINER_KEY_CODE)",
+          #           "OperationCode" : "WindowsSign",
+          #           "Parameters" : {},
+          #           "ToolName" : "sign",
+          #           "ToolVersion" : "1.0"
+          #         }
+          #       ]
 
           # Validate signed images have md5sum changed
           - script: |
@@ -1045,24 +1045,24 @@ stages:
             displayName: "Update dependencies"
             
 
-          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
-            displayName: 'ESRP CodeSigning macOS AzCopy'
-            inputs:
-              ConnectedServiceName: 'PMC ESRP AzCopy Signing'
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
-              Pattern: 'azcopy_darwin*'
-              signConfigType: inlineSignParams
-              VerboseLogin: true
-              inlineOperation: |
-                [
-                  {
-                    "KeyCode" : "$(ESRP_AZCOPY_MACOS_KEY_CODE)",
-                    "OperationCode" : "MacOSSign",
-                    "Parameters" : {},
-                    "ToolName" : "sign",
-                    "ToolVersion" : "1.0"
-                  }
-                ]
+          # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+          #   displayName: 'ESRP CodeSigning macOS AzCopy'
+          #   inputs:
+          #     ConnectedServiceName: 'PMC ESRP AzCopy Signing'
+          #     FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
+          #     Pattern: 'azcopy_darwin*'
+          #     signConfigType: inlineSignParams
+          #     VerboseLogin: true
+          #     inlineOperation: |
+          #       [
+          #         {
+          #           "KeyCode" : "$(ESRP_AZCOPY_MACOS_KEY_CODE)",
+          #           "OperationCode" : "MacOSSign",
+          #           "Parameters" : {},
+          #           "ToolName" : "sign",
+          #           "ToolVersion" : "1.0"
+          #         }
+          #       ]
 
           # Validate signed images have md5sum changed
           - script: |
