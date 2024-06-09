@@ -850,10 +850,11 @@ stages:
             workingDirectory: $(Build.ArtifactStagingDirectory)
           
           - script: |
-              sudo apt-get update --fix-missing
+              sudo apt-get update
+              sudo apt-get upgrade -y
+              sudo apt-get install -f --fix-missing
               wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
               sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt update 
               sudo apt install apt-transport-https -y
               sudo apt install dotnet-sdk-3.1 -y
             displayName: "Update dependencies"
@@ -954,10 +955,11 @@ stages:
             displayName: 'List Artifacts'
           
           - script: |
-              sudo apt-get update --fix-missing
+              sudo apt-get update
+              sudo apt-get upgrade -y
+              sudo apt-get install -f --fix-missing
               wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
               sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt update 
               sudo apt install apt-transport-https -y
               sudo apt install dotnet-sdk-3.1 -y
             displayName: "Update dependencies"
@@ -1036,7 +1038,9 @@ stages:
             displayName: 'List Artifacts'
           
           - script: |
-              sudo apt-get update --fix-missing
+              sudo apt-get update
+              sudo apt-get upgrade -y
+              sudo apt-get install -f --fix-missing
               wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
               sudo dpkg -i packages-microsoft-prod.deb 
               sudo apt update 
