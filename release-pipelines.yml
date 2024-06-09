@@ -421,7 +421,7 @@ stages:
 
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azCopy-temp'
+              artifactName: 'azCopy-linux-temp'
             displayName: 'Publish Artifacts'
             condition: succeededOrFailed()
         
@@ -539,7 +539,7 @@ stages:
 
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azCopy-temp'
+              artifactName: 'azCopy-linux-temp'
             displayName: 'Publish Artifacts'
             condition: succeededOrFailed()
         
@@ -698,7 +698,7 @@ stages:
 
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azCopy-temp'
+              artifactName: 'azCopy-windows-temp'
             displayName: 'Publish Artifacts'
             condition: succeededOrFailed()
         
@@ -708,7 +708,6 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-     
       - job: Set_4
         timeoutInMinutes: 360
         strategy:
@@ -792,7 +791,7 @@ stages:
 
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azCopy-temp'
+              artifactName: 'azCopy-mac-temp'
             displayName: 'Publish Artifacts'
             condition: succeededOrFailed()
         
@@ -833,18 +832,18 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'azCopy-temp'
+              artifactName: 'azCopy-linux-temp'
               downloadPath: $(Build.ArtifactStagingDirectory)
           
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-temp/*
+              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
             displayName: 'List Artifacts'
 
           - script: |
               mkdir mariner && chmod 755 mariner
-              cp azCopy-temp/*arm64.rpm mariner
-              cp azCopy-temp/*x86_64.rpm mariner
+              cp azCopy-linux-temp/*arm64.rpm mariner
+              cp azCopy-linux-temp/*x86_64.rpm mariner
               sudo ls -lRt mariner
               md5sum mariner/*
             displayName: 'Copy artifacts for Mariner'
@@ -864,7 +863,7 @@ stages:
             displayName: 'ESRP CodeSigning azCopy linux'
             inputs:
               ConnectedServiceName: 'PMC ESRP AzCopy Signing'
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-temp'
+              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-linux-temp'
               Pattern: '*.rpm, *.deb'
               signConfigType: inlineSignParams
               VerboseLogin: true
@@ -898,52 +897,14 @@ stages:
                   }
                 ]
 
-          # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
-          #   displayName: 'ESRP CodeSigning azCopy windows'
-          #   inputs:
-          #     ConnectedServiceName: 'PMC ESRP azCopy Signing'
-          #     FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-temp'
-          #     Pattern: '*.zip, *.exe'
-          #     signConfigType: inlineSignParams
-          #     VerboseLogin: true
-          #     inlineOperation: |
-          #       [
-          #         {
-          #           "KeyCode" : "$(ESRP_AZCOPY_MARINER_KEY_CODE)",
-          #           "OperationCode" : "WindowsSign",
-          #           "Parameters" : {},
-          #           "ToolName" : "sign",
-          #           "ToolVersion" : "1.0"
-          #         }
-          #       ]
-
-          # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
-          #   displayName: 'ESRP CodeSigning macOS AzCopy'
-          #   inputs:
-          #     ConnectedServiceName: 'PMC ESRP AzCopy Signing'
-          #     FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-temp'
-          #     Pattern: 'azcopy_darwin*'
-          #     signConfigType: inlineSignParams
-          #     VerboseLogin: true
-          #     inlineOperation: |
-          #       [
-          #         {
-          #           "KeyCode" : "$(ESRP_AZCOPY_MACOS_KEY_CODE)",
-          #           "OperationCode" : "MacOSSign",
-          #           "Parameters" : {},
-          #           "ToolName" : "sign",
-          #           "ToolVersion" : "1.0"
-          #         }
-          #       ]
-
           # Validate signed images have md5sum changed
           - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-temp/*
+              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
               chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-temp/*.md
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*.md
               rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
-              mv $(Build.ArtifactStagingDirectory)/azCopy-temp/* $(Build.ArtifactStagingDirectory)/
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-temp/
+              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/* $(Build.ArtifactStagingDirectory)/
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/
             displayName: 'Make Artifacts executable'
 
           - script: |
@@ -955,7 +916,171 @@ stages:
           # Push signed images to artifact directory
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azCopy-signed'
+              artifactName: 'azCopy-linux-signed'
+            displayName: 'Publish Signed Artifacts'
+
+      - job: Set_2
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu-22:
+              vmImage: 'Ubuntu-20.04'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
+
+        variables:
+          - group: AZCOPY_ESRP_SECRET
+
+        steps:
+          - checkout: none
+          
+          - script: |
+              echo ${{ parameters.tag }}
+            displayName: 'Tag Name'
+          
+          # download artifacts that need to be published
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-windows-temp'
+              downloadPath: $(Build.ArtifactStagingDirectory)
+          
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
+            displayName: 'List Artifacts'
+          
+          - script: |
+              sudo apt-get update
+              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+              sudo dpkg -i packages-microsoft-prod.deb 
+              sudo apt update 
+              sudo apt install apt-transport-https -y
+              sudo apt install dotnet-sdk-3.1 -y
+            displayName: "Update dependencies"
+            
+          
+          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+            displayName: 'ESRP CodeSigning azCopy windows'
+            inputs:
+              ConnectedServiceName: 'PMC ESRP azCopy Signing'
+              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-windows-temp'
+              Pattern: '*.zip, *.exe'
+              signConfigType: inlineSignParams
+              VerboseLogin: true
+              inlineOperation: |
+                [
+                  {
+                    "KeyCode" : "$(ESRP_AZCOPY_MARINER_KEY_CODE)",
+                    "OperationCode" : "WindowsSign",
+                    "Parameters" : {},
+                    "ToolName" : "sign",
+                    "ToolVersion" : "1.0"
+                  }
+                ]
+
+          # Validate signed images have md5sum changed
+          - script: |
+              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/* $(Build.ArtifactStagingDirectory)/
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/
+            displayName: 'Make Artifacts executable'
+
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/*
+            displayName: 'List Signed Artifacts'
+          
+          # Push signed images to artifact directory
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-windows-signed'
+            displayName: 'Publish Signed Artifacts'
+
+      - job: Set_3
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Mac-Signing:
+              vmImage: 'Ubuntu-20.04'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
+
+        variables:
+          - group: AZCOPY_ESRP_SECRET
+
+        steps:
+          - checkout: none
+          
+          - script: |
+              echo ${{ parameters.tag }}
+            displayName: 'Tag Name'
+          
+          # download artifacts that need to be published
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-mac-temp'
+              downloadPath: $(Build.ArtifactStagingDirectory)
+          
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+            displayName: 'List Artifacts'
+          
+          - script: |
+              sudo apt-get update
+              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+              sudo dpkg -i packages-microsoft-prod.deb 
+              sudo apt update 
+              sudo apt install apt-transport-https -y
+              sudo apt install dotnet-sdk-3.1 -y
+            displayName: "Update dependencies"
+            
+
+          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+            displayName: 'ESRP CodeSigning macOS AzCopy'
+            inputs:
+              ConnectedServiceName: 'PMC ESRP AzCopy Signing'
+              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
+              Pattern: 'azcopy_darwin*'
+              signConfigType: inlineSignParams
+              VerboseLogin: true
+              inlineOperation: |
+                [
+                  {
+                    "KeyCode" : "$(ESRP_AZCOPY_MACOS_KEY_CODE)",
+                    "OperationCode" : "MacOSSign",
+                    "Parameters" : {},
+                    "ToolName" : "sign",
+                    "ToolVersion" : "1.0"
+                  }
+                ]
+
+          # Validate signed images have md5sum changed
+          - script: |
+              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
+              mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(Build.ArtifactStagingDirectory)/
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
+            displayName: 'Make Artifacts executable'
+
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/*
+            displayName: 'List Signed Artifacts'
+          
+          # Push signed images to artifact directory
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-mac-signed'
             displayName: 'Publish Signed Artifacts'
 
   # SignArtifacts end here
@@ -1006,9 +1131,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'azCopy-signed'
+              artifactName: 'azCopy-linux-signed'
               downloadPath: $(root_dir)
-              itemPattern: azCopy-signed/azcopy-*x86_64.deb
+              itemPattern: azCopy-linux-signed/azcopy-*x86_64.deb
 
           - script: |
               ls -l
@@ -1017,14 +1142,14 @@ stages:
                 exit 1
               fi
             displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            workingDirectory: $(root_dir)/azCopy-linux-signed
             
           - script: |
               sudo dpkg --info azcopy-*x86_64.deb
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Install deb Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            workingDirectory: $(root_dir)/azCopy-linux-signed
 
           - script: | 
               azcopy_linux_amd64 --version
@@ -1084,9 +1209,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'azCopy-signed'
+              artifactName: 'azCopy-linux-signed'
               downloadPath: $(root_dir)
-              itemPattern: azCopy-signed/azcopy-*arm64.deb
+              itemPattern: azCopy-linux-signed/azcopy-*arm64.deb
 
           - script: |
               ls -l
@@ -1095,13 +1220,13 @@ stages:
                 exit 1
               fi
             displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            workingDirectory: $(root_dir)/azCopy-linux-signed
 
           - script: |
               sudo dpkg --info azcopy-*arm64.deb
               sudo dpkg -i azcopy-*arm64.deb
             displayName: 'Install Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            workingDirectory: $(root_dir)/azCopy-linux-signed
 
           - script: | 
               azcopy_linux_arm64 --version
@@ -1165,9 +1290,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'azCopy-signed'
+              artifactName: 'azCopy-linux-signed'
               downloadPath: $(root_dir)
-              itemPattern: azCopy-signed/azcopy-*arm64.rpm
+              itemPattern: azCopy-linux-signed/azcopy-*arm64.rpm
 
           - script: |
               ls -l
@@ -1176,7 +1301,7 @@ stages:
                 exit 1
               fi
             displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            workingDirectory: $(root_dir)/azCopy-linux-signed
 
           - script: |
               sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
@@ -1184,7 +1309,7 @@ stages:
               sudo yum groupinstall "Development Tools" -y              
               sudo rpm -i azcopy-*.arm64.rpm
             displayName: 'Install Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            workingDirectory: $(root_dir)/azCopy-linux-signed
 
           - script: | 
               azcopy_linux_arm64 --version
@@ -1248,9 +1373,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'azCopy-signed'
+              artifactName: 'azCopy-linux-signed'
               downloadPath: $(root_dir)
-              itemPattern: azCopy-signed/azcopy-*x86_64.rpm
+              itemPattern: azCopy-linux-signed/azcopy-*x86_64.rpm
 
           - script: |
               ls -l
@@ -1259,7 +1384,7 @@ stages:
                 exit 1
               fi
             displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            workingDirectory: $(root_dir)/azCopy-linux-signed
 
           - script: |
               sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
@@ -1267,7 +1392,7 @@ stages:
               sudo yum groupinstall "Development Tools" -y
               sudo rpm -i azcopy-*x86_64.rpm
             displayName: 'Install Package'
-            workingDirectory: $(root_dir)/azCopy-signed
+            workingDirectory: $(root_dir)/azCopy-linux-signed
 
           - script: | 
               azcopy_linux_amd64 --version
@@ -1332,9 +1457,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'azCopy-signed'
+              artifactName: 'azCopy-linux-signed'
               downloadPath: $(root_dir)
-              itemPattern: azCopy-signed/mariner/azcopy*x86_64.rpm
+              itemPattern: azCopy-linux-signed/mariner/azcopy*x86_64.rpm
 
           - script: |
               ls -l
@@ -1343,13 +1468,13 @@ stages:
                 exit 1
               fi
             displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-signed/mariner              
+            workingDirectory: $(root_dir)/azCopy-linux-signed/mariner              
 
           - script: |
               sudo rpm -qip azcopy*x86_64.rpm
               sudo rpm -i azcopy*x86_64.rpm
             displayName: 'Install Package'
-            workingDirectory: $(root_dir)/azCopy-signed/mariner
+            workingDirectory: $(root_dir)/azCopy-linux-signed/mariner
 
           - script: | 
               azcopy_linux_amd64 --version
@@ -1388,13 +1513,13 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifactName: 'azCopy-signed'
+              artifactName: 'azCopy-linux-signed'
               downloadPath: $(Build.ArtifactStagingDirectory)
           
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-signed/*.deb
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-signed/*.rpm
+              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
+              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
             displayName: 'List Artifacts'
 
           - script: |
@@ -1422,7 +1547,7 @@ stages:
                   tag: ${{ parameters.tag }}
 
                   assets: |
-                    $(Build.ArtifactStagingDirectory)/azCopy-signed/*
+                    $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
                   changeLogCompareToRelease: 'lastFullRelease'
                   changeLogType: 'commitBased'
                   isDraft: ${{ parameters.draft }}
@@ -1479,7 +1604,7 @@ stages:
             - task: DownloadBuildArtifacts@0
               displayName: 'Download Signed Artifacts'
               inputs:
-                artifactName: 'azCopy-signed'
+                artifactName: 'azCopy-linux-signed'
                 downloadPath: $(Build.ArtifactStagingDirectory)
 
             - script: |
@@ -1495,20 +1620,16 @@ stages:
                 cd ..
                 rm -r mariner/
               displayName: 'Rename Mariner binaries'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
+              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
             - script: |
                 sudo ls -lRt $(Build.ArtifactStagingDirectory)
               displayName: 'List Artifacts'
 
             - script: |
-                mv azCopy-signed/azcopy_linux_se_amd64 .
-                mv azCopy-signed/azcopy*.zip .
-                mv azCopy-signed/azcopy*.exe .
-                pmc package upload azCopy-signed
-                mv azcopy_linux_se_amd64 azCopy-signed/
-                mv azcopy*.zip azCopy-signed/
-                mv azcopy*.exe azCopy-signed/
+                mv azCopy-linux-signed/azcopy_linux_se_amd64 .
+                pmc package upload azCopy-linux-signed
+                mv azcopy_linux_se_amd64 azCopy-linux-signed/
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
@@ -1542,7 +1663,7 @@ stages:
                   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
                 done < <(tail -n +3 ../packages.csv)
               displayName: 'Add uploaded packages to repository'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
+              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
             - script: |
                 while IFS=, read -r distro fuseArchType repoName releaseName; do
@@ -1555,7 +1676,7 @@ stages:
                   fi
                 done < <(tail -n +3 ../packages.csv)
               displayName: 'Publish the repository'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-signed/
+              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
   # - stage: UpdateLatestVersion
   #   dependsOn: ReleaseArtifacts
