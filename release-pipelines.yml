@@ -1413,7 +1413,7 @@ stages:
                 inputs:
                   githubConnection: 'github.com_dphulkar-msft'
                   repositoryName: 'dphulkar-msft/azure-storage-azcopy'
-                  action: 'edit'
+                  action: 'create'
 
                   target: '$(Build.SourceVersion)'
                   tagSource: 'userSpecifiedTag'
