@@ -21,6 +21,7 @@
 package common
 
 import (
+	"encoding/json"
 	"reflect"
 	"runtime"
 	"strings"
@@ -88,7 +89,6 @@ func (EnvironmentVariable) UserDir() EnvironmentVariable {
 
 var EAutoLoginType = AutoLoginType(0)
 
-// Wrapper type for AutoLoginType that handles custom JSON marshaling and unmarshaling
 type AutoLoginType uint8
 
 func (AutoLoginType) Device() AutoLoginType     { return AutoLoginType(0) }
@@ -115,6 +115,29 @@ func (d *AutoLoginType) Parse(s string) error {
 		*d = val.(AutoLoginType)
 	}
 	return err
+}
+
+// MarshalJSON customizes the JSON encoding for AutoLoginType
+func (d AutoLoginType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+// UnmarshalJSON customizes the JSON decoding for AutoLoginType
+func (d *AutoLoginType) UnmarshalJSON(data []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	if strValue, ok := v.(string); ok {
+		return d.Parse(strValue)
+	}
+	// Handle numeric values
+	if numValue, ok := v.(float64); ok {
+		*d = AutoLoginType(uint8(numValue))
+		return nil
+	}
+
+	return nil
 }
 
 func ValidAutoLoginTypes() []string {

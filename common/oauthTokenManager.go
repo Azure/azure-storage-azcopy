@@ -770,29 +770,6 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 	}
 }
 
-// MarshalJSON customizes the JSON encoding for AutoLoginType
-func (alt AutoLoginType) MarshalJSON() ([]byte, error) {
-	return json.Marshal(alt.String())
-}
-
-// UnmarshalJSON customizes the JSON decoding for AutoLoginType
-func (alt *AutoLoginType) UnmarshalJSON(data []byte) error {
-	var v interface{}
-	if err := json.Unmarshal(data, &v); err != nil {
-		return err
-	}
-	if strValue, ok := v.(string); ok {
-		return alt.Parse(strValue)
-	}
-	// Handle numeric values
-	if numValue, ok := v.(float64); ok {
-		*alt = AutoLoginType(uint8(numValue))
-		return nil
-	}
-
-	return nil
-}
-
 // jsonToTokenInfo converts bytes to OAuthTokenInfo
 func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	var OAuthTokenInfo OAuthTokenInfo
