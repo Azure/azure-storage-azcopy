@@ -164,7 +164,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 
 func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType: EAutoLoginType.Workload(),
+		LoginType: AutoLoginTypeJSON{EAutoLoginType.Workload()},
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo, persist)
@@ -172,7 +172,7 @@ func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {
 
 func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType: EAutoLoginType.AzCLI(),
+		LoginType: AutoLoginTypeJSON{EAutoLoginType.AzCLI()},
 		Tenant:    tenantID,
 	}
 
@@ -182,7 +182,7 @@ func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
 
 func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType: EAutoLoginType.PsCred(),
+		LoginType: AutoLoginTypeJSON{EAutoLoginType.PsCred()},
 		Tenant:    tenantID,
 	}
 
@@ -196,7 +196,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 	}
 
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType:    EAutoLoginType.MSI(),
+		LoginType:    AutoLoginTypeJSON{EAutoLoginType.MSI()},
 		IdentityInfo: identityInfo,
 	}
 
@@ -206,7 +206,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(identityInfo IdentityInfo, persist b
 // SecretLogin is a UOTM shell for secretLoginNoUOTM.
 func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType:               EAutoLoginType.SPN(),
+		LoginType:               AutoLoginTypeJSON{EAutoLoginType.SPN()},
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           applicationID,
@@ -223,7 +223,7 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) error {
 	absCertPath, _ := filepath.Abs(certPath)
 	oAuthTokenInfo := &OAuthTokenInfo{
-		LoginType:               EAutoLoginType.SPN(),
+		LoginType:               AutoLoginTypeJSON{EAutoLoginType.SPN()},
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           applicationID,
@@ -281,7 +281,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	}
 
 	oAuthTokenInfo := OAuthTokenInfo{
-		LoginType:               EAutoLoginType.Device(),
+		LoginType:               AutoLoginTypeJSON{EAutoLoginType.Device()},
 		Token:                   *token,
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
@@ -398,7 +398,7 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %v", err)
 	}
 
-	if tokenInfo.LoginType != EAutoLoginType.TokenStore() {
+	if tokenInfo.LoginType.AutoLoginType != EAutoLoginType.TokenStore() {
 		refreshedToken, err := tokenInfo.Refresh(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %v", err)
@@ -415,10 +415,10 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 type OAuthTokenInfo struct {
 	azcore.TokenCredential `json:"-"`
 	adal.Token
-	Tenant                  string        `json:"_tenant"`
-	ActiveDirectoryEndpoint string        `json:"_ad_endpoint"`
-	LoginType               AutoLoginType `json:"_token_refresh_source"`
-	ApplicationID           string        `json:"_application_id"`
+	Tenant                  string            `json:"_tenant"`
+	ActiveDirectoryEndpoint string            `json:"_ad_endpoint"`
+	LoginType               AutoLoginTypeJSON `json:"_token_refresh_source"`
+	ApplicationID           string            `json:"_application_id"`
 	IdentityInfo            IdentityInfo
 	SPNInfo                 SPNInfo
 }
@@ -465,7 +465,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 	if err != nil {
 		return nil, err
 	}
-	if credInfo.LoginType == EAutoLoginType.TokenStore() || credInfo.LoginType != EAutoLoginType.Device() {
+	if credInfo.LoginType.AutoLoginType == EAutoLoginType.TokenStore() || credInfo.LoginType.AutoLoginType != EAutoLoginType.Device() {
 		scopes := []string{StorageScope}
 		t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
 		if err != nil {
@@ -744,11 +744,11 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 		return credInfo.TokenCredential, nil
 	}
 
-	if credInfo.LoginType == EAutoLoginType.TokenStore() {
+	if credInfo.LoginType.AutoLoginType == EAutoLoginType.TokenStore() {
 		return credInfo.GetTokenStoreCredential()
 	}
 
-	switch credInfo.LoginType {
+	switch credInfo.LoginType.AutoLoginType {
 	case EAutoLoginType.MSI():
 		return credInfo.GetManagedIdentityCredential()
 	case EAutoLoginType.SPN():
@@ -770,27 +770,32 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 	}
 }
 
-// @brief MarshalJSON implements the json.Marshaler interface for AutoLoginType
-func (alt AutoLoginType) MarshalJSON() ([]byte, error) {
-	str := strconv.FormatUint(uint64(alt), 10)
-	return json.Marshal(str)
+// MarshalJSON customizes the JSON encoding for AutoLoginTypeJSON
+func (alt AutoLoginTypeJSON) MarshalJSON() ([]byte, error) {
+	return json.Marshal(alt.AutoLoginType)
 }
 
-// @brief UnmarshalJSON implements the json.Unmarshaler interface for autoLoginType
-func (alt *AutoLoginType) UnmarshalJSON(data []byte) (err error) {
-
-	var autoLoginTypeStr string
-	if err := json.Unmarshal(data, &autoLoginTypeStr); err != nil {
+// UnmarshalJSON customizes the JSON decoding for AutoLoginTypeJSON
+func (alt *AutoLoginTypeJSON) UnmarshalJSON(data []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}
 
-	val, err := strconv.ParseUint(autoLoginTypeStr, 10, 8)
-	if err != nil {
-		return
+	switch value := v.(type) {
+	case float64:
+		alt.AutoLoginType = AutoLoginType(value)
+	case string:
+		uintValue, err := strconv.ParseUint(value, 10, 8)
+		if err != nil {
+			return err
+		}
+		alt.AutoLoginType = AutoLoginType(uint8(uintValue))
+	default:
+		return fmt.Errorf("unsupported type for AutoLoginType: %T", value)
 	}
 
-	*alt = AutoLoginType(uint8(val))
-	return
+	return nil
 }
 
 // jsonToTokenInfo converts bytes to OAuthTokenInfo
@@ -799,7 +804,7 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
 		return nil, err
 	}
-	if OAuthTokenInfo.LoginType == EAutoLoginType.TokenStore() {
+	if OAuthTokenInfo.LoginType.AutoLoginType == EAutoLoginType.TokenStore() {
 		_, _ = OAuthTokenInfo.GetTokenStoreCredential()
 	}
 	return &OAuthTokenInfo, nil

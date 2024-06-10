@@ -40,7 +40,7 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "This UT tests if AutoLoginType filed is parsed properly from string to uint8 data type",
+			name: "This UT tests if AutoLoginType filled is parsed properly from string to uint8 data type",
 			uotm: &UserOAuthTokenManager{},
 			args: args{
 				ctx: context.Background(),
@@ -78,7 +78,60 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 			want: &OAuthTokenInfo{
 				Tenant:                  "dummy_tenant",
 				ActiveDirectoryEndpoint: "dummy_ad_endpoint",
-				LoginType:               255,
+				LoginType:               AutoLoginTypeJSON{AutoLoginType: 255},
+				ApplicationID:           "dummy_application_id",
+				IdentityInfo: IdentityInfo{
+					ClientID: "dummy_identity_client_id",
+					ObjectID: "dummy_identity_object_id",
+					MSIResID: "dummy_identity_msi_res_id",
+				},
+				SPNInfo: SPNInfo{
+					Secret:   "dummy_spn_secret",
+					CertPath: "dummy_spn_cert_path",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "This UT tests if AutoLoginType filled is parsed properly to uint8 data type",
+			uotm: &UserOAuthTokenManager{},
+			args: args{
+				ctx: context.Background(),
+			},
+			setup: func(t *testing.T) {
+				tokenInfoJSON := `{
+					"access_token": "dummy_access_token",
+					"refresh_token": "dummy_refresh_token",
+					"expires_in": 0,
+					"expires_on": 0,
+					"not_before": 0,
+					"resource": "dummy_resource",
+					"token_type": "dummy_token_type",
+					"_tenant": "dummy_tenant",
+					"_ad_endpoint": "dummy_ad_endpoint",
+					"_token_refresh_source": 255,
+					"_application_id": "dummy_application_id",
+					"IdentityInfo": {
+						"_identity_client_id": "dummy_identity_client_id",
+						"_identity_object_id": "dummy_identity_object_id",
+						"_identity_msi_res_id": "dummy_identity_msi_res_id"
+					},
+					"SPNInfo": {
+						"_spn_secret": "dummy_spn_secret",
+						"_spn_cert_path": "dummy_spn_cert_path"
+					}
+				}`
+
+				// Set the environment variable AZCOPY_OAUTH_TOKEN_INFO
+				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfoJSON)
+				if err != nil {
+					t.Fatalf("Failed to set environment variable: %v", err)
+				}
+			},
+			want: &OAuthTokenInfo{
+				Tenant:                  "dummy_tenant",
+				ActiveDirectoryEndpoint: "dummy_ad_endpoint",
+				LoginType:               AutoLoginTypeJSON{AutoLoginType: 255},
 				ApplicationID:           "dummy_application_id",
 				IdentityInfo: IdentityInfo{
 					ClientID: "dummy_identity_client_id",

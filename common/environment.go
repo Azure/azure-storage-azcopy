@@ -21,10 +21,11 @@
 package common
 
 import (
-	"github.com/JeffreyRichter/enum/enum"
 	"reflect"
 	"runtime"
 	"strings"
+
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 type EnvironmentVariable struct {
@@ -87,7 +88,13 @@ func (EnvironmentVariable) UserDir() EnvironmentVariable {
 
 var EAutoLoginType = AutoLoginType(0)
 
+// Wrapper type for AutoLoginType that handles custom JSON marshaling and unmarshaling
 type AutoLoginType uint8
+
+// Wrapper type for AutoLoginType that handles custom JSON marshaling and unmarshaling
+type AutoLoginTypeJSON struct {
+	AutoLoginType
+}
 
 func (AutoLoginType) Device() AutoLoginType     { return AutoLoginType(0) }
 func (AutoLoginType) SPN() AutoLoginType        { return AutoLoginType(1) }
