@@ -523,23 +523,6 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 		matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
 
 		lcm.progressCache = msgToOutput.msgContent
-
-	case EOutputMessageType.Init(), EOutputMessageType.Info(), EOutputMessageType.Dryrun(), EOutputMessageType.Response():
-		if lcm.progressCache != "" { // a progress status is already on the last line
-			// print the info from the beginning on current line
-			fmt.Print("\r")
-			fmt.Print(msgToOutput.msgContent)
-
-			// it is possible that the info is shorter than the progress status
-			// in this case we must erase the left over characters from the progress status
-			matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
-
-			// print the previous progress status again, so that it's on the last line
-			fmt.Print("\n")
-			fmt.Print(lcm.progressCache)
-		} else {
-			fmt.Println(msgToOutput.msgContent)
-		}
 	case EOutputMessageType.Prompt():
 		questionTime := time.Now()
 
@@ -564,6 +547,23 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 
 		// read the response to the prompt and send it back through the channel
 		msgToOutput.inputChannel <- lcm.getInputAfterTime(questionTime)
+	default:
+		// Init, Info, Dryrun, Response, ListSummary, ListObject, and any other new message types will use default
+		if lcm.progressCache != "" { // a progress status is already on the last line
+			// print the info from the beginning on current line
+			fmt.Print("\r")
+			fmt.Print(msgToOutput.msgContent)
+
+			// it is possible that the info is shorter than the progress status
+			// in this case we must erase the left over characters from the progress status
+			matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
+
+			// print the previous progress status again, so that it's on the last line
+			fmt.Print("\n")
+			fmt.Print(lcm.progressCache)
+		} else {
+			fmt.Println(msgToOutput.msgContent)
+		}
 	}
 }
 
