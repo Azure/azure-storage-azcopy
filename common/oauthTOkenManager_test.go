@@ -1,0 +1,128 @@
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
+
+//
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+
+// of this software and associated documentation files (the "Software"), to deal
+
+// in the Software without restriction, including without limitation the rights
+
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+
+// copies of the Software, and to permit persons to whom the Software is
+
+// furnished to do so, subject to the following conditions:
+
+//
+
+// The above copyright notice and this permission notice shall be included in
+
+// all copies or substantial portions of the Software.
+
+//
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+
+// THE SOFTWARE.
+
+package common
+
+import (
+	"context"
+	"os"
+	"reflect"
+	"testing"
+)
+
+func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
+	type args struct {
+		ctx context.Context
+	}
+	tests := []struct {
+		name    string
+		uotm    *UserOAuthTokenManager
+		args    args
+		setup   func(t *testing.T)
+		want    *OAuthTokenInfo
+		wantErr bool
+	}{
+		{
+			name: "This UT tests if AutoLoginType filed is parsed properly from string to uint8 data type",
+			uotm: &UserOAuthTokenManager{},
+			args: args{
+				ctx: context.Background(),
+			},
+			setup: func(t *testing.T) {
+				tokenInfoJSON := `{
+					"access_token": "dummy_access_token",
+					"refresh_token": "dummy_refresh_token",
+					"expires_in": 0,
+					"expires_on": 0,
+					"not_before": 0,
+					"resource": "dummy_resource",
+					"token_type": "dummy_token_type",
+					"_tenant": "dummy_tenant",
+					"_ad_endpoint": "dummy_ad_endpoint",
+					"_token_refresh_source": "255",
+					"_application_id": "dummy_application_id",
+					"IdentityInfo": {
+						"_identity_client_id": "dummy_identity_client_id",
+						"_identity_object_id": "dummy_identity_object_id",
+						"_identity_msi_res_id": "dummy_identity_msi_res_id"
+					},
+					"SPNInfo": {
+						"_spn_secret": "dummy_spn_secret",
+						"_spn_cert_path": "dummy_spn_cert_path"
+					}
+				}`
+
+				// Set the environment variable AZCOPY_OAUTH_TOKEN_INFO
+				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfoJSON)
+				if err != nil {
+					t.Fatalf("Failed to set environment variable: %v", err)
+				}
+			},
+			want: &OAuthTokenInfo{
+				Tenant:                  "dummy_tenant",
+				ActiveDirectoryEndpoint: "dummy_ad_endpoint",
+				LoginType:               255,
+				ApplicationID:           "dummy_application_id",
+				IdentityInfo: IdentityInfo{
+					ClientID: "dummy_identity_client_id",
+					ObjectID: "dummy_identity_object_id",
+					MSIResID: "dummy_identity_msi_res_id",
+				},
+				SPNInfo: SPNInfo{
+					Secret:   "dummy_spn_secret",
+					CertPath: "dummy_spn_cert_path",
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			tt.setup(t)
+			got, err := tt.uotm.GetTokenInfo(tt.args.ctx)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("UserOAuthTokenManager.GetTokenInfo() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if reflect.DeepEqual(got, tt.want) {
+				t.Errorf("UserOAuthTokenManager.GetTokenInfo() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

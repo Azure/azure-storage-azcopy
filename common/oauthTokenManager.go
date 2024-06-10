@@ -84,7 +84,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial,                   /*Context*/
+			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -524,7 +524,7 @@ type TokenStoreCredential struct {
 // we do not make repeated GetToken calls.
 // This is a temporary fix for issue where we would request a
 // new token from Stg Exp even while they've not yet populated the
-// tokenstore. 
+// tokenstore.
 //
 // This is okay because we use same credential on both source and
 // destination. If we move to a case where the credentials are
@@ -532,7 +532,6 @@ type TokenStoreCredential struct {
 //
 // We should move to a method where the token is always read  from
 // tokenstore, and azcopy is invoked after tokenstore is populated.
-//
 var globalTokenStoreCredential *TokenStoreCredential
 var globalTsc sync.Once
 
@@ -771,8 +770,32 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 	}
 }
 
+// @brief MarshalJSON implements the json.Marshaler interface for AutoLoginType
+func (alt AutoLoginType) MarshalJSON() ([]byte, error) {
+	str := strconv.FormatUint(uint64(alt), 10)
+	return json.Marshal(str)
+}
+
+// @brief UnmarshalJSON implements the json.Unmarshaler interface for autoLoginType
+func (alt *AutoLoginType) UnmarshalJSON(data []byte) (err error) {
+
+	var autoLoginTypeStr string
+	if err := json.Unmarshal(data, &autoLoginTypeStr); err != nil {
+		return err
+	}
+
+	val, err := strconv.ParseUint(autoLoginTypeStr, 10, 8)
+	if err != nil {
+		return
+	}
+
+	*alt = AutoLoginType(uint8(val))
+	return
+}
+
 // jsonToTokenInfo converts bytes to OAuthTokenInfo
 func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
+
 	var OAuthTokenInfo OAuthTokenInfo
 	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
 		return nil, err
