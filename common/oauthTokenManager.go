@@ -795,6 +795,7 @@ func (alt *AutoLoginType) UnmarshalJSON(data []byte) (err error) {
 
 // jsonToTokenInfo converts bytes to OAuthTokenInfo
 func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
+
 	var OAuthTokenInfo OAuthTokenInfo
 	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
 		return nil, err
