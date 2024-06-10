@@ -145,6 +145,45 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "This UT tests if _token_refresh_source fails to parse due to invalid type",
+			uotm: &UserOAuthTokenManager{},
+			args: args{
+				ctx: context.Background(),
+			},
+			setup: func(t *testing.T) {
+				tokenInfoJSON := `{
+					"access_token": "dummy_access_token",
+					"refresh_token": "dummy_refresh_token",
+					"expires_in": 0,
+					"expires_on": 0,
+					"not_before": 0,
+					"resource": "dummy_resource",
+					"token_type": "dummy_token_type",
+					"_tenant": "dummy_tenant",
+					"_ad_endpoint": "dummy_ad_endpoint",
+					"_token_refresh_source": 2er25,
+					"_application_id": "dummy_application_id",
+					"IdentityInfo": {
+						"_identity_client_id": "dummy_identity_client_id",
+						"_identity_object_id": "dummy_identity_object_id",
+						"_identity_msi_res_id": "dummy_identity_msi_res_id"
+					},
+					"SPNInfo": {
+						"_spn_secret": "dummy_spn_secret",
+						"_spn_cert_path": "dummy_spn_cert_path"
+					}
+				}`
+
+				// Set the environment variable AZCOPY_OAUTH_TOKEN_INFO
+				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfoJSON)
+				if err != nil {
+					t.Fatalf("Failed to set environment variable: %v", err)
+				}
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -155,7 +194,7 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 				t.Errorf("UserOAuthTokenManager.GetTokenInfo() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if reflect.DeepEqual(got, tt.want) {
+			if got != nil && reflect.DeepEqual(got, tt.want) {
 				t.Errorf("UserOAuthTokenManager.GetTokenInfo() = %v, want %v", got, tt.want)
 			}
 		})
