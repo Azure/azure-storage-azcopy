@@ -91,11 +91,6 @@ var EAutoLoginType = AutoLoginType(0)
 // Wrapper type for AutoLoginType that handles custom JSON marshaling and unmarshaling
 type AutoLoginType uint8
 
-// Wrapper type for AutoLoginType that handles custom JSON marshaling and unmarshaling
-type AutoLoginTypeJSON struct {
-	AutoLoginType
-}
-
 func (AutoLoginType) Device() AutoLoginType     { return AutoLoginType(0) }
 func (AutoLoginType) SPN() AutoLoginType        { return AutoLoginType(1) }
 func (AutoLoginType) MSI() AutoLoginType        { return AutoLoginType(2) }

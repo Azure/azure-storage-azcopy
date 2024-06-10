@@ -56,7 +56,7 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 					"token_type": "dummy_token_type",
 					"_tenant": "dummy_tenant",
 					"_ad_endpoint": "dummy_ad_endpoint",
-					"_token_refresh_source": "255",
+					"_token_refresh_source": "TokenStore",
 					"_application_id": "dummy_application_id",
 					"IdentityInfo": {
 						"_identity_client_id": "dummy_identity_client_id",
@@ -78,7 +78,7 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 			want: &OAuthTokenInfo{
 				Tenant:                  "dummy_tenant",
 				ActiveDirectoryEndpoint: "dummy_ad_endpoint",
-				LoginType:               AutoLoginTypeJSON{AutoLoginType: 255},
+				LoginType:               255,
 				ApplicationID:           "dummy_application_id",
 				IdentityInfo: IdentityInfo{
 					ClientID: "dummy_identity_client_id",
@@ -131,7 +131,7 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 			want: &OAuthTokenInfo{
 				Tenant:                  "dummy_tenant",
 				ActiveDirectoryEndpoint: "dummy_ad_endpoint",
-				LoginType:               AutoLoginTypeJSON{AutoLoginType: 255},
+				LoginType:               255,
 				ApplicationID:           "dummy_application_id",
 				IdentityInfo: IdentityInfo{
 					ClientID: "dummy_identity_client_id",
