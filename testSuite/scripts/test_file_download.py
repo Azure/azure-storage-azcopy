@@ -6,10 +6,6 @@ import utility as util
 
 class FileShare_Download_User_Scenario(unittest.TestCase):
 
-        # Verifying the downloaded file
-        result = util.Command("testFile").add_arguments(dest).add_arguments(src).execute_azcopy_verify()
-        self.assertTrue(result)
-
     # test_upload_download_1kb_file_wildcard_all_files verifies the upload/download of 1Kb file with wildcard using azcopy.
     def test_upload_download_1kb_file_wildcard_all_files(self):
         # create file of size 1KB.
