@@ -1702,13 +1702,13 @@ stages:
               inputs:
                 artifactName: 'azCopy-linux-signed'
                 downloadPath: $(Build.ArtifactStagingDirectory)
-
+                
             - script: |
                 cd mariner
                 arm64file=$(ls azcopy*.arm64.rpm)
                 amd64file=$(ls azcopy*.x86_64.rpm)
-                marinerArmFileName="${arm64file/-1/-1-cm2}"
-                marinerAmdFileName="${amd64file/-1/-1-cm2}"
+                marinerArmFileName="${filename/.arm64.rpm/-cm2.arm64.rpm}"
+                marinerAmdFileName="${filename/.x86_64.rpm/-cm2.x86_64.rpm}"
                 mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
                 mv -v ./azcopy*.x86_64.rpm "$marinerAmdFileName"
                 ls -lRt
