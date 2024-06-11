@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"context"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
@@ -68,6 +69,84 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 
 	// Validate that the network stats were updated
 	ValidateStatsReturned(svm, stdout)
+}
+
+func (s *BasicFunctionalitySuite) Scenario_PartialSparseFileUpload(svm *ScenarioVariationManager) {
+	body := NewPartialSparseObjectContentContainer(svm, 16*common.MegaByte)
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
+		ObjectName: pointerTo("test"),
+		Body:       body,
+	})
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: pointerTo(float64(4)),
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, true)
+
+	if svm.Dryrun() {
+		return
+	}
+	// Verify ranges
+	manager := dstObj.(ObjectResourceManager).(*FileObjectResourceManager)
+	resp, err := manager.getFileClient().GetRangeList(context.Background(), nil)
+	svm.NoError("Get Range List call should not fail", err)
+	svm.Assert("Ranges should be returned", Not{IsNil{}}, resp.Ranges)
+	svm.Assert("Expected number of ranges does not match", Equal{}, len(resp.Ranges), 2)
+}
+
+func (s *BasicFunctionalitySuite) Scenario_CompleteSparseFileUpload(svm *ScenarioVariationManager) {
+	body := NewZeroObjectContentContainer(4 * common.MegaByte)
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
+		ObjectName: pointerTo("test"),
+		Body:       body,
+	})
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: pointerTo(float64(4)),
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, true)
+
+	if svm.Dryrun() {
+		return
+	}
+	// Verify ranges
+	manager := dstObj.(ObjectResourceManager).(*FileObjectResourceManager)
+	resp, err := manager.getFileClient().GetRangeList(context.Background(), nil)
+	svm.NoError("Get Range List call should not fail", err)
+	svm.Assert("Ranges should be returned", Not{IsNil{}}, resp.Ranges)
+	svm.Assert("Expected number of ranges does not match", Equal{}, len(resp.Ranges), 0)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *ScenarioVariationManager) {
@@ -273,6 +352,129 @@ func (s *BasicFunctionalitySuite) Scenario_FileUploadDifferentSizes(svm *Scenari
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
 	}, true)
+}
+
+func (s *BasicFunctionalitySuite) Scenario_UploadFileProperties(svm *ScenarioVariationManager) {
+	size := int64(0)
+	fileName := "test_file_upload"
+	body := NewRandomObjectContentContainer(svm, size)
+
+	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
+		GetObject(svm, fileName, common.EEntityType.File()) // awkward capitalization to see if AzCopy catches it.
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	metadata := common.Metadata{"Author": pointerTo("gapra"), "Viewport": pointerTo("width"), "Description": pointerTo("test file")}
+	contentType := pointerTo("testctype")
+	contentEncoding := pointerTo("testenc")
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{srcObj, dstContainer},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+			Metadata:        metadata,
+			ContentType:     contentType,
+			ContentEncoding: contentEncoding,
+			NoGuessMimeType: pointerTo(true),
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+		ObjectProperties: ObjectProperties{
+			Metadata: metadata,
+			HTTPHeaders: contentHeaders{
+				contentType:     contentType,
+				contentEncoding: contentEncoding,
+			},
+		},
+	}, false)
+}
+
+func (s *BasicFunctionalitySuite) Scenario_GuessMimeType(svm *ScenarioVariationManager) {
+	size := int64(0)
+	fileName := "test_guessmimetype.html"
+	body := NewRandomObjectContentContainer(svm, size)
+
+	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
+		GetObject(svm, fileName, common.EEntityType.File()) // awkward capitalization to see if AzCopy catches it.
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{srcObj, dstContainer},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+		ObjectProperties: ObjectProperties{
+			HTTPHeaders: contentHeaders{
+				contentType: pointerTo("text/html"),
+			},
+		},
+	}, false)
+}
+
+func (s *BasicFunctionalitySuite) Scenario_Download63MBFile(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(svm, 63*common.MegaByte)
+	name := "test"
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb:    AzCopyVerbCopy,
+			Targets: []ResourceManager{srcObj, dstObj},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: pointerTo(float64(4)),
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, true)
+}
+
+func (s *BasicFunctionalitySuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationManager) {
+	body := NewZeroObjectContentContainer(0)
+	name := "test"
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
+
+	srcObjLMT := srcObj.GetProperties(svm).FileProperties.LastModifiedTime
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb:    AzCopyVerbCopy,
+			Targets: []ResourceManager{srcObj, dstObj},
+			Flags: CopyFlags{
+				PreserveLMT: pointerTo(true),
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+		ObjectProperties: ObjectProperties{
+			FileProperties: FileProperties{
+				LastModifiedTime: srcObjLMT,
+			},
+		},
+	}, false)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm *ScenarioVariationManager) {

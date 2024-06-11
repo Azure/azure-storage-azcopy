@@ -22,48 +22,6 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         result = util.Command("testFile").add_arguments(file_path).add_arguments(destination).execute_azcopy_verify()
         self.assertTrue(result)
 
-
-    # test_file_range_for_complete_sparse_file verifies the number of ranges for
-    # complete empty file i.e each character is Null character.
-    def test_file_range_for_complete_sparse_file(self):
-        # create test file.
-        file_name = "sparse_file"
-        file_path = util.create_complete_sparse_file(file_name, 4 * 1024 * 1024)
-
-        # execute azcopy file upload.
-        destination_sas = util.get_resource_sas_from_share(file_name)
-        result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("block-size-mb", "4").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # execute validator.
-        # no of ranges should be 0 for the empty sparse file.
-        result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).add_flags(
-            "verify-block-size", "true").add_flags("number-blocks-or-pages", "0").execute_azcopy_verify()
-        self.assertTrue(result)
-
-
-    # test_file_upload_partial_sparse_file verifies the number of ranges
-    # for azure file upload by azcopy.
-    def test_file_upload_partial_sparse_file(self):
-        # create test file.
-        file_name = "test_partial_sparse_file"
-        file_path = util.create_partial_sparse_file(file_name, 16 * 1024 * 1024)
-
-        # execute azcopy file upload.
-        destination_sas = util.get_resource_sas_from_share(file_name)
-        result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("block-size-mb", "4").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # number of range for partial sparse created above will be (size/2)
-        number_of_ranges = int((16 * 1024 * 1024 / (4 * 1024 * 1024)) / 2)
-        # execute validator to verify the number of range for uploaded file.
-        result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("verify-block-size", "true"). \
-            add_flags("number-blocks-or-pages", str(number_of_ranges)).execute_azcopy_verify()
-        self.assertTrue(result)
-
     # util_test_n_1kb_file_in_dir_upload_to_share verifies the upload of n 1kb file to the share.
     def util_test_n_1kb_file_in_dir_upload_to_share(self, number_of_files):
         # create dir dir_n_files and 1 kb files inside the dir.
@@ -131,50 +89,6 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
     @unittest.skip("upload directory without --recursive specified is not supported currently.")
     def test_8_1kb_file_in_dir_upload_to_azure_directory_non_recursive(self):
         self.util_test_n_1kb_file_in_dir_upload_to_azure_directory(8, "false")
-
-    # test_metaData_content_encoding_content_type verifies the meta data, content type,
-    # content encoding of 2kb upload to share through azcopy.
-    def test_metaData_content_encoding_content_type(self):
-        # create 2kb file test_mcect.txt
-        filename = "test_mcect.txt"
-        file_path = util.create_test_file(filename, 2048)
-
-        # execute azcopy upload command.
-        destination_sas = util.get_resource_sas_from_share(filename)
-        result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("metadata",
-                                                                                  "author=jiac;viewport=width;description=test file"). \
-            add_flags("content-type", "testctype").add_flags("content-encoding", "testenc").add_flags("no-guess-mime-type",
-                                                                                                      "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # execute azcopy validate order.
-        # adding the source in validator as first argument.
-        # adding the destination in validator as second argument.
-        result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).add_flags("metadata",
-                                                                                                            "author=jiac;viewport=width;description=test file"). \
-            add_flags("content-type", "testctype").add_flags("content-encoding", "testenc").add_flags("no-guess-mime-type",
-                                                                                                      "true").execute_azcopy_verify()
-        self.assertTrue(result)
-
-
-    # test_guess_mime_type verifies the mime type detection by azcopy while uploading the file
-    def test_guess_mime_type(self):
-        # create a test html file
-        filename = "test_guessmimetype.html"
-        file_path = util.create_test_html_file(filename)
-
-        # execute azcopy upload of html file.
-        destination_sas = util.get_resource_sas_from_share(filename)
-        result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("recursive", "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # execute the validator to verify the content-type.
-        result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level",
-                                                                                                            "info"). \
-            add_flags("recursive", "true")
-        self.assertTrue(result)
 
     # test_1G_file_upload verifies the azcopy upload of 1Gb file upload in blocks of 100 Mb
     @unittest.skip("covered by stress")

@@ -47,11 +47,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 0)
 
-    def test_copy_single_63mb_file_from_blob_to_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 63 * 1024 * 1024)
-
     def test_copy_10_files_from_blob_container_to_blob_container(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -89,15 +84,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             util.test_s2s_dst_blob_account_url, 
             "Blob",
             self.bucket_name)
-
-    def test_copy_single_file_from_blob_to_blob_propertyandmetadata(self):
-        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
-            src_container_url, 
-            "Blob", 
-            dst_container_url, 
-            "Blob")
 
     def test_copy_file_from_blob_container_to_blob_container_propertyandmetadata(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
@@ -193,15 +179,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             util.test_s2s_dst_blob_account_url, 
             "Blob",
             self.bucket_name_file_blob)
-
-    def test_copy_single_file_from_file_to_blob_propertyandmetadata(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
-            src_share_url, 
-            "File", 
-            dst_container_url, 
-            "Blob")
 
     def test_copy_file_from_file_share_to_blob_container_propertyandmetadata(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
@@ -483,41 +460,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test scenarios related to blob type and blob tier.
     ##################################
-    def test_copy_single_file_from_blockblob_to_blockblob_with_blobtier_from_source(self):
-        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-        blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
-        for size in blob_sizes:
-            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", size)
-
-        self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", 8*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Cool")
-
-    def test_copy_single_file_from_blockblob_to_blockblob_with_no_preserve_blobtier(self):
-        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-
-        self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", 4*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Hot", False)
-
-    def test_copy_single_file_from_pageblob_to_pageblob_with_blobtier_from_source(self):
-        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-        blob_sizes = [0, 512, 1024, 4*1024*1024]
-        no_blob_tier = ""  # don't validate tier for page blobs
-        for size in blob_sizes:
-            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", size, "PageBlob", "", "", "", "PageBlob", no_blob_tier)
-
-    def test_copy_single_file_from_appendblob_to_appendblob_from_source(self):
-        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-        blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024, 8*1024*1024+1]
-        no_blob_tier = ""  # blob-level tiering is not available for append blobs
-        for size in blob_sizes:
-            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob", no_blob_tier)
 
     def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
         if 'S3_TESTS_OFF' in os.environ and os.environ['S3_TESTS_OFF'] != "":
