@@ -1002,7 +1002,7 @@ stages:
               AuthCertName: 'azcopy-auth'
               AuthSignCertName: 'azcopy-sign-test'
               FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-windows-temp'
-              Pattern: '*.exe','*.zip'
+              Pattern: '*.exe, *.zip'
               signConfigType: inlineSignParams
               inlineOperation: |
               [
