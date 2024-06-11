@@ -1109,28 +1109,28 @@ stages:
             displayName: "Update dependencies"
             
 
-          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
-            displayName: 'ESRP CodeSigning macOS AzCopy'
-            inputs:
-              ConnectedServiceName: 'PMC ESRP AzCopy Signing'
-              AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
-              AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
-              Pattern: 'azcopy_darwin*'
-              signConfigType: inlineSignParams
-              VerboseLogin: true
-              inlineOperation: |
-                [
-                  {
-                    "KeyCode" : "CP-401337-Apple",
-                    "OperationCode" : "MacAppDeveloperSign",
-                    "Parameters":{
-                          "Hardening":"--options=runtime"
-                      },
-                    "ToolName" : "sign",
-                    "ToolVersion" : "1.0"
-                  }
-                ]
+          # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+          #   displayName: 'ESRP CodeSigning macOS AzCopy'
+          #   inputs:
+          #     ConnectedServiceName: 'PMC ESRP AzCopy Signing'
+          #     AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
+          #     AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
+          #     FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
+          #     Pattern: 'azcopy_darwin*'
+          #     signConfigType: inlineSignParams
+          #     VerboseLogin: true
+          #     inlineOperation: |
+          #       [
+          #         {
+          #           "KeyCode" : "CP-401337-Apple",
+          #           "OperationCode" : "MacAppDeveloperSign",
+          #           "Parameters":{
+          #                 "Hardening":"--options=runtime"
+          #             },
+          #           "ToolName" : "sign",
+          #           "ToolVersion" : "1.0"
+          #         }
+          #       ]
 
 
           # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
