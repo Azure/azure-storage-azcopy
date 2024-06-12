@@ -1,6 +1,17 @@
 
 # Change Log
 
+## Version 10.25.1
+
+### Security fixes
+
+1. Updated Golang to 1.22.4 to address security vulnerabilities
+
+### Bug Fixes
+
+1. Fixed a regression in `list` where `--output-type=text` would not output any information
+2. Adjusted parsing of `AZCOPY_OAUTH_TOKEN_INFO` to support both enum names as a string and integers (for users that took dependency upon the accidental changes in 10.25)
+
 ## Version 10.25.0
 
 ### Security fixes
