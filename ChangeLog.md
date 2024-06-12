@@ -7,6 +7,11 @@
 
 1. Updated Golang to 1.22.4 to address security vulnerabilities
 
+### Dependency updates
+
+1. Golang 1.22.3 -> 1.22.4
+2. azidentity 1.5.1 -> 1.6.0
+
 ### Bug Fixes
 
 1. Fixed a regression in `list` where `--output-type=text` would not output any information
