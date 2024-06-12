@@ -1111,6 +1111,11 @@ stages:
               sudo apt install dotnet-sdk-3.1 -y
             displayName: "Update dependencies"
             
+          - task: UseDotNet@2
+            displayName: 'Install .NET Core 6.0 runtime'
+            inputs:
+              packageType: 'runtime'
+              version: '6.0.0'
 
           # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
           #   displayName: 'ESRP CodeSigning macOS AzCopy'
@@ -1135,11 +1140,7 @@ stages:
           #         }
           #       ]
 
-          - task: UseDotNet@2
-            displayName: 'Install .NET Core 6.0 runtime'
-            inputs:
-              packageType: 'runtime'
-              version: '6.0.0'
+          
 
           # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
           #   displayName: 'Sign Mac executable'
@@ -1780,6 +1781,8 @@ stages:
               workingDirectory: $(Build.ArtifactStagingDirectory)/
 
             - script: |
+                mv azcopy_linux_se_amd64 ../
+                mv azcopy_linux_se_arm64 ../
                 for file in "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed"/*; 
                 do
                   if [ -f "$file" ]; then
@@ -1810,6 +1813,9 @@ stages:
                   echo "Uploading packages for $distro"
                   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
                 done < <(tail -n +3 ../packages.csv)
+
+                mv ../azcopy_linux_se_amd64 .
+                mv ../azcopy_linux_se_arm64 .
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
