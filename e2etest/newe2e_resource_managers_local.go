@@ -298,9 +298,9 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 	out := ObjectProperties{}
 	stats, err := os.Stat(l.getWorkingPath())
 	a.NoError("failed to get stat", err)
-	lmt := stats.ModTime()
+	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
 	out.FileProperties = FileProperties{
-		LastModifiedTime: PtrOf(lmt),
+		LastModifiedTime: lmt,
 	}
 
 	// OS-triggered code, implemented in newe2e_resource_managers_local_windows.go
