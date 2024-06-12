@@ -1707,13 +1707,8 @@ stages:
                 cd mariner
                 arm64file=$(ls azcopy*.arm64.rpm)
                 amd64file=$(ls azcopy*.x86_64.rpm)
-<<<<<<< HEAD
                 marinerArmFileName="${filename/.arm64.rpm/-cm2.arm64.rpm}"
                 marinerAmdFileName="${filename/.x86_64.rpm/-cm2.x86_64.rpm}"
-=======
-                marinerArmFileName="${arm64file/.1/.1-cm2}"
-                marinerAmdFileName="${amd64file/.1/.1-cm2}"
->>>>>>> 9fc59e5c357b4a77c641cbc9c4061c516fee7b0d
                 mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
                 mv -v ./azcopy*.x86_64.rpm "$marinerAmdFileName"
                 ls -lRt
