@@ -305,260 +305,260 @@ stages:
     #dependsOn: RunTests
     #condition: succeeded('RunTests')
     jobs:
-      # - job: Set_1
-      #   timeoutInMinutes: 120
-      #   strategy:
-      #     matrix:
-      #       Ubuntu_amd64:
-      #         imageName: 'ubuntu-20.04'
-      #         container: 'test-cnt-ubn-20'
-      #         AgentName: "blobfuse-ubuntu20"
-      #   pool:
-      #     name: "blobfuse-ubuntu-pool"
-      #     demands:
-      #       - ImageOverride -equals $(agentName)
+      - job: Set_1
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu_amd64:
+              imageName: 'ubuntu-20.04'
+              container: 'test-cnt-ubn-20'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(agentName)
 
-      #   variables:
-      #     - name: root_dir
-      #       value: '$(System.DefaultWorkingDirectory)'
-      #     - name: work_dir
-      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
-      #   steps:
-      #     #TODO: remove this after merging to main
-      #     - script: |
-      #         wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-      #         chmod 777 $(work_dir)/go_installer.sh
-      #         sudo ls -lRt $(work_dir)/
-      #       displayName: 'list'
+        steps:
+          #TODO: remove this after merging to main
+          - script: |
+              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
+              chmod 777 $(work_dir)/go_installer.sh
+              sudo ls -lRt $(work_dir)/
+            displayName: 'list'
 
-      #     # Custom script to install Go-lang
-      #     - task: ShellScript@2
-      #       inputs:
-      #         scriptPath: "$(work_dir)/go_installer.sh"
-      #         args: "$(root_dir)/"
-      #       displayName: "Installing Go tools"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "Installing Go tools"
 
-      #     - script: |
-      #         echo 'Running GO Vet'
-      #         go vet 
-      #       displayName: 'Golang Vet - Linux'
-      #       workingDirectory: $(root_dir)
+          - script: |
+              echo 'Running GO Vet'
+              go vet 
+            displayName: 'Golang Vet - Linux'
+            workingDirectory: $(root_dir)
 
-      #     # install dependencies required for compiling azcopy
-      #     - script: |
-      #         sudo apt-get clean
-      #         sudo apt-get update --fix-missing
-      #         sudo apt-get install pkg-config libsecret-1-dev -y
-      #         sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
-      #         sudo gem install dotenv -v 2.8.1
-      #         sudo gem install fpm -V
-      #       displayName: "Installing Dependencies"
+          # install dependencies required for compiling azcopy
+          - script: |
+              sudo apt-get clean
+              sudo apt-get update --fix-missing
+              sudo apt-get install pkg-config libsecret-1-dev -y
+              sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+              sudo gem install dotenv -v 2.8.1
+              sudo gem install fpm -V
+            displayName: "Installing Dependencies"
 
-      #     # get glibc version with which build is done
-      #     - script: |
-      #        ldd --version
-      #       displayName: "GLIBC Version"
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
 
-      #     - script: |
-      #         GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
-      #       displayName: 'Generate Linux AMD64'
+          - script: |
+              GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_amd64"
+            displayName: 'Generate Linux AMD64'
 
-      #     - script: |
-      #         GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
-      #       displayName: 'Generate Linux AMD64 SE Integration'
+          - script: |
+              GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_amd64"
+            displayName: 'Generate Linux AMD64 SE Integration'
 
-      #     - script: |
-      #         sudo ls -lRt $(work_dir)/
-      #       displayName: 'List the binaries'
-      #       workingDirectory: $(root_dir)
+          - script: |
+              sudo ls -lRt $(work_dir)/
+            displayName: 'List the binaries'
+            workingDirectory: $(root_dir)
 
-      #     # place the generated binary files & any additional files in appropriate locations
-      #     - script: |
-      #         mkdir -p pkgDirAmd64/usr/bin/
-      #         cp -r $(work_dir)/azcopy_linux_amd64 pkgDirAmd64/usr/bin/
-      #       displayName: 'Accumulate pkg files'
+          # place the generated binary files & any additional files in appropriate locations
+          - script: |
+              mkdir -p pkgDirAmd64/usr/bin/
+              cp -r $(work_dir)/azcopy_linux_amd64 pkgDirAmd64/usr/bin/
+            displayName: 'Accumulate pkg files'
 
-      #     - script: |
-      #         cp NOTICE.txt pkgDirAmd64/usr/bin/
-      #       displayName: 'Copy NOTICE.txt'
+          - script: |
+              cp NOTICE.txt pkgDirAmd64/usr/bin/
+            displayName: 'Copy NOTICE.txt'
 
-      #     - script: |
-      #         ./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version
-      #         raw_version_output=(`/pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version`)
-      #         azcopy_version=${raw_version_output[2]}
-      #         echo "Version : $azcopy_version"
-      #       displayName: 'Verify the generated build'
+          - script: |
+              ./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version
+              raw_version_output=(`/pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version`)
+              azcopy_version=${raw_version_output[2]}
+              echo "Version : $azcopy_version"
+            displayName: 'Verify the generated build'
             
           
-      #     # using fpm tool for packaging of our binary & performing post-install operations
-      #     # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-      #     - script: |
-      #         fpm -s dir -t deb -n azcopy -C pkgDirAmd64/ \
-      #         -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
-      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-      #         --url "https://github.com/Azure/azure-storage-azcopy" \
-      #         --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-      #         mv ./azcopy*.deb ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`.x86_64.deb
-      #         cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Make AMD64 deb Package'
+          # using fpm tool for packaging of our binary & performing post-install operations
+          # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+          - script: |
+              fpm -s dir -t deb -n azcopy -C pkgDirAmd64/ \
+              -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+              mv ./azcopy*.deb ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`.x86_64.deb
+              cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Make AMD64 deb Package'
             
-      #     - script: |
-      #         fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirAmd64/ \
-      #         -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
-      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-      #         --url "https://github.com/Azure/azure-storage-azcopy" \
-      #         --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-      #         mv ./azcopy*.rpm ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`.x86_64.rpm
-      #         cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Make AMD64 rpm Package'
+          - script: |
+              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirAmd64/ \
+              -v `./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3` \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+              mv ./azcopy*.rpm ./azcopy-`./pkgDirAmd64/usr/bin/azcopy_linux_amd64 --version | cut -d " " -f 3`.x86_64.rpm
+              cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Make AMD64 rpm Package'
 
-      #     - script: |
-      #         cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Add SE binary to signing stage'
+          - script: |
+              cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Add SE binary to signing stage'
 
-      #     - task: PublishBuildArtifacts@1
-      #       inputs:
-      #         artifactName: 'azCopy-linux-temp'
-      #       displayName: 'Publish Artifacts'
-      #       condition: succeededOrFailed()
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-linux-temp'
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
         
-      #     - task: ComponentGovernanceComponentDetection@0
-      #       inputs:
-      #         scanType: 'Register'
-      #         verbosity: 'Verbose'
-      #         alertWarningLevel: 'High'
+          - task: ComponentGovernanceComponentDetection@0
+            inputs:
+              scanType: 'Register'
+              verbosity: 'Verbose'
+              alertWarningLevel: 'High'
 
-      # - job: Set_2
-      #   timeoutInMinutes: 120
-      #   strategy:
-      #     matrix:
-      #       Ubuntu_arm64:
-      #         vmImage: 'ubuntu-20.04'
-      #         container: 'test-cnt-ubn-20'
-      #         AgentName: 'blobfuse-ubn20-arm64'
+      - job: Set_2
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu_arm64:
+              vmImage: 'ubuntu-20.04'
+              container: 'test-cnt-ubn-20'
+              AgentName: 'blobfuse-ubn20-arm64'
 
-      #   pool:
-      #     name: "blobfuse-ubn-arm64-pool"
-      #     demands:
-      #       - ImageOverride -equals $(agentName)
+        pool:
+          name: "blobfuse-ubn-arm64-pool"
+          demands:
+            - ImageOverride -equals $(agentName)
 
-      #   variables:
-      #     - name: root_dir
-      #       value: '$(System.DefaultWorkingDirectory)'
-      #     - name: work_dir
-      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
-      #   steps:
-      #     #TODO: remove this after merging to main
-      #     - script: |
-      #         wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-      #         chmod 777 $(work_dir)/go_installer.sh
-      #         sudo ls -lRt $(work_dir)/
-      #       displayName: 'list'
+        steps:
+          #TODO: remove this after merging to main
+          - script: |
+              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
+              chmod 777 $(work_dir)/go_installer.sh
+              sudo ls -lRt $(work_dir)/
+            displayName: 'list'
 
-      #     # Custom script to install Go-lang
-      #     - task: ShellScript@2
-      #       inputs:
-      #         scriptPath: "$(work_dir)/go_installer.sh"
-      #         args: "$(root_dir)/"
-      #       displayName: "Installing Go tools"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/"
+            displayName: "Installing Go tools"
 
-      #     - script: |
-      #         echo 'Running GO Vet'
-      #         go vet 
-      #       displayName: 'Golang Vet - Linux'
-      #       workingDirectory: $(root_dir)
+          - script: |
+              echo 'Running GO Vet'
+              go vet 
+            displayName: 'Golang Vet - Linux'
+            workingDirectory: $(root_dir)
 
-      #     # install dependencies required for compiling azcopy
-      #     - script: |
-      #         sudo apt-get clean
-      #         sudo apt-get update --fix-missing
-      #         sudo apt-get install pkg-config libsecret-1-dev wget -y
-      #         sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
-      #         sudo gem install dotenv -v 2.8.1
-      #         sudo gem install fpm -V
-      #       displayName: "Installing Dependencies"
+          # install dependencies required for compiling azcopy
+          - script: |
+              sudo apt-get clean
+              sudo apt-get update --fix-missing
+              sudo apt-get install pkg-config libsecret-1-dev wget -y
+              sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+              sudo gem install dotenv -v 2.8.1
+              sudo gem install fpm -V
+            displayName: "Installing Dependencies"
 
-      #     # get glibc version with which build is done
-      #     - script: |
-      #        ldd --version
-      #       displayName: "GLIBC Version"
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
 
-      #     - script: |
-      #         GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
-      #       displayName: 'Generate Linux ARM64'
+          - script: |
+              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(work_dir)/azcopy_linux_arm64"
+            displayName: 'Generate Linux ARM64'
           
-      #     - script: |
-      #         GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_arm64"
-      #       displayName: 'Generate Linux ARM64 SE Integration'
+          - script: |
+              GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(work_dir)/azcopy_linux_se_arm64"
+            displayName: 'Generate Linux ARM64 SE Integration'
 
-      #     - script: |
-      #         sudo ls -lRt $(work_dir)/
-      #       displayName: 'List the binaries'
-      #       workingDirectory: $(root_dir)
+          - script: |
+              sudo ls -lRt $(work_dir)/
+            displayName: 'List the binaries'
+            workingDirectory: $(root_dir)
 
-      #     # place the generated binary files & any additional files in appropriate locations
-      #     - script: |
-      #         mkdir -p pkgDirArm64/usr/bin/
-      #         cp -r $(work_dir)/azcopy_linux_arm64 pkgDirArm64/usr/bin/
-      #       displayName: 'Accumulate arm64 pkg files'
+          # place the generated binary files & any additional files in appropriate locations
+          - script: |
+              mkdir -p pkgDirArm64/usr/bin/
+              cp -r $(work_dir)/azcopy_linux_arm64 pkgDirArm64/usr/bin/
+            displayName: 'Accumulate arm64 pkg files'
 
-      #     - script: |
-      #         cp NOTICE.txt pkgDirArm64/usr/bin/
-      #       displayName: 'Copy NOTICE.txt'
+          - script: |
+              cp NOTICE.txt pkgDirArm64/usr/bin/
+            displayName: 'Copy NOTICE.txt'
 
-      #     - script: |
-      #         GOARCH=arm64 GOOS=linux ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
-      #       displayName: 'Verify the generated build'
+          - script: |
+              GOARCH=arm64 GOOS=linux ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version
+            displayName: 'Verify the generated build'
 
-      #     # using fpm tool for packaging of our binary & performing post-install operations
-      #     # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-      #     # TODO: Add description
-      #     - script: |
-      #         fpm -s dir -t deb -n azcopy -C pkgDirArm64/ \
-      #         -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
-      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-      #         --url "https://github.com/Azure/azure-storage-azcopy" \
-      #         --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-      #         mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`.arm64.deb
-      #         cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
-      #         version = ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3
-      #         echo "Version : $version"
-      #         echo `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Make ARM64 deb Package'
+          # using fpm tool for packaging of our binary & performing post-install operations
+          # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+          # TODO: Add description
+          - script: |
+              fpm -s dir -t deb -n azcopy -C pkgDirArm64/ \
+              -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+              mv ./azcopy*.deb ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`.arm64.deb
+              cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+              version = ./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3
+              echo "Version : $version"
+              echo `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`
+            workingDirectory: $(root_dir)
+            displayName: 'Make ARM64 deb Package'
             
-      #     - script: |
-      #         fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirArm64/ \
-      #         -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
-      #         --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-      #         --url "https://github.com/Azure/azure-storage-azcopy" \
-      #         --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-      #         mv ./azcopy*.rpm ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`.arm64.rpm
-      #         cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Make ARM64 rpm Package'
+          - script: |
+              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDirArm64/ \
+              -v `./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3` \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+              mv ./azcopy*.rpm ./azcopy-`./pkgDirArm64/usr/bin/azcopy_linux_arm64 --version | cut -d " " -f 3`.arm64.rpm
+              cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Make ARM64 rpm Package'
 
-      #     - script: |
-      #         cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
-      #       workingDirectory: $(root_dir)
-      #       displayName: 'Add SE binary to signing stage'
+          - script: |
+              cp -r $(work_dir)/azcopy_linux_se* $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Add SE binary to signing stage'
 
-      #     - task: PublishBuildArtifacts@1
-      #       inputs:
-      #         artifactName: 'azCopy-linux-temp'
-      #       displayName: 'Publish Artifacts'
-      #       condition: succeededOrFailed()
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-linux-temp'
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
         
-      #     - task: ComponentGovernanceComponentDetection@0
-      #       inputs:
-      #         scanType: 'Register'
-      #         verbosity: 'Verbose'
-      #         alertWarningLevel: 'High'
+          - task: ComponentGovernanceComponentDetection@0
+            inputs:
+              scanType: 'Register'
+              verbosity: 'Verbose'
+              alertWarningLevel: 'High'
       
       # - job: Set_3
       #   timeoutInMinutes: 120
@@ -1138,34 +1138,34 @@ stages:
               packageType: 'runtime'
               version: '6.0.0'
 
-          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-            displayName: 'Sign Mac executable'
-            inputs:
-              ConnectedServiceName: 'ESRP KeyVault identity'
-              AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
-              AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
-              AuthAKVName: 'azcopy-esrp-kv'
-              AuthCertName: 'azcopy-auth'
-              AuthSignCertName: 'azcopy-sign-test'
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
-              Pattern: 'azcopy_darwin*'
-              signConfigType: inlineSignParams
-              inlineOperation: |
-                [
-                    {
-                      "KeyCode":"CP-401337-Apple",
-                      "OperationCode":"MacAppDeveloperSign",
-                      "Parameters":{
-                          "Hardening":"--options=runtime"
-                      },
-                      "ToolName":"sign",
-                      "ToolVersion":"1.0"
-                    }
-                ]
-              SessionTimeout: 30
-            script: |
-              # Install .NET SDK
-              curl -L https://dot.net/v1/dotnet-install.sh | bash -s -- --version 6.0.0
+          # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+          #   displayName: 'Sign Mac executable'
+          #   inputs:
+          #     ConnectedServiceName: 'ESRP KeyVault identity'
+          #     AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
+          #     AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
+          #     AuthAKVName: 'azcopy-esrp-kv'
+          #     AuthCertName: 'azcopy-auth'
+          #     AuthSignCertName: 'azcopy-sign-test'
+          #     FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
+          #     Pattern: 'azcopy_darwin*'
+          #     signConfigType: inlineSignParams
+          #     inlineOperation: |
+          #       [
+          #           {
+          #             "KeyCode":"CP-401337-Apple",
+          #             "OperationCode":"MacAppDeveloperSign",
+          #             "Parameters":{
+          #                 "Hardening":"--options=runtime"
+          #             },
+          #             "ToolName":"sign",
+          #             "ToolVersion":"1.0"
+          #           }
+          #       ]
+          #     SessionTimeout: 30
+          #   script: |
+          #     # Install .NET SDK
+          #     curl -L https://dot.net/v1/dotnet-install.sh | bash -s -- --version 6.0.0
 
           # Validate signed images have md5sum changed
           - script: |
