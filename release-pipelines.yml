@@ -1108,7 +1108,7 @@ stages:
               sudo dpkg -i packages-microsoft-prod.deb 
               sudo apt update 
               sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-3.1 -y
+              # sudo apt install dotnet-sdk-3.1 -y
             displayName: "Update dependencies"
             
           - task: UseDotNet@2
@@ -1142,34 +1142,31 @@ stages:
 
           
 
-          # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-          #   displayName: 'Sign Mac executable'
-          #   inputs:
-          #     ConnectedServiceName: 'ESRP KeyVault identity'
-          #     AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
-          #     AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
-          #     AuthAKVName: 'azcopy-esrp-kv'
-          #     AuthCertName: 'azcopy-auth'
-          #     AuthSignCertName: 'azcopy-sign-test'
-          #     FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
-          #     Pattern: 'azcopy_darwin*'
-          #     signConfigType: inlineSignParams
-          #     inlineOperation: |
-          #       [
-          #           {
-          #             "KeyCode":"CP-401337-Apple",
-          #             "OperationCode":"MacAppDeveloperSign",
-          #             "Parameters":{
-          #                 "Hardening":"--options=runtime"
-          #             },
-          #             "ToolName":"sign",
-          #             "ToolVersion":"1.0"
-          #           }
-          #       ]
-          #     SessionTimeout: 30
-          #   script: |
-          #     # Install .NET SDK
-          #     curl -L https://dot.net/v1/dotnet-install.sh | bash -s -- --version 6.0.0
+          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+            displayName: 'Sign Mac executable'
+            inputs:
+              ConnectedServiceName: 'ESRP KeyVault identity'
+              AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
+              AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
+              AuthAKVName: 'azcopy-esrp-kv'
+              AuthCertName: 'azcopy-auth'
+              AuthSignCertName: 'azcopy-sign-test'
+              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-mac-temp'
+              Pattern: 'azcopy_darwin*'
+              signConfigType: inlineSignParams
+              inlineOperation: |
+                [
+                    {
+                      "KeyCode":"CP-401337-Apple",
+                      "OperationCode":"MacAppDeveloperSign",
+                      "Parameters":{
+                          "Hardening":"--options=runtime"
+                      },
+                      "ToolName":"sign",
+                      "ToolVersion":"1.0"
+                    }
+                ]
+              SessionTimeout: 30
 
           # Validate signed images have md5sum changed
           - script: |
@@ -1673,8 +1670,8 @@ stages:
                   target: '$(Build.SourceVersion)'
                   tagSource: 'userSpecifiedTag'
 
-                  title: ${{ parameters.tag }}
-                  tag: ${{ parameters.tag }}
+                  title: 'azcopy-10.25.0'
+                  tag: 'azcopy-10.25.0'
                   
                   assets: |
                     $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
