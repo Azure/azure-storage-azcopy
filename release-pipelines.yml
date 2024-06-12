@@ -1657,7 +1657,7 @@ stages:
               - script: |
                   mv azCopy-linux-signed/azcopy_linux_se_amd64 .
                   mv azCopy-linux-signed/azcopy_linux_se_arm64 .
-                  # mv azCopy-windows-signed/azcopy_windows_v7_arm.exe .
+                  mv azCopy-windows-signed/azcopy_windows_v7_arm.exe .
                 displayName: 'Move binaries from signed folders'
                 workingDirectory: $(Build.ArtifactStagingDirectory)
 
@@ -1674,10 +1674,11 @@ stages:
 
                   title: ${{ parameters.tag }}
                   tag: ${{ parameters.tag }}
-                  #$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
+                  
                   assets: |
                     $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
                     $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*
+                    $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
                   changeLogCompareToRelease: 'lastFullRelease'
                   changeLogType: 'commitBased'
                   isDraft: ${{ parameters.draft }}
@@ -1849,12 +1850,12 @@ stages:
   #             - task: DownloadBuildArtifacts@0
   #               displayName: 'Download Build Artifacts'
   #               inputs:
-  #                 artifactName: 'azCopy'
+  #                 artifactName: 'azCopy-linux-signed'
   #                 downloadPath: $(Build.ArtifactStagingDirectory)
               
-  #             # install blobfuse2
+  #             # install azcopy
   #             - script: |
-  #                 cd $(Build.ArtifactStagingDirectory)/azcopy
+  #                 cd $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
   #                 ls | grep -i ubuntu-20.04
   #                 sudo apt-get install ./`ls | grep -i ubuntu-20.04` -y
   #                 azcopy version
