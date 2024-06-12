@@ -22,10 +22,64 @@ package common
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 )
+
+const tokenInfoJson = `{
+					"access_token": "dummy_access_token",
+					"refresh_token": "dummy_refresh_token",
+					"expires_in": 0,
+					"expires_on": 0,
+					"not_before": 0,
+					"resource": "dummy_resource",
+					"token_type": "dummy_token_type",
+					"_tenant": "dummy_tenant",
+					"_ad_endpoint": "dummy_ad_endpoint",
+					"_token_refresh_source": %v,
+					"_application_id": "dummy_application_id",
+					"IdentityInfo": {
+						"_identity_client_id": "dummy_identity_client_id",
+						"_identity_object_id": "dummy_identity_object_id",
+						"_identity_msi_res_id": "dummy_identity_msi_res_id"
+					},
+					"SPNInfo": {
+						"_spn_secret": "dummy_spn_secret",
+						"_spn_cert_path": "dummy_spn_cert_path"
+					}
+				}`
+
+var oauthTokenInfo = OAuthTokenInfo{
+	Tenant:                  "dummy_tenant",
+	ActiveDirectoryEndpoint: "dummy_ad_endpoint",
+	LoginType:               255,
+	ApplicationID:           "dummy_application_id",
+	IdentityInfo: IdentityInfo{
+		ClientID: "dummy_identity_client_id",
+		ObjectID: "dummy_identity_object_id",
+		MSIResID: "dummy_identity_msi_res_id",
+	},
+	SPNInfo: SPNInfo{
+		Secret:   "dummy_spn_secret",
+		CertPath: "dummy_spn_cert_path",
+	},
+}
+
+func formatTokenInfo(value interface{}) string {
+	var formattedValue string
+	switch v := value.(type) {
+	case string:
+		formattedValue = fmt.Sprintf("\"%s\"", v)
+	case int:
+		formattedValue = strconv.Itoa(v)
+	default:
+		formattedValue = fmt.Sprintf("%v", v)
+	}
+	return fmt.Sprintf(tokenInfoJson, formattedValue)
+}
 
 func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 	type args struct {
@@ -46,137 +100,66 @@ func TestUserOAuthTokenManager_GetTokenInfo(t *testing.T) {
 				ctx: context.Background(),
 			},
 			setup: func(t *testing.T) {
-				tokenInfoJSON := `{
-					"access_token": "dummy_access_token",
-					"refresh_token": "dummy_refresh_token",
-					"expires_in": 0,
-					"expires_on": 0,
-					"not_before": 0,
-					"resource": "dummy_resource",
-					"token_type": "dummy_token_type",
-					"_tenant": "dummy_tenant",
-					"_ad_endpoint": "dummy_ad_endpoint",
-					"_token_refresh_source": "TokenStore",
-					"_application_id": "dummy_application_id",
-					"IdentityInfo": {
-						"_identity_client_id": "dummy_identity_client_id",
-						"_identity_object_id": "dummy_identity_object_id",
-						"_identity_msi_res_id": "dummy_identity_msi_res_id"
-					},
-					"SPNInfo": {
-						"_spn_secret": "dummy_spn_secret",
-						"_spn_cert_path": "dummy_spn_cert_path"
-					}
-				}`
+				tokenInfo := formatTokenInfo("TokenStore")
+				fmt.Println(tokenInfo)
 
 				// Set the environment variable AZCOPY_OAUTH_TOKEN_INFO
-				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfoJSON)
+				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfo)
 				if err != nil {
 					t.Fatalf("Failed to set environment variable: %v", err)
 				}
 			},
-			want: &OAuthTokenInfo{
-				Tenant:                  "dummy_tenant",
-				ActiveDirectoryEndpoint: "dummy_ad_endpoint",
-				LoginType:               255,
-				ApplicationID:           "dummy_application_id",
-				IdentityInfo: IdentityInfo{
-					ClientID: "dummy_identity_client_id",
-					ObjectID: "dummy_identity_object_id",
-					MSIResID: "dummy_identity_msi_res_id",
-				},
-				SPNInfo: SPNInfo{
-					Secret:   "dummy_spn_secret",
-					CertPath: "dummy_spn_cert_path",
-				},
-			},
+			want:    &oauthTokenInfo,
 			wantErr: false,
 		},
 		{
-			name: "This UT tests if AutoLoginType filled is parsed properly to uint8 data type",
+			name: "This UT tests if AutoLoginType filled is assigned properly to uint8 data type",
 			uotm: &UserOAuthTokenManager{},
 			args: args{
 				ctx: context.Background(),
 			},
 			setup: func(t *testing.T) {
-				tokenInfoJSON := `{
-					"access_token": "dummy_access_token",
-					"refresh_token": "dummy_refresh_token",
-					"expires_in": 0,
-					"expires_on": 0,
-					"not_before": 0,
-					"resource": "dummy_resource",
-					"token_type": "dummy_token_type",
-					"_tenant": "dummy_tenant",
-					"_ad_endpoint": "dummy_ad_endpoint",
-					"_token_refresh_source": 255,
-					"_application_id": "dummy_application_id",
-					"IdentityInfo": {
-						"_identity_client_id": "dummy_identity_client_id",
-						"_identity_object_id": "dummy_identity_object_id",
-						"_identity_msi_res_id": "dummy_identity_msi_res_id"
-					},
-					"SPNInfo": {
-						"_spn_secret": "dummy_spn_secret",
-						"_spn_cert_path": "dummy_spn_cert_path"
-					}
-				}`
+				tokenInfo := formatTokenInfo(255)
+				fmt.Println(tokenInfo)
 
 				// Set the environment variable AZCOPY_OAUTH_TOKEN_INFO
-				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfoJSON)
+				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfo)
 				if err != nil {
 					t.Fatalf("Failed to set environment variable: %v", err)
 				}
 			},
-			want: &OAuthTokenInfo{
-				Tenant:                  "dummy_tenant",
-				ActiveDirectoryEndpoint: "dummy_ad_endpoint",
-				LoginType:               255,
-				ApplicationID:           "dummy_application_id",
-				IdentityInfo: IdentityInfo{
-					ClientID: "dummy_identity_client_id",
-					ObjectID: "dummy_identity_object_id",
-					MSIResID: "dummy_identity_msi_res_id",
-				},
-				SPNInfo: SPNInfo{
-					Secret:   "dummy_spn_secret",
-					CertPath: "dummy_spn_cert_path",
-				},
-			},
+			want:    &oauthTokenInfo,
 			wantErr: false,
 		},
 		{
-			name: "This UT tests if _token_refresh_source fails to parse due to invalid type",
+			name: "This UT tests if _token_refresh_source fails to parse due to invalid string type",
 			uotm: &UserOAuthTokenManager{},
 			args: args{
 				ctx: context.Background(),
 			},
 			setup: func(t *testing.T) {
-				tokenInfoJSON := `{
-					"access_token": "dummy_access_token",
-					"refresh_token": "dummy_refresh_token",
-					"expires_in": 0,
-					"expires_on": 0,
-					"not_before": 0,
-					"resource": "dummy_resource",
-					"token_type": "dummy_token_type",
-					"_tenant": "dummy_tenant",
-					"_ad_endpoint": "dummy_ad_endpoint",
-					"_token_refresh_source": 2er25,
-					"_application_id": "dummy_application_id",
-					"IdentityInfo": {
-						"_identity_client_id": "dummy_identity_client_id",
-						"_identity_object_id": "dummy_identity_object_id",
-						"_identity_msi_res_id": "dummy_identity_msi_res_id"
-					},
-					"SPNInfo": {
-						"_spn_secret": "dummy_spn_secret",
-						"_spn_cert_path": "dummy_spn_cert_path"
-					}
-				}`
+				tokenInfo := formatTokenInfo("2gt5")
 
 				// Set the environment variable AZCOPY_OAUTH_TOKEN_INFO
-				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfoJSON)
+				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfo)
+				if err != nil {
+					t.Fatalf("Failed to set environment variable: %v", err)
+				}
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "This UT tests if _token_refresh_source fails to parse due to value out of uint8 range",
+			uotm: &UserOAuthTokenManager{},
+			args: args{
+				ctx: context.Background(),
+			},
+			setup: func(t *testing.T) {
+				tokenInfo := formatTokenInfo(847)
+
+				// Set the environment variable AZCOPY_OAUTH_TOKEN_INFO
+				err := os.Setenv("AZCOPY_OAUTH_TOKEN_INFO", tokenInfo)
 				if err != nil {
 					t.Fatalf("Failed to set environment variable: %v", err)
 				}

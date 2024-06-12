@@ -22,6 +22,7 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
@@ -133,11 +134,14 @@ func (d *AutoLoginType) UnmarshalJSON(data []byte) error {
 	}
 	// Handle numeric values
 	if numValue, ok := v.(float64); ok {
+		if numValue < 0 || numValue > 255 {
+			return fmt.Errorf("value out of range for _token_source_refresh: %v", numValue)
+		}
 		*d = AutoLoginType(uint8(numValue))
 		return nil
 	}
 
-	return nil
+	return fmt.Errorf("unsupported type for AutoLoginType: %T", v)
 }
 
 func ValidAutoLoginTypes() []string {
