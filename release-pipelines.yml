@@ -482,7 +482,7 @@ stages:
             continueOnError: true
 
           - script: |
-              cp -r (archives)/* $(Build.ArtifactStagingDirectory)
+              cp -r $(archives)/* $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Add tar.gz to signing stage'
 
@@ -671,6 +671,11 @@ stages:
               archiveType: tar
               archiveFile: '$(archives)/azcopy_linux_se_arm64_$(azcopy_version).tar.gz'
             continueOnError: true
+          
+          - script: |
+              cp -r $(archives)/* $(Build.ArtifactStagingDirectory)
+            workingDirectory: $(root_dir)
+            displayName: 'Add tar.gz to signing stage'
 
           - task: PublishBuildArtifacts@1
             inputs:
@@ -1679,6 +1684,23 @@ stages:
     dependsOn: TestArtifacts
     condition: succeeded('TestArtifacts')
     jobs:
+      # - job: ReleaseToContainer
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Ubuntu-22:
+      #         vmImage: 'Ubuntu-20.04'
+      #         AgentName: "blobfuse-ubuntu20"
+      #   pool:
+      #     name: "blobfuse-ubuntu-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
+      #   variables:
+      #     - name: Test_Release_Account_Name
+      #       value: 'azcopyprivatedrops'
+      #     - name: Release_Account_Name
+      #       value: 'azcopyvnextrelease'
+
       - job: ReleaseAzcopy
         timeoutInMinutes: 120
         strategy:
