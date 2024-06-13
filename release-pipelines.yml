@@ -404,8 +404,8 @@ stages:
 
           - script: |
               sudo mkdir -p /pkgDirAmd64/usr/bin/
-              cp NOTICE.txt /pkgDirAmd64/usr/bin/
-              cp $(linux_amd64)/azcopy_linux_amd64 /pkgDirAmd64/usr/bin/
+              sudo cp NOTICE.txt /pkgDirAmd64/usr/bin/
+              sudo cp $(linux_amd64)/azcopy_linux_amd64 /pkgDirAmd64/usr/bin/
               cp NOTICE.txt $(linux_amd64)/
               cp NOTICE.txt $(linux_se_amd64)/
             displayName: 'Copy required files'
@@ -594,8 +594,8 @@ stages:
 
           - script: |
               sudo mkdir -p /pkgDirArm64/usr/bin/
-              cp NOTICE.txt /pkgDirArm64/usr/bin/
-              cp $(linux_arm64)/azcopy_linux_arm64 /pkgDirArm64/usr/bin/
+              sudo cp NOTICE.txt /pkgDirArm64/usr/bin/
+              sudo cp $(linux_arm64)/azcopy_linux_arm64 /pkgDirArm64/usr/bin/
               cp NOTICE.txt $(linux_se_arm64)/
             displayName: 'Copy required files'
 
@@ -820,6 +820,21 @@ stages:
           - script: |
               GOARCH=arm64 CGO_ENABLED=1 go build -o "$(darwin_arm_dir)/azcopy_darwin_arm64"
             displayName: 'Test Cross-compiled MacOS Build with ARM64'
+          
+          - script: |
+              cp $(darwin_amd_dir)/azcopy_darwin_amd64 $(Build.ArtifactStagingDirectory)
+              cp $(darwin_arm_dir)/azcopy_darwin_arm64 $(Build.ArtifactStagingDirectory)
+            displayName: "Copy binaries to staging directory"
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-binaries'
+            displayName: 'Publish binaries'
+            condition: succeededOrFailed()
+
+          - script: |
+              rm -rf $(Build.ArtifactStagingDirectory)/*
+            displayName: "Remove binaries from staging directory"
 
           - task: Bash@3
             displayName: 'Extract AZCopy version'
