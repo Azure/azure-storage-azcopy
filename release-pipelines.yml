@@ -411,6 +411,10 @@ stages:
             displayName: 'Copy required files'
 
           - script: |
+              sudo ls -lRt /pkgDirAmd64/usr/bin/
+            displayName: 'List the files'
+
+          - script: |
               export GOARCH=amd64
               export GOOS=linux
               $(linux_amd64)/azcopy_linux_amd64 --version
@@ -598,6 +602,10 @@ stages:
               sudo cp $(linux_arm64)/azcopy_linux_arm64 /pkgDirArm64/usr/bin/
               cp NOTICE.txt $(linux_se_arm64)/
             displayName: 'Copy required files'
+
+          - script: |
+              sudo ls -lRt /pkgDirAmd64/usr/bin/
+            displayName: 'List the files'
 
           - script: |
               export GOARCH=arm64
