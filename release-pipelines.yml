@@ -618,7 +618,7 @@ stages:
               targetType: 'inline'
               script: |
                 # Run azcopy --version and capture the output
-                $azcopyOutput = & "$(windows_amd64)\azcopy_windows_amd64.exe" --version
+                $azcopyOutput = & "$(Build.ArtifactStagingDirectory)\azcopy_windows_v7_arm.exe" --version
 
                 # Output the raw azcopy version output for debugging
                 Write-Output "Raw azcopy output: $azcopyOutput"
@@ -630,7 +630,7 @@ stages:
                     Write-Output "Extracted version: $version"
                     
                     # Set the pipeline variable
-                    Write-Host "##vso[task.setvariable variable=azcopy_version]$version"
+                    #Write-Host "##vso[task.setvariable variable=AZCOPY_VERSION;isOutput=true]$version"
                 } else {
                     Write-Error "Unable to extract version from azcopy output"
                 }
@@ -883,7 +883,9 @@ stages:
             value: '$(work_dir)\azcopy_windows_386'
           - name: archives
             value: $(root_dir)\archives
-
+          - name: AZCOPY_VERSION
+            value: $[ dependencies.SetVariables.outputs['SetVars.AZCOPY_VERSION'] ]
+          
         steps:
           - script: |
               echo ${{ parameters.tag }}
