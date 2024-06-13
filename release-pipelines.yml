@@ -1690,73 +1690,73 @@ stages:
     dependsOn: TestArtifacts
     condition: succeeded('TestArtifacts')
     jobs:
-      - job: ReleaseToContainer
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Ubuntu-22:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
-        variables:
-          - name: Test_Release_Account_Name
-            value: 'azcopyprivatedrops'
-          - name: Release_Account_Name
-            value: 'azcopyvnextrelease'
+      # - job: ReleaseToContainer
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Ubuntu-22:
+      #         vmImage: 'Ubuntu-20.04'
+      #         AgentName: "blobfuse-ubuntu20"
+      #   pool:
+      #     name: "blobfuse-ubuntu-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
+      #   variables:
+      #     - name: Test_Release_Account_Name
+      #       value: 'azcopyprivatedrops'
+      #     - name: Release_Account_Name
+      #       value: 'azcopyvnextrelease'
 
-        # download artifacts that need to be published
-        - task: DownloadBuildArtifacts@0
-          displayName: 'Download Linux Build Artifacts'
-          inputs:
-            artifactName: 'azCopy-linux-signed'
-            downloadPath: $(Build.ArtifactStagingDirectory)
+      #   # download artifacts that need to be published
+      #   - task: DownloadBuildArtifacts@0
+      #     displayName: 'Download Linux Build Artifacts'
+      #     inputs:
+      #       artifactName: 'azCopy-linux-signed'
+      #       downloadPath: $(Build.ArtifactStagingDirectory)
 
-        - task: DownloadBuildArtifacts@0
-          displayName: 'Download Windows Build Artifacts'
-          inputs:
-            artifactName: 'azCopy-windows-signed'
-            downloadPath: $(Build.ArtifactStagingDirectory)
+      #   - task: DownloadBuildArtifacts@0
+      #     displayName: 'Download Windows Build Artifacts'
+      #     inputs:
+      #       artifactName: 'azCopy-windows-signed'
+      #       downloadPath: $(Build.ArtifactStagingDirectory)
 
-        - task: DownloadBuildArtifacts@0
-          displayName: 'Download Mac Build Artifacts'
-          inputs:
-            artifactName: 'azCopy-mac-signed'
-            downloadPath: $(Build.ArtifactStagingDirectory)
+      #   - task: DownloadBuildArtifacts@0
+      #     displayName: 'Download Mac Build Artifacts'
+      #     inputs:
+      #       artifactName: 'azCopy-mac-signed'
+      #       downloadPath: $(Build.ArtifactStagingDirectory)
         
-        - task: DownloadBuildArtifacts@0
-          displayName: 'Download Mac Build Artifacts'
-          inputs:
-            artifactName: 'azCopy-binaries'
-            downloadPath: $(Build.ArtifactStagingDirectory)
+      #   - task: DownloadBuildArtifacts@0
+      #     displayName: 'Download Mac Build Artifacts'
+      #     inputs:
+      #       artifactName: 'azCopy-binaries'
+      #       downloadPath: $(Build.ArtifactStagingDirectory)
 
-        - task: AzureCLI@2
-          displayName: 'Azure CLI '
-          inputs:
-            azureSubscription: 'ESRP KeyVault identity'
-            scriptType: bash
-            scriptLocation: inlineScript
-            inlineScript: |
-            # Find the current version
-            raw_version_output=(`$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version`)
-            azcopy_version=${raw_version_output[2]}
+      #   - task: AzureCLI@2
+      #     displayName: 'Azure CLI '
+      #     inputs:
+      #       azureSubscription: 'ESRP KeyVault identity'
+      #       scriptType: bash
+      #       scriptLocation: inlineScript
+      #       inlineScript: |
+      #       # Find the current version
+      #       raw_version_output=(`$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version`)
+      #       azcopy_version=${raw_version_output[2]}
             
-            today=`date +"%Y%m%d"`
-            if [ $(Test_Mode) = "on" ]; then
-            container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-            else
-              container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-            fi
-            echo "Artifacts will be uploaded to: $container_url"
+      #       today=`date +"%Y%m%d"`
+      #       if [ $(Test_Mode) = "on" ]; then
+      #       container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+      #       else
+      #         container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+      #       fi
+      #       echo "Artifacts will be uploaded to: $container_url"
             
-            executable_name=azcopy_linux_amd64
+      #       executable_name=azcopy_linux_amd64
             
-            # Upload the archived builds
-            AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-            AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
-            AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
+      #       # Upload the archived builds
+      #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
+      #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
+      #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
 
 
       - job: ReleaseAzcopy
