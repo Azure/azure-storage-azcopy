@@ -977,13 +977,14 @@ stages:
               wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
               sudo dpkg -i packages-microsoft-prod.deb 
               sudo apt install apt-transport-https -y
+              sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
 
-          - task: UseDotNet@2
-            displayName: 'Install .NET Core 6.0 runtime'
-            inputs:
-              packageType: 'runtime'
-              version: '6.0.0'
+          # - task: UseDotNet@2
+          #   displayName: 'Install .NET Core 6.0 runtime'
+          #   inputs:
+          #     packageType: 'runtime'
+          #     version: '6.0.0'
 
           - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
             displayName: 'Sign Windows exectuable'
@@ -1093,13 +1094,14 @@ stages:
               sudo dpkg -i packages-microsoft-prod.deb 
               sudo apt update 
               sudo apt install apt-transport-https -y
+              sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
             
-          - task: UseDotNet@2
-            displayName: 'Install .NET Core 6.0 runtime'
-            inputs:
-              packageType: 'runtime'
-              version: '6.0.0'
+          # - task: UseDotNet@2
+          #   displayName: 'Install .NET Core 6.0 runtime'
+          #   inputs:
+          #     packageType: 'runtime'
+          #     version: '6.0.0'
 
           - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
             displayName: 'Sign Mac executable'
