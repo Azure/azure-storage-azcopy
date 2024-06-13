@@ -21,13 +21,13 @@ jobs:
     strategy:
       matrix:
         Ubuntu-20:
-          imageName: 'ubuntu-20.04'
+          imageName: 'ubuntu-latest'
           type: 'linux'
         MacOS:
-          imageName: 'macos-11'
+          imageName: 'macos-latest'
           type: 'mac-os'
         Windows:
-          imageName: 'windows-2019'
+          imageName: 'windows-latest'
           type: 'windows'
     pool:
       vmImage: $(imageName)
@@ -125,16 +125,16 @@ jobs:
     strategy:
       matrix:
         Ubuntu-20:
-          imageName: 'ubuntu-20.04'
+          imageName: 'ubuntu-latest'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
         Windows:
-          imageName: 'windows-2019'
+          imageName: 'windows-latest'
           build_name: 'azcopy_windows_amd64.exe'
           display_name: "Windows"
           type: 'windows'
         MacOS:
-          imageName: 'macos-11'
+          imageName: 'macos-latest'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
     pool:
@@ -302,7 +302,7 @@ jobs:
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
     pool:
-      vmImage: 'ubuntu-20.04'
+      vmImage: 'ubuntu-latest'
     steps:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
