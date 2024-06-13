@@ -403,7 +403,7 @@ stages:
             displayName: "Remove binaries from staging directory"
 
           - script: |
-              mkdir -p /pkgDirAmd64/usr/bin/
+              sudo mkdir -p /pkgDirAmd64/usr/bin/
               cp NOTICE.txt /pkgDirAmd64/usr/bin/
               cp $(linux_amd64)/azcopy_linux_amd64 /pkgDirAmd64/usr/bin/
               cp NOTICE.txt $(linux_amd64)/
@@ -593,7 +593,7 @@ stages:
             displayName: "Remove binaries from staging directory"
 
           - script: |
-              mkdir -p /pkgDirArm64/usr/bin/
+              sudo mkdir -p /pkgDirArm64/usr/bin/
               cp NOTICE.txt /pkgDirArm64/usr/bin/
               cp $(linux_arm64)/azcopy_linux_arm64 /pkgDirArm64/usr/bin/
               cp NOTICE.txt $(linux_se_arm64)/
@@ -731,29 +731,34 @@ stages:
               GOOS: windows
               CGO_ENABLED: 0
 
-          - task: PowerShell@2
-            displayName: 'Extract AZCopy version'
+          - task: PublishBuildArtifacts@1
             inputs:
-              targetType: 'inline'
-              script: |
-                # Run azcopy --version and capture the output
-                $azcopyOutput = & "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe" --version
+              artifactName: 'azCopy-binaries'
+            displayName: 'Publish binaries'
+            condition: succeededOrFailed()
 
-                # Output the raw azcopy version output for debugging
-                Write-Output "Raw azcopy output: $azcopyOutput"
+          # - task: PowerShell@2
+          #   displayName: 'Extract AZCopy version'
+          #   inputs:
+          #     targetType: 'inline'
+          #     script: |
+          #       # Run azcopy --version and capture the output
+          #       $azcopyOutput = & "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe" --version
 
-                # Example output: "azcopy version 10.25.0~Preview.1" or "azcopy version 10.25.0"
-                # Extract the version part using string manipulation
-                if ($azcopyOutput -match "azcopy version (\d+\.\d+\.\d+)(~Preview\.\d+)?") {
-                    $version = $matches[1]
-                    Write-Output "Extracted version: $version"
+          #       # Output the raw azcopy version output for debugging
+          #       Write-Output "Raw azcopy output: $azcopyOutput"
+
+          #       # Example output: "azcopy version 10.25.0~Preview.1" or "azcopy version 10.25.0"
+          #       # Extract the version part using string manipulation
+          #       if ($azcopyOutput -match "azcopy version (\d+\.\d+\.\d+)(~Preview\.\d+)?") {
+          #           $version = $matches[1]
+          #           Write-Output "Extracted version: $version"
                     
-                    # Set the pipeline variable
-                    #Write-Host "##vso[task.setvariable variable=AZCOPY_VERSION;isOutput=true]$version"
-                } else {
-                    Write-Error "Unable to extract version from azcopy output"
-                }
-
+          #           # Set the pipeline variable
+          #           #Write-Host "##vso[task.setvariable variable=AZCOPY_VERSION;isOutput=true]$version"
+          #       } else {
+          #           Write-Error "Unable to extract version from azcopy output"
+          #       }
 
           - task: PublishBuildArtifacts@1
             inputs:
@@ -865,120 +870,120 @@ stages:
     dependsOn: BuildArtifacts
     condition: succeeded('BuildArtifacts')
     jobs:
-      # - job: Set_1
-      #   timeoutInMinutes: 120
-      #   strategy:
-      #     matrix:
-      #       Linux-Signing:
-      #         vmImage: 'Ubuntu-20.04'
-      #         AgentName: "blobfuse-ubuntu20"
-      #   pool:
-      #     name: "blobfuse-ubuntu-pool"
-      #     demands:
-      #       - ImageOverride -equals $(AgentName)
+      - job: Set_1
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Linux-Signing:
+              vmImage: 'Ubuntu-20.04'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
 
-      #   variables:
-      #     - group: AZCOPY_ESRP_SECRET
+        variables:
+          - group: AZCOPY_ESRP_SECRET
 
-      #   steps:
-      #     - checkout: none
+        steps:
+          - checkout: none
           
-      #     - script: |
-      #         echo ${{ parameters.tag }}
-      #       displayName: 'Tag Name'
+          - script: |
+              echo ${{ parameters.tag }}
+            displayName: 'Tag Name'
           
-      #     # download artifacts that need to be published
-      #     - task: DownloadBuildArtifacts@0
-      #       displayName: 'Download Build Artifacts'
-      #       inputs:
-      #         artifactName: 'azCopy-linux-temp'
-      #         downloadPath: $(Build.ArtifactStagingDirectory)
+          # download artifacts that need to be published
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-linux-temp'
+              downloadPath: $(Build.ArtifactStagingDirectory)
           
-      #     - script: |
-      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
-      #         md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
-      #       displayName: 'List Artifacts'
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
+            displayName: 'List Artifacts'
 
-      #     - script: |
-      #         mkdir mariner && chmod 755 mariner
-      #         cp azCopy-linux-temp/*arm64.rpm mariner
-      #         cp azCopy-linux-temp/*x86_64.rpm mariner
-      #         sudo ls -lRt mariner
-      #         md5sum mariner/*
-      #       displayName: 'Copy artifacts for Mariner'
-      #       workingDirectory: $(Build.ArtifactStagingDirectory)
+          - script: |
+              mkdir mariner && chmod 755 mariner
+              cp azCopy-linux-temp/*arm64.rpm mariner
+              cp azCopy-linux-temp/*x86_64.rpm mariner
+              sudo ls -lRt mariner
+              md5sum mariner/*
+            displayName: 'Copy artifacts for Mariner'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
           
-      #     - script: |
-      #         sudo apt-get clean
-      #         sudo apt-get update
-      #         sudo apt-get upgrade -y
-      #         sudo apt-get install -f --fix-missing
-      #         wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-      #         sudo dpkg -i packages-microsoft-prod.deb 
-      #         sudo apt install apt-transport-https -y
-      #         sudo apt install dotnet-sdk-3.1 -y
-      #       displayName: "Update dependencies"
+          - script: |
+              sudo apt-get clean
+              sudo apt-get update
+              sudo apt-get upgrade -y
+              sudo apt-get install -f --fix-missing
+              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+              sudo dpkg -i packages-microsoft-prod.deb 
+              sudo apt install apt-transport-https -y
+              sudo apt install dotnet-sdk-3.1 -y
+            displayName: "Update dependencies"
             
-      #     # Send images for signing
-      #     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
-      #       displayName: 'ESRP CodeSigning azCopy linux'
-      #       inputs:
-      #         ConnectedServiceName: 'PMC ESRP AzCopy Signing'
-      #         FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-linux-temp'
-      #         Pattern: '*.rpm, *.deb'
-      #         signConfigType: inlineSignParams
-      #         VerboseLogin: true
-      #         inlineOperation: |
-      #           [
-      #             {
-      #               "KeyCode" : "$(ESRP_AZCOPY_KEY_CODE)",
-      #               "OperationCode" : "LinuxSign",
-      #               "Parameters" : {},
-      #               "ToolName" : "sign",
-      #               "ToolVersion" : "1.0"
-      #             }
-      #           ]
+          # Send images for signing
+          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+            displayName: 'ESRP CodeSigning azCopy linux'
+            inputs:
+              ConnectedServiceName: 'PMC ESRP AzCopy Signing'
+              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-linux-temp'
+              Pattern: '*.rpm, *.deb, *tar.gz'
+              signConfigType: inlineSignParams
+              VerboseLogin: true
+              inlineOperation: |
+                [
+                  {
+                    "KeyCode" : "$(ESRP_AZCOPY_KEY_CODE)",
+                    "OperationCode" : "LinuxSign",
+                    "Parameters" : {},
+                    "ToolName" : "sign",
+                    "ToolVersion" : "1.0"
+                  }
+                ]
 
-      #     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
-      #       displayName: 'ESRP CodeSigning azCopy mariner'
-      #       inputs:
-      #         ConnectedServiceName: 'PMC ESRP azCopy Signing'
-      #         FolderPath: '$(Build.ArtifactStagingDirectory)/mariner'
-      #         Pattern: '*.rpm, *.deb'
-      #         signConfigType: inlineSignParams
-      #         VerboseLogin: true
-      #         inlineOperation: |
-      #           [
-      #             {
-      #               "KeyCode" : "$(ESRP_AZCOPY_MARINER_KEY_CODE)",
-      #               "OperationCode" : "LinuxSign",
-      #               "Parameters" : {},
-      #               "ToolName" : "sign",
-      #               "ToolVersion" : "1.0"
-      #             }
-      #           ]
+          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+            displayName: 'ESRP CodeSigning azCopy mariner'
+            inputs:
+              ConnectedServiceName: 'PMC ESRP azCopy Signing'
+              FolderPath: '$(Build.ArtifactStagingDirectory)/mariner'
+              Pattern: '*.rpm, *.deb'
+              signConfigType: inlineSignParams
+              VerboseLogin: true
+              inlineOperation: |
+                [
+                  {
+                    "KeyCode" : "$(ESRP_AZCOPY_MARINER_KEY_CODE)",
+                    "OperationCode" : "LinuxSign",
+                    "Parameters" : {},
+                    "ToolName" : "sign",
+                    "ToolVersion" : "1.0"
+                  }
+                ]
 
-      #     # Validate signed images have md5sum changed
-      #     - script: |
-      #         chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
-      #         chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
-      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*.md
-      #         rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
-      #         mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/* $(Build.ArtifactStagingDirectory)/
-      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/
-      #       displayName: 'Make Artifacts executable'
+          # Validate signed images have md5sum changed
+          - script: |
+              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
+              chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*.md
+              rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
+              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/* $(Build.ArtifactStagingDirectory)/
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/
+            displayName: 'Make Artifacts executable'
 
-      #     - script: |
-      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
-      #         md5sum $(Build.ArtifactStagingDirectory)/*
-      #         md5sum $(Build.ArtifactStagingDirectory)/mariner/*
-      #       displayName: 'List Signed Artifacts'
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/*
+              md5sum $(Build.ArtifactStagingDirectory)/mariner/*
+            displayName: 'List Signed Artifacts'
           
-      #     # Push signed images to artifact directory
-      #     - task: PublishBuildArtifacts@1
-      #       inputs:
-      #         artifactName: 'azCopy-linux-signed'
-      #       displayName: 'Publish Signed Artifacts'
+          # Push signed images to artifact directory
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-linux-signed'
+            displayName: 'Publish Signed Artifacts'
 
       - job: Set_2
         timeoutInMinutes: 120
