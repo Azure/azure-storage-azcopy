@@ -984,20 +984,20 @@ stages:
             displayName: 'Archive Windows 64 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_amd64)'
-              archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
+              archiveFile: '$(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 32 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_386)'
-              archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
+              archiveFile: '$(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip'
             continueOnError: true
 
           - script: |
-              cp $(archives)\azcopy_windows_amd64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)\azcopy_windows_386_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
-              cp $(work_dir)\azcopy_windows_v7_arm.exe $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+              cp $(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
           - script: |
@@ -1056,12 +1056,6 @@ stages:
               sudo apt install apt-transport-https -y
               sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
-            
-          # - task: UseDotNet@2
-          #   displayName: 'Install .NET Core 6.0 runtime'
-          #   inputs:
-          #     packageType: 'runtime'
-          #     version: '6.0.0'
 
           - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
             displayName: 'Sign Mac executable'
