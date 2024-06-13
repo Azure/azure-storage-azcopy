@@ -421,24 +421,24 @@ stages:
               azcopyOutput=$($(linux_amd64)/azcopy_linux_amd64 --version)
 
               # Run azcopy --version and capture the output
-                azcopyOutput=$($(linux_amd64)/azcopy_linux_amd64 --version)
+              azcopyOutput=$($(linux_amd64)/azcopy_linux_amd64 --version)
 
-                # Extract the version part using grep and sed
-                if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                  version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                  if [[ -n "$version" ]]; then
-                    echo "Extracted version: $version"
-                    
-                    # Set the pipeline variable (for Azure DevOps)
-                    echo "##vso[task.setvariable variable=azcopy_version]$version"
-                  else
-                    echo "Unable to extract version from azcopy output"
-                    exit 1
-                  fi
+              # Extract the version part using grep and sed
+              if echo "$azcopyOutput" | grep -q "azcopy version"; then
+                version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+                if [[ -n "$version" ]]; then
+                  echo "Extracted version: $version"
+                  
+                  # Set the pipeline variable (for Azure DevOps)
+                  echo "##vso[task.setvariable variable=azcopy_version]$version"
                 else
-                  echo "azcopy version string not found in output"
+                  echo "Unable to extract version from azcopy output"
                   exit 1
                 fi
+              else
+                echo "azcopy version string not found in output"
+                exit 1
+              fi
             displayName: 'Verify and extract the generated build version'
             
           # using fpm tool for packaging of our binary & performing post-install operations
@@ -1046,6 +1046,12 @@ stages:
             inputs:
               artifactName: 'azCopy-windows-temp'
               downloadPath: $(Build.ArtifactStagingDirectory)
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download linux binary for extracting version'
+            inputs:
+              artifactName: 'azCopy-binaries'
+              downloadPath: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
           
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
@@ -1133,19 +1139,19 @@ stages:
             displayName: 'Archive Windows 64 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_amd64)'
-              archiveFile: '$(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip'
+              archiveFile: '$(archives)/azcopy_windows_amd64.zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 32 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_386)'
-              archiveFile: '$(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip'
+              archiveFile: '$(archives)/azcopy_windows_386.zip'
             continueOnError: true
 
           - script: |
-              cp $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_windows_amd64.zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_windows_386.zip $(Build.ArtifactStagingDirectory)
               cp $(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
@@ -1684,22 +1690,74 @@ stages:
     dependsOn: TestArtifacts
     condition: succeeded('TestArtifacts')
     jobs:
-      # - job: ReleaseToContainer
-      #   timeoutInMinutes: 120
-      #   strategy:
-      #     matrix:
-      #       Ubuntu-22:
-      #         vmImage: 'Ubuntu-20.04'
-      #         AgentName: "blobfuse-ubuntu20"
-      #   pool:
-      #     name: "blobfuse-ubuntu-pool"
-      #     demands:
-      #       - ImageOverride -equals $(AgentName)
-      #   variables:
-      #     - name: Test_Release_Account_Name
-      #       value: 'azcopyprivatedrops'
-      #     - name: Release_Account_Name
-      #       value: 'azcopyvnextrelease'
+      - job: ReleaseToContainer
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Ubuntu-22:
+              vmImage: 'Ubuntu-20.04'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
+        variables:
+          - name: Test_Release_Account_Name
+            value: 'azcopyprivatedrops'
+          - name: Release_Account_Name
+            value: 'azcopyvnextrelease'
+
+        # download artifacts that need to be published
+        - task: DownloadBuildArtifacts@0
+          displayName: 'Download Linux Build Artifacts'
+          inputs:
+            artifactName: 'azCopy-linux-signed'
+            downloadPath: $(Build.ArtifactStagingDirectory)
+
+        - task: DownloadBuildArtifacts@0
+          displayName: 'Download Windows Build Artifacts'
+          inputs:
+            artifactName: 'azCopy-windows-signed'
+            downloadPath: $(Build.ArtifactStagingDirectory)
+
+        - task: DownloadBuildArtifacts@0
+          displayName: 'Download Mac Build Artifacts'
+          inputs:
+            artifactName: 'azCopy-mac-signed'
+            downloadPath: $(Build.ArtifactStagingDirectory)
+        
+        - task: DownloadBuildArtifacts@0
+          displayName: 'Download Mac Build Artifacts'
+          inputs:
+            artifactName: 'azCopy-binaries'
+            downloadPath: $(Build.ArtifactStagingDirectory)
+
+        - task: AzureCLI@2
+          displayName: 'Azure CLI '
+          inputs:
+            azureSubscription: 'ESRP KeyVault identity'
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+            # Find the current version
+            raw_version_output=(`$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version`)
+            azcopy_version=${raw_version_output[2]}
+            
+            today=`date +"%Y%m%d"`
+            if [ $(Test_Mode) = "on" ]; then
+            container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+            else
+              container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+            fi
+            echo "Artifacts will be uploaded to: $container_url"
+            
+            executable_name=azcopy_linux_amd64
+            
+            # Upload the archived builds
+            AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
+            AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
+            AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
+
 
       - job: ReleaseAzcopy
         timeoutInMinutes: 120
