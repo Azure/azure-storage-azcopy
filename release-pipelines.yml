@@ -861,8 +861,6 @@ stages:
             value: $(root_dir)\archives
 
         steps:
-          - checkout: none
-          
           - script: |
               echo ${{ parameters.tag }}
             displayName: 'Tag Name'
