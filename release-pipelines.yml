@@ -612,6 +612,30 @@ stages:
               GOOS: windows
               CGO_ENABLED: 0
 
+          - task: PowerShell@2
+            displayName: 'Extract AZCopy version'
+            inputs:
+              targetType: 'inline'
+              script: |
+                # Run azcopy --version and capture the output
+                $azcopyOutput = & "$(windows_amd64)\azcopy_windows_amd64.exe" --version
+
+                # Output the raw azcopy version output for debugging
+                Write-Output "Raw azcopy output: $azcopyOutput"
+
+                # Example output: "azcopy version 10.25.0~Preview.1" or "azcopy version 10.25.0"
+                # Extract the version part using string manipulation
+                if ($azcopyOutput -match "azcopy version (\d+\.\d+\.\d+)(~Preview\.\d+)?") {
+                    $version = $matches[1]
+                    Write-Output "Extracted version: $version"
+                    
+                    # Set the pipeline variable
+                    Write-Host "##vso[task.setvariable variable=azcopy_version]$version"
+                } else {
+                    Write-Error "Unable to extract version from azcopy output"
+                }
+
+
           - task: PublishBuildArtifacts@1
             inputs:
               artifactName: 'azCopy-windows-temp'
@@ -953,30 +977,7 @@ stages:
               cp NOTICE.txt $(windows_amd64)
               cp NOTICE.txt $(windows_386)
             displayName: 'Copy required files'
-
-          - task: PowerShell@2
-            displayName: 'Extract AZCopy version'
-            inputs:
-              targetType: 'inline'
-              script: |
-                # Run azcopy --version and capture the output
-                $azcopyOutput = & "$(windows_amd64)\azcopy_windows_amd64.exe" --version
-
-                # Output the raw azcopy version output for debugging
-                Write-Output "Raw azcopy output: $azcopyOutput"
-
-                # Example output: "azcopy version 10.25.0~Preview.1" or "azcopy version 10.25.0"
-                # Extract the version part using string manipulation
-                if ($azcopyOutput -match "azcopy version (\d+\.\d+\.\d+)(~Preview\.\d+)?") {
-                    $version = $matches[1]
-                    Write-Output "Extracted version: $version"
-                    
-                    # Set the pipeline variable
-                    Write-Host "##vso[task.setvariable variable=azcopy_version]$version"
-                } else {
-                    Write-Error "Unable to extract version from azcopy output"
-                }
-
+          
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 64 bit Build'
             inputs:
@@ -991,41 +992,11 @@ stages:
               archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
             continueOnError: true
 
-          - task: PowerShell@2
+          - script: |
+              cp $(archives)\azcopy_windows_amd64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)\azcopy_windows_386_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
+              cp $(work_dir)\azcopy_windows_v7_arm.exe $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
-            inputs:
-              targetType: 'inline'
-              script: |
-                # Ensure the destination directory exists
-                New-Item -ItemType Directory -Path "$(Build.ArtifactStagingDirectory)" -Force
-
-                # Copy the zip files and executable to the artifact staging directory
-                $sourceAmd64Zip = "$(archives)\azcopy_windows_amd64_$(azcopy_version).zip"
-                $source386Zip = "$(archives)\azcopy_windows_386_$(azcopy_version).zip"
-                $sourceArmExe = "$(work_dir)\azcopy_windows_v7_arm.exe"
-                $destinationDir = "$(Build.ArtifactStagingDirectory)"
-
-                # Check if the source files exist before copying
-                if (Test-Path $sourceAmd64Zip) {
-                    Copy-Item -Path $sourceAmd64Zip -Destination $destinationDir -Force -ErrorAction Stop
-                    Write-Output "Copied $sourceAmd64Zip to $destinationDir"
-                } else {
-                    Write-Error "File not found: $sourceAmd64Zip"
-                }
-
-                if (Test-Path $source386Zip) {
-                    Copy-Item -Path $source386Zip -Destination $destinationDir -Force -ErrorAction Stop
-                    Write-Output "Copied $source386Zip to $destinationDir"
-                } else {
-                    Write-Error "File not found: $source386Zip"
-                }
-
-                if (Test-Path $sourceArmExe) {
-                    Copy-Item -Path $sourceArmExe -Destination $destinationDir -Force -ErrorAction Stop
-                    Write-Output "Copied $sourceArmExe to $destinationDir"
-                } else {
-                    Write-Error "File not found: $sourceArmExe"
-                }
 
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
