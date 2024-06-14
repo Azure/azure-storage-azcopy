@@ -1114,7 +1114,7 @@ stages:
               cp NOTICE.txt $(windows_386)
               sudo ls -ltR $(windows_amd64)
               sudo ls -ltR $(windows_386)
-              suco chmod 777 $(archives)/
+              sudo chmod 777 $(archives)/
             displayName: 'Copy required files'
           
           - task: ArchiveFiles@2
@@ -1306,7 +1306,7 @@ stages:
               wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
               sudo dpkg -i packages-microsoft-prod.deb 
               sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-3.1 -y
+              sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
 
           # Send linux images for signing
