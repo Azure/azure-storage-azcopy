@@ -9,7 +9,7 @@ parameters:
     type: string
     default: 'azcopy-'
 
-   - name: test_mode
+  - name: test_mode
     displayName: 'Test Mode'
     type: boolean
     default: false
