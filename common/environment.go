@@ -21,10 +21,13 @@
 package common
 
 import (
-	"github.com/JeffreyRichter/enum/enum"
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
+
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 type EnvironmentVariable struct {
@@ -113,6 +116,32 @@ func (d *AutoLoginType) Parse(s string) error {
 		*d = val.(AutoLoginType)
 	}
 	return err
+}
+
+// MarshalJSON customizes the JSON encoding for AutoLoginType
+func (d AutoLoginType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+// UnmarshalJSON customizes the JSON decoding for AutoLoginType
+func (d *AutoLoginType) UnmarshalJSON(data []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	if strValue, ok := v.(string); ok {
+		return d.Parse(strValue)
+	}
+	// Handle numeric values
+	if numValue, ok := v.(float64); ok {
+		if numValue < 0 || numValue > 255 {
+			return fmt.Errorf("value out of range for _token_source_refresh: %v", numValue)
+		}
+		*d = AutoLoginType(uint8(numValue))
+		return nil
+	}
+
+	return fmt.Errorf("unsupported type for AutoLoginType: %T", v)
 }
 
 func ValidAutoLoginTypes() []string {
