@@ -1329,32 +1329,6 @@ stages:
                 ]
 
           - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-            displayName: 'Sign Mac executable'
-            inputs:
-              ConnectedServiceName: 'ESRP KeyVault identity'
-              AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
-              AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
-              AuthAKVName: 'azcopy-esrp-kv'
-              AuthCertName: 'azcopy-auth'
-              AuthSignCertName: 'azcopy-sign-test'
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
-              Pattern: 'azcopy_darwin*'
-              signConfigType: inlineSignParams
-              inlineOperation: |
-                [
-                    {
-                      "KeyCode":"$(ESRP_AZCOPY_MAC_KEY_CODE)",
-                      "OperationCode":"MacAppDeveloperSign",
-                      "Parameters":{
-                          "Hardening":"--options=runtime"
-                      },
-                      "ToolName":"sign",
-                      "ToolVersion":"1.0"
-                    }
-                ]
-              SessionTimeout: 30
-
-          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
             displayName: 'Sign Windows exectuable'
             inputs:
               ConnectedServiceName: 'ESRP KeyVault identity'
@@ -1396,6 +1370,32 @@ stages:
                     "toolName": "signtool.exe",
                     "toolVersion": "6.2.9304.0"
                   }
+                ]
+              SessionTimeout: 30
+
+          - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+            displayName: 'Sign Mac executable'
+            inputs:
+              ConnectedServiceName: 'ESRP KeyVault identity'
+              AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
+              AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
+              AuthAKVName: 'azcopy-esrp-kv'
+              AuthCertName: 'azcopy-auth'
+              AuthSignCertName: 'azcopy-sign-test'
+              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
+              Pattern: 'azcopy_darwin*'
+              signConfigType: inlineSignParams
+              inlineOperation: |
+                [
+                    {
+                      "KeyCode":"$(ESRP_AZCOPY_MAC_KEY_CODE)",
+                      "OperationCode":"MacAppDeveloperSign",
+                      "Parameters":{
+                          "Hardening":"--options=runtime"
+                      },
+                      "ToolName":"sign",
+                      "ToolVersion":"1.0"
+                    }
                 ]
               SessionTimeout: 30
 
