@@ -1054,6 +1054,7 @@ stages:
               sudo dpkg -i packages-microsoft-prod.deb 
               sudo apt install apt-transport-https -y
               sudo apt install dotnet-sdk-6.0 -y
+              sudo apt-get install -y zip
             displayName: "Update dependencies"
 
           - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
