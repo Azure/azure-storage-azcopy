@@ -1750,25 +1750,25 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-              # Find the current version
-              raw_version_output=(`$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version`)
-              azcopy_version=${raw_version_output[2]}
-              
-              today=`date +"%Y%m%d"`
-              if [ $(test_mode) = "on" ]; then
-              container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-              else
-                container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-              fi
-              echo "Artifacts will be uploaded to: $container_url"
-              
-              executable_name=azcopy_linux_amd64
-              
-              # Upload the archived builds
-              AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-              AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
-              AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
-              AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/*.zip" "$container_url" --recursive --put-md5=true
+                # Find the current version
+                raw_version_output=(`$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version`)
+                azcopy_version=${raw_version_output[2]}
+                
+                today=`date +"%Y%m%d"`
+                if [ $(test_mode) = "on" ]; then
+                container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+                else
+                  container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+                fi
+                echo "Artifacts will be uploaded to: $container_url"
+                
+                executable_name=azcopy_linux_amd64
+                
+                # Upload the archived builds
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/*.zip" "$container_url" --recursive --put-md5=true
 
       - job: ReleaseAzcopy
         timeoutInMinutes: 120
