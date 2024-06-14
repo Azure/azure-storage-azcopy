@@ -1132,8 +1132,8 @@ stages:
             continueOnError: true
 
           - script: |
-              cp $(archives)/azcopy_windows_amd64.zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_windows_386.zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
           - script: |
