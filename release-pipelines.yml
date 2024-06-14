@@ -1427,10 +1427,10 @@ stages:
 
   # SignArtifacts end here
 
-  - stage: TestArtifacts
-    dependsOn: SignArtifacts
-    condition: succeeded('SignArtifacts')
-    jobs:
+  # - stage: TestArtifacts
+  #   dependsOn: SignArtifacts
+  #   condition: succeeded('SignArtifacts')
+  #   jobs:
       # - job: Set_1
       #   timeoutInMinutes: 120
       #   strategy:
