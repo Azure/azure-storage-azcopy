@@ -1025,13 +1025,13 @@ stages:
         variables:
           - group: AZCOPY_ESRP_SECRET
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)\azure-storage-azcopy'
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
           - name: windows_amd64
-            value: '$(work_dir)\azcopy_windows_amd64'
+            value: '$(work_dir)/azcopy_windows_amd64'
           - name: windows_386
-            value: '$(work_dir)\azcopy_windows_386'
+            value: '$(work_dir)/azcopy_windows_386'
           - name: archives
-            value: $(root_dir)\archives
+            value: $(root_dir)/archives
           - name: AZCOPY_VERSION
             value: $[ dependencies.SetVariables.outputs['SetVars.AZCOPY_VERSION'] ]
           
@@ -1134,6 +1134,11 @@ stages:
               cp NOTICE.txt $(windows_amd64)
               cp NOTICE.txt $(windows_386)
             displayName: 'Copy required files'
+          
+          - script: |
+              sudo apt-get update
+              sudo apt-get install -y zip
+            displayName: 'Install zip utility'
           
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 64 bit Build'
