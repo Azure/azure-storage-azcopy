@@ -1113,30 +1113,28 @@ stages:
               cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)
               cp NOTICE.txt $(windows_amd64)
               cp NOTICE.txt $(windows_386)
-              sudo ls -ltR $(windows_amd64)
-              sudo ls -ltR $(windows_386)
-              zip -r $(archives)/azcopy_windows_amd64.zip .
-              zip -r $(archives)/azcopy_windows_386.zip .
+              zip -r $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip .
+              zip -r $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip .
             displayName: 'Copy required files'
           
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 64 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_amd64)'
-              archiveFile: '$(archives)/azcopy_windows_amd64.zip'
+              archiveFile: '$(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 32 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_386)'
-              archiveFile: '$(archives)/azcopy_windows_386.zip'
+              archiveFile: '$(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip'
             continueOnError: true
 
           - script: |
               cp $(archives)/azcopy_windows_amd64.zip $(Build.ArtifactStagingDirectory)
               cp $(archives)/azcopy_windows_386.zip $(Build.ArtifactStagingDirectory)
-              cp $(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe $(Build.ArtifactStagingDirectory)
+              cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_v7_arm.exe $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
           - script: |
@@ -1267,6 +1265,19 @@ stages:
               artifactName: 'azCopy-mac-signed'
             displayName: 'Publish Signed Artifacts'
 
+          - script: |
+              mkdir -p $(Build.ArtifactStagingDirectory)/unzipped
+              unzip -o $(Build.ArtifactStagingDirectory)/*.zip -d $(Build.ArtifactStagingDirectory)/unzipped
+              mv $(Build.ArtifactStagingDirectory)/unzipped/azcopy_darwin* $(Build.ArtifactStagingDirectory)/
+              rm -rf $(Build.ArtifactStagingDirectory)/unzipped
+            displayName:  'Copy signed mac build to staging directory'
+
+          # Push signed images to artifact directory
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-binaries-signed'
+            displayName: 'Publish Signed Mac Binary'
+
       - job: Set_4
         timeoutInMinutes: 120
         strategy:
@@ -1375,32 +1386,6 @@ stages:
                   }
                 ]
               SessionTimeout: 30
-
-          # - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-          #   displayName: 'Sign Mac executable'
-          #   inputs:
-          #     ConnectedServiceName: 'ESRP KeyVault identity'
-          #     AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
-          #     AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
-          #     AuthAKVName: 'azcopy-esrp-kv'
-          #     AuthCertName: 'azcopy-auth'
-          #     AuthSignCertName: 'azcopy-sign-test'
-          #     FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
-          #     Pattern: 'azcopy_darwin*'
-          #     signConfigType: inlineSignParams
-          #     inlineOperation: |
-          #       [
-          #           {
-          #             "KeyCode":"$(ESRP_AZCOPY_MAC_KEY_CODE)",
-          #             "OperationCode":"MacAppDeveloperSign",
-          #             "Parameters":{
-          #                 "Hardening":"--options=runtime"
-          #             },
-          #             "ToolName":"sign",
-          #             "ToolVersion":"1.0"
-          #           }
-          #       ]
-          #     SessionTimeout: 30
 
           # Validate signed images have md5sum changed
           - script: |
