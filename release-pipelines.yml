@@ -1121,6 +1121,8 @@ stages:
                 if [[ -n "$version" ]]; then
                   echo "Extracted version: $version"
                   echo "##vso[task.setvariable variable=azcopy_version]$version"
+                fi
+              fi
             displayName: 'Extract the generated build version'
 
           - script: |
