@@ -1751,7 +1751,7 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 # Find the current version
-                raw_version_output=(`$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version`)
+                raw_version_output=($($(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version))
                 azcopy_version=${raw_version_output[2]}
                 
                 today=`date +"%Y%m%d"`
