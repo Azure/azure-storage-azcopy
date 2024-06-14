@@ -1113,7 +1113,7 @@ stages:
 
           - script: |
               # Run azcopy --version and capture the output
-              azcopyOutput=$($(work_dir)/azCopy_binaries/azcopy_linux_amd64 --version)
+              azcopyOutput=$($(work_dir)/azCopy-binaries/azcopy_linux_amd64 --version)
 
               if echo "$azcopyOutput" | grep -q "azcopy version"; then
                 version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
