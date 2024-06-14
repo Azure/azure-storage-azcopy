@@ -1283,12 +1283,12 @@ stages:
             displayName: 'Publish Signed Artifacts'
 
           - script: |
-              rm-rf $(Build.ArtifactStagingDirectory)/*.zip
+              rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               mkdir -p $(Build.ArtifactStagingDirectory)/unzipped
               unzip -o $(Build.ArtifactStagingDirectory)/*.zip -d $(Build.ArtifactStagingDirectory)/unzipped
               mv $(Build.ArtifactStagingDirectory)/unzipped/azcopy_darwin* $(Build.ArtifactStagingDirectory)/
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped
-              sudo ls -ltR rm-rf $(Build.ArtifactStagingDirectory)
+              sudo ls -ltR $(Build.ArtifactStagingDirectory)
             displayName:  'Copy signed mac build to staging directory'
 
           # Push signed images to artifact directory
