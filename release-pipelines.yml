@@ -1013,8 +1013,6 @@ stages:
             value: '$(work_dir)/azcopy_windows_386'
           - name: archives
             value: '$(work_dir)/archives'
-          - name: AZCOPY_VERSION
-            value: $[ dependencies.SetVariables.outputs['SetVars.AZCOPY_VERSION'] ]
           
         steps:
           - script: |
@@ -1032,7 +1030,8 @@ stages:
             displayName: 'Download linux binary for extracting version'
             inputs:
               artifactName: 'azCopy-binaries'
-              downloadPath: $(Build.ArtifactStagingDirectory)/azcopy_linux_amd64
+              downloadPath: $(root_dir)/
+              itemPattern: 'azCopy-binaries/azcopy_linux_amd64'
           
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
@@ -1109,26 +1108,37 @@ stages:
             displayName: 'Make Artifacts executable'
 
           - script: |
+              # Run azcopy --version and capture the output
+              azcopyOutput=$($($(root_dir)/azCopy_binaries)/azcopy_linux_amd64 --version)
+
+              if echo "$azcopyOutput" | grep -q "azcopy version"; then
+                version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+                if [[ -n "$version" ]]; then
+                  echo "Extracted version: $version"
+                  echo "##vso[task.setvariable variable=azcopy_version]$version"
+            displayName: 'Extract the generated build version'
+
+          - script: |
               cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)
               cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)
               cp NOTICE.txt $(windows_amd64)
               cp NOTICE.txt $(windows_386)
-              zip -r $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip .
-              zip -r $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip .
+              zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
+              zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
             displayName: 'Copy required files'
           
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 64 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_amd64)'
-              archiveFile: '$(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip'
+              archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
             displayName: 'Archive Windows 32 bit Build'
             inputs:
               rootFolderOrFile: '$(windows_386)'
-              archiveFile: '$(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip'
+              archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
             continueOnError: true
 
           - script: |
@@ -1137,6 +1147,7 @@ stages:
             displayName: 'Copy zip to staging directory'
 
           - script: |
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy_windows_temp
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/*
             displayName: 'List Signed Artifacts'
