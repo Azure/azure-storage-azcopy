@@ -1134,7 +1134,6 @@ stages:
           - script: |
               cp $(archives)/azcopy_windows_amd64.zip $(Build.ArtifactStagingDirectory)
               cp $(archives)/azcopy_windows_386.zip $(Build.ArtifactStagingDirectory)
-              cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_v7_arm.exe $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
           - script: |
