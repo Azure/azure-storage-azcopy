@@ -218,11 +218,20 @@ func InferArgumentLocation(arg string) common.Location {
 			if common.IsGCPURL(*u) {
 				return common.ELocation.GCP()
 			}
-      
-			// If none of the above conditions match, return Unknown 
+
+			// If none of the above conditions match, return Unknown
 			return common.ELocation.Unknown()
 		}
 	}
 
 	return common.ELocation.Local()
+}
+
+func invalidAzureBlobName(objectKey string) bool {
+	/* Blob object name is invalid if it ends with period or
+	   one of (virtual) directories in path ends with period.
+	   This list is not exhaustive
+	*/
+	return strings.HasSuffix(objectKey, ".") ||
+		strings.Contains(objectKey, "./")
 }

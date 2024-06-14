@@ -28,7 +28,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
-	"runtime"
 	"strings"
 	"time"
 
@@ -48,8 +47,8 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	trailingDot common.TrailingDotOption
-	destination *common.Location
+	trailingDot                 common.TrailingDotOption
+	destination                 *common.Location
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -121,15 +120,10 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse
 }
 
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
-	invalidBlobOrWindowsName := func(path string) bool {
+	invalidBlobName := func(path string) bool {
 		if t.destination != nil {
-			if (t.destination.IsLocal() && runtime.GOOS == "windows") || *t.destination == common.ELocation.Blob() || *t.destination == common.ELocation.BlobFS() {
-				/* Blob or Windows object name is invalid if it ends with period or
-				   one of (virtual) directories in path ends with period.
-				   This list is not exhaustive
-				*/
-				return strings.HasSuffix(path, ".") ||
-					strings.Contains(path, "./")
+			if *t.destination == common.ELocation.Blob() || *t.destination == common.ELocation.BlobFS() {
+				return invalidAzureBlobName(path)
 			}
 		}
 		return false
@@ -141,7 +135,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
-		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
+		if invalidBlobName(targetURLParts.DirectoryOrFilePath) {
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, targetURLParts.DirectoryOrFilePath))
 			return common.EAzError.InvalidBlobOrWindowsName()
 		}
@@ -283,7 +277,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			for _, fileInfo := range lResp.Segment.Files {
-				if invalidBlobOrWindowsName(*fileInfo.Name) {
+				if invalidBlobName(*fileInfo.Name) {
 					//Throw a warning on console and continue
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *fileInfo.Name))
 					continue
@@ -296,7 +290,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 			}
 			for _, dirInfo := range lResp.Segment.Directories {
-				if invalidBlobOrWindowsName(*dirInfo.Name) {
+				if invalidBlobName(*dirInfo.Name) {
 					//Throw a warning on console and continue
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *dirInfo.Name))
 					continue
@@ -307,7 +301,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				}
 				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, *dirInfo.Name), nil)
 				if t.recursive {
-						// If recursive is turned on, add sub directories to be processed
+					// If recursive is turned on, add sub directories to be processed
 					enqueueDir(currentDirectoryClient.NewSubdirectoryClient(*dirInfo.Name))
 				}
 
@@ -381,14 +375,14 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
 	t = &fileTraverser{
-		rawURL: rawURL,
-		serviceClient: serviceClient,
-		ctx: ctx,
-		recursive: recursive,
-		getProperties: getProperties,
+		rawURL:                      rawURL,
+		serviceClient:               serviceClient,
+		ctx:                         ctx,
+		recursive:                   recursive,
+		getProperties:               getProperties,
 		incrementEnumerationCounter: incrementEnumerationCounter,
-		trailingDot: trailingDot,
-		destination: destination,
+		trailingDot:                 trailingDot,
+		destination:                 destination,
 	}
 	return
 }
