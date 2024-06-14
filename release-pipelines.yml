@@ -1920,23 +1920,23 @@ stages:
               itemPattern: azCopy-windows-signed/azcopy*amd64*.zip
           
           - script: |
-            # Define variables
-            $zipFilePath = "$(Build.ArtifactStagingDirectory)\azCopy-windows-signed\azcopy.zip"
-            $extractDir = "$(Build.ArtifactStagingDirectory)\extracted"
-            
-            # Create extraction directory
-            New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+              # Define variables
+              $zipFilePath = "$(Build.ArtifactStagingDirectory)\azCopy-windows-signed\azcopy.zip"
+              $extractDir = "$(Build.ArtifactStagingDirectory)\extracted"
+              
+              # Create extraction directory
+              New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 
-            # Extract the zip file
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($zipFilePath, $extractDir)
-            
-            # Change to the directory containing azcopy
-            Set-Location -Path $extractDir
+              # Extract the zip file
+              Add-Type -AssemblyName System.IO.Compression.FileSystem
+              [System.IO.Compression.ZipFile]::ExtractToDirectory($zipFilePath, $extractDir)
+              
+              # Change to the directory containing azcopy
+              Set-Location -Path $extractDir
 
-            # Run the azcopy version command
-            .\azcopy.exe --version
-          displayName: 'Extract Files and Run Version Command on Windows'
+              # Run the azcopy version command
+              .\azcopy.exe --version
+            displayName: 'Extract Files and Run Version Command on Windows'
 
   # TestArtifacts ends here
   
