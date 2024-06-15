@@ -2019,7 +2019,7 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
 
           - script: |
-               sudo apt-get install -y zip
+              sudo apt-get install -y zip
               zip -r $(Build.ArtifactStagingDirectory)/azCopy-binaries/drop.zip .
             displayName: 'Create drop.zip file'
 
