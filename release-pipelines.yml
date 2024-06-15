@@ -2019,6 +2019,7 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
 
           - script: |
+               sudo apt-get install -y zip
               zip -r $(Build.ArtifactStagingDirectory)/azCopy-binaries/drop.zip .
             displayName: 'Create drop.zip file'
 
@@ -2124,20 +2125,13 @@ stages:
             
           - ${{ if eq(parameters.post_release, true) }}:
 
-              - script: |
-                  mv azCopy-linux-signed/azcopy_linux_se_amd64 .
-                  mv azCopy-linux-signed/azcopy_linux_se_arm64 .
-                  mv azCopy-windows-signed/azcopy_windows_v7_arm.exe .
-                displayName: 'Move binaries from signed folders'
-                workingDirectory: $(Build.ArtifactStagingDirectory)
-
               # add release tags & push to github
               #TODO: update github connection and repo name while merging to main
               - task: GithubRelease@1
                 inputs:
                   githubConnection: 'dphulkar-msft-github-rel'
                   repositoryName: 'dphulkar-msft/azure-storage-azcopy'
-                  action: 'create'
+                  action: 'edit'
 
                   target: '$(Build.SourceVersion)'
                   tagSource: 'userSpecifiedTag'
@@ -2154,13 +2148,6 @@ stages:
                   isDraft: ${{ parameters.draft }}
                   isPreRelease: ${{ parameters.prerelease }}
                   assetUploadMode: replace
-
-              - script: |
-                  mv azcopy_linux_se_amd64 azCopy-linux-signed/
-                  mv azcopy_linux_se_arm64 azCopy-linux-signed/
-                  # mv azcopy_windows_v7_arm.exe azCopy-windows-signed/
-                displayName: 'Move binaries from signed folders'
-                workingDirectory: $(Build.ArtifactStagingDirectory)
 
   - ${{ if eq(parameters.publish_artifacts, true) }}:
     - stage: PublishArtifacts
