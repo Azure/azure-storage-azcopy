@@ -2018,12 +2018,26 @@ stages:
               artifactName: 'azCopy-binaries'
               downloadPath: $(Build.ArtifactStagingDirectory)
 
+          - script: |
+              zip -r $(Build.ArtifactStagingDirectory)/azCopy-binaries/drop.zip .
+            displayName: 'Create drop.zip file'
+
           - task: ArchiveFiles@2
             displayName: 'Archive all binaries to drop.zip'
             inputs:
               rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
               archiveFile: '$(Build.ArtifactStagingDirectory)/azCopy-binaries/drop.zip'
             continueOnError: true
+          
+          - task: UsePythonVersion@0
+            displayName: 'Use Python version'
+            inputs:
+              versionSpec: '3.x'
+              addToPath: true
+
+          - script: |
+              pip install azure-cli
+            displayName: 'Install Azure CLI'
 
           - task: AzureCLI@2
             displayName: 'Azure CLI'
