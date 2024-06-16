@@ -2030,11 +2030,28 @@ stages:
               archiveFile: '$(Build.ArtifactStagingDirectory)/azCopy-binaries/drop.zip'
             continueOnError: true
           
+          - task: Bash@3
+            displayName: 'Install Python 3.x'
+            inputs:
+              targetType: 'inline'
+              script: |
+                sudo apt-get update
+                sudo apt-get install -y python3 python3-pip
+
           - task: UsePythonVersion@0
             displayName: 'Use Python version'
             inputs:
               versionSpec: '3.x'
               addToPath: true
+
+          - task: Bash@3
+            displayName: 'Verify Python installation'
+            inputs:
+              targetType: 'inline'
+              script: |
+                python3 --version
+                pip3 --version
+
 
           - script: |
               pip install azure-cli
