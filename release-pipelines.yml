@@ -2043,6 +2043,7 @@ stages:
           - script: |
               sudo apt-get install -y zip
               zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
+              $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64 --version
             displayName: 'Create drop.zip file'
 
           - task: ArchiveFiles@2
@@ -2368,7 +2369,7 @@ stages:
                 workingDirectory: $(root_dir)
 
               - script: |
-                  python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy version`"
+                  python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
 
