@@ -573,3 +573,27 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
 }
+
+func (s *BasicFunctionalitySuite) Scenario_UploadBlockBlob(svm *ScenarioVariationManager) {
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+	srcObject := srcContainer.GetObject(svm, "dir_10_files", common.EEntityType.Folder())
+	dstObject := dstContainer.GetObject(svm, "dir_10_files", common.EEntityType.Folder())
+
+	for i := range 10 {
+		name := "dir_10_files/test" + strconv.Itoa(i) + ".txt"
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	}
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{srcObject, dstObject.(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken(), EExplicitCredentialType.OAuth()}), svm, CreateAzCopyTargetOptions{})},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+		},
+	})
+}

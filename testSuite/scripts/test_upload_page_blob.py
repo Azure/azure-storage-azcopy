@@ -4,14 +4,6 @@ import os
 
 
 class PageBlob_Upload_User_Scenarios(unittest.TestCase):
-    def setUp(self):
-        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']).add_flags("tenant-id", os.environ['OAUTH_TENANT_ID'])
-        cmd.execute_azcopy_copy_command()
-
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
     # util_test_page_blob_upload_1mb verifies the azcopy upload of 1mb file
     # as a page blob.
     def util_test_page_blob_upload_1mb(self, use_oauth=False):
