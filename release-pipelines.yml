@@ -49,262 +49,266 @@ trigger: none
 pr: none
 
 stages:
-  # - stage: RunTests
-  #   jobs:
-  #     - job: UT_On_Ubuntu
-  #       variables:
-  #         isMutexSet: 'false'
-  #       # allow maximum build time, in case we have build congestion
-  #       timeoutInMinutes: 360
-  #       pool:
-  #         vmImage: 'ubuntu-20.04'
+  - stage: RunTests
+    jobs:
+      - job: UT_On_Ubuntu
+        variables:
+          isMutexSet: 'false'
+        # allow maximum build time, in case we have build congestion
+        timeoutInMinutes: 360
+        pool:
+          vmImage: 'ubuntu-20.04'
+        variables:
+          - group: AZCOPY_TESTS_VAR
 
-  #       steps:
-  #         - task: UsePythonVersion@0
-  #           name: 'Set_up_Python'
-  #           inputs:
-  #             versionSpec: '3.7'
+        steps:
+          - task: UsePythonVersion@0
+            name: 'Set_up_Python'
+            inputs:
+              versionSpec: '3.7'
 
-  #         - task: GoTool@0
-  #           name: 'Set_up_Golang'
-  #           inputs:
-  #             version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+          - task: GoTool@0
+            name: 'Set_up_Golang'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
 
-  #         - task: DownloadSecureFile@1
-  #           name: ciGCSServiceAccountKey
-  #           displayName: 'Download GCS Service Account Key'
-  #           inputs:
-  #             secureFile: 'ci-gcs-dev.json'
+          - task: DownloadSecureFile@1
+            name: ciGCSServiceAccountKey
+            displayName: 'Download GCS Service Account Key'
+            inputs:
+              secureFile: 'ci-gcs-dev.json'
 
-  #         - script: |
-  #             go install github.com/jstemmer/go-junit-report@v0.9.1
-  #             go install github.com/axw/gocov/gocov@v1.1.0
-  #             go install github.com/AlekSi/gocov-xml@v1.0.0
-  #             go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-  #           displayName: 'Install dependencies'
+          - script: |
+              go install github.com/jstemmer/go-junit-report@v0.9.1
+              go install github.com/axw/gocov/gocov@v1.1.0
+              go install github.com/AlekSi/gocov-xml@v1.0.0
+              go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
+            displayName: 'Install dependencies'
 
-  #         - script: |
-  #             pip install azure-storage-blob==12.12.0
-  #             # set the variable to indicate that the mutex is being acquired
-  #             # note: we set it before acquiring the mutex to ensure we release the mutex. 
-  #             # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
-  #             # mutex but before we set this variable.
-  #             # setting this before will always work since it is valid to break an un-acquired mutex.
-  #             echo '##vso[task.setvariable variable=isMutexSet]true'
-  #             # acquire the mutex before running live tests to avoid conflicts
-  #             python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
-  #           name: 'Acquire_the_distributed_mutex'
-  #         - template: azurePipelineTemplates/run-ut.yml
-  #           parameters:
-  #             directory: 'cmd'
-  #             coverage_name: 'cmd'
+          - script: |
+              pip install azure-storage-blob==12.12.0
+              # set the variable to indicate that the mutex is being acquired
+              # note: we set it before acquiring the mutex to ensure we release the mutex. 
+              # setting this after can result in an un-broken mutex if someone cancels the pipeline after we acquire the 
+              # mutex but before we set this variable.
+              # setting this before will always work since it is valid to break an un-acquired mutex.
+              echo '##vso[task.setvariable variable=isMutexSet]true'
+              # acquire the mutex before running live tests to avoid conflicts
+              python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
+            name: 'Acquire_the_distributed_mutex'
+          - template: azurePipelineTemplates/run-ut.yml
+            parameters:
+              directory: 'cmd'
+              coverage_name: 'cmd'
 
-  #         - template: azurePipelineTemplates/run-ut.yml
-  #           parameters:
-  #             directory: 'common'
-  #             coverage_name: 'common'
+          - template: azurePipelineTemplates/run-ut.yml
+            parameters:
+              directory: 'common'
+              coverage_name: 'common'
 
-  #         - template: azurePipelineTemplates/run-ut.yml
-  #           parameters:
-  #             directory: 'common/parallel'
-  #             coverage_name: 'parallel'
+          - template: azurePipelineTemplates/run-ut.yml
+            parameters:
+              directory: 'common/parallel'
+              coverage_name: 'parallel'
 
-  #         - template: azurePipelineTemplates/run-ut.yml
-  #           parameters:
-  #             directory: 'ste'
-  #             coverage_name: 'ste'
+          - template: azurePipelineTemplates/run-ut.yml
+            parameters:
+              directory: 'ste'
+              coverage_name: 'ste'
 
-  #         - template: azurePipelineTemplates/run-ut.yml
-  #           parameters:
-  #             directory: 'sddl'
-  #             coverage_name: 'sddl'
+          - template: azurePipelineTemplates/run-ut.yml
+            parameters:
+              directory: 'sddl'
+              coverage_name: 'sddl'
 
-  #         - script: |
-  #             GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
-  #             go build -tags "netgo" -o test-validator ./testSuite/
-  #             mkdir test-temp
-  #             mkdir coverage
-  #             export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
-  #             export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
-  #             export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+          - script: |
+              GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
+              go build -tags "netgo" -o test-validator ./testSuite/
+              mkdir test-temp
+              mkdir coverage
+              export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
+              export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
+              export TEST_DIRECTORY_PATH=$(pwd)/test-temp
 
-  #             keyctl session test python ./testSuite/scripts/run.py
+              keyctl session test python ./testSuite/scripts/run.py
           
-  #             echo 'Formatting coverage directory to legacy txt format'
-  #             go tool covdata textfmt -i=coverage -o smoke_coverage.txt
-  #             echo 'Formatting coverage to json format'
-  #             $(go env GOPATH)/bin/gocov convert smoke_coverage.txt > smoke_coverage.json
-  #             echo 'Formatting coverage to xml format'
-  #             $(go env GOPATH)/bin/gocov-xml < smoke_coverage.json > smoke_coverage.xml
-  #           name: 'Run_smoke_tests'
-  #           env:
-  #             ACCOUNT_NAME: $(ACCOUNT_NAME)
-  #             ACCOUNT_KEY: $(ACCOUNT_KEY)
-  #             AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-  #             AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-  #             GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
-  #             GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
-  #             ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-  #             AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
-  #             CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
-  #             CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
-  #             CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
-  #             FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
-  #             FILESYSTEM_URL: $(FILESYSTEM_URL)
-  #             OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
-  #             OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
-  #             PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
-  #             S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
-  #             S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
-  #             S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
-  #             S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
-  #             S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
-  #             SHARE_SAS_URL: $(SHARE_SAS_URL)
-  #             GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-  #           condition: succeededOrFailed()
-  #         # Smoke Tests Publishing
-  #         - task: PublishCodeCoverageResults@1
-  #           condition: succeededOrFailed()
-  #           inputs:
-  #             codeCoverageTool: Cobertura
-  #             summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
-  #         - script: |
-  #             pip install azure-storage-blob==12.12.0
-  #             python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
-  #           name: 'Release_the_distributed_mutex'
-  #           # this runs even if the job was canceled (only if the mutex was acquired by this job)
-  #           condition: and(always(), eq(variables['isMutexSet'], 'true'))
-  #     - job: E2E_Test
-  #       timeoutInMinutes: 360
-  #       # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
-  #       strategy:
-  #         matrix:
-  #           Ubuntu-20:
-  #             imageName: 'ubuntu-20.04'
-  #             build_name: 'azcopy_linux_amd64'
-  #             display_name: "Linux"
-  #             go_path: '$(go env GOPATH)/bin/'
-  #             suffix: ''
-  #             run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
-  #             output_test_logs: ''
-  #             save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-  #             return_exit_code: 'exit "$exit_code"'
-  #             go_build: 'GOARCH=amd64 GOOS=linux go build -tags "netgo" -o $(build_name)'
-  #           Windows:
-  #             imageName: 'windows-2019'
-  #             build_name: 'azcopy_windows_amd64.exe'
-  #             display_name: "Windows"
-  #             type: 'windows'
-  #             go_path: 'C:\Users\VssAdministrator\go\bin\'
-  #             suffix: '.exe'
-  #             run_e2e: 'go test -timeout=2h -v ./e2etest > test.txt'
-  #             output_test_logs: 'cat test.txt'
-  #             save_exit_code: 'set exit_code=%errorlevel%'
-  #             return_exit_code: 'exit %exit_code%'
-  #             go_build: 'go build -cover -o $(build_name)'
-  #           MacOS:
-  #             imageName: 'macos-11'
-  #             build_name: 'azcopy_darwin_amd64'
-  #             display_name: "MacOS"
-  #             go_path: '$(go env GOPATH)/bin/'
-  #             suffix: ''
-  #             run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
-  #             output_test_logs: ''
-  #             save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-  #             return_exit_code: 'exit "$exit_code"'
-  #             go_build: 'CGO_ENABLED=1 go build -cover -o $(build_name)'
-  #       pool:
-  #         vmImage: $(imageName)
+              echo 'Formatting coverage directory to legacy txt format'
+              go tool covdata textfmt -i=coverage -o smoke_coverage.txt
+              echo 'Formatting coverage to json format'
+              $(go env GOPATH)/bin/gocov convert smoke_coverage.txt > smoke_coverage.json
+              echo 'Formatting coverage to xml format'
+              $(go env GOPATH)/bin/gocov-xml < smoke_coverage.json > smoke_coverage.xml
+            name: 'Run_smoke_tests'
+            env:
+              ACCOUNT_NAME: $(ACCOUNT_NAME)
+              ACCOUNT_KEY: $(ACCOUNT_KEY)
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              GOOGLE_CLOUD_PROJECT: $(GOOGLE_CLOUD_PROJECT)
+              GOOGLE_APPLICATION_CREDENTIALS: $(ciGCSServiceAccountKey.secureFilePath)
+              ACTIVE_DIRECTORY_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+              AZCOPY_SPA_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+              CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
+              CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
+              CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
+              FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
+              FILESYSTEM_URL: $(FILESYSTEM_URL)
+              OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
+              OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
+              PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
+              S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
+              S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
+              S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
+              S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
+              S2S_SRC_GCP_SERVICE_URL: $(S2S_SRC_GCP_SERVICE_URL)
+              SHARE_SAS_URL: $(SHARE_SAS_URL)
+              GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+            condition: succeededOrFailed()
+          # Smoke Tests Publishing
+          - task: PublishCodeCoverageResults@1
+            condition: succeededOrFailed()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: $(System.DefaultWorkingDirectory)/**/smoke_coverage.xml
+          - script: |
+              pip install azure-storage-blob==12.12.0
+              python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
+            name: 'Release_the_distributed_mutex'
+            # this runs even if the job was canceled (only if the mutex was acquired by this job)
+            condition: and(always(), eq(variables['isMutexSet'], 'true'))
+      - job: E2E_Test
+        timeoutInMinutes: 360
+        # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
+        strategy:
+          matrix:
+            Ubuntu-20:
+              imageName: 'ubuntu-20.04'
+              build_name: 'azcopy_linux_amd64'
+              display_name: "Linux"
+              go_path: '$(go env GOPATH)/bin/'
+              suffix: ''
+              run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
+              output_test_logs: ''
+              save_exit_code: 'exit_code=${PIPESTATUS[0]}'
+              return_exit_code: 'exit "$exit_code"'
+              go_build: 'GOARCH=amd64 GOOS=linux go build -tags "netgo" -o $(build_name)'
+            Windows:
+              imageName: 'windows-2019'
+              build_name: 'azcopy_windows_amd64.exe'
+              display_name: "Windows"
+              type: 'windows'
+              go_path: 'C:\Users\VssAdministrator\go\bin\'
+              suffix: '.exe'
+              run_e2e: 'go test -timeout=2h -v ./e2etest > test.txt'
+              output_test_logs: 'cat test.txt'
+              save_exit_code: 'set exit_code=%errorlevel%'
+              return_exit_code: 'exit %exit_code%'
+              go_build: 'go build -cover -o $(build_name)'
+            MacOS:
+              imageName: 'macos-11'
+              build_name: 'azcopy_darwin_amd64'
+              display_name: "MacOS"
+              go_path: '$(go env GOPATH)/bin/'
+              suffix: ''
+              run_e2e: 'go test -timeout=2h -v ./e2etest | tee test.txt'
+              output_test_logs: ''
+              save_exit_code: 'exit_code=${PIPESTATUS[0]}'
+              return_exit_code: 'exit "$exit_code"'
+              go_build: 'CGO_ENABLED=1 go build -cover -o $(build_name)'
+        pool:
+          vmImage: $(imageName)
+        variables:
+          - group: AZCOPY_TESTS_VAR
 
-  #       steps:
-  #         - task: PowerShell@2
-  #           inputs: 
-  #             targetType: 'inline'
-  #             script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
-  #             pwsh: 'true'
-  #           displayName: 'Install Powershell Az Module'
-  #         - task: GoTool@0
-  #           inputs:
-  #             version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-  #         - script: |
-  #             go install github.com/jstemmer/go-junit-report@v0.9.1
-  #             go install github.com/axw/gocov/gocov@v1.1.0
-  #             go install github.com/AlekSi/gocov-xml@v1.0.0
-  #             go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-  #           displayName: 'Installing dependencies'
-  #         - bash: |
-  #             echo "##vso[task.setvariable variable=CGO_ENABLED]0"
-  #           displayName: 'Set CGO_ENABLED for Windows'
-  #           condition: eq(variables.type, 'windows')
-  #         - bash: |
-  #             npm install -g azurite
-  #             mkdir azurite
-  #             azurite --silent --location azurite --debug azurite\debug.log &
-  #           displayName: 'Install and Run Azurite'
-  #         # Running E2E Tests on AMD64
-  #         - script: |
-  #             mkdir coverage
-  #             echo 'Building executable'
-  #             $(go_build)
-  #             echo 'Running tests'
-  #             $(run_e2e)
-  #             $(save_exit_code)
-  #             echo "Generating junit report"
-  #             cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
-  #             echo 'Formatting coverage directory to legacy txt format'
-  #             go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
-  #             $(output_test_logs)
-  #             echo 'Formatting coverage to json format'
-  #             $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
-  #             echo 'Formatting coverage to xml format'
-  #             $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
-  #             $(return_exit_code)
-  #           env:
-  #             AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-  #             AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-  #             AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
-  #             AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
-  #             AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-  #             AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-  #             AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
-  #             AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
-  #             AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
-  #             AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
-  #             AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
-  #             AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG)
-  #             AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
-  #             AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG)
-  #             CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-  #             CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-  #             AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-  #             GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-  #             NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
-  #             NEW_E2E_APPLICATION_ID: $(AZCOPY_NEW_E2E_APPLICATION_ID)
-  #             NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
-  #             NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-  #             NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-  #           displayName: 'E2E Test $(display_name) - AMD64'
+        steps:
+          - task: PowerShell@2
+            inputs: 
+              targetType: 'inline'
+              script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+              pwsh: 'true'
+            displayName: 'Install Powershell Az Module'
+          - task: GoTool@0
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+          - script: |
+              go install github.com/jstemmer/go-junit-report@v0.9.1
+              go install github.com/axw/gocov/gocov@v1.1.0
+              go install github.com/AlekSi/gocov-xml@v1.0.0
+              go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
+            displayName: 'Installing dependencies'
+          - bash: |
+              echo "##vso[task.setvariable variable=CGO_ENABLED]0"
+            displayName: 'Set CGO_ENABLED for Windows'
+            condition: eq(variables.type, 'windows')
+          - bash: |
+              npm install -g azurite
+              mkdir azurite
+              azurite --silent --location azurite --debug azurite\debug.log &
+            displayName: 'Install and Run Azurite'
+          # Running E2E Tests on AMD64
+          - script: |
+              mkdir coverage
+              echo 'Building executable'
+              $(go_build)
+              echo 'Running tests'
+              $(run_e2e)
+              $(save_exit_code)
+              echo "Generating junit report"
+              cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
+              echo 'Formatting coverage directory to legacy txt format'
+              go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
+              $(output_test_logs)
+              echo 'Formatting coverage to json format'
+              $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
+              echo 'Formatting coverage to xml format'
+              $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
+              $(return_exit_code)
+            env:
+              AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
+              AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
+              AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
+              AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
+              AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+              AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
+              AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
+              AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
+              AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
+              AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
+              AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
+              AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG)
+              AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
+              AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG)
+              CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
+              CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
+              AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
+              GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
+              NEW_E2E_SUBSCRIPTION_ID: $(AZCOPY_NEW_E2E_SUBSCRIPTION_ID)
+              NEW_E2E_APPLICATION_ID: $(AZCOPY_NEW_E2E_APPLICATION_ID)
+              NEW_E2E_CLIENT_SECRET: $(AZCOPY_NEW_E2E_CLIENT_SECRET)
+              NEW_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
+              NEW_E2E_AZCOPY_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
+            displayName: 'E2E Test $(display_name) - AMD64'
 
-  #         - task: PublishBuildArtifacts@1
-  #           displayName: 'Publish logs'
-  #           condition: succeededOrFailed()
-  #           inputs:
-  #             pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
-  #             artifactName: logs
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish logs'
+            condition: succeededOrFailed()
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
+              artifactName: logs
 
-  #         - task: PublishTestResults@2
-  #           condition: succeededOrFailed()
-  #           inputs:
-  #             testRunner: JUnit
-  #             testResultsFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_report.xml
-  #             testRunTitle: 'Go on $(display_name)'
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testRunner: JUnit
+              testResultsFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_report.xml
+              testRunTitle: 'Go on $(display_name)'
 
-  #         - task: PublishCodeCoverageResults@1
-  #           condition: succeededOrFailed()
-  #           inputs:
-  #             codeCoverageTool: Cobertura
-  #             summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
-  #             additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
+          - task: PublishCodeCoverageResults@1
+            condition: succeededOrFailed()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
+              additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
 
   - stage: BuildArtifacts
     #dependsOn: RunTests
@@ -2069,7 +2073,7 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 cp $(Build.ArtifactStagingDirectory)
-                
+
                 sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
                 sudo rpm -qip azcopy-*x86_64.rpm
                 sudo yum groupinstall "Development Tools" -y
