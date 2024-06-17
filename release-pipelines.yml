@@ -2042,10 +2042,10 @@ stages:
 
           - script: |
               sudo apt-get install -y zip
-              chmod +x $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64
               zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
-              $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64 --version
+              cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.rpm .
             displayName: 'Create drop.zip file and verify azcopy'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
 
           - task: ArchiveFiles@2
             displayName: 'Archive all binaries to drop.zip'
@@ -2061,11 +2061,6 @@ stages:
               script: |
                 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-          - script: |
-              cp $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64 .
-            displayName: 'Copy executable binary to different location'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
-
           - task: AzureCLI@2
             displayName: 'Azure CLI'
             inputs:
@@ -2073,18 +2068,25 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                # Define variables
-                artifactDir=$(Build.ArtifactStagingDirectory)
-                azcopyPath="$artifactDir/azcopy_linux_amd64"
+                cp $(Build.ArtifactStagingDirectory)
                 
-                # Ensure azcopy binary is executable
-                chmod +x $azcopyPath
+                sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
+                sudo rpm -qip azcopy-*x86_64.rpm
+                sudo yum groupinstall "Development Tools" -y
+                sudo rpm -i azcopy-*x86_64.rpm
+
+                # # Define variables
+                # artifactDir=$(Build.ArtifactStagingDirectory)
+                # azcopyPath="$artifactDir/azcopy_linux_amd64"
                 
-                # Verify the azcopy binary
-                if ! $azcopyPath --version; then
-                  echo "Failed to verify azcopy binary."
-                  exit 1
-                fi
+                # # Ensure azcopy binary is executable
+                # chmod +x $azcopyPath
+                
+                # # Verify the azcopy binary
+                # if ! $azcopyPath --version; then
+                #   echo "Failed to verify azcopy binary."
+                #   exit 1
+                # fi
 
                 # Find the current version
                 raw_version_output=$($(Build.ArtifactStagingDirectory)/azcopy_linux_amd64 --version)
