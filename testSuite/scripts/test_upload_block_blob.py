@@ -8,39 +8,6 @@ from stat import *
 import utility as util
 
 class Block_Upload_User_Scenarios(unittest.TestCase):
-    def util_test_1kb_blob_upload(self, use_oauth_session=False):
-        # Creating a single File Of size 1 KB
-        filename = "test1KB.txt"
-        file_path = util.create_test_file(filename, 1024)
-
-        # executing the azcopy command to upload the 1KB file.
-        src = file_path
-        if not use_oauth_session:
-            dest = util.get_resource_sas(filename)
-            dest_validate = dest
-        else:
-            dest = util.get_resource_from_oauth_container(filename)
-            dest_validate = util.get_resource_from_oauth_container_validate(filename)
-
-        result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the uploaded blob.
-        # the resource local path should be the first argument for the azcopy validator.
-        # the resource sas should be the second argument for azcopy validator.
-        result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
-        self.assertTrue(result)
-
-    # test_1kb_blob_upload verifies the 1KB blob upload by azcopy.
-    def test_1kb_blob_upload_with_sas(self):
-        #Test the case with SAS
-        self.util_test_1kb_blob_upload()
-
-    def test_1kb_blob_upload_with_oauth(self):
-        #Test the case with OAuth
-        self.util_test_1kb_blob_upload(True)
-
     # test_63mb_blob_upload verifies the azcopy upload of 63mb blob upload.
     def test_63mb_blob_upload(self):
         # creating file of 63mb size.

@@ -276,6 +276,41 @@ func (s *S2SSuite) Scenario_BlobDestinationPropertyMetadata(svm *ScenarioVariati
 	}, false)
 }
 
+//func (s *S2SSuite) Scenario_BlobBlobWithAuthEnvVar(svm *ScenarioVariationManager) {
+//	fileName := "test_copy.txt"
+//	size := int64(common.KiloByte)
+//	body := NewRandomObjectContentContainer(svm, size)
+//
+//	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+//	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
+//	srcObj.Create(svm, body, ObjectProperties{})
+//
+//	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+//	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
+//
+//	// TODO : Run login w/ AzCLI
+//
+//
+//	RunAzCopy(svm, AzCopyCommand{
+//		Verb: AzCopyVerbCopy,
+//		Targets: []ResourceManager{
+//			TryApplySpecificAuthType(srcObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+//			TryApplySpecificAuthType(dstObj, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
+//		Flags: CopyFlags{
+//			CopySyncCommonFlags: CopySyncCommonFlags{
+//				Recursive: pointerTo(true),
+//			},
+//		},
+//		Environment: pointerTo(AzCopyEnvironment{
+//			CredType: pointerTo("OAuthToken"),
+//		}),
+//	})
+//
+//	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
+//		Body: body,
+//	}, true)
+//}
+
 func (s *S2SSuite) Scenario_BlobDestinationSizes(svm *ScenarioVariationManager) {
 	fileName := "test_copy.txt"
 	size := ResolveVariation(svm, []int64{63 * common.MegaByte, common.KiloByte})
@@ -292,6 +327,35 @@ func (s *S2SSuite) Scenario_BlobDestinationSizes(svm *ScenarioVariationManager) 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
 		Targets: []ResourceManager{srcObj, dstObj.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{})},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+	}, true)
+}
+
+func (s *S2SSuite) Scenario_BlobBlobOAuth(svm *ScenarioVariationManager) {
+	fileName := "test_copy.txt"
+	size := int64(17) * common.MegaByte
+	body := NewRandomObjectContentContainer(svm, size)
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			srcObj,
+			dstObj.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive: pointerTo(true),

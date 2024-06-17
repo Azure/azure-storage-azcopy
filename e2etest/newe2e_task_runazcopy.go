@@ -115,6 +115,8 @@ type AzCopyEnvironment struct {
 	AzureTenantId           *string `env:"AZURE_TENANT_ID"`
 	AzureClientId           *string `env:"AZURE_CLIENT_ID"`
 
+	CredType *string `env:"AZCOPY_CRED_TYPE"`
+
 	InheritEnvironment bool
 }
 
