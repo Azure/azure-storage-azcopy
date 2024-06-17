@@ -1881,7 +1881,7 @@ stages:
             displayName: 'Download Build Artifacts'
             inputs:
               artifactName: 'azCopy-mac-signed'
-              downloadPath: $(root_dir)
+              downloadPath: $(Build.ArtifactStagingDirectory)
               itemPattern: azCopy-mac-signed/azcopy*amd64*.zip
 
           - script: |
@@ -1944,7 +1944,7 @@ stages:
             displayName: 'Download Build Artifacts'
             inputs:
               artifactName: 'azCopy-windows-signed'
-              downloadPath: $(root_dir)
+              downloadPath: $(Build.ArtifactStagingDirectory)
               itemPattern: azCopy-windows-signed/azcopy*amd64*.zip
           
           - task: PowerShell@2
@@ -2052,13 +2052,6 @@ stages:
               archiveFile: '$(Build.ArtifactStagingDirectory)//drop.zip'
             continueOnError: true
 
-          - script: |
-              sudo chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed
-              sudo chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-windows-signed
-              sudo chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
-              sudo chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-signed
-            displayName: 'Provide required permissions'
-
           - task: Bash@3
             displayName: 'Install Azure CLI'
             inputs:
@@ -2073,11 +2066,14 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                # Find the current version
-                raw_version_output=($($(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64 --version))
-                azcopy_version=${raw_version_output[2]}
+                # Ensure azcopy binary is executable
+                chmod +x $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64
                 
-                today=`date +"%Y%m%d"`
+                # Find the current version
+                raw_version_output=$($(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64 --version)
+                azcopy_version=$(echo $raw_version_output | awk '{print $3}')
+                
+                today=$(date +"%Y%m%d")
                 
                 if [ "$test_mode" = "true" ]; then
                   container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
