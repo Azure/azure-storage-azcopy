@@ -745,6 +745,14 @@ stages:
               GOARM: 7
               GOOS: windows
               CGO_ENABLED: 0
+          
+          - script: |
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_arm64.exe"
+            displayName: 'Generate Windows ARM'
+            env:
+              GOARCH: arm64
+              GOOS: windows
+              CGO_ENABLED: 0
 
           - task: PublishBuildArtifacts@1
             inputs:
@@ -1013,6 +1021,8 @@ stages:
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
           - name: windows_amd64
             value: '$(work_dir)/azcopy_windows_amd64'
+          - name: windows_arm64
+            value: '$(work_dir)/azcopy_windows_arm64'
           - name: windows_386
             value: '$(work_dir)/azcopy_windows_386'
           - name: archives
@@ -1044,6 +1054,7 @@ stages:
 
           - script: |
               mkdir -p $(windows_amd64)
+              mkdir -p $(windows_arm64)
               mkdir -p $(windows_386)
               mkdir -p $(archives)
             displayName: 'Create required directories'
@@ -1127,18 +1138,28 @@ stages:
 
           - script: |
               cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)
+              cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64.exe $(windows_arm64)
               cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)
               cp NOTICE.txt $(windows_amd64)
+              cp NOTICE.txt $(windows_arm64)
               cp NOTICE.txt $(windows_386)
               zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
+              zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
               zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
             displayName: 'Copy required files'
           
           - task: ArchiveFiles@2
-            displayName: 'Archive Windows 64 bit Build'
+            displayName: 'Archive Windows 64 bit AMD Build'
             inputs:
               rootFolderOrFile: '$(windows_amd64)'
               archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Windows 64 bit ARM Build'
+            inputs:
+              rootFolderOrFile: '$(windows_arm64)'
+              archiveFile: '$(archives)/azcopy_windows_arm64_$(azcopy_version).zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
@@ -1150,6 +1171,7 @@ stages:
 
           - script: |
               cp $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_windows_arm64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
               cp $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
@@ -2031,6 +2053,12 @@ stages:
               rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/azCopy-binaries-signed'
               archiveFile: '$(Build.ArtifactStagingDirectory)//drop.zip'
             continueOnError: true
+
+          - script: |
+              sudo chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed
+              sudo chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-windows-signed
+              sudo chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
+              sudo chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-signed
           
           # - task: Bash@3
           #   displayName: 'Install Python 3.x'
