@@ -53,8 +53,8 @@ stages:
     jobs:
       - job: UT_On_Ubuntu
         variables:
-          - group: AZCOPY_TESTS_VAR
-          - isMutexSet: 'false'
+          group: AZCOPY_TESTS_VAR
+          isMutexSet: 'false'
         # allow maximum build time, in case we have build congestion
         timeoutInMinutes: 360
         pool:
