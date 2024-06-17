@@ -2015,9 +2015,9 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
           
           - task: DownloadBuildArtifacts@0
-            displayName: 'Download Mac Build Artifacts'
+            displayName: 'Download Binaries Build Artifacts'
             inputs:
-              artifactName: 'azCopy-signed-binaries'
+              artifactName: 'azCopy-binaries-signed'
               downloadPath: $(Build.ArtifactStagingDirectory)
 
           - script: |
@@ -2028,7 +2028,7 @@ stages:
           - task: ArchiveFiles@2
             displayName: 'Archive all binaries to drop.zip'
             inputs:
-              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/azCopy-signed-binaries'
+              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/azCopy-binaries-signed'
               archiveFile: '$(Build.ArtifactStagingDirectory)//drop.zip'
             continueOnError: true
           
@@ -2073,7 +2073,7 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 # Find the current version
-                raw_version_output=($($(Build.ArtifactStagingDirectory)/azCopy-signed-binaries/azcopy_linux_amd64 --version))
+                raw_version_output=($($(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64 --version))
                 azcopy_version=${raw_version_output[2]}
                 
                 today=`date +"%Y%m%d"`
@@ -2088,10 +2088,10 @@ stages:
                 executable_name=azcopy_linux_amd64
                 
                 # Upload the archived builds
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-signed-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-signed-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-signed-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-signed-binaries/$executable_name cp "$(Build.ArtifactStagingDirectory)/drop.zip" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/$executable_name cp "$(Build.ArtifactStagingDirectory)/drop.zip" "$container_url" --recursive --put-md5=true
 
       - job: ReleaseAzcopy
         timeoutInMinutes: 120
