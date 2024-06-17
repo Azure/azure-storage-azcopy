@@ -1980,13 +1980,13 @@ stages:
                 Set-Location -Path $extractDir
 
                 # Verify that azcopy.exe exists
-                if (-Not (Test-Path -Path ".\azcopy_windows_amd64.exe")) {
+                if (-Not (Test-Path -Path ".\azcopy_windows_amd64\azcopy_windows_amd64.exe")) {
                   Write-Error "azcopy.exe not found in extraction directory: $extractDir"
                   exit 1
                 }
 
                 # Run the azcopy version command
-                .\azcopy.exe --version
+                .\azcopy_windows_amd64\azcopy_windows_amd64.exe --version
             displayName: 'Extract Files and Run Version Command on Windows'
 
   # TestArtifacts ends here
