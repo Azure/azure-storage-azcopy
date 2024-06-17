@@ -2042,15 +2042,16 @@ stages:
 
           - script: |
               sudo apt-get install -y zip
+              chmod +x $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64
               zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
               $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64 --version
-            displayName: 'Create drop.zip file'
+            displayName: 'Create drop.zip file and verify azcopy'
 
           - task: ArchiveFiles@2
             displayName: 'Archive all binaries to drop.zip'
             inputs:
               rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/azCopy-binaries-signed'
-              archiveFile: '$(Build.ArtifactStagingDirectory)//drop.zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/drop.zip'
             continueOnError: true
 
           - task: Bash@3
