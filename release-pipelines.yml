@@ -1254,7 +1254,7 @@ stages:
           - template: setup/esrp_sign_windows.yml
             parameters:
               FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
-              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
+              ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
               Pattern: '*.exe'
           
           # Validate signed images have md5sum changed
@@ -1292,51 +1292,25 @@ stages:
               container: 'test-cnt-ubn-22'
         pool:
           vmImage: $(vmImage)
-
-        variables:
-          - group: AZCOPY_ESRP_SECRET
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
         steps:
-          #TODO: remove this after merging to main
           - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
+              sudo apt update
+              sudo apt --fix-broken install
+              ldd --version
+            displayName: "GLIBC Version"
 
-          # Custom script to install Go-lang
-          - task: ShellScript@2
-            inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "GoTool Custom Setup"
-            
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-              downloadPath: $(root_dir)
-              itemPattern: azCopy-linux-signed/azcopy-*x86_64.deb
+          - template: test_artifacts.yml
+            parameters:
+              artifact_name: 'azCopy-linux-signed'
+              download_path: '$(System.DefaultWorkingDirectory)'
+              item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
 
-          - script: |
-              ls -l
-              result=$(ls -1 | wc -l)
-              if [ $result -ne 1 ]; then
-                exit 1
-              fi
-            displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed
-            
           - script: |
               sudo dpkg --info azcopy-*x86_64.deb
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Install deb Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
               azcopy_linux_amd64 --version
@@ -1359,59 +1333,24 @@ stages:
           demands:
             - ImageOverride -equals $(AgentName)
 
-        variables:  
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
         steps:
-          #TODO: remove this after merging to main
           - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
-      
-          - script: |
-              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-            displayName: 'Checkout Branch'
-            workingDirectory: $(root_dir)/azure-storage-azcopy
-          
-          # Custom script to install Go-lang
-          - task: ShellScript@2
-            inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "GoTool Custom Setup"
-
-          - script: |
-             sudo apt update
-             sudo apt --fix-broken install
-             ldd --version
+              sudo apt update
+              sudo apt --fix-broken install
+              ldd --version
             displayName: "GLIBC Version"
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-              downloadPath: $(root_dir)
-              itemPattern: azCopy-linux-signed/azcopy-*arm64.deb
-
-          - script: |
-              ls -l
-              result=$(ls -1 | wc -l)
-              if [ $result -ne 1 ]; then
-                exit 1
-              fi
-            displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed
+          - template: test_artifacts.yml
+            parameters:
+              artifact_name: 'azCopy-linux-signed'
+              download_path: '$(System.DefaultWorkingDirectory)'
+              item_pattern: 'azCopy-linux-signed/azcopy-*arm64.deb'
 
           - script: |
               sudo dpkg --info azcopy-*arm64.deb
               sudo dpkg -i azcopy-*arm64.deb
             displayName: 'Install Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
               azcopy_linux_arm64 --version
@@ -1435,57 +1374,17 @@ stages:
           demands:
             - ImageOverride -equals $(agentName)
 
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
         steps:
-            #TODO: remove this after merging to main
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
-          
           - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
 
-          - script: |
-              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-            displayName: 'Checkout Branch'
-            workingDirectory: $(root_dir)/azure-storage-azcopy
-          
-          # Custom script to install Go-lang
-          - task: ShellScript@2
-            inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "GoTool Custom Setup"
-
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"
-
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-              downloadPath: $(root_dir)
-              itemPattern: azCopy-linux-signed/azcopy-*arm64.rpm
-
-          - script: |
-              ls -l
-              result=$(ls -1 | wc -l)
-              if [ $result -ne 1 ]; then
-                exit 1
-              fi
-            displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed
+          - template: test_artifacts.yml
+            parameters:
+              artifact_name: 'azCopy-linux-signed'
+              download_path: '$(System.DefaultWorkingDirectory)'
+              item_pattern: 'azCopy-linux-signed/azcopy-*arm64.rpm'
 
           - script: |
               sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
@@ -1493,7 +1392,7 @@ stages:
               sudo yum groupinstall "Development Tools" -y              
               sudo rpm -i azcopy-*.arm64.rpm
             displayName: 'Install Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
               azcopy_linux_arm64 --version
@@ -1517,57 +1416,22 @@ stages:
           demands:
             - ImageOverride -equals $(agentName)
 
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
         steps:
           - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
 
-           #TODO: remove this after merging to main
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
-
-          - script: |
-              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-            displayName: 'Checkout Branch'
-            workingDirectory: $(root_dir)/azure-storage-azcopy
-
-          # Custom script to install Go-lang
-          - task: ShellScript@2
-            inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "GoTool Custom Setup"
-
+          - template: test_artifacts.yml
+            parameters:
+              artifact_name: 'azCopy-linux-signed'
+              download_path: '$(System.DefaultWorkingDirectory)'
+              item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.rpm'
+          
           # get glibc version with which build is done
           - script: |
              ldd --version
             displayName: "GLIBC Version"
-
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-              downloadPath: $(root_dir)
-              itemPattern: azCopy-linux-signed/azcopy-*x86_64.rpm
-
-          - script: |
-              ls -l
-              result=$(ls -1 | wc -l)
-              if [ $result -ne 1 ]; then
-                exit 1
-              fi
-            displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed
 
           - script: |
               sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
@@ -1575,7 +1439,7 @@ stages:
               sudo yum groupinstall "Development Tools" -y
               sudo rpm -i azcopy-*x86_64.rpm
             displayName: 'Install Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
               azcopy_linux_amd64 --version
@@ -1600,63 +1464,28 @@ stages:
           demands:
             - ImageOverride -equals $(AgentName)
 
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
         steps:
           - script: |
               sudo tdnf update -y
               sudo tdnf install git -y
             displayName: 'Install Git'
 
-          #TODO: remove this after merging to main
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
-
-          - script: |
-              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-            displayName: 'Checkout Branch'
-            workingDirectory: $(root_dir)/azure-storage-azcopy
-
-          # Custom script to install Go-lang
-          - task: ShellScript@2
-            inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "GoTool Custom Setup"
+          - template: test_artifacts.yml
+            parameters:
+              artifact_name: 'azCopy-linux-signed/mariner'
+              download_path: '$(System.DefaultWorkingDirectory)'
+              item_pattern: 'azCopy-linux-signed/mariner/azcopy*x86_64.rpm'
 
           # get glibc version with which build is done
           - script: |
              ldd --version
-            displayName: "GLIBC Version"
-
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-              downloadPath: $(root_dir)
-              itemPattern: azCopy-linux-signed/mariner/azcopy*x86_64.rpm
-
-          - script: |
-              ls -l
-              result=$(ls -1 | wc -l)
-              if [ $result -ne 1 ]; then
-                exit 1
-              fi
-            displayName: 'List Downloaded Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed/mariner              
+            displayName: "GLIBC Version"             
 
           - script: |
               sudo rpm -qip azcopy*x86_64.rpm
               sudo rpm -i azcopy*x86_64.rpm
             displayName: 'Install Package'
-            workingDirectory: $(root_dir)/azCopy-linux-signed/mariner
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
 
           - script: | 
               azcopy_linux_amd64 --version
