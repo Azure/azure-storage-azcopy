@@ -933,14 +933,14 @@ stages:
               sudo apt install dotnet-sdk-3.1 -y
             displayName: "Update dependencies"
 
-          - template: esrp_sign_linux.yml
+          - template: setup/esrp_sign_linux.yml
             parameters:
               FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
               ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
               Pattern: '*.rpm, *.deb, *tar.gz'
               DisplayName: 'ESRP CodeSigning azCopy linux'
           
-          - template: esrp_sign_linux.yml
+          - template: setup/esrp_sign_linux.yml
             parameters:
               FolderPath: $(Build.ArtifactStagingDirectory)/mariner
               ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
@@ -1037,7 +1037,7 @@ stages:
               sudo apt-get install -y zip
             displayName: "Update dependencies"
 
-          - template: esrp_sign_windows.yml
+          - template: setup/esrp_sign_windows.yml
             parameters:
               FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
               ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
@@ -1160,7 +1160,7 @@ stages:
               sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
 
-          - template: esrp_sign_notarize_macos.yml
+          - template: setup/esrp_sign_notarize_macos.yml
             parameters:
               FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
               ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
@@ -1244,14 +1244,14 @@ stages:
               sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
 
-          - template: esrp_sign_linux.yml
+          - template: setup/esrp_sign_linux.yml
             parameters:
               FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
               ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
               Pattern: 'azcopy_linux*'
               DisplayName: 'ESRP CodeSigning azCopy linux binaries'
 
-          - template: esrp_sign_windows.yml
+          - template: setup/esrp_sign_windows.yml
             parameters:
               FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
               ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
