@@ -6,12 +6,6 @@ parameters:
   - name: item_pattern
     type: string
 
-variables:
-  - name: root_dir
-    value: '$(System.DefaultWorkingDirectory)'
-  - name: work_dir
-    value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
 steps:
   #TODO: Remove this while merging to main
   # - script: |
