@@ -1340,7 +1340,7 @@ stages:
               ldd --version
             displayName: "GLIBC Version"
 
-          - template: test_artifacts.yml
+          - template: setup/test_artifacts.yml
             parameters:
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
@@ -1380,7 +1380,7 @@ stages:
               sudo yum install git -y
             displayName: 'Install Git'
 
-          - template: test_artifacts.yml
+          - template: setup/test_artifacts.yml
             parameters:
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
@@ -1422,7 +1422,7 @@ stages:
               sudo yum install git -y
             displayName: 'Install Git'
 
-          - template: test_artifacts.yml
+          - template: setup/test_artifacts.yml
             parameters:
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
@@ -1470,7 +1470,7 @@ stages:
               sudo tdnf install git -y
             displayName: 'Install Git'
 
-          - template: test_artifacts.yml
+          - template: setup/test_artifacts.yml
             parameters:
               artifact_name: 'azCopy-linux-signed/mariner'
               download_path: '$(System.DefaultWorkingDirectory)'
