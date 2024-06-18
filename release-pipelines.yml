@@ -2075,18 +2075,7 @@ stages:
                 sudo dpkg -i azcopy-*x86_64.deb
                 sudo apt-get install build-essential -y
 
-                # # Define variables
-                # artifactDir=$(Build.ArtifactStagingDirectory)
-                # azcopyPath="$artifactDir/azcopy_linux_amd64"
-                
-                # # Ensure azcopy binary is executable
-                # chmod +x $azcopyPath
-                
-                # # Verify the azcopy binary
-                # if ! $azcopyPath --version; then
-                #   echo "Failed to verify azcopy binary."
-                #   exit 1
-                # fi
+                ls -ltR $(Build.ArtifactStagingDirectory)/
 
                 # Find the current version
                 raw_version_output=$($(Build.ArtifactStagingDirectory)/azcopy_linux_amd64 --version)
