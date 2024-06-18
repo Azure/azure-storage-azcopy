@@ -2045,6 +2045,10 @@ stages:
               sudo apt-get install -y zip
               zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
               cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
+              sudo dpkg --info azcopy-*x86_64.deb
+              sudo dpkg -i azcopy-*x86_64.deb
+              sudo apt-get install build-essential -y
+              ls -ltR $(Build.ArtifactStagingDirectory)/
             displayName: 'Create drop.zip file and verify azcopy'
             workingDirectory: $(Build.ArtifactStagingDirectory)
 
@@ -2069,16 +2073,8 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                cd $(Build.ArtifactStagingDirectory)
-
-                sudo dpkg --info azcopy-*x86_64.deb
-                sudo dpkg -i azcopy-*x86_64.deb
-                sudo apt-get install build-essential -y
-
-                ls -ltR $(Build.ArtifactStagingDirectory)/
-
                 # Find the current version
-                raw_version_output=$($(Build.ArtifactStagingDirectory)/azcopy_linux_amd64 --version)
+                raw_version_output=$(azcopy_linux_amd64 --version)
                 azcopy_version=$(echo $raw_version_output | awk '{print $3}')
                 
                 today=$(date +"%Y%m%d")
@@ -2093,10 +2089,10 @@ stages:
                 executable_name=azcopy_linux_amd64
                 
                 # Upload the archived builds
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/$executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/$executable_name cp "$(Build.ArtifactStagingDirectory)/drop.zip" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/drop.zip" "$container_url" --recursive --put-md5=true
 
       - job: ReleaseAzcopy
         timeoutInMinutes: 120
@@ -2327,6 +2323,7 @@ stages:
         pool:
           vmImage: 'ubuntu-20.04'
         variables:
+          - group: AZCOPY_TESTS_VAR
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
         
