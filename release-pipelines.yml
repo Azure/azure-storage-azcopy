@@ -1478,7 +1478,7 @@ stages:
 
           - template: setup/test_artifacts.yml
             parameters:
-              artifact_name: 'azCopy-linux-signed/mariner'
+              artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/mariner/azcopy*x86_64.rpm'
 
