@@ -1299,7 +1299,7 @@ stages:
               ldd --version
             displayName: "GLIBC Version"
 
-          - template: test_artifacts.yml
+          - template: setup/test_artifacts.yml
             parameters:
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
