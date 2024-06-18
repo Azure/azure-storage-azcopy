@@ -2044,7 +2044,7 @@ stages:
           - script: |
               sudo apt-get install -y zip
               zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
-              cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.rpm .
+              cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
             displayName: 'Create drop.zip file and verify azcopy'
             workingDirectory: $(Build.ArtifactStagingDirectory)
 
