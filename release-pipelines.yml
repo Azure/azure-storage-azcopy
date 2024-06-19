@@ -1912,31 +1912,25 @@ stages:
               workingDirectory: $(Build.ArtifactStagingDirectory)/
 
             - script: |
-                for file in "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed"/*; 
-                do
-                  if [ -f "$file" ]; then
-                    fileID=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $file`
-                    echo "File: $file and File ID: $fileID"
-                  fi
-                done
+                marinerArmRpmFile=$(ls azcopy* | grep 'cm2\.arm64\.rpm')
+                marinerArmRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile`
+                echo "Azcopy mariner ARM RPM ID: $marinerArmRpm"
 
-                # marinerArmRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*-cm2.arm64.rpm`
-                # echo "Azcopy mariner AMD DEB ID: $marinerArmRpm"
+                marinerAmdRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*-cm2.x86_64.rpm`
+                echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
 
-                # marinerAmdRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*-cm2.x86_64.rpm`
-                # echo "Azcopy mariner AMD DEB ID: $marinerAmdRpm"
+                azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
+                echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
 
-                # azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
-                # echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
+                azcopyAmdRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.rpm`
+                echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
 
-                # azcopyAmdRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.rpm`
-                # echo "Azcopy AMD DEB ID: $azcopyAmdRpm"
+                azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
+                echo "Azcopy ARM DEB ID: $azcopyArmDeb"
 
-                # azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
-                # echo "Azcopy AMD DEB ID: $azcopyArmDeb"
-
-                # azcopyArmRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.rpm`
-                # echo "Azcopy AMD DEB ID: $azcopyArmRpm"
+                azcopyArmRpmFile=$(ls azcopy* | grep -v 'cm2\.arm64\.rpm')
+                azcopyArmRpm=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile`
+                echo "Azcopy ARM RPM ID: $azcopyArmRpm"
 
                 while IFS=, read -r distro fuseArchType repoName releaseName; do
                   echo "Uploading packages for $distro"
