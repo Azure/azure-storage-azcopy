@@ -1729,7 +1729,7 @@ stages:
 
                 today=$(date +"%Y%m%d")
                 
-                if [ $(Test_Mode) = "true" ]; then
+                if [ $(Test_Mode) = "True" ]; then
                   container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
                 else
                   container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
@@ -1813,8 +1813,8 @@ stages:
                   target: '$(Build.SourceVersion)'
                   tagSource: 'userSpecifiedTag'
 
-                  title: 'azcopy-10.25.0'
-                  tag: 'azcopy-10.25.0'
+                  title: ${{ parameters.tag }}
+                  tag: ${{ parameters.tag }}
                   
                   assets: |
                     $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
