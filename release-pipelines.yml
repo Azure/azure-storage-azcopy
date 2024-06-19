@@ -1900,11 +1900,12 @@ stages:
 
             - script: |
                 mv azCopy-linux-signed/*tar.gz .
-                pmc package upload azCopy-linux-signed
-                mv *tar.gz azCopy-linux-signed/*tar.gz
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azCopy-linux-signed
+                mv *.tar.gz azCopy-linux-signed/
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
+            # replace org name while merging to main
             - script: |
                 wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
                 cat ./packages.csv
@@ -1994,9 +1995,10 @@ stages:
                   sudo dpkg -i azcopy-*arm64.deb
                   azcopy --version
                 displayName: 'Installing azcopy'
-
+              
+              # TODO: change org name while merging to main
               - script: |
-                  wget https://raw.githubusercontent.com/Azure/azure-storage-storage/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
+                  wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
                   ls -l
                 displayName: 'Getting Python script'
                 workingDirectory: $(root_dir)
