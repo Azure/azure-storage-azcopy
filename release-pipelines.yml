@@ -1962,17 +1962,7 @@ stages:
     dependsOn: ReleaseArtifacts
     condition: succeeded('ReleaseArtifacts')
     jobs:
-      - job: UpdateVersion
-        Rhel_Arm64:
-          agentName: "blobfuse-rhel9-arm64"
-          vmImage: 'RHEL-9.0'
-          container: 'test-cnt-rhel-9-arm64'
-              
-        pool:
-          name: "blobfuse-ubn-arm64-pool"
-          demands:
-            - ImageOverride -equals $(agentName)
-
+      - job: UpdateVersion       
         pool:
           vmImage: 'ubuntu-20.04'
         variables:
