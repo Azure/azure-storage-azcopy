@@ -1723,10 +1723,13 @@ stages:
                 # Find the current version
                 raw_version_output=$(azcopy_linux_amd64 --version)
                 azcopy_version=$(echo $raw_version_output | awk '{print $3}')
-                
+
+                echo "Test Mode value $(Test_Mode)"
+                ls -ltR $(Build.ArtifactStagingDirectory)
+
                 today=$(date +"%Y%m%d")
                 
-                if [ "$(Test_Mode)" = "true" ]; then
+                if [ $(Test_Mode) = "true" ]; then
                   container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
                 else
                   container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
@@ -1896,7 +1899,9 @@ stages:
               displayName: 'List Artifacts'
 
             - script: |
+                mv azCopy-linux-signed/*tar.gz .
                 pmc package upload azCopy-linux-signed
+                mv *tar.gz azCopy-linux-signed/*tar.gz
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
@@ -1958,6 +1963,16 @@ stages:
     condition: succeeded('ReleaseArtifacts')
     jobs:
       - job: UpdateVersion
+        Rhel_Arm64:
+          agentName: "blobfuse-rhel9-arm64"
+          vmImage: 'RHEL-9.0'
+          container: 'test-cnt-rhel-9-arm64'
+              
+        pool:
+          name: "blobfuse-ubn-arm64-pool"
+          demands:
+            - ImageOverride -equals $(agentName)
+
         pool:
           vmImage: 'ubuntu-20.04'
         variables:
@@ -1984,19 +1999,20 @@ stages:
               # install azcopy
               - script: |
                   cd $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
-                  ls azcopy*.arm64.rpm
-                  sudo apt-get install ./`ls azcopy*.arm64.rpm` -y
+                  ls azcopy*.arm64.deb
+                  sudo dpkg --info azcopy-*arm64.deb
+                  sudo dpkg -i azcopy-*arm64.deb
                   azcopy --version
                 displayName: 'Installing azcopy'
 
               - script: |
-                  wget https://raw.githubusercontent.com/Azure/azure-storage-storage/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/releaseVersionUpdate.py
+                  wget https://raw.githubusercontent.com/Azure/azure-storage-storage/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
                   ls -l
                 displayName: 'Getting Python script'
                 workingDirectory: $(root_dir)
 
               - script: |
-                  python3 setup/releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
+                  python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
 
