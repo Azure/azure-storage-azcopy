@@ -1901,7 +1901,6 @@ stages:
             - script: |
                 mv azCopy-linux-signed/*tar.gz .
                 pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azCopy-linux-signed
-                mv *.tar.gz azCopy-linux-signed/
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
@@ -2004,6 +2003,7 @@ stages:
                 workingDirectory: $(root_dir)
 
               - script: |
+                  pip install azure-storage-blob
                   python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
