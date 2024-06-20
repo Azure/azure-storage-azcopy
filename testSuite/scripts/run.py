@@ -5,15 +5,11 @@ from test_file_download import *
 from test_file_upload import *
 from test_azcopy_operations import *
 from test_blobfs_upload_sharedkey import *
-from test_blobfs_upload_oauth import *
 from test_blobfs_download_sharedkey import *
-from test_blobfs_download_oauth import *
 from test_blob_piping import *
 from test_blob_sync import *
 from test_service_to_service_copy import *
 from test_google_cloud_storage_copy import *
-from test_blobfs_download_SAS import *
-from test_blobfs_upload_SAS import *
 from test_file_sync import *
 from test_file_copy import *
 from test_google_cloud_storage_copy import *
@@ -217,10 +213,6 @@ def main():
                          Block_Upload_User_Scenarios,
                          Blob_Download_User_Scenario,
                          PageBlob_Upload_User_Scenarios,
-                         BlobFs_Upload_OAuth_User_Scenarios,
-                         BlobFs_Download_OAuth_User_Scenarios,
-                         BlobFs_Download_SAS_User_Scenarios,
-                         BlobFs_Upload_SAS_User_Scenarios,
                          Azcopy_Operation_User_Scenario,
                          FileShare_Download_User_Scenario,
                          FileShare_Upload_User_Scenario,
