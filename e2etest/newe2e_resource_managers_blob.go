@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"bytes"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
@@ -16,6 +17,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 /*
@@ -627,6 +629,12 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 		},
 		Metadata: resp.Metadata,
 		BlobProperties: BlobProperties{
+			LastModifiedTime: func() *time.Time {
+				if resp.LastModified == nil {
+					return nil
+				}
+				return to.Ptr(resp.LastModified.UTC())
+			}(),
 			VersionId: resp.VersionID,
 			Type:      resp.BlobType,
 			Tags: func() map[string]string {
@@ -643,8 +651,27 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 
 				return out
 			}(),
-			BlockBlobAccessTier: nil,
-			PageBlobAccessTier:  nil,
+			BlockBlobAccessTier: func() *blob.AccessTier {
+				if resp.AccessTier == nil {
+					return nil
+				}
+				return to.Ptr(blob.AccessTier(*resp.AccessTier))
+			}(),
+			PageBlobAccessTier: func() *pageblob.PremiumPageBlobAccessTier {
+				if resp.AccessTier == nil {
+					return nil
+				}
+				return to.Ptr(pageblob.PremiumPageBlobAccessTier(*resp.AccessTier))
+			}(),
+			LeaseState:    resp.LeaseState,
+			LeaseDuration: resp.LeaseDuration,
+			LeaseStatus:   resp.LeaseStatus,
+			ArchiveStatus: func() *blob.ArchiveStatus {
+				if resp.ArchiveStatus == nil {
+					return nil
+				}
+				return to.Ptr(blob.ArchiveStatus(*resp.ArchiveStatus))
+			}(),
 		},
 	}
 }

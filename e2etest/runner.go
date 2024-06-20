@@ -299,10 +299,9 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 	copy(env, os.Environ())
 
 	if needsOAuth {
-		tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
-
 		switch strings.ToLower(oauthMode) {
-		case "", common.EAutoLoginType.SPN().String():
+		case common.EAutoLoginType.SPN().String():
+			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
 			env = append(env,
 				"AZCOPY_AUTO_LOGIN_TYPE="+common.Iff(oauthMode == "", common.EAutoLoginType.SPN().String(), oauthMode),
 				"AZCOPY_SPA_APPLICATION_ID="+appId,
@@ -312,39 +311,51 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 			if tenId != "" {
 				env = append(env, "AZCOPY_TENANT_ID="+tenId)
 			}
-		case common.EAutoLoginType.AzCLI().String():
-			args := []string{
-				"login",
-				"--service-principal",
-				"-u=" + appId,
-				"-p=" + clientSecret,
-			}
-			if tenId != "" {
-				args = append(args, "--tenant="+tenId)
-				env = append(env, "AZCOPY_TENANT_ID="+tenId)
-			}
+		case "", common.EAutoLoginType.AzCLI().String():
+			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
+				// We are already logged in with AzCLI in Azure Pipeline
+			} else {
+				tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
+				args := []string{
+					"login",
+					"--service-principal",
+					"-u=" + appId,
+					"-p=" + clientSecret,
+				}
+				if tenId != "" {
+					args = append(args, "--tenant="+tenId)
+					env = append(env, "AZCOPY_TENANT_ID="+tenId)
+				}
 
-			out, err := exec.Command("az", args...).Output()
-			if err != nil {
-				e, ok := err.(*exec.ExitError)
-				if ok {
-					return CopyOrSyncCommandResult{}, false, fmt.Errorf("%s\n%s\nfailed to login with AzCli: %s", e.Stderr, out, err.Error())
-				} else {
-					return CopyOrSyncCommandResult{}, false, fmt.Errorf("failed to login with AzCli: %s", err.Error())
+				out, err := exec.Command("az", args...).Output()
+				if err != nil {
+					e, ok := err.(*exec.ExitError)
+					if ok {
+						return CopyOrSyncCommandResult{}, false, fmt.Errorf("%s\n%s\nfailed to login with AzCli: %s", e.Stderr, out, err.Error())
+					} else {
+						return CopyOrSyncCommandResult{}, false, fmt.Errorf("failed to login with AzCli: %s", err.Error())
+					}
 				}
 			}
 
-			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE="+oauthMode)
+			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE=AzCLI")
 		case "pscred":
-			tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
-			cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
+			var script string
+			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
+				tenId, clientId, token := GlobalInputManager{}.GetWorkloadIdentity()
+				cmd := `Connect-AzAccount -ApplicationId %s -Tenant %s -FederatedToken %s`
+				script = fmt.Sprintf(cmd, clientId, tenId, token)
+			} else {
+				tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
+				cmd := `$secret = ConvertTo-SecureString -String %s -AsPlainText -Force;
 				$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList %s, $secret;
 				Connect-AzAccount -ServicePrincipal -Credential $cred`
-			if tenId != "" {
-				cmd += " -Tenant " + tenId
-			}
+				if tenId != "" {
+					cmd += " -Tenant " + tenId
+				}
 
-			script := fmt.Sprintf(cmd, clientSecret, appId)
+				script = fmt.Sprintf(cmd, clientSecret, appId)
+			}
 			out, err := exec.Command("pwsh", "-Command", script).Output()
 			if err != nil {
 				e := err.(*exec.ExitError)

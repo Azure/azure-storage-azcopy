@@ -151,6 +151,9 @@ type ResourceDefinitionObject struct {
 	Body ObjectContentContainer
 	// ObjectShouldExist is true unless set to false. Useful in negative validation (e.g. remove)
 	ObjectShouldExist *bool
+
+	// This is used only to pass the size of the object when making a list of expected objects
+	Size string
 }
 
 func (r ResourceDefinitionObject) GenerateAdoptiveParent(a Asserter) ResourceDefinition {
