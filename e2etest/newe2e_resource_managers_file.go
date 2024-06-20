@@ -287,6 +287,7 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
+						LastModifiedTime:  v.Properties.LastModified,
 					},
 				}
 			}
@@ -322,6 +323,7 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
+						LastModifiedTime:  v.Properties.LastModified,
 					},
 				}
 			}
@@ -543,6 +545,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
+				LastModifiedTime:  resp.LastModified,
 			},
 		}
 	case common.EEntityType.File():
@@ -573,6 +576,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
+				LastModifiedTime:  resp.LastModified,
 			},
 		}
 	default:

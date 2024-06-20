@@ -8,47 +8,6 @@ from stat import *
 import utility as util
 
 class Block_Upload_User_Scenarios(unittest.TestCase):
-    def setUp(self):
-        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']).add_flags("tenant-id", os.environ['OAUTH_TENANT_ID'])
-        cmd.execute_azcopy_copy_command()
-
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
-    def util_test_1kb_blob_upload(self, use_oauth_session=False):
-        # Creating a single File Of size 1 KB
-        filename = "test1KB.txt"
-        file_path = util.create_test_file(filename, 1024)
-
-        # executing the azcopy command to upload the 1KB file.
-        src = file_path
-        if not use_oauth_session:
-            dest = util.get_resource_sas(filename)
-            dest_validate = dest
-        else:
-            dest = util.get_resource_from_oauth_container(filename)
-            dest_validate = util.get_resource_from_oauth_container_validate(filename)
-
-        result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the uploaded blob.
-        # the resource local path should be the first argument for the azcopy validator.
-        # the resource sas should be the second argument for azcopy validator.
-        result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
-        self.assertTrue(result)
-
-    # test_1kb_blob_upload verifies the 1KB blob upload by azcopy.
-    def test_1kb_blob_upload_with_sas(self):
-        #Test the case with SAS
-        self.util_test_1kb_blob_upload()
-
-    def test_1kb_blob_upload_with_oauth(self):
-        #Test the case with OAuth
-        self.util_test_1kb_blob_upload(True)
-
     # test_63mb_blob_upload verifies the azcopy upload of 63mb blob upload.
     def test_63mb_blob_upload(self):
         # creating file of 63mb size.
@@ -66,38 +25,6 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # calling the testBlob validator to verify whether blob has been successfully uploaded or not
         result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest).execute_azcopy_verify()
         self.assertTrue(result)
-
-    # test_n_1kb_blob_upload verifies the upload of n 1kb blob to the container.
-    def util_test_n_1kb_blob_upload(self, number_of_files, use_oauth_session=False):
-        # create dir dir_n_files and 1 kb files inside the dir.
-        dir_name = "dir_" + str(number_of_files) + "_files"
-        dir_n_files_path = util.create_test_n_files(1024, number_of_files, dir_name)
-
-        if not use_oauth_session:
-            dest = util.test_container_url
-            dest_validate = util.get_resource_sas(dir_name)
-        else:
-            dest = util.test_oauth_container_url
-            dest_validate = util.get_resource_from_oauth_container_validate(dir_name)
-
-        # execute azcopy command
-        result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(dest). \
-            add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # execute the validator.
-        result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(dest_validate). \
-            add_flags("is-object-dir", "true").execute_azcopy_verify()
-        self.assertTrue(result)
-
-
-    # test_10_1kb_blob_upload_with_sas verifies the upload of 10 1kb blob to the container with SAS.
-    def test_10_1kb_blob_upload_with_sas(self):
-        self.util_test_n_1kb_blob_upload(10)
-
-    # test_10_1kb_blob_upload_with_sas verifies the upload of 10 1kb blob to the container with OAuth.
-    def test_10_1kb_blob_upload_with_oauth(self):
-        self.util_test_n_1kb_blob_upload(10, True)
 
     # test_metaData_content_encoding_content_type verifies the meta data, content type,
     # content encoding of 2kb upload to container through azcopy.

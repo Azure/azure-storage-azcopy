@@ -6,6 +6,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"math"
 	"math/rand"
 )
 
@@ -32,6 +33,16 @@ func NewRandomObjectContentContainer(a Asserter, size int64) ObjectContentContai
 
 func NewZeroObjectContentContainer(size int64) ObjectContentContainer {
 	return &ObjectContentContainerBuffer{Data: make([]byte, size)}
+}
+
+func NewPartialSparseObjectContentContainer(a Asserter, size int64) ObjectContentContainer {
+	buf := make([]byte, size)
+	for i := 0; i < len(buf); i += 8 * common.MegaByte {
+		end := math.Min(float64(i+4*common.MegaByte), float64(len(buf)))
+		_, err := rand.Read(buf[i:int(end)])
+		a.NoError("Generate random data", err)
+	}
+	return &ObjectContentContainerBuffer{buf}
 }
 
 func NewStringObjectContentContainer(data string) ObjectContentContainer {
