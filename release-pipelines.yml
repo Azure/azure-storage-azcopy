@@ -1187,11 +1187,12 @@ stages:
             displayName: 'Publish Signed Artifacts'
 
           - script: |
-              rm -rf $(Build.ArtifactStagingDirectory)/*.zip
+              
               mkdir -p $(Build.ArtifactStagingDirectory)/unzipped
-              unzip -o $(Build.ArtifactStagingDirectory)/*.zip -d $(Build.ArtifactStagingDirectory)/unzipped
+              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped
               mv $(Build.ArtifactStagingDirectory)/unzipped/azcopy_darwin* $(Build.ArtifactStagingDirectory)/
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped
+              rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
             displayName:  'Copy signed mac binary to staging directory'
 
@@ -1316,8 +1317,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
             displayName: 'Check Version and Help'
 
       - job: Set_2
@@ -1354,8 +1355,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_arm64 --version
+              azcopy_linux_arm64 --help
             displayName: 'Check Version and Help'
 
       - job: Set_3
@@ -1394,8 +1395,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_arm64 --version
+              azcopy_linux_arm64 --help
             displayName: 'Check Version and Help'
       
       - job: Set_4
@@ -1439,8 +1440,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
             displayName: 'Check Version and Help'
 
       - job: Set_5
@@ -1483,8 +1484,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
             displayName: 'Check Version and Help'
 
       - job: Set_6
@@ -1725,7 +1726,7 @@ stages:
                 
                 # Upload the archived builds
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
