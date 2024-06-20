@@ -1316,8 +1316,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
             displayName: 'Check Version and Help'
 
       - job: Set_2
@@ -1354,8 +1354,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_arm64 --version
+              azcopy_linux_arm64 --help
             displayName: 'Check Version and Help'
 
       - job: Set_3
@@ -1394,8 +1394,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_arm64 --version
+              azcopy_linux_arm64 --help
             displayName: 'Check Version and Help'
       
       - job: Set_4
@@ -1439,8 +1439,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
             displayName: 'Check Version and Help'
 
       - job: Set_5
@@ -1483,8 +1483,8 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
 
           - script: | 
-              azcopy --version
-              azcopy --help
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
             displayName: 'Check Version and Help'
 
       - job: Set_6
