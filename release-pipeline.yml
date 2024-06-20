@@ -1,8 +1,6 @@
 variables:
   AZCOPY_GOLANG_VERSION: '1.21.8'
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
-  AZCOPY_VERSION: '0.0.0'
-  MUTEX_URL: https://ciazcopyv10regular.blob.core.windows.net/distributedmutex/lock
 
 parameters:
   - name: tag
@@ -1186,11 +1184,13 @@ stages:
             displayName: 'Publish Signed Artifacts'
 
           - script: |
-              
-              mkdir -p $(Build.ArtifactStagingDirectory)/unzipped
-              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped
-              mv $(Build.ArtifactStagingDirectory)/unzipped/azcopy_darwin* $(Build.ArtifactStagingDirectory)/
-              rm -rf $(Build.ArtifactStagingDirectory)/unzipped
+              mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_amd64
+              mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_arm64
+              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_amd64
+              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*arm64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_arm64
+              mv $(Build.ArtifactStagingDirectory)/unzipped_amd64/azcopy_darwin* $(Build.ArtifactStagingDirectory)/
+              mv $(Build.ArtifactStagingDirectory)/unzipped_arm64/azcopy_darwin* $(Build.ArtifactStagingDirectory)/
+              rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
               rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
             displayName:  'Copy signed mac binary to staging directory'
@@ -1315,7 +1315,7 @@ stages:
             displayName: 'Install deb Package'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
-          - script: | 
+          - script: |
               azcopy_linux_amd64 --version
               azcopy_linux_amd64 --help
             displayName: 'Check Version and Help'
