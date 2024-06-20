@@ -1153,10 +1153,10 @@ stages:
               sudo apt-get clean
               sudo apt-get update
               sudo apt-get upgrade -y
+              sudo apt-get install unzip -y
               sudo apt-get install -f --fix-missing
               wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
               sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt update 
               sudo apt install apt-transport-https -y
               sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
@@ -1260,6 +1260,7 @@ stages:
           
           # Validate signed images have md5sum changed
           - script: |
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin*
               chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
               rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/*.md
               mv $(Build.ArtifactStagingDirectory)/azCopy-binaries/* $(Build.ArtifactStagingDirectory)/
@@ -1315,12 +1316,9 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy_linux_amd64 --version
-            displayName: 'Check Version'
-
-          - script: | 
-              azcopy_linux_amd64 --help
-            displayName: 'Check Help'
+              azcopy --version
+              azcopy --help
+            displayName: 'Check Version and Help'
 
       - job: Set_2
         timeoutInMinutes: 120
@@ -1356,12 +1354,9 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy_linux_arm64 --version
-            displayName: 'Check Version'
-
-          - script: | 
-              azcopy_linux_arm64 --help
-            displayName: 'Check Help'
+              azcopy --version
+              azcopy --help
+            displayName: 'Check Version and Help'
 
       - job: Set_3
         timeoutInMinutes: 120
@@ -1399,12 +1394,9 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy_linux_arm64 --version
-            displayName: 'Check Version'
-
-          - script: | 
-              azcopy_linux_arm64 --help
-            displayName: 'Check Help'
+              azcopy --version
+              azcopy --help
+            displayName: 'Check Version and Help'
       
       - job: Set_4
         timeoutInMinutes: 120
@@ -1447,12 +1439,9 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
-              azcopy_linux_amd64 --version
-            displayName: 'Check Version'
-
-          - script: | 
-              azcopy_linux_amd64 --help
-            displayName: 'Check Help'
+              azcopy --version
+              azcopy --help
+            displayName: 'Check Version and Help'
 
       - job: Set_5
         timeoutInMinutes: 120
@@ -1494,12 +1483,9 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
 
           - script: | 
-              azcopy_linux_amd64 --version
-            displayName: 'Check Version'
-
-          - script: | 
-              azcopy_linux_amd64 --help
-            displayName: 'Check Help'
+              azcopy --version
+              azcopy --help
+            displayName: 'Check Version and Help'
 
       - job: Set_6
         timeoutInMinutes: 360
@@ -1724,7 +1710,6 @@ stages:
                 raw_version_output=$(azcopy_linux_amd64 --version)
                 azcopy_version=$(echo $raw_version_output | awk '{print $3}')
 
-                echo "Test Mode value $(Test_Mode)"
                 ls -ltR $(Build.ArtifactStagingDirectory)
 
                 today=$(date +"%Y%m%d")
@@ -1742,7 +1727,7 @@ stages:
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/drop.zip" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
       - job: ReleaseAzcopy
         timeoutInMinutes: 120
