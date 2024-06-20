@@ -17,10 +17,10 @@ containerUrl = sasUrl.split('?')[0]
 sasToken = sasUrl.split('?')[1]
 
 # delete latest version file in the container
-deleteUrl = containerUrl + '/' + 'latest_version.txt' + '?' + sasToken
-print(f"deleteURL: '{deleteUrl}'")
-resp = requests.delete(deleteUrl)
-sys.exit(1) if(resp.status_code<200 or resp.status_code>202) else print('Deleted last release file')
+# deleteUrl = containerUrl + '/' + 'latest_version.txt' + '?' + sasToken
+# print(f"deleteURL: '{deleteUrl}'")
+# resp = requests.delete(deleteUrl)
+# sys.exit(1) if(resp.status_code<200 or resp.status_code>202) else print('Deleted last release file')
 
 # Create a file and write data to it
 file_name = 'latest_version.txt'
