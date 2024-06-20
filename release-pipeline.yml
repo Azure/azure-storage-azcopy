@@ -1,8 +1,6 @@
 variables:
   AZCOPY_GOLANG_VERSION: '1.21.8'
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
-  AZCOPY_VERSION: '0.0.0'
-  MUTEX_URL: https://ciazcopyv10regular.blob.core.windows.net/distributedmutex/lock
 
 parameters:
   - name: tag
@@ -1994,3 +1992,7 @@ stages:
                   python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
