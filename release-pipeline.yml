@@ -1,8 +1,11 @@
 variables:
   AZCOPY_GOLANG_VERSION: '1.21.8'
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
+<<<<<<< HEAD
   AZCOPY_VERSION: '0.0.0'
   MUTEX_URL: https://ciazcopyv10regular.blob.core.windows.net/distributedmutex/lock
+=======
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
 
 parameters:
   - name: tag
@@ -1316,8 +1319,13 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_amd64 --version
               azcopy_linux_amd64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
             displayName: 'Check Version and Help'
 
       - job: Set_2
@@ -1354,8 +1362,13 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_arm64 --version
               azcopy_linux_arm64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
             displayName: 'Check Version and Help'
 
       - job: Set_3
@@ -1394,8 +1407,13 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_arm64 --version
               azcopy_linux_arm64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
             displayName: 'Check Version and Help'
       
       - job: Set_4
@@ -1439,8 +1457,13 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_amd64 --version
               azcopy_linux_amd64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
             displayName: 'Check Version and Help'
 
       - job: Set_5
@@ -1483,8 +1506,13 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_amd64 --version
               azcopy_linux_amd64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
             displayName: 'Check Version and Help'
 
       - job: Set_6
@@ -1994,3 +2022,7 @@ stages:
                   python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
