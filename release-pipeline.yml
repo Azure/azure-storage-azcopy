@@ -1,6 +1,8 @@
 variables:
   AZCOPY_GOLANG_VERSION: '1.21.8'
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
+  AZCOPY_VERSION: '0.0.0'
+  MUTEX_URL: https://ciazcopyv10regular.blob.core.windows.net/distributedmutex/lock
 
 parameters:
   - name: tag
@@ -337,12 +339,11 @@ stages:
             value: $(work_dir)/linux_se_amd64
 
         steps:
-          #TODO: remove this after merging to main
           - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
+              wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
               chmod 777 $(work_dir)/go_installer.sh
               sudo ls -lRt $(work_dir)/
-            displayName: 'list'
+            displayName: 'Download go installer script'
 
           # Custom script to install Go-lang
           - task: ShellScript@2
@@ -527,12 +528,12 @@ stages:
             value: $(work_dir)/linux_se_arm64
 
         steps:
-          #TODO: remove this after merging to main
+          #TODO: remove this while merging to main
           - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
+              wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
               chmod 777 $(work_dir)/go_installer.sh
               sudo ls -lRt $(work_dir)/
-            displayName: 'list'
+            displayName: 'Download go installer script'
 
           # Custom script to install Go-lang
           - task: ShellScript@2
@@ -1185,11 +1186,12 @@ stages:
             displayName: 'Publish Signed Artifacts'
 
           - script: |
-              rm -rf $(Build.ArtifactStagingDirectory)/*.zip
+              
               mkdir -p $(Build.ArtifactStagingDirectory)/unzipped
-              unzip -o $(Build.ArtifactStagingDirectory)/*.zip -d $(Build.ArtifactStagingDirectory)/unzipped
+              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped
               mv $(Build.ArtifactStagingDirectory)/unzipped/azcopy_darwin* $(Build.ArtifactStagingDirectory)/
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped
+              rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
             displayName:  'Copy signed mac binary to staging directory'
 
@@ -1723,7 +1725,7 @@ stages:
                 
                 # Upload the archived builds
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
@@ -1887,9 +1889,8 @@ stages:
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
-            # replace org name while merging to main
             - script: |
-                wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
+                wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
                 cat ./packages.csv
               displayName: 'Fetch packages.csv'
               workingDirectory: $(Build.ArtifactStagingDirectory)/
@@ -1980,9 +1981,8 @@ stages:
                   azcopy --version
                 displayName: 'Installing azcopy'
               
-              # TODO: change org name while merging to main
               - script: |
-                  wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
+                  wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
                   ls -l
                 displayName: 'Getting Python script'
                 workingDirectory: $(root_dir)
@@ -1992,7 +1992,3 @@ stages:
                   python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
-<<<<<<< HEAD
-=======
-
->>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
