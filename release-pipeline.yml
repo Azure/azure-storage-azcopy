@@ -1314,8 +1314,18 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_amd64 --version
               azcopy_linux_amd64 --help
+=======
+<<<<<<< HEAD
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
+>>>>>>> 4019d86c8186f6cd7a4df121c531bc89b5bf66ed
             displayName: 'Check Version and Help'
 
       - job: Set_2
@@ -1352,8 +1362,18 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_arm64 --version
               azcopy_linux_arm64 --help
+=======
+<<<<<<< HEAD
+              azcopy_linux_arm64 --version
+              azcopy_linux_arm64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
+>>>>>>> 4019d86c8186f6cd7a4df121c531bc89b5bf66ed
             displayName: 'Check Version and Help'
 
       - job: Set_3
@@ -1392,8 +1412,18 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_arm64 --version
               azcopy_linux_arm64 --help
+=======
+<<<<<<< HEAD
+              azcopy_linux_arm64 --version
+              azcopy_linux_arm64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
+>>>>>>> 4019d86c8186f6cd7a4df121c531bc89b5bf66ed
             displayName: 'Check Version and Help'
       
       - job: Set_4
@@ -1437,8 +1467,18 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_amd64 --version
               azcopy_linux_amd64 --help
+=======
+<<<<<<< HEAD
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
+>>>>>>> 4019d86c8186f6cd7a4df121c531bc89b5bf66ed
             displayName: 'Check Version and Help'
 
       - job: Set_5
@@ -1481,8 +1521,18 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
 
           - script: | 
+<<<<<<< HEAD
               azcopy_linux_amd64 --version
               azcopy_linux_amd64 --help
+=======
+<<<<<<< HEAD
+              azcopy_linux_amd64 --version
+              azcopy_linux_amd64 --help
+=======
+              azcopy --version
+              azcopy --help
+>>>>>>> 2638db4d61ed0afa1890fc6618e35b913ef52895
+>>>>>>> 4019d86c8186f6cd7a4df121c531bc89b5bf66ed
             displayName: 'Check Version and Help'
 
       - job: Set_6
