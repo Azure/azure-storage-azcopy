@@ -19,8 +19,6 @@ github.com/Azure/azure-sdk-for-go/sdk/internal v1.8.0 h1:jBQA3cKT4L2rWMpgE7Yt3Hw
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.8.0/go.mod h1:4OG6tQ9EOP/MT0NMjDlRzWoVFxfu9rN9B2X+tlSVktg=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage v1.5.0 h1:AifHbc4mg0x9zW52WOpKbsHaDKuRhlI7TVl47thgQ70=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage v1.5.0/go.mod h1:T5RfihdXtBDxt1Ch2wobif3TvzTdumDy29kahv6AV9A=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.1 h1:fXPMAmuh0gDuRDey0atC8cXBuKIlqCzCkL8sm1n9Ov0=
-github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.1/go.mod h1:SUZc9YRRHfx2+FAQKNDGrssXehqLpxmwRv2mC/5ntj4=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.1.1 h1:mkaGMgFkpDJVs7QUQrHvqEEpJFvoDrqGaHqMkywhGN0=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.1.1/go.mod h1:3S0vo7Y+O3Fjnnon5JXVrlG2IrfQkXasvKWB4OwX1lk=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.2.1 h1:59Jk/lsLhtEMq6Zi7t6aWDFMman28m2O9K67IPAqqEI=
@@ -117,6 +115,8 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/mattn/go-ieproxy v0.0.11 h1:MQ/5BuGSgDAHZOJe6YY80IF2UVCfGkwfo6AeD7HtHYo=
 github.com/mattn/go-ieproxy v0.0.11/go.mod h1:/NsJd+kxZBmjMc5hrJCKMbP57B84rvq9BiDRbtO9AS0=
+github.com/mawhite-msft/azure-sdk-for-go/sdk/storage/azblob v0.0.0-20240614172713-ee454601024f h1:3zQdvhd9J4+5LqZ1I73k8NP3upq61twePPck6r44Zhs=
+github.com/mawhite-msft/azure-sdk-for-go/sdk/storage/azblob v0.0.0-20240614172713-ee454601024f/go.mod h1:sJ8JTIjNrTgqRsLtI+rXVqyQY+M6Okq6OfqLfesKGBU=
 github.com/minio/minio-go v6.0.14+incompatible h1:fnV+GD28LeqdN6vT2XdGKW8Qe/IfjJDswNVuni6km9o=
 github.com/minio/minio-go v6.0.14+incompatible/go.mod h1:7guKYtitv8dktvNUGrhzmNlA5wrAABTQXCoesZdFQO8=
 github.com/mitchellh/go-homedir v1.1.0 h1:lukF9ziXFxDFPkA1vsr5zpc1XuPDn/wFntq5mG+4E0Y=
