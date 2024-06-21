@@ -222,3 +222,26 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 		},
 	}, false)
 }
+
+func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(svm, 63*common.MegaByte)
+	name := "test_upload_preserve_last_mtime"
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb:    AzCopyVerbCopy,
+			Targets: []ResourceManager{srcObj, dstObj},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: pointerTo(4.0),
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, false)
+}
