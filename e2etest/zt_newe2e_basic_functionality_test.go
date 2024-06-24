@@ -1,8 +1,10 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
+
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -163,4 +165,49 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+
+}
+
+// Scenario_Copy_S2SwithPreserveBlobTags validates that copy operation with PreserveBlobTags set to true returns informative error message to the user: Failed to set blob tags due to permission error.
+func (s *BasicFunctionalitySuite) Scenario_Copy_S2SwithPreserveBlobTags(svm *ScenarioVariationManager) {
+	// Calculate verb early to create the destination object early
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionContainer{})
+	dstObj := dstContainer.GetObject(svm, "abc", common.EEntityType.File())
+
+	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}), GetResourceOptions{PreferredAccount: pointerTo(PrimaryHNSAcct)}), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, "test", common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: srcObj.ContainerName(),
+						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
+					},
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: dstObj.ContainerName(),
+						Permissions:   (&blobsas.BlobPermissions{Read: true, List: true}).String(),
+					},
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:             pointerTo(true),
+					S2SPreserveBlobTags:   pointerTo(true),
+					S2SPreserveAccessTier: pointerTo(false),
+				},
+			},
+			ShouldFail: true,
+		})
+
+	// Validate that the stdout contains blob tags permission error
+	ValidateErrorOutput(svm, stdout, "Failed to set blob tags due to permission error")
 }
