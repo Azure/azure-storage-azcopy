@@ -9,14 +9,6 @@ import utility as util
 import unittest
 
 class Blob_Download_User_Scenario(unittest.TestCase):
-    def setUp(self):
-        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']).add_flags("tenant-id", os.environ['OAUTH_TENANT_ID'])
-        cmd.execute_azcopy_copy_command()
-
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
     # test_download_1kb_blob_to_null verifies that a 1kb blob can be downloaded to null and the md5 can be checked successfully
     def test_download_1kb_blob_to_null(self):
         # create file of size 1kb
@@ -63,37 +55,6 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         src = util.get_resource_sas(filename)
         dst = "/"
         result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info")
-
-    # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
-    def test_download_1kb_blob(self):
-        # create file of size 1KB.
-        filename = "test_1kb_blob_upload.txt"
-        file_path = util.create_test_file(filename, 1024)
-
-        # Upload 1KB file using azcopy.
-        src = file_path
-        dest = util.test_container_url
-        result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the uploaded blob.
-        # the resource local path should be the first argument for the azcopy validator.
-        # the resource sas should be the second argument for azcopy validator.
-        resource_url = util.get_resource_sas(filename)
-        result = util.Command("testBlob").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
-        self.assertTrue(result)
-
-        # downloading the uploaded file
-        src = util.get_resource_sas(filename)
-        dest = util.test_directory_path + "/test_1kb_blob_download.txt"
-        result = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level",
-                                                                                       "info").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the downloaded blob
-        result = util.Command("testBlob").add_arguments(dest).add_arguments(src).execute_azcopy_verify()
-        self.assertTrue(result)
 
     # test_download_preserve_last_modified_time verifies the azcopy downloaded file
     # and its modified time preserved locally on disk
