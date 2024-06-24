@@ -17,7 +17,7 @@ containerUrl = sasUrl.split('?')[0]
 sasToken = sasUrl.split('?')[1]
 
 # delete latest version file in the container
-deleteUrl = containerUrl + '/' + 'releasemetadata/latest_version.txt' + '?' + sasToken
+deleteUrl = containerUrl + '/' + 'latest_version.txt' + '?' + sasToken
 resp = requests.delete(deleteUrl)
 sys.exit(1) if(resp.status_code<200 or resp.status_code>202) else print('Deleted last release file')
 
