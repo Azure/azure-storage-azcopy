@@ -1362,7 +1362,7 @@ stages:
                 Set-Location -Path $extractDir
 
                 # Verify that azcopy.exe exists
-                if (-Not (Test-Path -Path ".\azcopy_windows_amd64\azcopy.exe")) {
+                if (-Not (Test-Path -Path ".\azcopy_windows_amd64\azcopy")) {
                   Write-Error "azcopy.exe not found in extraction directory: $extractDir"
                   exit 1
                 }
