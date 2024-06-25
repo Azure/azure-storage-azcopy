@@ -1,8 +1,5 @@
 variables:
   AZCOPY_GOLANG_VERSION: '1.21.8'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.21.8'
-  AZCOPY_VERSION: '0.0.0'
-  MUTEX_URL: https://ciazcopyv10regular.blob.core.windows.net/distributedmutex/lock
 
 parameters:
   - name: tag
