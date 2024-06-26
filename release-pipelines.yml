@@ -149,15 +149,15 @@ stages:
             displayName: 'Verify and extract the generated build version'
 
           - script: |
-              linux_amd64_dir="${work_dir}/azcopy_linux_amd64_${azcopy_version}"
+              linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
 
-              linux_se_amd64_dir="${work_dir}/azcopy_linux_amd64_${azcopy_version}"
+              linux_se_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
 
-              mkdir $linux_amd64_dir
-              mkdir $linux_se_amd64_dir
-              mkdir $(archives)
+              mkdir -p $linux_amd64_dir
+              mkdir -p $linux_se_amd64_dir
+              mkdir -p $(archives)
             displayName: 'Create required directories'
 
           - script: |
@@ -336,15 +336,15 @@ stages:
             displayName: 'Verify and extract the generated build version'
 
           - script: |
-              linux_arm64_dir="${work_dir}/azcopy_linux_arm64_${azcopy_version}"
+              linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=linux_arm64_dir]$linux_arm64_dir"
 
-              linux_se_arm64_dir="${work_dir}/azcopy_linux_arm64_${azcopy_version}"
+              linux_se_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=linux_se_arm64_dir]$linux_se_arm64_dir"
 
-              mkdir $linux_arm64_dir
-              mkdir $linux_se_arm64_dir
-              mkdir $(archives)
+              mkdir -p $linux_arm64_dir
+              mkdir -p $linux_se_arm64_dir
+              mkdir -p $(archives)
             displayName: 'Create required directories'
 
           - script: |
