@@ -314,8 +314,7 @@ stages:
           - script: |
               export GOARCH=arm64
               export GOOS=linux
-              $(linux_arm64)/azcopy --version
-              azcopyOutput=$($(linux_arm64)/azcopy --version)
+              azcopyOutput=$($(root_dir)/azcopy_linux_arm64 --version)
 
                 # Extract the version part using grep and sed
                 if echo "$azcopyOutput" | grep -q "azcopy version"; then
