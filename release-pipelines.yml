@@ -555,8 +555,8 @@ stages:
               darwin_arm_dir="${work_dir}/azcopy_darwin_arm64_${azcopy_version}"
               echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
               
-              mkdir -p $(darwin_amd_dir)
-              mkdir -p $(darwin_arm_dir)
+              mkdir -p $darwin_amd_dir
+              mkdir -p $darwin_arm_dir
               mkdir -p $(archives)
             displayName: 'Create required directories'
 
@@ -708,12 +708,6 @@ stages:
           - group: AZCOPY_ESRP_SECRET
           - name: work_dir
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: windows_amd64
-            value: '$(work_dir)/azcopy_windows_amd64'
-          - name: windows_arm64
-            value: '$(work_dir)/azcopy_windows_arm64'
-          - name: windows_386
-            value: '$(work_dir)/azcopy_windows_386'
           - name: archives
             value: '$(work_dir)/archives'
           
@@ -739,13 +733,6 @@ stages:
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
             displayName: 'List Artifacts'
-
-          - script: |
-              mkdir -p $(windows_amd64)
-              mkdir -p $(windows_arm64)
-              mkdir -p $(windows_386)
-              mkdir -p $(archives)
-            displayName: 'Create required directories'
           
           - script: |
               sudo apt-get clean
@@ -787,17 +774,25 @@ stages:
 
           - script: |
               windows_amd64="$(work_dir)/azcopy_windows_amd64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
+
               windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
+
               windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
-              cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64 $(windows_amd64)
-              cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64 $(windows_arm64)
-              cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386 $(windows_386)
+              echo "##vso[task.setvariable variable=windows_386]$windows_386"
+
+              mkdir $(windows_amd64)
+              mkdir $(windows_arm64)
+              mkdir $(windows_386)
+              mkdir -p $(archives)
+
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64 $(windows_amd64)/azcopy
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64 $(windows_arm64)/azcopy
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386 $(windows_386)/azcopy
               cp NOTICE.txt $(windows_amd64)
               cp NOTICE.txt $(windows_arm64)
               cp NOTICE.txt $(windows_386)
-              mv $(windows_amd64)/azcopy_windows_amd64 $(windows_amd64)/azcopy
-              mv $(windows_arm64)/azcopy_windows_arm64 $(windows_arm64)/azcopy
-              mv $(windows_386)/azcopy_windows_386 $(windows_386)/azcopy
               zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
               zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
               zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
