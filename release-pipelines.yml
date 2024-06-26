@@ -549,15 +549,15 @@ stages:
                 echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
 
           - script: |
-              darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
+              darwin_amd_dir="${work_dir}/azcopy_darwin_amd64_${azcopy_version}"
               echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
 
-              darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
+              darwin_arm_dir="${work_dir}/azcopy_darwin_arm64_${azcopy_version}"
               echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
-      
-              mkdir $(darwin_amd_dir)
-              mkdir $(darwin_arm_dir)
-              mkdir $(archives)
+              
+              mkdir -p $(darwin_amd_dir)
+              mkdir -p $(darwin_arm_dir)
+              mkdir -p $(archives)
             displayName: 'Create required directories'
 
           - script: |
@@ -786,6 +786,9 @@ stages:
             displayName: 'Extract the generated build version'
 
           - script: |
+              windows_amd64="$(work_dir)/azcopy_windows_amd64_$(azcopy_version)"
+              windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
+              windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
               cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64 $(windows_amd64)
               cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64 $(windows_arm64)
               cp $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386 $(windows_386)
