@@ -1197,7 +1197,7 @@ stages:
               make
               sudo make install
               sudo ldconfig
-            diaplayName: 'Install libsecret'
+            displayName: 'Install libsecret'
 
           - template: setup/test_artifacts.yml
             parameters:
