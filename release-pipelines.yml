@@ -1057,8 +1057,8 @@ stages:
           - checkout: none
           - script: |
               sudo apt update
-              sudo apt-get install libsecret-1-dev
-              sudo apt --fix-broken install
+              sudo apt-get install libsecret-1-dev -y
+              sudo apt --fix-broken install -y
               ldd --version
             displayName: "GLIBC Version"
 
@@ -1097,7 +1097,7 @@ stages:
           - checkout: none
           - script: |
               sudo yum update -y
-              sudo yum install libsecret
+              sudo yum install libsecret -y
               sudo yum install git -y
             displayName: 'Install Git'
 
@@ -1138,7 +1138,7 @@ stages:
           - checkout: none
           - script: |
               sudo yum update -y
-              sudo yum install libsecret
+              sudo yum install libsecret -y
               sudo yum install git -y
             displayName: 'Install Git'
 
@@ -1185,19 +1185,20 @@ stages:
           - checkout: none
           - script: |
               sudo tdnf update -y
+              sudo tdnf install libsecret -y
               sudo tdnf install git -y
             displayName: 'Install dependencies'
           
-          - script: |
-              sudo tdnf install wget tar gcc make glib2-devel gnome-keyring-devel
-              wget https://download.gnome.org/sources/libsecret/0.20/libsecret-0.20.4.tar.xz
-              tar -xf libsecret-0.20.4.tar.xz
-              cd libsecret-0.20.4
-              ./configure
-              make
-              sudo make install
-              sudo ldconfig
-            displayName: 'Install libsecret'
+          # - script: |
+          #     sudo tdnf install wget tar gcc make glib2-devel gnome-keyring-devel
+          #     wget https://download.gnome.org/sources/libsecret/0.20/libsecret-0.20.4.tar.xz
+          #     tar -xf libsecret-0.20.4.tar.xz
+          #     cd libsecret-0.20.4
+          #     ./configure
+          #     make
+          #     sudo make install
+          #     sudo ldconfig
+          #   displayName: 'Install libsecret'
 
           - template: setup/test_artifacts.yml
             parameters:
