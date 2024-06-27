@@ -359,7 +359,7 @@ stages:
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           - script: |
-              fpm -s dir -t deb -n azcopy -C pkgDir/ \
+              fpm -s dir -t deb -n azcopy --rpm-digest -C pkgDir/ \
               -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -1057,6 +1057,7 @@ stages:
           - checkout: none
           - script: |
               sudo apt update
+              sudo apt-get install libsecret-1-dev
               sudo apt --fix-broken install
               ldd --version
             displayName: "GLIBC Version"
@@ -1096,6 +1097,7 @@ stages:
           - checkout: none
           - script: |
               sudo yum update -y
+              sudo yum install libsecret
               sudo yum install git -y
             displayName: 'Install Git'
 
@@ -1136,6 +1138,7 @@ stages:
           - checkout: none
           - script: |
               sudo yum update -y
+              sudo yum install libsecret
               sudo yum install git -y
             displayName: 'Install Git'
 
@@ -1182,6 +1185,7 @@ stages:
           - checkout: none
           - script: |
               sudo tdnf update -y
+              sudo tdnf install libsecret
               sudo tdnf install git -y
             displayName: 'Install Git'
 
@@ -1262,8 +1266,16 @@ stages:
               # Extract the zip file
               unzip $ZIP_FILE_PATH -d $EXTRACT_DIR
 
-              # Change to the directory containing azcopy
-              cd $EXTRACT_DIR/azcopy_darwin_amd64
+              # Find the directory matching the pattern
+              matching_dirs=($EXTRACT_DIR/azcopy_darwin_amd64*)
+
+              # Check if there is exactly one matching directory
+              if [ ${#matching_dirs[@]} -eq 1 ]; then
+                  cd "${matching_dirs[0]}"
+              else
+                  echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+                  exit 1
+              fi
 
               # Run the azcopy version command
               ./azcopy --version
@@ -1335,14 +1347,28 @@ stages:
                 # Change to the directory containing azcopy
                 Set-Location -Path $extractDir
 
-                # Verify that azcopy exists
-                if (-Not (Test-Path -Path ".\azcopy_windows_amd64\azcopy")) {
-                  Write-Error "azcopy not found in extraction directory: $extractDir"
-                  exit 1
+                # Find directories matching the pattern
+                $matchingDirs = Get-ChildItem -Directory -Path .\azcopy_windows_amd64* | Select-Object -First 1
+
+                # Check if there is exactly one matching directory
+                if ($matchingDirs.Count -eq 0) {
+                    Write-Error "No directories found matching the pattern: .\azcopy_windows_amd64*"
+                    exit 1
+                } elseif ($matchingDirs.Count -gt 1) {
+                    Write-Error "Multiple directories found matching the pattern: .\azcopy_windows_amd64*"
+                    exit 1
                 }
 
-                # Run the azcopy version command
-                .\azcopy_windows_amd64\azcopy --version
+                # Check if the azcopy executable exists in the matching directory
+                $azcopyPath = Join-Path -Path $matchingDirs.FullName -ChildPath "azcopy"
+                if (-Not (Test-Path -Path $azcopyPath)) {
+                    Write-Error "azcopy not found in extraction directory: $($matchingDirs.FullName)"
+                    exit 1
+                } else {
+                    Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
+                }
+                
+                & $azcopyPath --version
             displayName: 'Extract Files and Run Version Command on Windows'
 
   # TestArtifacts ends here
@@ -1622,15 +1648,6 @@ stages:
                 marinerArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile)
                 echo "Azcopy mariner ARM RPM ID: $marinerArmRpm"
 
-                # Find the Mariner RPM file and upload
-                marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
-                marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
-                echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
-
-                marinerArmRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                marinerArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile)
-                echo "Azcopy mariner ARM RPM ID: $marinerArmRpm"
-
                 azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
                 echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
 
@@ -1645,10 +1662,29 @@ stages:
                 azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
                 echo "Azcopy ARM RPM ID: $azcopyArmRpm"
 
-                while IFS=, read -r distro fuseArchType repoName releaseName; do
+                # Find the Mariner RPM file and upload
+                marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
+                marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
+                echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
+
+                marinerArmRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
+                marinerArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile)
+                echo "Azcopy mariner ARM RPM ID: $marinerArmRpm"
+
+                if [[ $marinerAmdRpmFile == *"preview"* ]]; then
+                  echo "Package $marinerAmdRpmFile contains 'preview'."
+                  while IFS=, read -r distro fuseArchType repoName releaseName; do
                   echo "Uploading packages for $distro"
                   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                done < <(tail -n +3 ../packages.csv)
+                done < <(tail -n +5 ../packages.csv)
+                else
+                  echo "Package $package_name1 does not contain 'preview'."
+                  while IFS=, read -r distro fuseArchType repoName releaseName; do
+                  echo "Uploading packages for $distro"
+                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
+                done < <(tail -n +3 ../packages.csv | head -n -2)
+                fi
+
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
