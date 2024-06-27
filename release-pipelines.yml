@@ -1367,7 +1367,6 @@ stages:
                 } else {
                     Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
                 }
-
                 & $azcopyPath --version
             displayName: 'Extract Files and Run Version Command on Windows'
 
