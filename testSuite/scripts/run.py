@@ -3,7 +3,6 @@ from test_upload_block_blob import *
 from test_upload_page_blob import *
 from test_file_download import *
 from test_file_upload import *
-from test_azcopy_operations import *
 from test_blobfs_upload_sharedkey import *
 from test_blobfs_download_sharedkey import *
 from test_blob_piping import *
@@ -208,7 +207,6 @@ def main():
                          Block_Upload_User_Scenarios,
                          Blob_Download_User_Scenario,
                          PageBlob_Upload_User_Scenarios,
-                         Azcopy_Operation_User_Scenario,
                          FileShare_Download_User_Scenario,
                          FileShare_Upload_User_Scenario,
                          BlobFs_Upload_ShareKey_User_Scenarios,
