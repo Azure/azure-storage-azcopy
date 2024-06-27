@@ -1057,8 +1057,8 @@ stages:
           - checkout: none
           - script: |
               sudo apt update
-              sudo apt-get install libsecret-1-dev
-              sudo apt --fix-broken install
+              sudo apt-get install libsecret-1-dev -y
+              sudo apt --fix-broken install -y
               ldd --version
             displayName: "GLIBC Version"
 
@@ -1097,7 +1097,7 @@ stages:
           - checkout: none
           - script: |
               sudo yum update -y
-              sudo yum install libsecret
+              sudo yum install libsecret -y
               sudo yum install git -y
             displayName: 'Install Git'
 
@@ -1138,7 +1138,7 @@ stages:
           - checkout: none
           - script: |
               sudo yum update -y
-              sudo yum install libsecret
+              sudo yum install libsecret -y
               sudo yum install git -y
             displayName: 'Install Git'
 
