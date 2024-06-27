@@ -359,7 +359,11 @@ stages:
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           - script: |
+<<<<<<< HEAD
               fpm -s dir -t deb -n azcopy --rpm-digest sha256 -C pkgDir/ \
+=======
+              fpm -s dir -t deb -n azcopy --rpm-digest -C pkgDir/ \
+>>>>>>> c621b97d290609a7dda0f711e0316999ca9f824e
               -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -1367,7 +1371,11 @@ stages:
                 } else {
                     Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
                 }
+<<<<<<< HEAD
 
+=======
+                
+>>>>>>> c621b97d290609a7dda0f711e0316999ca9f824e
                 & $azcopyPath --version
             displayName: 'Extract Files and Run Version Command on Windows'
 
