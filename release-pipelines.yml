@@ -1185,19 +1185,20 @@ stages:
           - checkout: none
           - script: |
               sudo tdnf update -y
+              sudo tdnf install libsecret -y
               sudo tdnf install git -y
             displayName: 'Install dependencies'
           
-          - script: |
-              sudo tdnf install wget tar gcc make glib2-devel gnome-keyring-devel
-              wget https://download.gnome.org/sources/libsecret/0.20/libsecret-0.20.4.tar.xz
-              tar -xf libsecret-0.20.4.tar.xz
-              cd libsecret-0.20.4
-              ./configure
-              make
-              sudo make install
-              sudo ldconfig
-            displayName: 'Install libsecret'
+          # - script: |
+          #     sudo tdnf install wget tar gcc make glib2-devel gnome-keyring-devel
+          #     wget https://download.gnome.org/sources/libsecret/0.20/libsecret-0.20.4.tar.xz
+          #     tar -xf libsecret-0.20.4.tar.xz
+          #     cd libsecret-0.20.4
+          #     ./configure
+          #     make
+          #     sudo make install
+          #     sudo ldconfig
+          #   displayName: 'Install libsecret'
 
           - template: setup/test_artifacts.yml
             parameters:
