@@ -1187,6 +1187,18 @@ stages:
               sudo tdnf update -y
               sudo tdnf install git -y
             displayName: 'Install dependencies'
+          
+          - script: |
+              sudo tdnf install -y gcc glib2-devel gnome-keyring-devel make
+              wget https://download.gnome.org/sources/libsecret/0.20/libsecret-0.20.4.tar.xz
+              tar -xf libsecret-0.20.4.tar.xz
+              cd libsecret-0.20.4
+              ./configure
+              make
+              sudo make install
+              ldconfig -p | grep libsecret
+            displayName: 'Install libsecret'
+
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1210,7 +1222,6 @@ stages:
               azcopy --version
               azcopy --help
             displayName: 'Check Version and Help'
-            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
 
       - job: Set_6
         timeoutInMinutes: 360
