@@ -70,15 +70,24 @@ stages:
 
               # Install necessary packages
               sudo tdnf install -y gcc glib2-devel gnome-keyring-devel make libtool autoconf automake
+              sudo dnf install binutils
+
+              export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+              export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib:/lib
 
               # Verify gcc and make
               gcc --version
               make --version
 
+              df -h
+
               # Download and extract libsecret
               wget https://download.gnome.org/sources/libsecret/0.20/libsecret-0.20.4.tar.xz
               tar -xf libsecret-0.20.4.tar.xz
               cd libsecret-0.20.4
+
+              echo $PATH
+              echo $LD_LIBRARY_PATH
 
               # Configure and compile libsecret
               ./configure
