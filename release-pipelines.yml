@@ -1187,22 +1187,6 @@ stages:
               sudo tdnf update -y
               sudo tdnf install git -y
             displayName: 'Install dependencies'
-          
-          - script: |
-              # Update package list
-              sudo tdnf update
-
-              # Install libsecret
-              sudo tdnf install libsecret -y
-
-              # Verify installation
-              if ldconfig -p | grep -q libsecret-1.so.0; then
-                echo "libsecret installed successfully."
-              else
-                echo "libsecret installation failed or libsecret-1.so.0 not found."
-                exit 1
-              fi
-            displayName: 'Install libsecret'
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1217,6 +1201,7 @@ stages:
 
           - script: |
               sudo rpm -qip azcopy*x86_64.rpm
+              sudo tdnf install gcc build-essential -y
               sudo rpm -i azcopy*x86_64.rpm
             displayName: 'Install Package'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
