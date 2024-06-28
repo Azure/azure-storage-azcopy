@@ -1688,33 +1688,33 @@ stages:
 
                 if [[ $marinerAmdRpmFile == *"preview"* ]]; then
                   echo "Package $marinerAmdRpmFile contains 'preview'."
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                  echo "Uploading packages for $distro"
-                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                done < <(tail -n +5 ../packages.csv)
+                  # while IFS=, read -r distro fuseArchType repoName releaseName; do
+                  #   echo "Uploading packages for $distro"
+                  #   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
+                  # done < <(tail -n +5 ../packages.csv)
                 else
                   echo "Package $package_name1 does not contain 'preview'."
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                  echo "Uploading packages for $distro"
-                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                done < <(tail -n +3 ../packages.csv | head -n -2)
+                  # while IFS=, read -r distro fuseArchType repoName releaseName; do
+                  #   echo "Uploading packages for $distro"
+                  #   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
+                  # done < <(tail -n +3 ../packages.csv | head -n -2)
                 fi
 
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
-            - script: |
-                while IFS=, read -r distro fuseArchType repoName releaseName; do
-                  if [[ $fuseArchType == *"Arm"* ]] 
-                  then
-                    echo "Skipping for ARM type on $distro"
-                  else
-                    echo "Publishing for $distro"
-                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
-                  fi
-                done < <(tail -n +3 ../packages.csv)
-              displayName: 'Publish the repository'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
+            # - script: |
+            #     while IFS=, read -r distro fuseArchType repoName releaseName; do
+            #       if [[ $fuseArchType == *"Arm"* ]] 
+            #       then
+            #         echo "Skipping for ARM type on $distro"
+            #       else
+            #         echo "Publishing for $distro"
+            #         pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
+            #       fi
+            #     done < <(tail -n +3 ../packages.csv)
+            #   displayName: 'Publish the repository'
+            #   workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
   - stage: UpdateLatestVersion
     dependsOn: ReleaseArtifacts
