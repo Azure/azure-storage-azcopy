@@ -1485,23 +1485,6 @@ stages:
               sudo tdnf install git -y
             displayName: 'Install Git'
 
-          - script: |
-              git clone https://github.com/dphulkar-msft/azure-storage-azcopy
-            displayName: 'Checkout Code'
-            workingDirectory: $(root_dir)
-
-          - script: |
-              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-            displayName: 'Checkout Branch'
-            workingDirectory: $(root_dir)/azure-storage-azcopy
-
-          # Custom script to install Go-lang
-          - task: ShellScript@2
-            inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
-              args: "$(root_dir)/"
-            displayName: "GoTool Custom Setup"
-
           # get glibc version with which build is done
           - script: |
               ldd --version
