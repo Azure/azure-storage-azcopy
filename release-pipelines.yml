@@ -70,7 +70,8 @@ stages:
 
               # Install necessary packages
               sudo tdnf install -y gcc glib2-devel gnome-keyring-devel make libtool autoconf automake
-              sudo dnf install binutils
+              sudo tdnf install binutils -y
+              sudo tdnf install libsecret -y
 
               export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
               export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib:/lib
