@@ -742,7 +742,7 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*.md
               rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
               mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/* $(Build.ArtifactStagingDirectory)/
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
             displayName: 'Make Artifacts executable'
 
           - script: |
@@ -757,317 +757,317 @@ stages:
               artifactName: 'azCopy-linux-signed'
             displayName: 'Publish Signed Artifacts'
 
-      - job: Set_2
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Windows-Signing:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      # - job: Set_2
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Windows-Signing:
+      #         vmImage: 'Ubuntu-20.04'
+      #         AgentName: "blobfuse-ubuntu20"
+      #   pool:
+      #     name: "blobfuse-ubuntu-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
 
-        variables:
-          - group: AZCOPY_ESRP_SECRET
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: archives
-            value: '$(work_dir)/archives'
+      #   variables:
+      #     - group: AZCOPY_ESRP_SECRET
+      #     - name: work_dir
+      #       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+      #     - name: archives
+      #       value: '$(work_dir)/archives'
           
-        steps:
-          - script: |
-              echo ${{ parameters.tag }}
-            displayName: 'Tag Name'
+      #   steps:
+      #     - script: |
+      #         echo ${{ parameters.tag }}
+      #       displayName: 'Tag Name'
           
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-windows-temp'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+      #     - task: DownloadBuildArtifacts@0
+      #       displayName: 'Download Build Artifacts'
+      #       inputs:
+      #         artifactName: 'azCopy-windows-temp'
+      #         downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download linux binary for extracting version'
-            inputs:
-              artifactName: 'azCopy-binaries'
-              downloadPath: $(work_dir)/
-              itemPattern: 'azCopy-binaries/azcopy_linux_amd64'
+      #     - task: DownloadBuildArtifacts@0
+      #       displayName: 'Download linux binary for extracting version'
+      #       inputs:
+      #         artifactName: 'azCopy-binaries'
+      #         downloadPath: $(work_dir)/
+      #         itemPattern: 'azCopy-binaries/azcopy_linux_amd64'
           
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
-            displayName: 'List Artifacts'
+      #     - script: |
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
+      #       displayName: 'List Artifacts'
           
-          - script: |
-              sudo apt-get clean
-              sudo apt-get update
-              sudo apt-get upgrade -y
-              sudo apt-get install -f --fix-missing
-              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-              sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-6.0 -y
-              sudo apt-get install -y zip
-            displayName: "Update dependencies"
+      #     - script: |
+      #         sudo apt-get clean
+      #         sudo apt-get update
+      #         sudo apt-get upgrade -y
+      #         sudo apt-get install -f --fix-missing
+      #         wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+      #         sudo dpkg -i packages-microsoft-prod.deb 
+      #         sudo apt install apt-transport-https -y
+      #         sudo apt install dotnet-sdk-6.0 -y
+      #         sudo apt-get install -y zip
+      #       displayName: "Update dependencies"
 
-          - template: setup/esrp_sign_windows.yml
-            parameters:
-              FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-              ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
-              Pattern: 'azcopy_windows*'
+      #     - template: setup/esrp_sign_windows.yml
+      #       parameters:
+      #         FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
+      #         ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
+      #         Pattern: 'azcopy_windows*'
 
-          # Validate signed images have md5sum changed
-          - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
-            displayName: 'Make Artifacts executable'
+      #     # Validate signed images have md5sum changed
+      #     - script: |
+      #         chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
+      #       displayName: 'Make Artifacts executable'
 
-          - script: |
-              chmod 755 $(work_dir)/azCopy-binaries/azcopy_linux_amd64
-              # Run azcopy --version and capture the output
-              azcopyOutput=$($(work_dir)/azCopy-binaries/azcopy_linux_amd64 --version)
+      #     - script: |
+      #         chmod 755 $(work_dir)/azCopy-binaries/azcopy_linux_amd64
+      #         # Run azcopy --version and capture the output
+      #         azcopyOutput=$($(work_dir)/azCopy-binaries/azcopy_linux_amd64 --version)
 
-              if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                if [[ -n "$version" ]]; then
-                  echo "Extracted version: $version"
-                  echo "##vso[task.setvariable variable=azcopy_version]$version"
-                fi
-              fi
-            displayName: 'Extract the generated build version'
+      #         if echo "$azcopyOutput" | grep -q "azcopy version"; then
+      #           version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+      #           if [[ -n "$version" ]]; then
+      #             echo "Extracted version: $version"
+      #             echo "##vso[task.setvariable variable=azcopy_version]$version"
+      #           fi
+      #         fi
+      #       displayName: 'Extract the generated build version'
 
-          - script: |
-              windows_amd64="$(work_dir)/azcopy_windows_amd64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
+      #     - script: |
+      #         windows_amd64="$(work_dir)/azcopy_windows_amd64_$(azcopy_version)"
+      #         echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
 
-              windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
+      #         windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
+      #         echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
 
-              windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=windows_386]$windows_386"
+      #         windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
+      #         echo "##vso[task.setvariable variable=windows_386]$windows_386"
 
-              mkdir $windows_amd64
-              mkdir $windows_arm64
-              mkdir $windows_386
-              mkdir -p $(archives)
-            displayName: 'Create required directories'
+      #         mkdir $windows_amd64
+      #         mkdir $windows_arm64
+      #         mkdir $windows_386
+      #         mkdir -p $(archives)
+      #       displayName: 'Create required directories'
 
-          - script: |
-              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64 $(windows_amd64)/azcopy
-              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64 $(windows_arm64)/azcopy
-              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386 $(windows_386)/azcopy
-              cp NOTICE.txt $(windows_amd64)
-              cp NOTICE.txt $(windows_arm64)
-              cp NOTICE.txt $(windows_386)
-              zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
-              zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
-              zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
-            displayName: 'Copy required files'
+      #     - script: |
+      #         mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64 $(windows_amd64)/azcopy
+      #         mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64 $(windows_arm64)/azcopy
+      #         mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386 $(windows_386)/azcopy
+      #         cp NOTICE.txt $(windows_amd64)
+      #         cp NOTICE.txt $(windows_arm64)
+      #         cp NOTICE.txt $(windows_386)
+      #         zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
+      #         zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
+      #         zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
+      #       displayName: 'Copy required files'
           
-          - task: ArchiveFiles@2
-            displayName: 'Archive Windows 64 bit AMD Build'
-            inputs:
-              rootFolderOrFile: '$(windows_amd64)'
-              archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
-            continueOnError: true
+      #     - task: ArchiveFiles@2
+      #       displayName: 'Archive Windows 64 bit AMD Build'
+      #       inputs:
+      #         rootFolderOrFile: '$(windows_amd64)'
+      #         archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
+      #       continueOnError: true
 
-          - task: ArchiveFiles@2
-            displayName: 'Archive Windows 64 bit ARM Build'
-            inputs:
-              rootFolderOrFile: '$(windows_arm64)'
-              archiveFile: '$(archives)/azcopy_windows_arm64_$(azcopy_version).zip'
-            continueOnError: true
+      #     - task: ArchiveFiles@2
+      #       displayName: 'Archive Windows 64 bit ARM Build'
+      #       inputs:
+      #         rootFolderOrFile: '$(windows_arm64)'
+      #         archiveFile: '$(archives)/azcopy_windows_arm64_$(azcopy_version).zip'
+      #       continueOnError: true
 
-          - task: ArchiveFiles@2
-            displayName: 'Archive Windows 32 bit Build'
-            inputs:
-              rootFolderOrFile: '$(windows_386)'
-              archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
-            continueOnError: true
+      #     - task: ArchiveFiles@2
+      #       displayName: 'Archive Windows 32 bit Build'
+      #       inputs:
+      #         rootFolderOrFile: '$(windows_386)'
+      #         archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
+      #       continueOnError: true
 
-          - script: |
-              cp $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_windows_arm64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
-            displayName: 'Copy zip to staging directory'
+      #     - script: |
+      #         cp $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+      #         cp $(archives)/azcopy_windows_arm64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+      #         cp $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+      #       displayName: 'Copy zip to staging directory'
 
-          - script: |
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/*
-            displayName: 'List Signed Artifacts'
+      #     - script: |
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/*
+      #       displayName: 'List Signed Artifacts'
           
-          # Push signed images to artifact directory
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-windows-signed'
-            displayName: 'Publish Signed Artifacts'
+      #     # Push signed images to artifact directory
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-windows-signed'
+      #       displayName: 'Publish Signed Artifacts'
 
-      - job: Set_3
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Mac-Signing:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      # - job: Set_3
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Mac-Signing:
+      #         vmImage: 'Ubuntu-20.04'
+      #         AgentName: "blobfuse-ubuntu20"
+      #   pool:
+      #     name: "blobfuse-ubuntu-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
 
-        variables:
-          - group: AZCOPY_ESRP_SECRET
+      #   variables:
+      #     - group: AZCOPY_ESRP_SECRET
 
-        steps:
-          - checkout: none
+      #   steps:
+      #     - checkout: none
           
-          - script: |
-              echo ${{ parameters.tag }}
-            displayName: 'Tag Name'
+      #     - script: |
+      #         echo ${{ parameters.tag }}
+      #       displayName: 'Tag Name'
           
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-mac-temp'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+      #     - task: DownloadBuildArtifacts@0
+      #       displayName: 'Download Build Artifacts'
+      #       inputs:
+      #         artifactName: 'azCopy-mac-temp'
+      #         downloadPath: $(Build.ArtifactStagingDirectory)
           
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
-            displayName: 'List Artifacts'
+      #     - script: |
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+      #       displayName: 'List Artifacts'
           
-          - script: |
-              sudo apt-get clean
-              sudo apt-get update
-              sudo apt-get upgrade -y
-              sudo apt-get install unzip -y
-              sudo apt-get install -f --fix-missing
-              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-              sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-6.0 -y
-            displayName: "Update dependencies"
+      #     - script: |
+      #         sudo apt-get clean
+      #         sudo apt-get update
+      #         sudo apt-get upgrade -y
+      #         sudo apt-get install unzip -y
+      #         sudo apt-get install -f --fix-missing
+      #         wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+      #         sudo dpkg -i packages-microsoft-prod.deb 
+      #         sudo apt install apt-transport-https -y
+      #         sudo apt install dotnet-sdk-6.0 -y
+      #       displayName: "Update dependencies"
 
-          - template: setup/esrp_sign_notarize_macos.yml
-            parameters:
-              FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-              ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-              Pattern: '*.zip'
+      #     - template: setup/esrp_sign_notarize_macos.yml
+      #       parameters:
+      #         FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
+      #         ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+      #         Pattern: '*.zip'
 
-          # Validate signed images have md5sum changed
-          - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
-              mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(Build.ArtifactStagingDirectory)/
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
-            displayName: 'Make Artifacts executable'
+      #     # Validate signed images have md5sum changed
+      #     - script: |
+      #         chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
+      #         mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(Build.ArtifactStagingDirectory)/
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
+      #       displayName: 'Make Artifacts executable'
 
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/*
-            displayName: 'List Signed Artifacts'
+      #     - script: |
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/*
+      #       displayName: 'List Signed Artifacts'
           
-          # Push signed images to artifact directory
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-mac-signed'
-            displayName: 'Publish Signed Artifacts'
+      #     # Push signed images to artifact directory
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-mac-signed'
+      #       displayName: 'Publish Signed Artifacts'
 
-          - script: |
-              mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_amd64
-              mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_arm64
-              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_amd64
-              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*arm64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_arm64
-              mv $(Build.ArtifactStagingDirectory)/unzipped_amd64/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
-              mv $(Build.ArtifactStagingDirectory)/unzipped_arm64/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
-              rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
-              rm -rf $(Build.ArtifactStagingDirectory)/*.zip
-              sudo ls -ltR $(Build.ArtifactStagingDirectory)
-            displayName:  'Copy signed mac binary to staging directory'
+      #     - script: |
+      #         mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_amd64
+      #         mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_arm64
+      #         unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_amd64
+      #         unzip -o $(Build.ArtifactStagingDirectory)/azcopy*arm64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_arm64
+      #         mv $(Build.ArtifactStagingDirectory)/unzipped_amd64/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
+      #         mv $(Build.ArtifactStagingDirectory)/unzipped_arm64/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
+      #         rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
+      #         rm -rf $(Build.ArtifactStagingDirectory)/*.zip
+      #         sudo ls -ltR $(Build.ArtifactStagingDirectory)
+      #       displayName:  'Copy signed mac binary to staging directory'
 
-          # Push signed images to artifact directory
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-binaries-signed'
-            displayName: 'Publish Signed Mac Binary'
+      #     # Push signed images to artifact directory
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-binaries-signed'
+      #       displayName: 'Publish Signed Mac Binary'
 
-      - job: Set_4
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Binaries-Signing:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      # - job: Set_4
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Binaries-Signing:
+      #         vmImage: 'Ubuntu-20.04'
+      #         AgentName: "blobfuse-ubuntu20"
+      #   pool:
+      #     name: "blobfuse-ubuntu-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
 
-        variables:
-          - group: AZCOPY_ESRP_SECRET
+      #   variables:
+      #     - group: AZCOPY_ESRP_SECRET
 
-        steps:
-          - checkout: none
+      #   steps:
+      #     - checkout: none
           
-          - script: |
-              echo ${{ parameters.tag }}
-            displayName: 'Tag Name'
+      #     - script: |
+      #         echo ${{ parameters.tag }}
+      #       displayName: 'Tag Name'
           
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-binaries'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+      #     - task: DownloadBuildArtifacts@0
+      #       displayName: 'Download Build Artifacts'
+      #       inputs:
+      #         artifactName: 'azCopy-binaries'
+      #         downloadPath: $(Build.ArtifactStagingDirectory)
           
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
-            displayName: 'List Artifacts'
+      #     - script: |
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
+      #       displayName: 'List Artifacts'
           
-          - script: |
-              sudo apt-get clean
-              sudo apt-get update
-              sudo apt-get upgrade -y
-              sudo apt-get install -f --fix-missing
-              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-              sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-6.0 -y
-            displayName: "Update dependencies"
+      #     - script: |
+      #         sudo apt-get clean
+      #         sudo apt-get update
+      #         sudo apt-get upgrade -y
+      #         sudo apt-get install -f --fix-missing
+      #         wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+      #         sudo dpkg -i packages-microsoft-prod.deb 
+      #         sudo apt install apt-transport-https -y
+      #         sudo apt install dotnet-sdk-6.0 -y
+      #       displayName: "Update dependencies"
 
-          - template: setup/esrp_sign_linux.yml
-            parameters:
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
-              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-              Pattern: 'azcopy_linux*'
-              DisplayName: 'ESRP CodeSigning azCopy linux binaries'
+      #     - template: setup/esrp_sign_linux.yml
+      #       parameters:
+      #         FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
+      #         ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
+      #         Pattern: 'azcopy_linux*'
+      #         DisplayName: 'ESRP CodeSigning azCopy linux binaries'
 
-          - template: setup/esrp_sign_windows.yml
-            parameters:
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
-              ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
-              Pattern: 'azcopy_windows*'
+      #     - template: setup/esrp_sign_windows.yml
+      #       parameters:
+      #         FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
+      #         ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
+      #         Pattern: 'azcopy_windows*'
           
-          # Validate signed images have md5sum changed
-          - script: |
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin*
-              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/*.md
-              mv $(Build.ArtifactStagingDirectory)/azCopy-binaries/* $(Build.ArtifactStagingDirectory)/
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/
-            displayName: 'Make Artifacts executable'
+      #     # Validate signed images have md5sum changed
+      #     - script: |
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin*
+      #         chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/*.md
+      #         mv $(Build.ArtifactStagingDirectory)/azCopy-binaries/* $(Build.ArtifactStagingDirectory)/
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/
+      #       displayName: 'Make Artifacts executable'
 
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/*
-            displayName: 'List Signed Artifacts'
+      #     - script: |
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/*
+      #       displayName: 'List Signed Artifacts'
           
-          # Push signed images to artifact directory
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-binaries-signed'
-            displayName: 'Publish Signed Artifacts'
+      #     # Push signed images to artifact directory
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-binaries-signed'
+      #       displayName: 'Publish Signed Artifacts'
 
   # SignArtifacts end here
 
@@ -1075,167 +1075,167 @@ stages:
     dependsOn: SignArtifacts
     condition: succeeded('SignArtifacts')
     jobs:
-      - job: Set_1
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Ubuntu_amd64:
-              agentName: "blobfuse-ubuntu22"
-              vmImage: 'Ubuntu-22.04'
-              container: 'test-cnt-ubn-22'
-        pool:
-          vmImage: $(vmImage)
-        steps:
-          - checkout: none
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
+      # - job: Set_1
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Ubuntu_amd64:
+      #         agentName: "blobfuse-ubuntu22"
+      #         vmImage: 'Ubuntu-22.04'
+      #         container: 'test-cnt-ubn-22'
+      #   pool:
+      #     vmImage: $(vmImage)
+      #   steps:
+      #     - checkout: none
+      #     - script: |
+      #         sudo apt update
+      #         sudo apt --fix-broken install
+      #         ldd --version
+      #       displayName: "GLIBC Version"
 
-          - template: setup/test_artifacts.yml
-            parameters:
-              artifact_name: 'azCopy-linux-signed'
-              download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
+      #     - template: setup/test_artifacts.yml
+      #       parameters:
+      #         artifact_name: 'azCopy-linux-signed'
+      #         download_path: '$(System.DefaultWorkingDirectory)'
+      #         item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
 
-          - script: |
-              sudo dpkg --info azcopy-*x86_64.deb
-              sudo dpkg -i azcopy-*x86_64.deb
-              sudo apt-get install build-essential -y
-            displayName: 'Install deb Package'
-            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+      #     - script: |
+      #         sudo dpkg --info azcopy-*x86_64.deb
+      #         sudo dpkg -i azcopy-*x86_64.deb
+      #         sudo apt-get install build-essential -y
+      #       displayName: 'Install deb Package'
+      #       workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
-          - script: | 
-              azcopy --version
-              azcopy --help
-            displayName: 'Check Version and Help'
+      #     - script: | 
+      #         azcopy --version
+      #         azcopy --help
+      #       displayName: 'Check Version and Help'
 
-      - job: Set_2
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Ubuntu_arm64:
-              vmImage: 'Ubuntu-22.04'
-              container: 'test-cnt-ubn-22-arm64'
-              AgentName: "blobfuse-ubn22-arm64"
-        pool:
-          name: "blobfuse-ubn-arm64-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      # - job: Set_2
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Ubuntu_arm64:
+      #         vmImage: 'Ubuntu-22.04'
+      #         container: 'test-cnt-ubn-22-arm64'
+      #         AgentName: "blobfuse-ubn22-arm64"
+      #   pool:
+      #     name: "blobfuse-ubn-arm64-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
 
-        steps:
-          - checkout: none
-          - script: |
-              sudo apt update
-              sudo apt-get install libsecret-1-dev -y
-              sudo apt --fix-broken install -y
-              ldd --version
-            displayName: "GLIBC Version"
+      #   steps:
+      #     - checkout: none
+      #     - script: |
+      #         sudo apt update
+      #         sudo apt-get install libsecret-1-dev -y
+      #         sudo apt --fix-broken install -y
+      #         ldd --version
+      #       displayName: "GLIBC Version"
 
-          - template: setup/test_artifacts.yml
-            parameters:
-              artifact_name: 'azCopy-linux-signed'
-              download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy-*arm64.deb'
+      #     - template: setup/test_artifacts.yml
+      #       parameters:
+      #         artifact_name: 'azCopy-linux-signed'
+      #         download_path: '$(System.DefaultWorkingDirectory)'
+      #         item_pattern: 'azCopy-linux-signed/azcopy-*arm64.deb'
 
-          - script: |
-              sudo dpkg --info azcopy-*arm64.deb
-              sudo dpkg -i azcopy-*arm64.deb
-            displayName: 'Install Package'
-            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+      #     - script: |
+      #         sudo dpkg --info azcopy-*arm64.deb
+      #         sudo dpkg -i azcopy-*arm64.deb
+      #       displayName: 'Install Package'
+      #       workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
-          - script: | 
-              azcopy --version
-              azcopy --help
-            displayName: 'Check Version and Help'
+      #     - script: | 
+      #         azcopy --version
+      #         azcopy --help
+      #       displayName: 'Check Version and Help'
 
-      - job: Set_3
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Rhel_Arm64:
-              agentName: "blobfuse-rhel9-arm64"
-              vmImage: 'RHEL-9.0'
-              container: 'test-cnt-rhel-9-arm64'
+      # - job: Set_3
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Rhel_Arm64:
+      #         agentName: "blobfuse-rhel9-arm64"
+      #         vmImage: 'RHEL-9.0'
+      #         container: 'test-cnt-rhel-9-arm64'
               
-        pool:
-          name: "blobfuse-ubn-arm64-pool"
-          demands:
-            - ImageOverride -equals $(agentName)
+      #   pool:
+      #     name: "blobfuse-ubn-arm64-pool"
+      #     demands:
+      #       - ImageOverride -equals $(agentName)
 
-        steps:
-          - checkout: none
-          - script: |
-              sudo yum update -y
-              sudo yum install libsecret -y
-              sudo yum install git -y
-            displayName: 'Install Git'
+      #   steps:
+      #     - checkout: none
+      #     - script: |
+      #         sudo yum update -y
+      #         sudo yum install libsecret -y
+      #         sudo yum install git -y
+      #       displayName: 'Install Git'
 
-          - template: setup/test_artifacts.yml
-            parameters:
-              artifact_name: 'azCopy-linux-signed'
-              download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy-*arm64.rpm'
+      #     - template: setup/test_artifacts.yml
+      #       parameters:
+      #         artifact_name: 'azCopy-linux-signed'
+      #         download_path: '$(System.DefaultWorkingDirectory)'
+      #         item_pattern: 'azCopy-linux-signed/azcopy-*arm64.rpm'
 
-          - script: |
-              sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
-              sudo rpm -qip azcopy-*.arm64.rpm
-              sudo yum groupinstall "Development Tools" -y              
-              sudo rpm -i azcopy-*.arm64.rpm
-            displayName: 'Install Package'
-            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+      #     - script: |
+      #         sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
+      #         sudo rpm -qip azcopy-*.arm64.rpm
+      #         sudo yum groupinstall "Development Tools" -y              
+      #         sudo rpm -i azcopy-*.arm64.rpm
+      #       displayName: 'Install Package'
+      #       workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
-          - script: | 
-              azcopy --version
-              azcopy --help
-            displayName: 'Check Version and Help'
+      #     - script: | 
+      #         azcopy --version
+      #         azcopy --help
+      #       displayName: 'Check Version and Help'
       
-      - job: Set_4
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Rhel_Amd64:
-              agentName: "blobfuse-rhel9"
-              vmImage: 'RHEL-9.0'
-              container: 'test-cnt-rhel-9'
+      # - job: Set_4
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Rhel_Amd64:
+      #         agentName: "blobfuse-rhel9"
+      #         vmImage: 'RHEL-9.0'
+      #         container: 'test-cnt-rhel-9'
               
-        pool:
-          name: "blobfuse-rhel-pool"
-          demands:
-            - ImageOverride -equals $(agentName)
+      #   pool:
+      #     name: "blobfuse-rhel-pool"
+      #     demands:
+      #       - ImageOverride -equals $(agentName)
 
-        steps:
-          - checkout: none
-          - script: |
-              sudo yum update -y
-              sudo yum install libsecret -y
-              sudo yum install git -y
-            displayName: 'Install Git'
+      #   steps:
+      #     - checkout: none
+      #     - script: |
+      #         sudo yum update -y
+      #         sudo yum install libsecret -y
+      #         sudo yum install git -y
+      #       displayName: 'Install Git'
 
-          - template: setup/test_artifacts.yml
-            parameters:
-              artifact_name: 'azCopy-linux-signed'
-              download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.rpm'
+      #     - template: setup/test_artifacts.yml
+      #       parameters:
+      #         artifact_name: 'azCopy-linux-signed'
+      #         download_path: '$(System.DefaultWorkingDirectory)'
+      #         item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.rpm'
           
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"
+      #     # get glibc version with which build is done
+      #     - script: |
+      #        ldd --version
+      #       displayName: "GLIBC Version"
 
-          - script: |
-              sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
-              sudo rpm -qip azcopy-*x86_64.rpm
-              sudo yum groupinstall "Development Tools" -y
-              sudo rpm -i azcopy-*x86_64.rpm
-            displayName: 'Install Package'
-            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+      #     - script: |
+      #         sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
+      #         sudo rpm -qip azcopy-*x86_64.rpm
+      #         sudo yum groupinstall "Development Tools" -y
+      #         sudo rpm -i azcopy-*x86_64.rpm
+      #       displayName: 'Install Package'
+      #       workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
-          - script: | 
-              azcopy --version
-              azcopy --help
-            displayName: 'Check Version and Help'
+      #     - script: | 
+      #         azcopy --version
+      #         azcopy --help
+      #       displayName: 'Check Version and Help'
 
       - job: Set_5
         timeoutInMinutes: 120
@@ -1260,15 +1260,11 @@ stages:
             displayName: 'Install dependencies'
           
           - script: | 
-              sudo tdnf install -y binutils gcc gcc-c++ make
-              sudo tdnf install -y gcc glib2-devel gnome-keyring-devel make
-              wget https://download.gnome.org/sources/libsecret/0.20/libsecret-0.20.4.tar.xz
-              tar -xf libsecret-0.20.4.tar.xz
-              cd libsecret-0.20.4
-              ./configure
-              make
-              sudo make install
-              ldconfig -p | grep libsecret
+              sudo tdnf install -y libsecret
+              ls /usr/lib | grep libsecret
+              ls /usr/local/lib | grep libsecret
+              sudo ldconfig
+              export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
             displayName: 'Install libsecret'
 
 
