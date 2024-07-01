@@ -139,6 +139,7 @@ func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
 func (b *BlobServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -348,6 +349,7 @@ func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
 func (b *BlobContainerResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -724,6 +726,7 @@ func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
 func (b *BlobObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }

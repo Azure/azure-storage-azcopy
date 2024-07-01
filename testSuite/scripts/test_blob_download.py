@@ -108,7 +108,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file)\
                     .add_flags("log-level","info").add_flags("block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
-recursive_download_blob
+
         # verify the downloaded file
         result = util.Command("testBlob").add_arguments(download_file).add_arguments(
             destination_sas).execute_azcopy_verify()

@@ -15,6 +15,7 @@ import (
 type GetURIOptions struct {
 	RemoteOpts RemoteURIOpts
 	AzureOpts  AzureURIOpts
+	Wildcard   bool
 }
 
 type RemoteURIOpts struct {
