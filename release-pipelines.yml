@@ -1365,8 +1365,14 @@ stages:
                 } else {
                     Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
                 }
-                & $azcopyPath --version
-                & $azcopyPath --help
+                
+                # Run azcopy --version and capture output
+                $versionOutput = & $azcopyPath --version 2>&1
+                Write-Output "azcopy version output: $versionOutput"
+
+                # Run azcopy --help and capture output
+                $helpOutput = & $azcopyPath --help 2>&1
+                Write-Output "azcopy help output: $helpOutput"
             displayName: 'Extract Files and Run Version and Help Command on Windows'
        
        # TestArtifacts ends here
@@ -1427,7 +1433,6 @@ stages:
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Create drop.zip file and install azcopy deb package'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
 
           #TODO: check once
           - script: |
