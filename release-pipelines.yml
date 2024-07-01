@@ -61,20 +61,16 @@ stages:
 
         steps:
           - checkout: none
-          - script: |
-              sudo tdnf update -y
-              sudo tdnf install git -y
-            displayName: 'Install dependencies'
           
           - script: | 
               # Install libsecret if not already installed
               sudo tdnf install -y libsecret
-
+              sudo rm /var/run/.tdnf-instance-lockfile
               # List all files installed by libsecret package
-              tdnf repoquery -l libsecret
+              sudo tdnf repoquery -l libsecret
 
               # Search for libsecret library specifically
-              find /usr -name 'libsecret-1.so*'
+              sudo find /usr -name 'libsecret-1.so*'
 
 
               # # Install necessary packages
