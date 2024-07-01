@@ -993,81 +993,81 @@ stages:
       #       displayName: 'Publish Signed Mac Binary'
 
       # - job: Set_4
-      #   timeoutInMinutes: 120
-      #   strategy:
-      #     matrix:
-      #       Binaries-Signing:
-      #         vmImage: 'Ubuntu-20.04'
-      #         AgentName: "blobfuse-ubuntu20"
-      #   pool:
-      #     name: "blobfuse-ubuntu-pool"
-      #     demands:
-      #       - ImageOverride -equals $(AgentName)
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Binaries-Signing:
+              vmImage: 'Ubuntu-20.04'
+              AgentName: "blobfuse-ubuntu20"
+        pool:
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(AgentName)
 
-      #   variables:
-      #     - group: AZCOPY_ESRP_SECRET
+        variables:
+          - group: AZCOPY_ESRP_SECRET
 
-      #   steps:
-      #     - checkout: none
+        steps:
+          - checkout: none
           
-      #     - script: |
-      #         echo ${{ parameters.tag }}
-      #       displayName: 'Tag Name'
+          - script: |
+              echo ${{ parameters.tag }}
+            displayName: 'Tag Name'
           
-      #     - task: DownloadBuildArtifacts@0
-      #       displayName: 'Download Build Artifacts'
-      #       inputs:
-      #         artifactName: 'azCopy-binaries'
-      #         downloadPath: $(Build.ArtifactStagingDirectory)
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-binaries'
+              downloadPath: $(Build.ArtifactStagingDirectory)
           
-      #     - script: |
-      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
-      #         md5sum $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
-      #       displayName: 'List Artifacts'
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
+            displayName: 'List Artifacts'
           
-      #     - script: |
-      #         sudo apt-get clean
-      #         sudo apt-get update
-      #         sudo apt-get upgrade -y
-      #         sudo apt-get install -f --fix-missing
-      #         wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-      #         sudo dpkg -i packages-microsoft-prod.deb 
-      #         sudo apt install apt-transport-https -y
-      #         sudo apt install dotnet-sdk-6.0 -y
-      #       displayName: "Update dependencies"
+          - script: |
+              sudo apt-get clean
+              sudo apt-get update
+              sudo apt-get upgrade -y
+              sudo apt-get install -f --fix-missing
+              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+              sudo dpkg -i packages-microsoft-prod.deb 
+              sudo apt install apt-transport-https -y
+              sudo apt install dotnet-sdk-6.0 -y
+            displayName: "Update dependencies"
 
-      #     - template: setup/esrp_sign_linux.yml
-      #       parameters:
-      #         FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
-      #         ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-      #         Pattern: 'azcopy_linux*'
-      #         DisplayName: 'ESRP CodeSigning azCopy linux binaries'
+          - template: setup/esrp_sign_linux.yml
+            parameters:
+              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
+              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
+              Pattern: 'azcopy_linux*'
+              DisplayName: 'ESRP CodeSigning azCopy linux binaries'
 
-      #     - template: setup/esrp_sign_windows.yml
-      #       parameters:
-      #         FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
-      #         ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
-      #         Pattern: 'azcopy_windows*'
+          - template: setup/esrp_sign_windows.yml
+            parameters:
+              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
+              ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
+              Pattern: 'azcopy_windows*'
           
-      #     # Validate signed images have md5sum changed
-      #     - script: |
-      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin*
-      #         chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
-      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/*.md
-      #         mv $(Build.ArtifactStagingDirectory)/azCopy-binaries/* $(Build.ArtifactStagingDirectory)/
-      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/
-      #       displayName: 'Make Artifacts executable'
+          # Validate signed images have md5sum changed
+          - script: |
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin*
+              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-binaries/*
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/*.md
+              mv $(Build.ArtifactStagingDirectory)/azCopy-binaries/* $(Build.ArtifactStagingDirectory)/
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-binaries/
+            displayName: 'Make Artifacts executable'
 
-      #     - script: |
-      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
-      #         md5sum $(Build.ArtifactStagingDirectory)/*
-      #       displayName: 'List Signed Artifacts'
+          - script: |
+              sudo ls -lRt $(Build.ArtifactStagingDirectory)
+              md5sum $(Build.ArtifactStagingDirectory)/*
+            displayName: 'List Signed Artifacts'
           
-      #     # Push signed images to artifact directory
-      #     - task: PublishBuildArtifacts@1
-      #       inputs:
-      #         artifactName: 'azCopy-binaries-signed'
-      #       displayName: 'Publish Signed Artifacts'
+          # Push signed images to artifact directory
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-binaries-signed'
+            displayName: 'Publish Signed Artifacts'
 
   # SignArtifacts end here
 
@@ -1260,11 +1260,15 @@ stages:
             displayName: 'Install dependencies'
           
           - script: | 
-              sudo tdnf install -y libsecret
-              ls /usr/lib | grep libsecret
-              ls /usr/local/lib | grep libsecret
+              sudo tdnf install -y binutils gcc gcc-c++ make glib2-devel
+              wget https://download.gnome.org/sources/libsecret/0.20/libsecret-0.20.4.tar.xz
+              tar -xf libsecret-0.20.4.tar.xz
+              cd libsecret-0.20.4
+              ./configure
+              make
+              sudo make install
               sudo ldconfig
-              export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+              ldconfig -p | grep libsecret
             displayName: 'Install libsecret'
 
 
