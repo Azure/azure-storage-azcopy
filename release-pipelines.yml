@@ -169,8 +169,6 @@ stages:
               cp NOTICE.txt $(linux_amd64_dir)/
               cp NOTICE.txt $(linux_se_amd64_dir)/
               cp NOTICE.txt pkgDir/usr/bin/
-              ./pkgDir/usr/bin/azcopy --version
-              ldd $(linux_amd64_dir)/azcopy
             displayName: 'Copy required files for packaging'
 
           - script: |
@@ -341,7 +339,7 @@ stages:
               linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=linux_arm64_dir]$linux_arm64_dir"
 
-              linux_se_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
+              linux_se_arm64_dir="$(work_dir)/azcopy_linux_se_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=linux_se_arm64_dir]$linux_se_arm64_dir"
 
               mkdir -p $linux_arm64_dir
