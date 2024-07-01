@@ -439,7 +439,7 @@ stages:
             workingDirectory: $(root_dir)
 
           - script: |
-              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64"
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe"
             displayName: 'Generate Windows AMD64'
             env:
               GOARCH: amd64
@@ -447,7 +447,7 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
-              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_386"
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_386.exe"
             displayName: 'Generate Windows i386'
             env:
               GOARCH: 386
@@ -455,7 +455,7 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
-              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_v7_arm"
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_v7_arm.exe"
             displayName: 'Generate Windows ARM'
             env:
               GOARCH: arm
@@ -464,7 +464,7 @@ stages:
               CGO_ENABLED: 0
           
           - script: |
-              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_arm64"
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_arm64.exe"
             displayName: 'Generate Windows ARM'
             env:
               GOARCH: arm64
@@ -478,7 +478,7 @@ stages:
             condition: succeededOrFailed()
 
           - script: |
-              rm -rf $(Build.ArtifactStagingDirectory)\azcopy_windows_v7_arm
+              rm -rf $(Build.ArtifactStagingDirectory)\azcopy_windows_v7_arm.exe
             displayName: 'Remove arm7 binary from staging directory'
 
           - task: PublishBuildArtifacts@1
@@ -780,9 +780,9 @@ stages:
             displayName: 'Create required directories'
 
           - script: |
-              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64 $(windows_amd64)/azcopy
-              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64 $(windows_arm64)/azcopy
-              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386 $(windows_386)/azcopy
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)/azcopy.exe
               cp NOTICE.txt $(windows_amd64)
               cp NOTICE.txt $(windows_arm64)
               cp NOTICE.txt $(windows_386)
@@ -1700,7 +1700,7 @@ stages:
                 echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
 
                 marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile)
+                marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAarchRpmFile)
                 echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
                 echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
                 
