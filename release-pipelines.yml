@@ -903,8 +903,24 @@ stages:
               mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_arm64
               unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_amd64
               unzip -o $(Build.ArtifactStagingDirectory)/azcopy*arm64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_arm64
-              mv $(Build.ArtifactStagingDirectory)/unzipped_amd64/azcopy-*/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
-              mv $(Build.ArtifactStagingDirectory)/unzipped_arm64/azcopy-*/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
+
+              # Use find to retrieve the folder name
+              amd64FolderName=$(find $(Build.ArtifactStagingDirectory)/unzipped_amd64 -maxdepth 1 -type d -name "azcopy-*")
+              echo "Folder name: $amd64FolderName"
+
+              arm64FolderName=$(find $(Build.ArtifactStagingDirectory)/unzipped_arm64 -maxdepth 1 -type d -name "azcopy-*")
+              echo "Folder name: $arm64FolderName"
+              
+              # List the contents of the folder
+              echo "Contents:"
+              ls -l $amd64FolderName
+              ls -l $arm64FolderName
+
+              # Attempt the mv command
+              mv $amd64FolderName/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
+              mv $arm64FolderName/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
+
+
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
               rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
@@ -1364,9 +1380,25 @@ stages:
                     exit 1
                 } else {
                     Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
+                    # Ensure the azcopy executable has the correct permissions
+                    icacls $azcopyPath
+
+                    # Run azcopy --version and capture output
+                    try {
+                        $versionOutput = & $azcopyPath --version 2>&1
+                        Write-Output "azcopy version output: $versionOutput"
+                    } catch {
+                        Write-Error "Failed to run azcopy --version: $_"
+                    }
+
+                    # Run azcopy --help and capture output
+                    try {
+                        $helpOutput = & $azcopyPath --help 2>&1
+                        Write-Output "azcopy help output: $helpOutput"
+                    } catch {
+                        Write-Error "Failed to run azcopy --help: $_"
+                    }
                 }
-                & $azcopyPath --version
-                & $azcopyPath --help
             displayName: 'Extract Files and Run Version and Help Command on Windows'
        
        # TestArtifacts ends here
@@ -1427,7 +1459,6 @@ stages:
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Create drop.zip file and install azcopy deb package'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
 
           #TODO: check once
           - script: |
@@ -1668,37 +1699,56 @@ stages:
                 echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
                 echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
 
-                marinerArmRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                marinerArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile)
-                echo "Azcopy mariner ARM RPM: $marinerArmRpmFile"
-                echo "Azcopy mariner ARM RPM ID: $marinerArmRpm"
+                marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
+                marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile)
+                echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
+                echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
+                
+                is_preview="false"
+                echo "##vso[task.setvariable variable=is_preview]$is_preview"
 
                 if [[ $marinerAmdRpmFile == *"preview"* ]]; then
+                  is_preview="true"
+                  echo "##vso[task.setvariable variable=is_preview]$is_preview"
+
                   echo "Package $marinerAmdRpmFile contains 'preview'."
                   while IFS=, read -r distro fuseArchType repoName releaseName; do
                     echo "Uploading packages for $distro"
-                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                  done < <(tail -n +27 ../packages.csv)
+                    #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
+                  done < <(tail -n +5 ../packages.csv)
                 else
                   echo "Package $package_name1 does not contain 'preview'."
-                  # while IFS=, read -r distro fuseArchType repoName releaseName; do
-                  #   echo "Uploading packages for $distro"
-                  #   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                  # done < <(tail -n +3 ../packages.csv | head -n -2)
+                  while IFS=, read -r distro fuseArchType repoName releaseName; do
+                    echo "Uploading packages for $distro"
+                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
+                  done < <(tail -n +3 ../packages.csv | head -n -2)
                 fi
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
             - script: |
-                while IFS=, read -r distro fuseArchType repoName releaseName; do
-                  if [[ $fuseArchType == *"Arm"* ]] 
-                  then
-                    echo "Skipping for ARM type on $distro"
-                  else
-                    echo "Publishing for $distro"
-                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
-                  fi
-                done < <(tail -n +27 ../packages.csv)
+                if [ "$(is_preview)" = "true" ]; then
+                  while IFS=, read -r distro fuseArchType repoName releaseName; do
+                    if [[ $fuseArchType == *"Arm"* ]] 
+                    then
+                      echo "Skipping for ARM type on $distro"
+                    else
+                      echo "Publishing for $distro"
+                      #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
+                    fi
+                  done < <(tail -n +5 ../packages.csv)
+                else
+                  while IFS=, read -r distro fuseArchType repoName releaseName; do
+                    if [[ $fuseArchType == *"Arm"* ]] 
+                    then
+                      echo "Skipping for ARM type on $distro"
+                    else
+                      echo "Publishing for $distro"
+                      #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
+                    fi
+                  done < <(tail -n +3 ../packages.csv | head -n -2)
+                fi
+                
               displayName: 'Publish the repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
