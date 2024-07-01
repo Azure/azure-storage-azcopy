@@ -130,7 +130,7 @@ stages:
               # Run azcopy --version and capture the output
               azcopyOutput=$($(root_dir)/azcopy_linux_amd64 --version)
 
-              # Extract the version part using grep and sed
+              # Extract the version part
               if echo "$azcopyOutput" | grep -q "azcopy version"; then
                 version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
                 if [[ -n "$version" ]]; then
@@ -170,10 +170,6 @@ stages:
               cp NOTICE.txt $(linux_se_amd64_dir)/
               cp NOTICE.txt pkgDir/usr/bin/
             displayName: 'Copy required files for packaging'
-
-          - script: |
-              sudo ls -lRt pkgDir/usr/bin/
-            displayName: 'List the files'
 
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
@@ -312,12 +308,13 @@ stages:
           - script: |
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
+
           - script: |
               export GOARCH=arm64
               export GOOS=linux
               azcopyOutput=$($(root_dir)/azcopy_linux_arm64 --version)
 
-                # Extract the version part using grep and sed
+                # Extract the version part
                 if echo "$azcopyOutput" | grep -q "azcopy version"; then
                   version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
                   if [[ -n "$version" ]]; then
@@ -560,7 +557,7 @@ stages:
               cp NOTICE.txt $(darwin_arm_dir)
               mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
               mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
-            displayName: 'Copy NOTICE file'
+            displayName: 'Copy required files for packaging'
 
           - task: ArchiveFiles@2
             displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
@@ -577,8 +574,7 @@ stages:
             continueOnError: true
 
           - script: |
-              cp $(archives)/azcopy_darwin_amd64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_darwin_arm64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
           - task: PublishBuildArtifacts@1
@@ -777,9 +773,9 @@ stages:
               windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
               echo "##vso[task.setvariable variable=windows_386]$windows_386"
 
-              mkdir $windows_amd64
-              mkdir $windows_arm64
-              mkdir $windows_386
+              mkdir -p $windows_amd64
+              mkdir -p $windows_arm64
+              mkdir -p $windows_386
               mkdir -p $(archives)
             displayName: 'Create required directories'
 
@@ -817,9 +813,7 @@ stages:
             continueOnError: true
 
           - script: |
-              cp $(archives)/azcopy_windows_amd64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_windows_arm64_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_windows_386_$(AZCOPY_VERSION).zip $(Build.ArtifactStagingDirectory)
+              cp $(archives)/azcopy_windows* $(Build.ArtifactStagingDirectory)
             displayName: 'Copy zip to staging directory'
 
           - script: |
@@ -914,7 +908,7 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
               rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
-            displayName:  'Copy signed mac binary to staging directory'
+            displayName:  'Copy and list signed mac binary to staging directory'
 
           # Push signed images to artifact directory
           - task: PublishBuildArtifacts@1
@@ -1120,7 +1114,7 @@ stages:
           - script: | 
               azcopy --version
               azcopy --help
-            displayName: 'Check Version and Help'
+            displayName: 'Check Version and Help command'
       
       - job: Set_4
         timeoutInMinutes: 120
@@ -1166,7 +1160,7 @@ stages:
           - script: | 
               azcopy --version
               azcopy --help
-            displayName: 'Check Version and Help'
+            displayName: 'Check Version and Help command'
 
       - job: Set_5
         timeoutInMinutes: 120
@@ -1185,6 +1179,7 @@ stages:
 
         steps:
           - checkout: none
+
           - script: |
               sudo tdnf update -y
               sudo tdnf install git -y
@@ -1211,7 +1206,7 @@ stages:
           - script: | 
               azcopy --version
               azcopy --help
-            displayName: 'Check Version and Help'
+            displayName: 'Check Version and Help command'
 
       - job: Set_6
         timeoutInMinutes: 360
@@ -1281,7 +1276,8 @@ stages:
 
               # Run the azcopy version command
               ./azcopy --version
-            displayName: 'Install Zip, Extract Files, and Run Version Command'
+              ./azcopy --help
+            displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
       
       - job: Set_7
         timeoutInMinutes: 120
@@ -1370,7 +1366,8 @@ stages:
                     Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
                 }
                 & $azcopyPath --version
-            displayName: 'Extract Files and Run Version Command on Windows'
+                & $azcopyPath --help
+            displayName: 'Extract Files and Run Version and Help Command on Windows'
        
        # TestArtifacts ends here
   
@@ -1425,7 +1422,6 @@ stages:
           - script: |
               cp NOTICE.txt azCopy-binaries-signed/
               sudo apt-get install -y zip
-              zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
               cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
               sudo dpkg --info azcopy-*x86_64.deb
               sudo dpkg -i azcopy-*x86_64.deb
@@ -1433,12 +1429,18 @@ stages:
             displayName: 'Create drop.zip file and install azcopy deb package'
             workingDirectory: $(Build.ArtifactStagingDirectory)
 
-          - task: ArchiveFiles@2
+          #TODO: check once
+          - script: |
+              cd $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed
+              echo "Contents of $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed:"
+              ls -l
+              
+              # Create the zip archive with all files inside azCopy-binaries-signed
+              zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
+              
+              # List the contents of the resulting zip file for verification
+              unzip -l $(Build.ArtifactStagingDirectory)/drop.zip
             displayName: 'Archive all binaries to drop.zip'
-            inputs:
-              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/azCopy-binaries-signed/*'
-              archiveFile: '$(Build.ArtifactStagingDirectory)/drop.zip'
-            continueOnError: true
 
           - task: Bash@3
             displayName: 'Install Azure CLI'
@@ -1457,8 +1459,6 @@ stages:
                 # Find the current version
                 raw_version_output=$(azcopy --version)
                 azcopy_version=$(echo $raw_version_output | awk '{print $3}')
-
-                ls -ltR $(Build.ArtifactStagingDirectory)
 
                 today=$(date +"%Y%m%d")
                 
@@ -1518,6 +1518,7 @@ stages:
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
               md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
+              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
               md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
               md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
             displayName: 'List Artifacts'
@@ -1604,7 +1605,6 @@ stages:
                 fi
               displayName: 'Test PMC installation'
 
-            # download artifacts that need to be published
             - task: DownloadBuildArtifacts@0
               displayName: 'Download Signed Artifacts'
               inputs:
@@ -1619,7 +1619,7 @@ stages:
                 marinerAmdFileName="${amd64file/.x86_64.rpm/-cm2.x86_64.rpm}"
                 mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
                 mv -v ./azcopy*.x86_64.rpm "$marinerAmdFileName"
-                ls -lRt
+                sudo ls -lRt
                 mv azcopy*.rpm ..
                 cd ..
                 rm -r mariner/
@@ -1636,7 +1636,7 @@ stages:
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
-            # replace org name while merging to main
+            # TODO: replace org name while merging to main
             - script: |
                 wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
                 cat ./packages.csv
@@ -1644,32 +1644,33 @@ stages:
               workingDirectory: $(Build.ArtifactStagingDirectory)/
 
             - script: |
-                # Find the Mariner RPM file and upload
-                marinerArmRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                marinerArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile)
-                echo "Azcopy mariner ARM RPM ID: $marinerArmRpm"
-
                 azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
+                echo "Azcopy AMD DEB $azcopyAmdDeb"
                 echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
 
                 azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
                 azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
-                echo "Azcopy mariner AMD RPM ID: $azcopyAmdRpm"
+                echo "Azcopy AMD RPM $azcopyAmdRpm"
+                echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
       
                 azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
+                echo "Azcopy ARM DEB $azcopyArmDeb"
                 echo "Azcopy ARM DEB ID: $azcopyArmDeb"
 
                 azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm|')
                 azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
+                echo "Azcopy ARM RPM $azcopyArmRpmFile"
                 echo "Azcopy ARM RPM ID: $azcopyArmRpm"
 
                 # Find the Mariner RPM file and upload
                 marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
                 marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
+                echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
                 echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
 
                 marinerArmRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
                 marinerArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerArmRpmFile)
+                echo "Azcopy mariner ARM RPM: $marinerArmRpmFile"
                 echo "Azcopy mariner ARM RPM ID: $marinerArmRpm"
 
                 if [[ $marinerAmdRpmFile == *"preview"* ]]; then
