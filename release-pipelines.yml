@@ -566,103 +566,103 @@ stages:
       #         verbosity: 'Verbose'
       #         alertWarningLevel: 'High'
 
-      # - job: Set_4
-        timeoutInMinutes: 360
-        strategy:
-          matrix:
-            MacOS:
-              imageName: 'macos-13'
-              type: 'mac-os'
-        pool:
-          vmImage: $(imageName)
+    #   - job: Set_4
+    #     timeoutInMinutes: 360
+    #     strategy:
+    #       matrix:
+    #         MacOS:
+    #           imageName: 'macos-13'
+    #           type: 'mac-os'
+    #     pool:
+    #       vmImage: $(imageName)
 
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: archives
-            value: $(root_dir)/archives
+    #     variables:
+    #       - name: root_dir
+    #         value: '$(System.DefaultWorkingDirectory)'
+    #       - name: work_dir
+    #         value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+    #       - name: archives
+    #         value: $(root_dir)/archives
 
-        steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
+    #     steps:
+    #       - task: GoTool@0
+    #         env:
+    #           GO111MODULE: 'on'
+    #         inputs:
+    #           version: $(AZCOPY_GOLANG_VERSION)
 
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Mac'
-            workingDirectory: $(System.DefaultWorkingDirectory)
+    #       - script: |
+    #           echo 'Running GO Vet'
+    #           go vet 
+    #         displayName: 'Golang Vet - Mac'
+    #         workingDirectory: $(System.DefaultWorkingDirectory)
 
-          - script: |
-              CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
-            displayName: 'Generate MacOS Build with AMD64'
+    #       - script: |
+    #           CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
+    #         displayName: 'Generate MacOS Build with AMD64'
            
-          - script: |
-              GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64"
-            displayName: 'Test Cross-compiled MacOS Build with ARM64'
+    #       - script: |
+    #           GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64"
+    #         displayName: 'Test Cross-compiled MacOS Build with ARM64'
 
-          - task: Bash@3
-            displayName: 'Extract AZCopy version'
-            inputs:
-              targetType: 'inline'
-              script: |
-                azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
-                echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
+    #       - task: Bash@3
+    #         displayName: 'Extract AZCopy version'
+    #         inputs:
+    #           targetType: 'inline'
+    #           script: |
+    #             azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
+    #             echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
 
-          - script: |
-              darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
+    #       - script: |
+    #           darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
+    #           echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
 
-              darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
+    #           darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
+    #           echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
               
-              mkdir -p $darwin_amd_dir
-              mkdir -p $darwin_arm_dir
-              mkdir -p $(archives)
-            displayName: 'Create required directories'
+    #           mkdir -p $darwin_amd_dir
+    #           mkdir -p $darwin_arm_dir
+    #           mkdir -p $(archives)
+    #         displayName: 'Create required directories'
 
-          - script: |
-              cp NOTICE.txt $(darwin_amd_dir)
-              cp NOTICE.txt $(darwin_arm_dir)
-              mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
-              mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
-            displayName: 'Copy NOTICE file'
+    #       - script: |
+    #           cp NOTICE.txt $(darwin_amd_dir)
+    #           cp NOTICE.txt $(darwin_arm_dir)
+    #           mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
+    #           mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
+    #         displayName: 'Copy NOTICE file'
 
-          - task: ArchiveFiles@2
-            displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
-            inputs:
-              rootFolderOrFile: '$(darwin_amd_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
-            continueOnError: true
+    #       - task: ArchiveFiles@2
+    #         displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
+    #         inputs:
+    #           rootFolderOrFile: '$(darwin_amd_dir)'
+    #           archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
+    #         continueOnError: true
 
-          - task: ArchiveFiles@2
-            displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
-            inputs:
-              rootFolderOrFile: '$(darwin_arm_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
-            continueOnError: true
+    #       - task: ArchiveFiles@2
+    #         displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
+    #         inputs:
+    #           rootFolderOrFile: '$(darwin_arm_dir)'
+    #           archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
+    #         continueOnError: true
 
-          - script: |
-              cp $(archives)/azcopy_darwin_amd64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
-              cp $(archives)/azcopy_darwin_arm64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
-            displayName: 'Copy zip to staging directory'
+    #       - script: |
+    #           cp $(archives)/azcopy_darwin_amd64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
+    #           cp $(archives)/azcopy_darwin_arm64_$(azcopy_version).zip $(Build.ArtifactStagingDirectory)
+    #         displayName: 'Copy zip to staging directory'
 
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-mac-temp'
-            displayName: 'Publish Artifacts'
-            condition: succeededOrFailed()
+    #       - task: PublishBuildArtifacts@1
+    #         inputs:
+    #           artifactName: 'azCopy-mac-temp'
+    #         displayName: 'Publish Artifacts'
+    #         condition: succeededOrFailed()
         
-          - task: ComponentGovernanceComponentDetection@0
-            inputs:
-              scanType: 'Register'
-              verbosity: 'Verbose'
-              alertWarningLevel: 'High'
-    # BuildArtifacts end here
+    #       - task: ComponentGovernanceComponentDetection@0
+    #         inputs:
+    #           scanType: 'Register'
+    #           verbosity: 'Verbose'
+    #           alertWarningLevel: 'High'
+    # # BuildArtifacts end here
       
   - stage: SignArtifacts
     dependsOn: BuildArtifacts
