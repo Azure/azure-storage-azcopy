@@ -903,8 +903,8 @@ stages:
               mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_arm64
               unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_amd64
               unzip -o $(Build.ArtifactStagingDirectory)/azcopy*arm64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_arm64
-              mv $(Build.ArtifactStagingDirectory)/unzipped_amd64/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
-              mv $(Build.ArtifactStagingDirectory)/unzipped_arm64/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
+              mv $(Build.ArtifactStagingDirectory)/unzipped_amd64/azcopy-*/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
+              mv $(Build.ArtifactStagingDirectory)/unzipped_arm64/azcopy-*/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
               rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
@@ -1650,14 +1650,14 @@ stages:
 
                 azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
                 azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
-                echo "Azcopy AMD RPM $azcopyAmdRpm"
+                echo "Azcopy AMD RPM $azcopyAmdRpmFile"
                 echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
       
                 azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
                 echo "Azcopy ARM DEB $azcopyArmDeb"
                 echo "Azcopy ARM DEB ID: $azcopyArmDeb"
 
-                azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm|')
+                azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
                 azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
                 echo "Azcopy ARM RPM $azcopyArmRpmFile"
                 echo "Azcopy ARM RPM ID: $azcopyArmRpm"
