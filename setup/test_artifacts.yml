@@ -1,4 +1,6 @@
 parameters:
+  - name: go_version
+    type: string
   - name: artifact_name
     type: string
   - name: download_path
@@ -7,6 +9,7 @@ parameters:
     type: string
 
 steps:
+  #TODO: Change the org name after merging to main
   - script: |
       git clone https://github.com/dphulkar-msft/azure-storage-azcopy
     displayName: 'Checkout Code'
@@ -20,7 +23,7 @@ steps:
   - task: ShellScript@2
     inputs:
       scriptPath: "$(System.DefaultWorkingDirectory)/azure-storage-azcopy/go_installer.sh"
-      args: "$(System.DefaultWorkingDirectory)/"
+      args: "$(System.DefaultWorkingDirectory)/ ${{ parameters.go_version }}"
     displayName: "GoTool Custom Setup"
 
   - task: DownloadBuildArtifacts@0
