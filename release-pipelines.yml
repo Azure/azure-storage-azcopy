@@ -1457,355 +1457,355 @@ stages:
        
   #      # TestArtifacts ends here
 
-  - stage: ReleaseArtifacts
-    dependsOn: TestArtifacts
-    condition: succeeded('TestArtifacts')
-    jobs:
-      - job: ReleaseToContainer
-        strategy:
-          matrix:
-            Ubuntu_amd64:
-              agentName: "blobfuse-ubuntu22"
-              vmImage: 'Ubuntu-22.04'
-              container: 'test-cnt-ubn-22'
-        pool:
-          vmImage: $(vmImage)
+  # - stage: ReleaseArtifacts
+  #   dependsOn: TestArtifacts
+  #   condition: succeeded('TestArtifacts')
+  #   jobs:
+  #     - job: ReleaseToContainer
+  #       strategy:
+  #         matrix:
+  #           Ubuntu_amd64:
+  #             agentName: "blobfuse-ubuntu22"
+  #             vmImage: 'Ubuntu-22.04'
+  #             container: 'test-cnt-ubn-22'
+  #       pool:
+  #         vmImage: $(vmImage)
           
-        variables:
-          - name: Test_Release_Account_Name
-            value: 'azcopyprivatedrops'
-          - name: Release_Account_Name
-            value: 'azcopyvnextrelease'
-          - name: Test_Mode
-            value: ${{ parameters.test_mode }}
+  #       variables:
+  #         - name: Test_Release_Account_Name
+  #           value: 'azcopyprivatedrops'
+  #         - name: Release_Account_Name
+  #           value: 'azcopyvnextrelease'
+  #         - name: Test_Mode
+  #           value: ${{ parameters.test_mode }}
 
-        steps:
+  #       steps:
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Linux Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Linux Build Artifacts'
+  #           inputs:
+  #             artifactName: 'azCopy-linux-signed'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Windows Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-windows-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Windows Build Artifacts'
+  #           inputs:
+  #             artifactName: 'azCopy-windows-signed'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Mac Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-mac-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Mac Build Artifacts'
+  #           inputs:
+  #             artifactName: 'azCopy-mac-signed'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
           
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Binaries Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-binaries-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Binaries Build Artifacts'
+  #           inputs:
+  #             artifactName: 'azCopy-binaries-signed'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - script: |
-              cp NOTICE.txt azCopy-binaries-signed/
-              sudo apt-get install -y zip
-              cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
-              sudo dpkg --info azcopy-*x86_64.deb
-              sudo dpkg -i azcopy-*x86_64.deb
-              sudo apt-get install build-essential -y
-            displayName: 'Create drop.zip file and install azcopy deb package'
-            workingDirectory: '$(Build.ArtifactStagingDirectory)'
+  #         - script: |
+  #             cp NOTICE.txt azCopy-binaries-signed/
+  #             sudo apt-get install -y zip
+  #             cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
+  #             sudo dpkg --info azcopy-*x86_64.deb
+  #             sudo dpkg -i azcopy-*x86_64.deb
+  #             sudo apt-get install build-essential -y
+  #           displayName: 'Create drop.zip file and install azcopy deb package'
+  #           workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
-          #TODO: check once
-          - script: |
-              cd $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed
-              echo "Contents of $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed:"
-              ls -l
+  #         #TODO: check once
+  #         - script: |
+  #             cd $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed
+  #             echo "Contents of $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed:"
+  #             ls -l
               
-              # Create the zip archive with all files inside azCopy-binaries-signed
-              zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
+  #             # Create the zip archive with all files inside azCopy-binaries-signed
+  #             zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
               
-              # List the contents of the resulting zip file for verification
-              unzip -l $(Build.ArtifactStagingDirectory)/drop.zip
-            displayName: 'Archive all binaries to drop.zip'
+  #             # List the contents of the resulting zip file for verification
+  #             unzip -l $(Build.ArtifactStagingDirectory)/drop.zip
+  #           displayName: 'Archive all binaries to drop.zip'
 
-          - task: Bash@3
-            displayName: 'Install Azure CLI'
-            inputs:
-              targetType: 'inline'
-              script: |
-                curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  #         - task: Bash@3
+  #           displayName: 'Install Azure CLI'
+  #           inputs:
+  #             targetType: 'inline'
+  #             script: |
+  #               curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-          - task: AzureCLI@2
-            displayName: 'Azure CLI'
-            inputs:
-              azureSubscription: 'ESRP KeyVault identity'
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                # Find the current version
-                raw_version_output=$(azcopy --version)
-                azcopy_version=$(echo $raw_version_output | awk '{print $3}')
+  #         - task: AzureCLI@2
+  #           displayName: 'Azure CLI'
+  #           inputs:
+  #             azureSubscription: 'ESRP KeyVault identity'
+  #             scriptType: bash
+  #             scriptLocation: inlineScript
+  #             inlineScript: |
+  #               # Find the current version
+  #               raw_version_output=$(azcopy --version)
+  #               azcopy_version=$(echo $raw_version_output | awk '{print $3}')
 
-                today=$(date +"%Y%m%d")
+  #               today=$(date +"%Y%m%d")
                 
-                if [ $(Test_Mode) = "True" ]; then
-                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-                else
-                  container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-                fi
-                echo "Artifacts will be uploaded to: $container_url"
+  #               if [ $(Test_Mode) = "True" ]; then
+  #                 container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+  #               else
+  #                 container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+  #               fi
+  #               echo "Artifacts will be uploaded to: $container_url"
                 
-                executable_name=azcopy
+  #               executable_name=azcopy
                 
-                # Upload the archived builds
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
+  #               # Upload the archived builds
+  #               AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
+  #               AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
+  #               AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
+  #               AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
-      - job: ReleaseAzcopy
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Ubuntu-22:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+  #     - job: ReleaseAzcopy
+  #       timeoutInMinutes: 120
+  #       strategy:
+  #         matrix:
+  #           Ubuntu-22:
+  #             vmImage: 'Ubuntu-20.04'
+  #             AgentName: "blobfuse-ubuntu20"
+  #       pool:
+  #         name: "blobfuse-ubuntu-pool"
+  #         demands:
+  #           - ImageOverride -equals $(AgentName)
 
-        steps:
-          - checkout: none
+  #       steps:
+  #         - checkout: none
           
-          - script: |
-              echo ${{ parameters.tag }}
-            displayName: 'Tag Name'
+  #         - script: |
+  #             echo ${{ parameters.tag }}
+  #           displayName: 'Tag Name'
           
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Linux Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Linux Build Artifacts'
+  #           inputs:
+  #             artifactName: 'azCopy-linux-signed'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Windows Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-windows-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Windows Build Artifacts'
+  #           inputs:
+  #             artifactName: 'azCopy-windows-signed'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Mac Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-mac-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Mac Build Artifacts'
+  #           inputs:
+  #             artifactName: 'azCopy-mac-signed'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
           
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
-            displayName: 'List Artifacts'
+  #         - script: |
+  #             sudo ls -lRt $(Build.ArtifactStagingDirectory)
+  #             md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
+  #             md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
+  #             md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
+  #             md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
+  #             md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
+  #           displayName: 'List Artifacts'
 
-          - script: |
-              sudo apt-get clean
-              sudo apt-get update --fix-missing
-              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-              sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt update 
-              sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-3.1 -y
-            displayName: "Update dependencies"
+  #         - script: |
+  #             sudo apt-get clean
+  #             sudo apt-get update --fix-missing
+  #             wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+  #             sudo dpkg -i packages-microsoft-prod.deb 
+  #             sudo apt update 
+  #             sudo apt install apt-transport-https -y
+  #             sudo apt install dotnet-sdk-3.1 -y
+  #           displayName: "Update dependencies"
             
-          - ${{ if eq(parameters.post_release, true) }}:
+  #         - ${{ if eq(parameters.post_release, true) }}:
 
-              # add release tags & push to github
-              #TODO: update github connection and repo name while merging to main
-              - task: GithubRelease@1
-                inputs:
-                  githubConnection: 'dphulkar-msft-github-rel'
-                  repositoryName: 'dphulkar-msft/azure-storage-azcopy'
-                  action: 'edit'
+  #             # add release tags & push to github
+  #             #TODO: update github connection and repo name while merging to main
+  #             - task: GithubRelease@1
+  #               inputs:
+  #                 githubConnection: 'dphulkar-msft-github-rel'
+  #                 repositoryName: 'dphulkar-msft/azure-storage-azcopy'
+  #                 action: 'edit'
 
-                  target: '$(Build.SourceVersion)'
-                  tagSource: 'userSpecifiedTag'
+  #                 target: '$(Build.SourceVersion)'
+  #                 tagSource: 'userSpecifiedTag'
 
-                  title: ${{ parameters.tag }}
-                  tag: ${{ parameters.tag }}
+  #                 title: ${{ parameters.tag }}
+  #                 tag: ${{ parameters.tag }}
                   
-                  assets: |
-                    $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
-                    $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*
-                    $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
-                  changeLogCompareToRelease: 'lastFullRelease'
-                  changeLogType: 'commitBased'
-                  isDraft: ${{ parameters.draft }}
-                  isPreRelease: ${{ parameters.prerelease }}
-                  assetUploadMode: replace
+  #                 assets: |
+  #                   $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
+  #                   $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*
+  #                   $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
+  #                 changeLogCompareToRelease: 'lastFullRelease'
+  #                 changeLogType: 'commitBased'
+  #                 isDraft: ${{ parameters.draft }}
+  #                 isPreRelease: ${{ parameters.prerelease }}
+  #                 assetUploadMode: replace
 
-  - ${{ if eq(parameters.publish_artifacts, true) }}:
-    - stage: PublishArtifacts
-      dependsOn: ReleaseArtifacts
-      condition: succeeded('ReleaseArtifacts')
-      jobs:
-        - job: PublishArtifacts
-          timeoutInMinutes: 120
-          pool:
-            vmImage: 'ubuntu-22.04'
-          variables:
-            - group: AZCOPY_ESRP_SECRET
-            - name: root_dir
-              value: '$(System.DefaultWorkingDirectory)'
+  # - ${{ if eq(parameters.publish_artifacts, true) }}:
+  #   - stage: PublishArtifacts
+  #     dependsOn: ReleaseArtifacts
+  #     condition: succeeded('ReleaseArtifacts')
+  #     jobs:
+  #       - job: PublishArtifacts
+  #         timeoutInMinutes: 120
+  #         pool:
+  #           vmImage: 'ubuntu-22.04'
+  #         variables:
+  #           - group: AZCOPY_ESRP_SECRET
+  #           - name: root_dir
+  #             value: '$(System.DefaultWorkingDirectory)'
           
-          steps:
-            - checkout: none
+  #         steps:
+  #           - checkout: none
 
-            - task: PipAuthenticate@1
-              inputs:
-                artifactFeeds: 'DevExGlobalFeed'
-              displayName: 'Connect to PMC artifact'
+  #           - task: PipAuthenticate@1
+  #             inputs:
+  #               artifactFeeds: 'DevExGlobalFeed'
+  #             displayName: 'Connect to PMC artifact'
 
-            - script: |
-                pip install pmc-cli
-              displayName: 'Install pmc-cli'
+  #           - script: |
+  #               pip install pmc-cli
+  #             displayName: 'Install pmc-cli'
 
-            - task: DownloadSecureFile@1
-              name: pmcCertificate
-              displayName: 'Download pmc pem file'
-              inputs:
-                secureFile: 'blobfusebuildvault-blobfuse-release-pmc1-20230911.pem'
+  #           - task: DownloadSecureFile@1
+  #             name: pmcCertificate
+  #             displayName: 'Download pmc pem file'
+  #             inputs:
+  #               secureFile: 'blobfusebuildvault-blobfuse-release-pmc1-20230911.pem'
 
-            - task: DownloadSecureFile@1
-              name: settings
-              displayName: 'Download settings.toml file'
-              inputs:
-                secureFile: 'settings.toml'
+  #           - task: DownloadSecureFile@1
+  #             name: settings
+  #             displayName: 'Download settings.toml file'
+  #             inputs:
+  #               secureFile: 'settings.toml'
 
-            - script: |
-                pmc --version
-                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
-                if [ $? -ne 0 ]; then
-                  exit 1
-                fi
-              displayName: 'Test PMC installation'
+  #           - script: |
+  #               pmc --version
+  #               pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
+  #               if [ $? -ne 0 ]; then
+  #                 exit 1
+  #               fi
+  #             displayName: 'Test PMC installation'
 
-            - task: DownloadBuildArtifacts@0
-              displayName: 'Download Signed Artifacts'
-              inputs:
-                artifactName: 'azCopy-linux-signed'
-                downloadPath: $(Build.ArtifactStagingDirectory)
+  #           - task: DownloadBuildArtifacts@0
+  #             displayName: 'Download Signed Artifacts'
+  #             inputs:
+  #               artifactName: 'azCopy-linux-signed'
+  #               downloadPath: $(Build.ArtifactStagingDirectory)
                 
-            - script: |
-                cd mariner
-                arm64file=$(ls azcopy*.arm64.rpm)
-                amd64file=$(ls azcopy*.x86_64.rpm)
-                marinerArmFileName="${arm64file/.arm64.rpm/-cm2.arm64.rpm}"
-                marinerAmdFileName="${amd64file/.x86_64.rpm/-cm2.x86_64.rpm}"
-                mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
-                mv -v ./azcopy*.x86_64.rpm "$marinerAmdFileName"
-                sudo ls -lRt
-                mv azcopy*.rpm ..
-                cd ..
-                rm -r mariner/
-              displayName: 'Rename Mariner binaries'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
+  #           - script: |
+  #               cd mariner
+  #               arm64file=$(ls azcopy*.arm64.rpm)
+  #               amd64file=$(ls azcopy*.x86_64.rpm)
+  #               marinerArmFileName="${arm64file/.arm64.rpm/-cm2.arm64.rpm}"
+  #               marinerAmdFileName="${amd64file/.x86_64.rpm/-cm2.x86_64.rpm}"
+  #               mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
+  #               mv -v ./azcopy*.x86_64.rpm "$marinerAmdFileName"
+  #               sudo ls -lRt
+  #               mv azcopy*.rpm ..
+  #               cd ..
+  #               rm -r mariner/
+  #             displayName: 'Rename Mariner binaries'
+  #             workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
-            - script: |
-                sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              displayName: 'List Artifacts'
+  #           - script: |
+  #               sudo ls -lRt $(Build.ArtifactStagingDirectory)
+  #             displayName: 'List Artifacts'
 
-            - script: |
-                mv azCopy-linux-signed/*tar.gz .
-                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azCopy-linux-signed
-              displayName: 'Upload files'
-              workingDirectory: $(Build.ArtifactStagingDirectory)
+  #           - script: |
+  #               mv azCopy-linux-signed/*tar.gz .
+  #               pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azCopy-linux-signed
+  #             displayName: 'Upload files'
+  #             workingDirectory: $(Build.ArtifactStagingDirectory)
 
-            # TODO: replace org name while merging to main
-            - script: |
-                wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
-                cat ./packages.csv
-              displayName: 'Fetch packages.csv'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/
+  #           # TODO: replace org name while merging to main
+  #           - script: |
+  #               wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
+  #               cat ./packages.csv
+  #             displayName: 'Fetch packages.csv'
+  #             workingDirectory: $(Build.ArtifactStagingDirectory)/
 
-            - script: |
-                azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
-                echo "Azcopy AMD DEB $azcopyAmdDeb"
-                echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
+  #           - script: |
+  #               azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
+  #               echo "Azcopy AMD DEB $azcopyAmdDeb"
+  #               echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
 
-                azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
-                azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
-                echo "Azcopy AMD RPM $azcopyAmdRpmFile"
-                echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
+  #               azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
+  #               azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
+  #               echo "Azcopy AMD RPM $azcopyAmdRpmFile"
+  #               echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
       
-                azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
-                echo "Azcopy ARM DEB $azcopyArmDeb"
-                echo "Azcopy ARM DEB ID: $azcopyArmDeb"
+  #               azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
+  #               echo "Azcopy ARM DEB $azcopyArmDeb"
+  #               echo "Azcopy ARM DEB ID: $azcopyArmDeb"
 
-                azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
-                azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
-                echo "Azcopy ARM RPM $azcopyArmRpmFile"
-                echo "Azcopy ARM RPM ID: $azcopyArmRpm"
+  #               azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
+  #               azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
+  #               echo "Azcopy ARM RPM $azcopyArmRpmFile"
+  #               echo "Azcopy ARM RPM ID: $azcopyArmRpm"
 
-                # Find the Mariner RPM file and upload
-                marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
-                marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
-                echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
-                echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
+  #               # Find the Mariner RPM file and upload
+  #               marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
+  #               marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
+  #               echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
+  #               echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
 
-                marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
-                marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAarchRpmFile)
-                echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
-                echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
+  #               marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
+  #               marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAarchRpmFile)
+  #               echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
+  #               echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
                 
-                is_preview="false"
-                echo "##vso[task.setvariable variable=is_preview]$is_preview"
+  #               is_preview="false"
+  #               echo "##vso[task.setvariable variable=is_preview]$is_preview"
 
-                if [[ $marinerAmdRpmFile == *"preview"* ]]; then
-                  is_preview="true"
-                  echo "##vso[task.setvariable variable=is_preview]$is_preview"
+  #               if [[ $marinerAmdRpmFile == *"preview"* ]]; then
+  #                 is_preview="true"
+  #                 echo "##vso[task.setvariable variable=is_preview]$is_preview"
 
-                  echo "Package $marinerAmdRpmFile contains 'preview'."
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                    echo "Uploading packages for $distro"
-                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                  done < <(tail -n +5 ../packages.csv)
-                else
-                  echo "Package $package_name1 does not contain 'preview'."
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                    echo "Uploading packages for $distro"
-                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                  done < <(tail -n +3 ../packages.csv | head -n -2)
-                fi
-              displayName: 'Add uploaded packages to repository'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
+  #                 echo "Package $marinerAmdRpmFile contains 'preview'."
+  #                 while IFS=, read -r distro fuseArchType repoName releaseName; do
+  #                   echo "Uploading packages for $distro"
+  #                   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
+  #                 done < <(tail -n +5 ../packages.csv)
+  #               else
+  #                 echo "Package $package_name1 does not contain 'preview'."
+  #                 while IFS=, read -r distro fuseArchType repoName releaseName; do
+  #                   echo "Uploading packages for $distro"
+  #                   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
+  #                 done < <(tail -n +3 ../packages.csv | head -n -2)
+  #               fi
+  #             displayName: 'Add uploaded packages to repository'
+  #             workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
-            - script: |
-                if [ "$(is_preview)" = "true" ]; then
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                    if [[ $fuseArchType == *"Arm"* ]] 
-                    then
-                      echo "Skipping for ARM type on $distro"
-                    else
-                      echo "Publishing for $distro"
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
-                    fi
-                  done < <(tail -n +5 ../packages.csv)
-                else
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                    if [[ $fuseArchType == *"Arm"* ]] 
-                    then
-                      echo "Skipping for ARM type on $distro"
-                    else
-                      echo "Publishing for $distro"
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
-                    fi
-                  done < <(tail -n +3 ../packages.csv | head -n -2)
-                fi
+  #           - script: |
+  #               if [ "$(is_preview)" = "true" ]; then
+  #                 while IFS=, read -r distro fuseArchType repoName releaseName; do
+  #                   if [[ $fuseArchType == *"Arm"* ]] 
+  #                   then
+  #                     echo "Skipping for ARM type on $distro"
+  #                   else
+  #                     echo "Publishing for $distro"
+  #                     pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
+  #                   fi
+  #                 done < <(tail -n +5 ../packages.csv)
+  #               else
+  #                 while IFS=, read -r distro fuseArchType repoName releaseName; do
+  #                   if [[ $fuseArchType == *"Arm"* ]] 
+  #                   then
+  #                     echo "Skipping for ARM type on $distro"
+  #                   else
+  #                     echo "Publishing for $distro"
+  #                     pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
+  #                   fi
+  #                 done < <(tail -n +3 ../packages.csv | head -n -2)
+  #               fi
                 
-              displayName: 'Publish the repository'
-              workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
+  #             displayName: 'Publish the repository'
+  #             workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
   - stage: UpdateLatestVersion
     dependsOn: ReleaseArtifacts
