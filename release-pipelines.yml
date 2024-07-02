@@ -62,8 +62,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: archives
-            value: $(root_dir)/archives
 
         steps:
           #TODO: remove this after merging to main
@@ -120,54 +118,19 @@ stages:
             displayName: 'Publish binaries'
             condition: succeededOrFailed()
           
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-linux-temp'
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
+
           - script: |
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
 
           - script: |
-              export GOARCH=amd64
-              export GOOS=linux
-              # Run azcopy --version and capture the output
-              azcopyOutput=$($(root_dir)/azcopy_linux_amd64 --version)
-
-              # Extract the version part
-              if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                if [[ -n "$version" ]]; then
-                  echo "Extracted version: $version"
-                  
-                  # Set the pipeline variable (for Azure DevOps)
-                  echo "##vso[task.setvariable variable=azcopy_version]$version"
-                else
-                  echo "Unable to extract version from azcopy output"
-                  exit 1
-                fi
-              else
-                echo "azcopy version string not found in output"
-                exit 1
-              fi
-            displayName: 'Verify and extract the generated build version'
-
-          - script: |
-              linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
-
-              linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
-
-              mkdir -p $linux_amd64_dir
-              mkdir -p $linux_se_amd64_dir
-              mkdir -p $(archives)
-              ls -ltR $(work_dir)
-            displayName: 'Create required directories'
-
-          - script: |
               mkdir -p pkgDir/usr/bin/
-              mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
-              mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
-              cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
-              cp NOTICE.txt $(linux_amd64_dir)/
-              cp NOTICE.txt $(linux_se_amd64_dir)/
+              mv $(root_dir)/azcopy_linux_amd64 pkgDir/usr/bin/azcopy
               cp NOTICE.txt pkgDir/usr/bin/
             displayName: 'Copy required files for packaging'
 
@@ -195,33 +158,12 @@ stages:
             workingDirectory: $(root_dir)
             displayName: 'Make AMD64 rpm Package'
 
-          - task: ArchiveFiles@2
-            displayName: 'Archive Partner(SE) Linux Build'
-            inputs:
-              rootFolderOrFile: '$(linux_se_amd64_dir)'
-              archiveType: tar
-              archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
-            continueOnError: true
-
-          - task: ArchiveFiles@2
-            displayName: 'Archive Amd Linux Build'
-            inputs:
-              rootFolderOrFile: '$(linux_amd64_dir)'
-              archiveType: tar
-              archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
-            continueOnError: true
-
-          - script: |
-              cp -r $(archives)/* $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
-            displayName: 'Add tar.gz to signing stage'
-
           - task: PublishBuildArtifacts@1
             inputs:
               artifactName: 'azCopy-linux-temp'
             displayName: 'Publish Artifacts'
             condition: succeededOrFailed()
-        
+
           - task: ComponentGovernanceComponentDetection@0
             inputs:
               scanType: 'Register'
@@ -247,8 +189,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: archives
-            value: $(root_dir)/archives
 
         steps:
           #TODO: remove this after merging to main
@@ -304,54 +244,21 @@ stages:
               artifactName: 'azCopy-binaries'
             displayName: 'Publish binaries'
             condition: succeededOrFailed()
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-linux-temp'
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
           
           - script: |
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
 
           - script: |
-              export GOARCH=arm64
-              export GOOS=linux
-              azcopyOutput=$($(root_dir)/azcopy_linux_arm64 --version)
-
-                # Extract the version part
-                if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                  version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                  if [[ -n "$version" ]]; then
-                    echo "Extracted version: $version"
-                    
-                    # Set the pipeline variable (for Azure DevOps)
-                    echo "##vso[task.setvariable variable=azcopy_version]$version"
-                  else
-                    echo "Unable to extract version from azcopy output"
-                    exit 1
-                  fi
-                else
-                  echo "azcopy version string not found in output"
-                  exit 1
-                fi
-            displayName: 'Verify and extract the generated build version'
-
-          - script: |
-              linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=linux_arm64_dir]$linux_arm64_dir"
-
-              linux_se_arm64_dir="$(work_dir)/azcopy_linux_se_arm64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=linux_se_arm64_dir]$linux_se_arm64_dir"
-
-              mkdir -p $linux_arm64_dir
-              mkdir -p $linux_se_arm64_dir
-              mkdir -p $(archives)
-            displayName: 'Create required directories'
-
-          - script: |
               mkdir -p pkgDir/usr/bin/
               cp NOTICE.txt pkgDir/usr/bin/
-              mv $(root_dir)/azcopy_linux_arm64 $(linux_arm64_dir)/azcopy
-              mv $(root_dir)/azcopy_linux_se_arm64 $(linux_se_arm64_dir)/azcopy
-              cp $(linux_arm64_dir)/azcopy pkgDir/usr/bin/
-              cp NOTICE.txt $(linux_arm64_dir)/
-              cp NOTICE.txt $(linux_se_arm64_dir)/
+              mv $(root_dir)/azcopy_linux_arm64 pkgDir/usr/bin/azcopy
             displayName: 'Copy required files for packaging'
 
           # using fpm tool for packaging of our binary & performing post-install operations
@@ -377,27 +284,6 @@ stages:
               cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
             displayName: 'Make ARM64 rpm Package'
-
-          - task: ArchiveFiles@2
-            displayName: 'Archive Standard Linux Build'
-            inputs:
-              rootFolderOrFile: '$(linux_arm64_dir)'
-              archiveType: tar
-              archiveFile: '$(archives)/azcopy_linux_arm64_$(azcopy_version).tar.gz'
-            continueOnError: true
-
-          - task: ArchiveFiles@2
-            displayName: 'Archive Partner(SE) Linux Build'
-            inputs:
-              rootFolderOrFile: '$(linux_se_arm64_dir)'
-              archiveType: tar
-              archiveFile: '$(archives)/azcopy_linux_se_arm64_$(azcopy_version).tar.gz'
-            continueOnError: true
-          
-          - script: |
-              cp -r $(archives)/* $(Build.ArtifactStagingDirectory)
-            workingDirectory: $(root_dir)
-            displayName: 'Add tar.gz to signing stage'
 
           - task: PublishBuildArtifacts@1
             inputs:
@@ -493,102 +379,102 @@ stages:
     #           verbosity: 'Verbose'
     #           alertWarningLevel: 'High'
 
-      - job: Set_4
-        timeoutInMinutes: 360
-        strategy:
-          matrix:
-            MacOS:
-              imageName: 'macos-13'
-              type: 'mac-os'
-        pool:
-          vmImage: $(imageName)
+    #   - job: Set_4
+    #     timeoutInMinutes: 360
+    #     strategy:
+    #       matrix:
+    #         MacOS:
+    #           imageName: 'macos-13'
+    #           type: 'mac-os'
+    #     pool:
+    #       vmImage: $(imageName)
 
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: archives
-            value: $(root_dir)/archives
+    #     variables:
+    #       - name: root_dir
+    #         value: '$(System.DefaultWorkingDirectory)'
+    #       - name: work_dir
+    #         value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+    #       - name: archives
+    #         value: $(root_dir)/archives
 
-        steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
+    #     steps:
+    #       - task: GoTool@0
+    #         env:
+    #           GO111MODULE: 'on'
+    #         inputs:
+    #           version: $(AZCOPY_GOLANG_VERSION)
 
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Mac'
-            workingDirectory: $(System.DefaultWorkingDirectory)
+    #       - script: |
+    #           echo 'Running GO Vet'
+    #           go vet 
+    #         displayName: 'Golang Vet - Mac'
+    #         workingDirectory: $(System.DefaultWorkingDirectory)
 
-          - script: |
-              CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
-            displayName: 'Generate MacOS Build with AMD64'
+    #       - script: |
+    #           CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
+    #         displayName: 'Generate MacOS Build with AMD64'
            
-          - script: |
-              GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64"
-            displayName: 'Test Cross-compiled MacOS Build with ARM64'
+    #       - script: |
+    #           GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64"
+    #         displayName: 'Test Cross-compiled MacOS Build with ARM64'
 
-          - task: Bash@3
-            displayName: 'Extract AZCopy version'
-            inputs:
-              targetType: 'inline'
-              script: |
-                azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
-                echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
+    #       - task: Bash@3
+    #         displayName: 'Extract AZCopy version'
+    #         inputs:
+    #           targetType: 'inline'
+    #           script: |
+    #             azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
+    #             echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
 
-          - script: |
-              darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
+    #       - script: |
+    #           darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
+    #           echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
 
-              darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
+    #           darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
+    #           echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
               
-              mkdir -p $darwin_amd_dir
-              mkdir -p $darwin_arm_dir
-              mkdir -p $(archives)
-            displayName: 'Create required directories'
+    #           mkdir -p $darwin_amd_dir
+    #           mkdir -p $darwin_arm_dir
+    #           mkdir -p $(archives)
+    #         displayName: 'Create required directories'
 
-          - script: |
-              cp NOTICE.txt $(darwin_amd_dir)
-              cp NOTICE.txt $(darwin_arm_dir)
-              mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
-              mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
-            displayName: 'Copy required files for packaging'
+    #       - script: |
+    #           cp NOTICE.txt $(darwin_amd_dir)
+    #           cp NOTICE.txt $(darwin_arm_dir)
+    #           mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
+    #           mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
+    #         displayName: 'Copy required files for packaging'
 
-          - task: ArchiveFiles@2
-            displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
-            inputs:
-              rootFolderOrFile: '$(darwin_amd_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
-            continueOnError: true
+    #       - task: ArchiveFiles@2
+    #         displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
+    #         inputs:
+    #           rootFolderOrFile: '$(darwin_amd_dir)'
+    #           archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
+    #         continueOnError: true
 
-          - task: ArchiveFiles@2
-            displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
-            inputs:
-              rootFolderOrFile: '$(darwin_arm_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
-            continueOnError: true
+    #       - task: ArchiveFiles@2
+    #         displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
+    #         inputs:
+    #           rootFolderOrFile: '$(darwin_arm_dir)'
+    #           archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
+    #         continueOnError: true
 
-          - script: |
-              cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)
-            displayName: 'Copy zip to staging directory'
+    #       - script: |
+    #           cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)
+    #         displayName: 'Copy zip to staging directory'
 
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-mac-temp'
-            displayName: 'Publish Artifacts'
-            condition: succeededOrFailed()
+    #       - task: PublishBuildArtifacts@1
+    #         inputs:
+    #           artifactName: 'azCopy-mac-temp'
+    #         displayName: 'Publish Artifacts'
+    #         condition: succeededOrFailed()
         
-          - task: ComponentGovernanceComponentDetection@0
-            inputs:
-              scanType: 'Register'
-              verbosity: 'Verbose'
-              alertWarningLevel: 'High'
-    # BuildArtifacts end here
+    #       - task: ComponentGovernanceComponentDetection@0
+    #         inputs:
+    #           scanType: 'Register'
+    #           verbosity: 'Verbose'
+    #           alertWarningLevel: 'High'
+    # # BuildArtifacts end here
       
   - stage: SignArtifacts
     dependsOn: BuildArtifacts
@@ -608,10 +494,15 @@ stages:
 
         variables:
           - group: AZCOPY_ESRP_SECRET
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+          - name: archives
+            value: $(root_dir)/archives
 
         steps:
-          - checkout: none
-          
+
           - script: |
               echo ${{ parameters.tag }}
             displayName: 'Tag Name'
@@ -651,7 +542,7 @@ stages:
             parameters:
               FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
               ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-              Pattern: '*.rpm, *.deb, *tar.gz'
+              Pattern: '*.rpm, *.deb, azcopy_linux*'
               DisplayName: 'ESRP CodeSigning azCopy linux'
           
           - template: setup/esrp_sign_linux.yml
@@ -660,6 +551,67 @@ stages:
               ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
               Pattern: '*.rpm, *.deb'
               DisplayName: 'ESRP CodeSigning azCopy mariner'
+
+          - script: |
+              export GOARCH=amd64
+              export GOOS=linux
+              # Set the azcopy binary path
+              azcopyBinary="$(Build.ArtifactStagingDirectory)/azCopy-linux-temp/azcopy_linux_amd64"
+
+              # Ensure the azcopy binary has execution permissions
+              chmod +x "$azcopyBinary"
+
+              # Run azcopy --version and capture the output
+              azcopyOutput=$($azcopyBinary --version 2>&1)
+                            
+              # Extract the version part
+              if echo "$azcopyOutput" | grep -q "azcopy version"; then
+                version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+                if [[ -n "$version" ]]; then
+                  echo "Extracted version: $version"
+                  
+                  # Set the pipeline variable (for Azure DevOps)
+                  echo "##vso[task.setvariable variable=azcopy_version]$version"
+                else
+                  echo "Unable to extract version from azcopy output"
+                  exit 1
+                fi
+              else
+                echo "azcopy version string not found in output"
+                exit 1
+              fi
+            displayName: 'Verify and extract the generated build version'
+
+          - script: |
+              linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
+
+              linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
+
+              linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=linux_arm64_dir]$linux_arm64_dir"
+
+              linux_se_arm64_dir="$(work_dir)/azcopy_linux_se_arm64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=linux_se_arm64_dir]$linux_se_arm64_dir"
+
+              mkdir -p $linux_arm64_dir
+              mkdir -p $linux_se_arm64_dir
+              mkdir -p $linux_amd64_dir
+              mkdir -p $linux_se_amd64_dir
+              mkdir -p $(archives)
+
+              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
+              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
+              mv $(root_dir)/azcopy_linux_arm64 $(linux_arm64_dir)/azcopy
+              mv $(root_dir)/azcopy_linux_se_arm64 $(linux_se_arm64_dir)/azcopy
+
+              cp NOTICE.txt $(linux_arm64_dir)/
+              cp NOTICE.txt $(linux_se_arm64_dir)/
+              cp NOTICE.txt $(linux_amd64_dir)/
+              cp NOTICE.txt $(linux_se_amd64_dir)/
+              ls -ltR $(work_dir)
+            displayName: 'Create required directories'
 
           # Validate signed images have md5sum changed
           - script: |
@@ -676,6 +628,42 @@ stages:
               md5sum $(Build.ArtifactStagingDirectory)/*
               md5sum $(Build.ArtifactStagingDirectory)/mariner/*
             displayName: 'List Signed Artifacts'
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Partner(SE) Linux Build'
+            inputs:
+              rootFolderOrFile: '$(linux_se_amd64_dir)'
+              archiveType: tar
+              archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Amd Linux Build'
+            inputs:
+              rootFolderOrFile: '$(linux_amd64_dir)'
+              archiveType: tar
+              archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Standard Linux Build'
+            inputs:
+              rootFolderOrFile: '$(linux_arm64_dir)'
+              archiveType: tar
+              archiveFile: '$(archives)/azcopy_linux_arm64_$(azcopy_version).tar.gz'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Partner(SE) Linux Build'
+            inputs:
+              rootFolderOrFile: '$(linux_se_arm64_dir)'
+              archiveType: tar
+              archiveFile: '$(archives)/azcopy_linux_se_arm64_$(azcopy_version).tar.gz'
+            continueOnError: true
+
+          - script: |
+              cp -r $(archives)/* $(Build.ArtifactStagingDirectory)
+            displayName: 'Add tar.gz to staging directory'
           
           # Push signed images to artifact directory
           - task: PublishBuildArtifacts@1
@@ -1006,42 +994,42 @@ stages:
     dependsOn: SignArtifacts
     condition: succeeded('SignArtifacts')
     jobs:
-      - job: Set_1
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Ubuntu_amd64:
-              agentName: "blobfuse-ubuntu22"
-              vmImage: 'Ubuntu-22.04'
-              container: 'test-cnt-ubn-22'
-        pool:
-          vmImage: $(vmImage)
-        steps:
-          - checkout: none
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
+      # - job: Set_1
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Ubuntu_amd64:
+      #         agentName: "blobfuse-ubuntu22"
+      #         vmImage: 'Ubuntu-22.04'
+      #         container: 'test-cnt-ubn-22'
+      #   pool:
+      #     vmImage: $(vmImage)
+      #   steps:
+      #     - checkout: none
+      #     - script: |
+      #         sudo apt update
+      #         sudo apt --fix-broken install
+      #         ldd --version
+      #       displayName: "GLIBC Version"
 
-          - template: setup/test_artifacts.yml
-            parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
-              artifact_name: 'azCopy-linux-signed'
-              download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
+      #     - template: setup/test_artifacts.yml
+      #       parameters:
+      #         go_version: '$(AZCOPY_GOLANG_VERSION)'
+      #         artifact_name: 'azCopy-linux-signed'
+      #         download_path: '$(System.DefaultWorkingDirectory)'
+      #         item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
 
-          - script: |
-              sudo dpkg --info azcopy-*x86_64.deb
-              sudo dpkg -i azcopy-*x86_64.deb
-              sudo apt-get install build-essential -y
-            displayName: 'Install deb Package'
-            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+      #     - script: |
+      #         sudo dpkg --info azcopy-*x86_64.deb
+      #         sudo dpkg -i azcopy-*x86_64.deb
+      #         sudo apt-get install build-essential -y
+      #       displayName: 'Install deb Package'
+      #       workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
-          - script: | 
-              azcopy --version
-              azcopy --help
-            displayName: 'Check Version and Help'
+      #     - script: | 
+      #         azcopy --version
+      #         azcopy --help
+      #       displayName: 'Check Version and Help'
       
       - job: Set_2
         timeoutInMinutes: 120
@@ -1064,15 +1052,12 @@ stages:
           - template: setup/test_artifacts.yml
             parameters:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
-              artifact_name: 'azCopy-linux-temp'
+              artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-temp/azcopy_linux_amd64*.tar.gz'
+              item_pattern: 'azCopy-linux-signed/azcopy_linux_amd64*.tar.gz'
 
           - script: |
-              #!/bin/bash
-
               # Define the path to the .tar.gz file and the extraction directory
-              # Define variables
               TAR_GZ_FILE=$(ls azcopy_linux_amd64*.tar.gz)
               EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
 
@@ -1113,16 +1098,9 @@ stages:
                   exit 1
               fi
 
-              # Check if azcopy exists and is executable
-              if [ ! -x "./azcopy" ]; then
-                  echo "Error: azcopy not found or not executable in ${matching_dirs[0]}"
-                  exit 1
-              fi
-
               # Run azcopy commands
               ./azcopy --version
               ./azcopy --help
-
             displayName: 'Check Version and Help'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-temp
 
@@ -1828,8 +1806,8 @@ stages:
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
   - stage: UpdateLatestVersion
-    # dependsOn: ReleaseArtifacts
-    # condition: succeeded('ReleaseArtifacts')
+    dependsOn: ReleaseArtifacts
+    condition: succeeded('ReleaseArtifacts')
     jobs:
       - job: UpdateVersion       
         pool:
