@@ -55,7 +55,9 @@ func (l *LocalContainerResourceManager) Level() cmd.LocationLevel {
 }
 
 func (l *LocalContainerResourceManager) URI(opts ...GetURIOptions) string {
-	return l.RootPath
+	base := l.RootPath
+	base = addWildCard(base, opts...)
+	return base
 }
 
 func (l *LocalContainerResourceManager) Parent() ResourceManager {
@@ -217,7 +219,9 @@ func (l *LocalObjectResourceManager) Level() cmd.LocationLevel {
 }
 
 func (l *LocalObjectResourceManager) URI(opts ...GetURIOptions) string {
-	return filepath.Join(l.container.RootPath, l.objectPath)
+	base := filepath.Join(l.container.RootPath, l.objectPath)
+	base = addWildCard(base, opts...)
+	return base
 }
 
 func (l *LocalObjectResourceManager) Parent() ResourceManager {

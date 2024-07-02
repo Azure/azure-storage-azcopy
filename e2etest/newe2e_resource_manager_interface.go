@@ -77,7 +77,7 @@ func TryApplySpecificAuthType(rm ResourceManager, cred ExplicitCredentialTypes, 
 		return rrm.WithSpecificAuthType(cred, a, opts...)
 	}
 
-	return CreateAzCopyTarget(rm, EExplicitCredentialType.None(), a)
+	return CreateAzCopyTarget(rm, EExplicitCredentialType.None(), a, opts...)
 }
 
 // ExplicitCredentialTypes defines a more explicit enum for credential types as AzCopy's internal definition is very loose (e.g. Anonymous can be public or SAS); accepts the URI as-is.
