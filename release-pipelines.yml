@@ -1080,7 +1080,7 @@ stages:
           - script: |
               # Define the path to the .tar.gz file and the extraction directory
               # Define variables
-              TAR_GZ_FILE=$(ls azcopy*.tar.gz)
+              TAR_GZ_FILE=$(ls azcopy_linux_amd64*.tar.gz)
               EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
 
               # Create extraction directory
