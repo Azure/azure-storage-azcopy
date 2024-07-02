@@ -899,17 +899,17 @@ stages:
             displayName: 'Publish Signed Artifacts'
 
           - script: |
-              mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_amd64
-              mkdir -p $(Build.ArtifactStagingDirectory)/unzipped_arm64
-              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*amd64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_amd64
-              unzip -o $(Build.ArtifactStagingDirectory)/azcopy*arm64*.zip -d $(Build.ArtifactStagingDirectory)/unzipped_arm64
+              mkdir -p unzipped_amd64
+              mkdir -p unzipped_arm64
+              unzip -o azcopy*amd64*.zip -d unzipped_amd64
+              unzip -o azcopy*arm64*.zip -d unzipped_arm64
 
               # Use find to retrieve the folder name
-              amd64FolderName=$(ls $(Build.ArtifactStagingDirectory)/unzipped_amd64/azcopy_darwin_amd64*)
-              echo "Folder name: $amd64FolderName"
+              amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
+              echo "AMD64 Folder name: $amd64FolderName"
 
-              arm64FolderName=$(ls $(Build.ArtifactStagingDirectory)/unzipped_arm64/azcopy_darwin_arm64*)
-              echo "Folder name: $arm64FolderName"
+              arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
+              echo "ARM64 Folder name: $arm64FolderName"
               
               # List the contents of the folder
               echo "Contents:"
@@ -917,14 +917,15 @@ stages:
               ls -l $arm64FolderName
 
               # Attempt the mv command
-              mv $amd64FolderName/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
-              mv $arm64FolderName/azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
+              mv $amd64FolderName/azcopy azcopy_darwin_amd64
+              mv $arm64FolderName/azcopy azcopy_darwin_arm64
 
 
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
               rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
             displayName:  'Copy and list signed mac binary to staging directory'
+            workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
           # Push signed images to artifact directory
           - task: PublishBuildArtifacts@1
