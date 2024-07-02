@@ -1808,8 +1808,8 @@ stages:
   #             workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
   - stage: UpdateLatestVersion
-    dependsOn: ReleaseArtifacts
-    condition: succeeded('ReleaseArtifacts')
+    # dependsOn: ReleaseArtifacts
+    # condition: succeeded('ReleaseArtifacts')
     jobs:
       - job: UpdateVersion       
         pool:
