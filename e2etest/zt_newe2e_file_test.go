@@ -360,3 +360,30 @@ func (s *FileTestSuite) Scenario_DownloadDirectory(svm *ScenarioVariationManager
 		Objects: srcObjs,
 	}, true)
 }
+
+func (s *FileTestSuite) Scenario_SingleFileUploadWildcard(svm *ScenarioVariationManager) {
+	size := common.MegaByte
+	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
+	body := NewRandomObjectContentContainer(svm, int64(size))
+
+	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
+		GetObject(svm, fileName, common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
+		GetObject(svm, fileName, common.EEntityType.File())
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: true}), dstObj},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				BlockSizeMB: pointerTo(4.0),
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, true)
+}

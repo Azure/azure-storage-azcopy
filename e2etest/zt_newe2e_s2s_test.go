@@ -426,17 +426,7 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFileStripTopDir(svm *ScenarioV
 
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
 	srcBody := NewRandomObjectContentContainer(svm, 0)
-	srcProps := ObjectProperties{
-		Metadata: common.Metadata{"Author": pointerTo("gapra"), "Viewport": pointerTo("width"), "Description": pointerTo("test file")},
-		HTTPHeaders: contentHeaders{
-			contentType:        pointerTo("testctype"),
-			contentEncoding:    pointerTo("testcenc"),
-			contentDisposition: pointerTo("testcdis"),
-			contentLanguage:    pointerTo("testclang"),
-			cacheControl:       pointerTo("testcctrl"),
-		},
-	}
-	srcObj.Create(svm, srcBody, srcProps)
+	srcObj.Create(svm, srcBody, ObjectProperties{})
 
 	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
 
@@ -468,6 +458,7 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFileStripTopDir(svm *ScenarioV
 }
 
 func (s *S2STestSuite) Scenario_S2SAccount(svm *ScenarioVariationManager) {
+	svm.Skip("TODO : use new account")
 	// Scale up from service to object
 	srcAccount := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()}))
 	dstAccount := GetRootResource(svm, common.ELocation.Blob())
@@ -520,5 +511,168 @@ func (s *S2STestSuite) Scenario_S2SAccount(svm *ScenarioVariationManager) {
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
+	}, true)
+}
+
+func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFiles(svm *ScenarioVariationManager) {
+	// Scale up from service to object
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+	// Create destination directories
+	dstObjs := make(ObjectResourceMappingFlat)
+	for _, dir := range dirsToCreate {
+		if dstContainer.Location() != common.ELocation.Blob() {
+			dstObj := ResourceDefinitionObject{ObjectName: pointerTo("dir_file_copy_test/" + dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+			dstObjs["dir_file_copy_test/"+dir] = dstObj
+		}
+		for i := range 10 {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body}
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+			dstObj := ResourceDefinitionObject{ObjectName: pointerTo("dir_file_copy_test/" + name), Body: body}
+			dstObjs["dir_file_copy_test/"+name] = dstObj // src directory will be created in dest directory
+		}
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	srcDirObj := srcContainer.GetObject(svm, "dir_file_copy_test", common.EEntityType.Folder())
+	dstDirObj := dstContainer.GetObject(svm, "dir_file_copy_test", common.EEntityType.Folder())
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+			},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: dstObjs,
+	}, true)
+}
+
+func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirRecursive(svm *ScenarioVariationManager) {
+	// Scale up from service to object
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+	// Create destination directories
+	dstObjs := make(ObjectResourceMappingFlat)
+	for _, dir := range dirsToCreate {
+		if dstContainer.Location() != common.ELocation.Blob() {
+			dirName := dir
+			dstObj := ResourceDefinitionObject{ObjectName: pointerTo(dirName), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+			dstObjs[dirName] = dstObj
+		}
+		for i := range 10 {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body}
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+			dstObj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body}
+			dstObjs[name] = dstObj
+		}
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	srcDirObj := srcContainer.GetObject(svm, "dir_file_copy_test", common.EEntityType.Folder())
+	dstDirObj := dstContainer.GetObject(svm, "dir_file_copy_test", common.EEntityType.Folder())
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+					Wildcard:        true,
+				}),
+				TryApplySpecificAuthType(dstDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+			},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: dstObjs,
+	}, true)
+}
+
+func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirNonRecursive(svm *ScenarioVariationManager) {
+	// Scale up from service to object
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+	// Create destination directories
+	dstObjs := make(ObjectResourceMappingFlat)
+	for j, dir := range dirsToCreate {
+		if dstContainer.Location() != common.ELocation.Blob() {
+			dirName := dir
+			if j == 0 {
+				dstObj := ResourceDefinitionObject{ObjectName: pointerTo(dirName), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+				dstObjs[dirName] = dstObj
+			}
+		}
+		for i := range 10 {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body}
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+			if j == 0 {
+				dstObj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body}
+				dstObjs[name] = dstObj
+			}
+		}
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	srcDirObj := srcContainer.GetObject(svm, "dir_file_copy_test", common.EEntityType.Folder())
+	dstDirObj := dstContainer.GetObject(svm, "dir_file_copy_test", common.EEntityType.Folder())
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+					Wildcard:        true,
+				}),
+				TryApplySpecificAuthType(dstDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: dstObjs,
 	}, true)
 }

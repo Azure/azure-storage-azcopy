@@ -2,7 +2,6 @@ from test_blob_download import *
 from test_upload_block_blob import *
 from test_upload_page_blob import *
 from test_file_download import *
-from test_file_upload import *
 from test_blobfs_upload_sharedkey import *
 from test_blobfs_download_sharedkey import *
 from test_blob_piping import *
@@ -208,7 +207,6 @@ def main():
                          Blob_Download_User_Scenario,
                          PageBlob_Upload_User_Scenarios,
                          FileShare_Download_User_Scenario,
-                         FileShare_Upload_User_Scenario,
                          BlobFs_Upload_ShareKey_User_Scenarios,
                          BlobFs_Download_SharedKey_User_Scenarios,
                          Service_2_Service_Copy_User_Scenario,
