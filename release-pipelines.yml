@@ -1066,7 +1066,7 @@ stages:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-temp'
               download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy_linux_amd64*.tar.gz'
+              item_pattern: 'azCopy-linux-temp/azcopy_linux_amd64*.tar.gz'
 
           - script: |
               #!/bin/bash
