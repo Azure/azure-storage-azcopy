@@ -828,110 +828,100 @@ stages:
       #         artifactName: 'azCopy-windows-signed'
       #       displayName: 'Publish Signed Artifacts'
 
-      - job: Set_3
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Mac-Signing:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      # - job: Set_3
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Mac-Signing:
+      #         vmImage: 'Ubuntu-20.04'
+      #         AgentName: "blobfuse-ubuntu20"
+      #   pool:
+      #     name: "blobfuse-ubuntu-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
 
-        variables:
-          - group: AZCOPY_ESRP_SECRET
+      #   variables:
+      #     - group: AZCOPY_ESRP_SECRET
 
-        steps:
-          - checkout: none
+      #   steps:
+      #     - checkout: none
           
-          - script: |
-              echo ${{ parameters.tag }}
-            displayName: 'Tag Name'
+      #     - script: |
+      #         echo ${{ parameters.tag }}
+      #       displayName: 'Tag Name'
           
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-mac-temp'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+      #     - task: DownloadBuildArtifacts@0
+      #       displayName: 'Download Build Artifacts'
+      #       inputs:
+      #         artifactName: 'azCopy-mac-temp'
+      #         downloadPath: $(Build.ArtifactStagingDirectory)
           
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
-            displayName: 'List Artifacts'
+      #     - script: |
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+      #       displayName: 'List Artifacts'
           
-          - script: |
-              sudo apt-get clean
-              sudo apt-get update
-              sudo apt-get upgrade -y
-              sudo apt-get install unzip -y
-              sudo apt-get install -f --fix-missing
-              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-              sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-6.0 -y
-            displayName: "Update dependencies"
+      #     - script: |
+      #         sudo apt-get clean
+      #         sudo apt-get update
+      #         sudo apt-get upgrade -y
+      #         sudo apt-get install unzip -y
+      #         sudo apt-get install -f --fix-missing
+      #         wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+      #         sudo dpkg -i packages-microsoft-prod.deb 
+      #         sudo apt install apt-transport-https -y
+      #         sudo apt install dotnet-sdk-6.0 -y
+      #       displayName: "Update dependencies"
 
-          - template: setup/esrp_sign_notarize_macos.yml
-            parameters:
-              FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-              ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-              Pattern: '*.zip'
+      #     - template: setup/esrp_sign_notarize_macos.yml
+      #       parameters:
+      #         FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
+      #         ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+      #         Pattern: '*.zip'
 
-          # Validate signed images have md5sum changed
-          - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
-              mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(Build.ArtifactStagingDirectory)/
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
-            displayName: 'Make Artifacts executable'
+      #     # Validate signed images have md5sum changed
+      #     - script: |
+      #         chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
+      #         mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(Build.ArtifactStagingDirectory)/
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
+      #       displayName: 'Make Artifacts executable'
 
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/*
-            displayName: 'List Signed Artifacts'
+      #     - script: |
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/*
+      #       displayName: 'List Signed Artifacts'
           
-          # Push signed images to artifact directory
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-mac-signed'
-            displayName: 'Publish Signed Artifacts'
+      #     # Push signed images to artifact directory
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-mac-signed'
+      #       displayName: 'Publish Signed Artifacts'
 
-          - script: |
-              mkdir -p unzipped_amd64
-              mkdir -p unzipped_arm64
-              unzip -o azcopy*amd64*.zip -d unzipped_amd64
-              unzip -o azcopy*arm64*.zip -d unzipped_arm64
+      #     - script: |
+      #         mkdir -p unzipped_amd64
+      #         mkdir -p unzipped_arm64
+      #         unzip -o azcopy*amd64*.zip -d unzipped_amd64
+      #         unzip -o azcopy*arm64*.zip -d unzipped_arm64
 
-              # Use find to retrieve the folder name
-              amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
-              echo "AMD64 Folder name: $amd64FolderName"
+      #         # Use find to retrieve the folder name
+      #         amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
+      #         arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
 
-              arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
-              echo "ARM64 Folder name: $arm64FolderName"
-              
-              # List the contents of the folder
-              echo "Contents:"
-              ls -l $amd64FolderName
-              ls -l $arm64FolderName
+      #         mv $amd64FolderName/azcopy azcopy_darwin_amd64
+      #         mv $arm64FolderName/azcopy azcopy_darwin_arm64
 
-              # Attempt the mv command
-              mv $amd64FolderName/azcopy azcopy_darwin_amd64
-              mv $arm64FolderName/azcopy azcopy_darwin_arm64
+      #         rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
+      #         rm -rf $(Build.ArtifactStagingDirectory)/*.zip
+      #         sudo ls -ltR $(Build.ArtifactStagingDirectory)
+      #       displayName:  'Copy and list signed mac binary to staging directory'
+      #       workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
-
-              rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
-              rm -rf $(Build.ArtifactStagingDirectory)/*.zip
-              sudo ls -ltR $(Build.ArtifactStagingDirectory)
-            displayName:  'Copy and list signed mac binary to staging directory'
-            workingDirectory: '$(Build.ArtifactStagingDirectory)'
-
-          # Push signed images to artifact directory
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-binaries-signed'
-            displayName: 'Publish Signed Mac Binary'
+      #     # Push signed images to artifact directory
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-binaries-signed'
+      #       displayName: 'Publish Signed Mac Binary'
 
       # - job: Set_4
       #   timeoutInMinutes: 120
@@ -1079,16 +1069,37 @@ stages:
               item_pattern: 'azCopy-linux-signed/azcopy_linux_amd64*.tar.gz'
 
           - script: |
+              #!/bin/bash
+
               # Define the path to the .tar.gz file and the extraction directory
               # Define variables
               TAR_GZ_FILE=$(ls azcopy_linux_amd64*.tar.gz)
               EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
 
+              # Check if the file exists and is a regular file
+              if [ ! -f "$TAR_GZ_FILE" ]; then
+                  echo "Error: File $TAR_GZ_FILE does not exist."
+                  exit 1
+              fi
+
+              # Verify the file type
+              file_type=$(file -b "$TAR_GZ_FILE")
+              echo "File type: $file_type"
+
+              if [[ "$file_type" != *"gzip compressed data"* ]]; then
+                  echo "Error: The file is not a valid .tar.gz file"
+                  exit 1
+              fi
+
               # Create extraction directory
-              mkdir -p $EXTRACT_DIR
+              mkdir -p "$EXTRACT_DIR"
 
               # Extract the .tar.gz file
               tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
+              if [ $? -ne 0 ]; then
+                  echo "Error: Failed to extract $TAR_GZ_FILE"
+                  exit 1
+              fi
 
               # Find the directory matching the pattern
               matching_dirs=("$EXTRACT_DIR"/azcopy_linux_amd64*)
@@ -1102,8 +1113,16 @@ stages:
                   exit 1
               fi
 
+              # Check if azcopy exists and is executable
+              if [ ! -x "./azcopy" ]; then
+                  echo "Error: azcopy not found or not executable in ${matching_dirs[0]}"
+                  exit 1
+              fi
+
+              # Run azcopy commands
               ./azcopy --version
               ./azcopy --help
+
             displayName: 'Check Version and Help'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
