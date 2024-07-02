@@ -1064,7 +1064,7 @@ stages:
           - template: setup/test_artifacts.yml
             parameters:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
-              artifact_name: 'azCopy-linux-signed'
+              artifact_name: 'azCopy-linux-temp'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy_linux_amd64*.tar.gz'
 
@@ -1124,7 +1124,7 @@ stages:
               ./azcopy --help
 
             displayName: 'Check Version and Help'
-            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-temp
 
       # - job: Set_3
       #   timeoutInMinutes: 120
