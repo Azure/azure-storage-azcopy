@@ -538,25 +538,11 @@ stages:
               sudo apt install dotnet-sdk-3.1 -y
             displayName: "Update dependencies"
 
-          - template: setup/esrp_sign_linux.yml
-            parameters:
-              FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
-              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-              Pattern: '*.rpm, *.deb, azcopy_linux*'
-              DisplayName: 'ESRP CodeSigning azCopy linux'
-          
-          - template: setup/esrp_sign_linux.yml
-            parameters:
-              FolderPath: $(Build.ArtifactStagingDirectory)/mariner
-              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
-              Pattern: '*.rpm, *.deb'
-              DisplayName: 'ESRP CodeSigning azCopy mariner'
-
-          - script: |
+            - script: |
               export GOARCH=amd64
               export GOOS=linux
+              
               # Run azcopy --version and capture the output
-
               chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/azcopy_linux_amd64
               azcopyOutput=$($(Build.ArtifactStagingDirectory)/azCopy-linux-temp/azcopy_linux_amd64 --version)
 
@@ -577,6 +563,20 @@ stages:
                 exit 1
               fi
             displayName: 'Verify and extract the generated build version'
+
+          - template: setup/esrp_sign_linux.yml
+            parameters:
+              FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
+              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
+              Pattern: '*.rpm, *.deb, azcopy_linux*'
+              DisplayName: 'ESRP CodeSigning azCopy linux'
+          
+          - template: setup/esrp_sign_linux.yml
+            parameters:
+              FolderPath: $(Build.ArtifactStagingDirectory)/mariner
+              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
+              Pattern: '*.rpm, *.deb'
+              displayName: 'ESRP CodeSigning azCopy mariner'
 
           - script: |
               linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
