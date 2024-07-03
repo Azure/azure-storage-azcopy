@@ -1811,7 +1811,7 @@ stages:
 
                   # If the package is preview, publish to mariner preview package
                   if [[ $distro == *"Mariner-2.0"* ]]; then
-                    if [ "$(is_preview)" = "true" ]; then
+                    if [ $is_preview = "true" ]; then
                       repoName=$(echo $repoName | sed 's/prod/preview/')
                     fi
                   fi
@@ -1841,8 +1841,8 @@ stages:
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
   - stage: UpdateLatestVersion
-    # dependsOn: ReleaseArtifacts
-    # condition: succeeded('ReleaseArtifacts')
+    dependsOn: ReleaseArtifacts
+    condition: succeeded('ReleaseArtifacts')
     jobs:
       - job: UpdateVersion       
         pool:
