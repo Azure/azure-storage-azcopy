@@ -555,6 +555,7 @@ stages:
           - script: |
               export GOARCH=amd64
               export GOOS=linux
+              
               # Set the azcopy binary path
               azcopyBinary="$(Build.ArtifactStagingDirectory)/azCopy-linux-temp/azcopy_linux_amd64"
 
