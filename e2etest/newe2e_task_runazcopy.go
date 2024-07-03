@@ -68,7 +68,8 @@ type CreateAzCopyTargetOptions struct {
 	// SASTokenOptions expects a GenericSignatureValues, which can contain account signatures, or a service signature.
 	SASTokenOptions GenericSignatureValues
 	Scheme          string
-	Wildcard        bool
+	// The wildcard string to append to the end of a resource URI.
+	Wildcard string
 }
 
 func CreateAzCopyTarget(rm ResourceManager, authType ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {

@@ -439,7 +439,7 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFileStripTopDir(svm *ScenarioV
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
-					Wildcard:        true,
+					Wildcard:        "/*",
 				}),
 				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -604,7 +604,7 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirRecursive(sv
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
-					Wildcard:        true,
+					Wildcard:        "/*",
 				}),
 				TryApplySpecificAuthType(dstDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -663,7 +663,7 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirNonRecursive
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
-					Wildcard:        true,
+					Wildcard:        "/*",
 				}),
 				TryApplySpecificAuthType(dstDirObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,

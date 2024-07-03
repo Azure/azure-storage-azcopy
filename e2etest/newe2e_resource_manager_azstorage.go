@@ -16,13 +16,13 @@ import (
 
 func addWildCard(uri string, optList ...GetURIOptions) string {
 	wildcard := FirstOrZero(optList).Wildcard
-	if !wildcard {
+	if wildcard == "" {
 		return uri
 	}
 	if strings.Contains(uri, "?") {
-		uri = strings.Replace(uri, "?", "/*?", 1)
+		uri = strings.Replace(uri, "?", wildcard+"?", 1)
 	} else {
-		uri += "/*"
+		uri += wildcard
 	}
 
 	return uri

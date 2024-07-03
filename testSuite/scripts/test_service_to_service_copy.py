@@ -38,6 +38,27 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_without_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 17 * 1024 * 1024, True)
 
+    def test_copy_files_from_blob_account_to_blob_account(self):
+        self.util_test_copy_files_from_x_account_to_x_account(
+            util.test_s2s_src_blob_account_url,
+            "Blob",
+            util.test_s2s_dst_blob_account_url,
+            "Blob",
+            self.bucket_name)
+
+    ##################################
+    # Test from blob to file copy
+    # Note: tests go from dst blob to src file to avoid the extra config-- Ze's suggestion
+    ##################################
+
+    def test_copy_files_from_file_account_to_blob_account(self):
+        self.util_test_copy_files_from_x_account_to_x_account(
+            util.test_s2s_src_file_account_url,
+            "File",
+            util.test_s2s_dst_blob_account_url,
+            "Blob",
+            self.bucket_name_file_blob)
+
     ##################################
     # Test from S3 to blob copy.
     ##################################

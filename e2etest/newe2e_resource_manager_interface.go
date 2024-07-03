@@ -15,7 +15,8 @@ import (
 type GetURIOptions struct {
 	RemoteOpts RemoteURIOpts
 	AzureOpts  AzureURIOpts
-	Wildcard   bool
+	// The wildcard string to append to the end of a resource URI.
+	Wildcard string
 }
 
 type RemoteURIOpts struct {
