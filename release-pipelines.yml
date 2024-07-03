@@ -555,6 +555,7 @@ stages:
           - script: |
               export GOARCH=amd64
               export GOOS=linux
+<<<<<<< HEAD
               # Set the azcopy binary path
               azcopyBinary="$(Build.ArtifactStagingDirectory)/azCopy-linux-temp/azcopy_linux_amd64"
 
@@ -564,6 +565,11 @@ stages:
               # Run azcopy --version and capture the output
               azcopyOutput=$($azcopyBinary --version 2>&1)
                             
+=======
+              # Run azcopy --version and capture the output
+              azcopyOutput=$($(Build.ArtifactStagingDirectory)/azCopy-linux-temp/azcopy_linux_amd64 --version)
+
+>>>>>>> 1f6dc2c744a38cd1de6959347003682834541605
               # Extract the version part
               if echo "$azcopyOutput" | grep -q "azcopy version"; then
                 version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
