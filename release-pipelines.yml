@@ -1554,7 +1554,6 @@ stages:
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Create drop.zip file and install azcopy deb package'
-            workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
           #TODO: check once
           - script: |
@@ -1564,11 +1563,12 @@ stages:
               
               # Create the zip archive with all files inside azCopy-binaries-signed
               zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
-              
+              cd $(Build.ArtifactStagingDirectory)
+
               # List the contents of the resulting zip file for verification
               unzip -l $(Build.ArtifactStagingDirectory)/drop.zip
 
-              cp -r $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner .
+              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner .
             displayName: 'Archive all binaries to drop.zip'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
