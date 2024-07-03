@@ -906,10 +906,30 @@ stages:
 
               # Use find to retrieve the folder name
               amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
-              arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
+              echo "AMD64 Folder name: $amd64FolderName"
 
-              mv $amd64FolderName/azcopy azcopy_darwin_amd64
-              mv $arm64FolderName/azcopy azcopy_darwin_arm64
+              arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
+              echo "ARM64 Folder name: $arm64FolderName"
+
+              # Check if there is exactly one matching directory for amd64
+              if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
+                  echo "Found matching AMD64 directory: $amd64FolderName"
+                  cd "$amd64FolderName"
+                  mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64
+              else
+                  echo "Error: Expected exactly one matching AMD64 directory, found $(echo "$amd64FolderName" | wc -l)."
+                  exit 1
+              fi
+
+              # Check if there is exactly one matching directory for arm64
+              if [ $(echo "$arm64FolderName" | wc -l) -eq 1 ]; then
+                  echo "Found matching ARM64 directory: $arm64FolderName"
+                  cd "$arm64FolderName"
+                  mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
+              else
+                  echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
+                  exit 1
+              fi
 
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
               rm -rf $(Build.ArtifactStagingDirectory)/*.zip
@@ -1546,7 +1566,7 @@ stages:
               # List the contents of the resulting zip file for verification
               unzip -l $(Build.ArtifactStagingDirectory)/drop.zip
 
-              cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner .
+              cp -r $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner .
             displayName: 'Archive all binaries to drop.zip'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
@@ -1783,49 +1803,41 @@ stages:
                 
                 is_preview="false"
                 echo "##vso[task.setvariable variable=is_preview]$is_preview"
-
                 if [[ $marinerAmdRpmFile == *"preview"* ]]; then
                   is_preview="true"
                   echo "##vso[task.setvariable variable=is_preview]$is_preview"
 
-                  echo "Package $marinerAmdRpmFile contains 'preview'."
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                    echo "Uploading packages for $distro"
-                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                  done < <(tail -n +5 ../packages.csv)
-                else
-                  echo "Package $package_name1 does not contain 'preview'."
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                    echo "Uploading packages for $distro"
-                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!fuseArchType} $repoName $releaseName
-                  done < <(tail -n +3 ../packages.csv | head -n -2)
-                fi
+                while IFS=, read -r distro archType repoName releaseName; do
+
+                  # If the package is preview, publish to mariner preview package
+                  if [[ $distro == *"Mariner-2.0"* ]]; then
+                    if [ "$(is_preview)" = "true" ]; then
+                      repoName=$(echo $repoName | sed 's/prod/preview/')
+                    fi
+                  fi
+
+                  echo "Uploading packages for $distro"
+                  echo "Repo Name: $repoName"
+                  #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archType} $repoName $releaseName
+                done < <(tail -n +3 ../packages.csv)
+                
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
             - script: |
-                if [ "$(is_preview)" = "true" ]; then
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                    if [[ $fuseArchType == *"Arm"* ]] 
-                    then
+                  while IFS=, read -r distro archType repoName releaseName; do
+                    if [[ $ArchType == *"Arm"* ]]; then
                       echo "Skipping for ARM type on $distro"
                     else
-                      echo "Publishing for $distro"
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
+                      if [[ $distro == *"Mariner-2.0"* ]]; then
+                        if [ "$(is_preview)" = "true" ]; then
+                          repoName=$(echo $repoName | sed 's/prod/preview/')
+                        fi
+                      fi
+                      echo "Repo Name: $repoName"
+                      #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
                     fi
-                  done < <(tail -n +5 ../packages.csv)
-                else
-                  while IFS=, read -r distro fuseArchType repoName releaseName; do
-                    if [[ $fuseArchType == *"Arm"* ]] 
-                    then
-                      echo "Skipping for ARM type on $distro"
-                    else
-                      echo "Publishing for $distro"
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
-                    fi
-                  done < <(tail -n +3 ../packages.csv | head -n -2)
-                fi
-                
+                  done < <(tail -n +3 ../packages.csv) 
               displayName: 'Publish the repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
