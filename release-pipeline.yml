@@ -1554,7 +1554,6 @@ stages:
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
             displayName: 'Create drop.zip file and install azcopy deb package'
-            workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
           #TODO: check once
           - script: |
@@ -1564,11 +1563,12 @@ stages:
               
               # Create the zip archive with all files inside azCopy-binaries-signed
               zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
-              
+              cd $(Build.ArtifactStagingDirectory)
+
               # List the contents of the resulting zip file for verification
               unzip -l $(Build.ArtifactStagingDirectory)/drop.zip
 
-              cp -r $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner .
+              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner .
             displayName: 'Archive all binaries to drop.zip'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
@@ -1805,12 +1805,13 @@ stages:
                 if [[ $marinerAmdRpmFile == *"preview"* ]]; then
                   is_preview="true"
                   echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                fi
 
                 while IFS=, read -r distro archType repoName releaseName; do
 
                   # If the package is preview, publish to mariner preview package
                   if [[ $distro == *"Mariner-2.0"* ]]; then
-                    if [ "$(is_preview)" = "true" ]; then
+                    if [ $is_preview = "true" ]; then
                       repoName=$(echo $repoName | sed 's/prod/preview/')
                     fi
                   fi
@@ -1819,7 +1820,6 @@ stages:
                   echo "Repo Name: $repoName"
                   #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archType} $repoName $releaseName
                 done < <(tail -n +3 ../packages.csv)
-                
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
@@ -1841,8 +1841,8 @@ stages:
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
   - stage: UpdateLatestVersion
-    # dependsOn: ReleaseArtifacts
-    # condition: succeeded('ReleaseArtifacts')
+    dependsOn: ReleaseArtifacts
+    condition: succeeded('ReleaseArtifacts')
     jobs:
       - job: UpdateVersion       
         pool:
@@ -1888,4 +1888,3 @@ stages:
                   python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
-
