@@ -873,11 +873,11 @@ stages:
               sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
 
-          - template: setup/esrp_sign_notarize_macos.yml
-            parameters:
-              FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-              ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-              Pattern: '*.zip'
+          # - template: setup/esrp_sign_notarize_macos.yml
+          #   parameters:
+          #     FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
+          #     ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+          #     Pattern: '*.zip'
 
           # Validate signed images have md5sum changed
           - script: |
