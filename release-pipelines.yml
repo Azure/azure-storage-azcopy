@@ -921,6 +921,8 @@ stages:
                   exit 1
               fi
 
+              cd $(Build.ArtifactStagingDirectory)
+
               # Check if there is exactly one matching directory for arm64
               if [ $(echo "$arm64FolderName" | wc -l) -eq 1 ]; then
                   echo "Found matching ARM64 directory: $arm64FolderName"
