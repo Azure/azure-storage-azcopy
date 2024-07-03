@@ -1805,6 +1805,7 @@ stages:
                 if [[ $marinerAmdRpmFile == *"preview"* ]]; then
                   is_preview="true"
                   echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                fi
 
                 while IFS=, read -r distro archType repoName releaseName; do
 
@@ -1819,7 +1820,6 @@ stages:
                   echo "Repo Name: $repoName"
                   #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archType} $repoName $releaseName
                 done < <(tail -n +3 ../packages.csv)
-                
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
