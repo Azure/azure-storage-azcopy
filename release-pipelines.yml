@@ -538,7 +538,7 @@ stages:
               sudo apt install dotnet-sdk-3.1 -y
             displayName: "Update dependencies"
 
-            - script: |
+          - script: |
               export GOARCH=amd64
               export GOOS=linux
               
