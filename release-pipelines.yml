@@ -615,11 +615,13 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
           
           - script: |
+              md5sum azCopy-binaries/*
+              rm -rf azCopy-binaries/*.md
+              mv azCopy-binaries/* .
               export GOARCH=arm64 
               export GOOS=linux
               chmod 755 $(Build.ArtifactStagingDirectory)/*
               $(Build.ArtifactStagingDirectory)/azcopy_linux_se_arm64 --version
-              mv azCopy-binaries/* .
             displayName: 'Add binaries to staging directory'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
