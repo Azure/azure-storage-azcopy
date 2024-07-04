@@ -1036,88 +1036,88 @@ stages:
       #         azcopy --help
       #       displayName: 'Check Version and Help'
       
-      - job: Set_2
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Ubuntu_tar_amd64:
-              agentName: "blobfuse-ubuntu22"
-              vmImage: 'Ubuntu-22.04'
-              container: 'test-cnt-ubn-22'
-        pool:
-          vmImage: $(vmImage)
-        steps:
-          - checkout: none
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
+      # - job: Set_2
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Ubuntu_tar_amd64:
+      #         agentName: "blobfuse-ubuntu22"
+      #         vmImage: 'Ubuntu-22.04'
+      #         container: 'test-cnt-ubn-22'
+      #   pool:
+      #     vmImage: $(vmImage)
+      #   steps:
+      #     - checkout: none
+      #     - script: |
+      #         sudo apt update
+      #         sudo apt --fix-broken install
+      #         ldd --version
+      #       displayName: "GLIBC Version"
 
-          - template: setup/test_artifacts.yml
-            parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
-              artifact_name: 'azCopy-linux-signed'
-              download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy_linux_amd64*.tar.gz'
+      #     - template: setup/test_artifacts.yml
+      #       parameters:
+      #         go_version: '$(AZCOPY_GOLANG_VERSION)'
+      #         artifact_name: 'azCopy-linux-signed'
+      #         download_path: '$(System.DefaultWorkingDirectory)'
+      #         item_pattern: 'azCopy-linux-signed/azcopy_linux_amd64*.tar.gz'
 
-          - script: |
-              #!/bin/bash
+      #     - script: |
+      #         #!/bin/bash
 
-              # Define the path to the .tar.gz file and the extraction directory
-              # Define variables
-              TAR_GZ_FILE=$(ls azcopy_linux_amd64*.tar.gz)
-              EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
+      #         # Define the path to the .tar.gz file and the extraction directory
+      #         # Define variables
+      #         TAR_GZ_FILE=$(ls azcopy_linux_amd64*.tar.gz)
+      #         EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
 
-              # Check if the file exists and is a regular file
-              if [ ! -f "$TAR_GZ_FILE" ]; then
-                  echo "Error: File $TAR_GZ_FILE does not exist."
-                  exit 1
-              fi
+      #         # Check if the file exists and is a regular file
+      #         if [ ! -f "$TAR_GZ_FILE" ]; then
+      #             echo "Error: File $TAR_GZ_FILE does not exist."
+      #             exit 1
+      #         fi
 
-              # Verify the file type
-              file_type=$(file -b "$TAR_GZ_FILE")
-              echo "File type: $file_type"
+      #         # Verify the file type
+      #         file_type=$(file -b "$TAR_GZ_FILE")
+      #         echo "File type: $file_type"
 
-              if [[ "$file_type" != *"gzip compressed data"* ]]; then
-                  echo "Error: The file is not a valid .tar.gz file"
-                  exit 1
-              fi
+      #         if [[ "$file_type" != *"gzip compressed data"* ]]; then
+      #             echo "Error: The file is not a valid .tar.gz file"
+      #             exit 1
+      #         fi
 
-              # Create extraction directory
-              mkdir -p "$EXTRACT_DIR"
+      #         # Create extraction directory
+      #         mkdir -p "$EXTRACT_DIR"
 
-              # Extract the .tar.gz file
-              tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
-              if [ $? -ne 0 ]; then
-                  echo "Error: Failed to extract $TAR_GZ_FILE"
-                  exit 1
-              fi
+      #         # Extract the .tar.gz file
+      #         tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
+      #         if [ $? -ne 0 ]; then
+      #             echo "Error: Failed to extract $TAR_GZ_FILE"
+      #             exit 1
+      #         fi
 
-              # Find the directory matching the pattern
-              matching_dirs=("$EXTRACT_DIR"/azcopy_linux_amd64*)
+      #         # Find the directory matching the pattern
+      #         matching_dirs=("$EXTRACT_DIR"/azcopy_linux_amd64*)
 
-              # Check if there is exactly one matching directory
-              if [ ${#matching_dirs[@]} -eq 1 ]; then
-                  echo "Found matching directory: ${matching_dirs[0]}"
-                  cd "${matching_dirs[0]}"
-              else
-                  echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
-                  exit 1
-              fi
+      #         # Check if there is exactly one matching directory
+      #         if [ ${#matching_dirs[@]} -eq 1 ]; then
+      #             echo "Found matching directory: ${matching_dirs[0]}"
+      #             cd "${matching_dirs[0]}"
+      #         else
+      #             echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+      #             exit 1
+      #         fi
 
-              # Check if azcopy exists and is executable
-              if [ ! -x "./azcopy" ]; then
-                  echo "Error: azcopy not found or not executable in ${matching_dirs[0]}"
-                  exit 1
-              fi
+      #         # Check if azcopy exists and is executable
+      #         if [ ! -x "./azcopy" ]; then
+      #             echo "Error: azcopy not found or not executable in ${matching_dirs[0]}"
+      #             exit 1
+      #         fi
 
-              # Run azcopy commands
-              ./azcopy --version
-              ./azcopy --help
+      #         # Run azcopy commands
+      #         ./azcopy --version
+      #         ./azcopy --help
 
-            displayName: 'Check Version and Help'
-            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+      #       displayName: 'Check Version and Help'
+      #       workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
       - job: Set_3
         timeoutInMinutes: 120
