@@ -1048,6 +1048,19 @@ stages:
           - template: setup/test_artifacts.yml
             parameters:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
+              artifact_name: 'azCopy-binaries-signed'
+              download_path: '$(System.DefaultWorkingDirectory)'
+              item_pattern: 'azcopy-linux*'
+          
+          - script: |
+              azcopy_linux_amd64 --version
+              azcopy_linux_se_amd64 --version
+            displayNameName: 'Test signed linux binaries'
+            workingDirectory: '$(System.DefaultWorkingDirectory)'
+
+          - template: setup/test_artifacts.yml
+            parameters:
+              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
@@ -1167,6 +1180,19 @@ stages:
               sudo apt --fix-broken install -y
               ldd --version
             displayName: "GLIBC Version"
+
+          - template: setup/test_artifacts.yml
+            parameters:
+              go_version: '$(AZCOPY_GOLANG_VERSION)'
+              artifact_name: 'azCopy-binaries-signed'
+              download_path: '$(System.DefaultWorkingDirectory)'
+              item_pattern: 'azcopy-linux*'
+          
+          - script: |
+              azcopy_linux_arm64 --version
+              azcopy_linux_se_arm64 --version
+            displayNameName: 'Test signed linux binaries'
+            workingDirectory: '$(System.DefaultWorkingDirectory)'
 
           - template: setup/test_artifacts.yml
             parameters:
