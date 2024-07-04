@@ -732,7 +732,7 @@ stages:
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
-              rm -rf md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
+              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
             displayName: 'List Artifacts'
           
           - script: |
@@ -1000,7 +1000,7 @@ stages:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-binaries-signed/azcopy-linux*'
+              item_pattern: 'azCopy-binaries-signed/azcopy_linux*'
           
           - script: |
               azcopy_linux_amd64 --version
@@ -1136,7 +1136,7 @@ stages:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-binaries-signed/azcopy-linux*'
+              item_pattern: 'azCopy-binaries-signed/azcopy_linux*'
           
           - script: |
               azcopy_linux_arm64 --version
