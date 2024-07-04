@@ -722,9 +722,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download linux binary for extracting version'
             inputs:
-              artifactName: 'azCopy-binaries'
+              artifactName: 'azCopy-linux-temp'
               downloadPath: $(work_dir)/
-              itemPattern: 'azCopy-binaries/azcopy_linux_amd64'
+              itemPattern: 'azCopy-linux-temp/azcopy_linux_amd64'
           
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
@@ -772,9 +772,9 @@ stages:
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
           - script: |
-              chmod 755 $(work_dir)/azCopy-binaries/azcopy_linux_amd64
+              chmod 755 $(work_dir)/azCopy-linux-temp/azcopy_linux_amd64
               # Run azcopy --version and capture the output
-              azcopyOutput=$($(work_dir)/azCopy-binaries/azcopy_linux_amd64 --version)
+              azcopyOutput=$($(work_dir)/azCopy-linux-temp/azcopy_linux_amd64 --version)
 
               if echo "$azcopyOutput" | grep -q "azcopy version"; then
                 version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
