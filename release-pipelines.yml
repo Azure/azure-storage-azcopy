@@ -621,10 +621,11 @@ stages:
           # Push linux binaries to artifact directory
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azCopy-linux-signed'
+              artifactName: 'azCopy-binaries-signed'
             displayName: 'Publish Signed Artifacts'
           
           - script: |
+              rm -rf azcopy_linux*
               mv $(System.DefaultWorkingDirectory)/azCopy-linux-temp .
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum azCopy-linux-temp/*
