@@ -1050,13 +1050,13 @@ stages:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azcopy-linux*'
+              item_pattern: 'azCopy-binaries-signed/azcopy-linux*'
           
           - script: |
               azcopy_linux_amd64 --version
               azcopy_linux_se_amd64 --version
             displayName: 'Test signed linux binaries'
-            workingDirectory: '$(System.DefaultWorkingDirectory)'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/azCopy-binaries-signed'
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1186,13 +1186,13 @@ stages:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azcopy-linux*'
+              item_pattern: 'azCopy-binaries-signed/azcopy-linux*'
           
           - script: |
               azcopy_linux_arm64 --version
               azcopy_linux_se_arm64 --version
             displayName: 'Test signed linux binaries'
-            workingDirectory: '$(System.DefaultWorkingDirectory)'
+            workingDirectory: '$(System.DefaultWorkingDirectory)/azCopy-binaries-signed'
 
           - template: setup/test_artifacts.yml
             parameters:
