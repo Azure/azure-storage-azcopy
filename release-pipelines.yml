@@ -1000,9 +1000,10 @@ stages:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-binaries-signed/azcopy_linux*'
+              item_pattern: 'azCopy-binaries-signed/azcopy_linux*amd64'
           
           - script: |
+              ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries-signed/
               chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries-signed/*
               $(System.DefaultWorkingDirectory)/azCopy-binaries-signed/azcopy_linux_amd64 --version
               $(System.DefaultWorkingDirectory)/azCopy-binaries-signed/azcopy_linux_se_amd64 --version
@@ -1011,9 +1012,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifact_name: 'azCopy-linux-signed'
-              download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
+              artifactName: 'azCopy-linux-signed'
+              downloadPath: '$(System.DefaultWorkingDirectory)'
+              itemPattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
 
           - script: |
               sudo dpkg --info azcopy-*x86_64.deb
@@ -1136,9 +1137,10 @@ stages:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-binaries-signed/azcopy_linux*'
+              item_pattern: 'azCopy-binaries-signed/azcopy_linux*arm64'
           
           - script: |
+              ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries-signed
               chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries-signed/*
               $(System.DefaultWorkingDirectory)/azCopy-binaries-signed/azcopy_linux_arm64 --version
               $(System.DefaultWorkingDirectory)/azCopy-binaries-signed/azcopy_linux_se_arm64 --version
@@ -1147,9 +1149,9 @@ stages:
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
-              artifact_name: 'azCopy-linux-signed'
-              download_path: '$(System.DefaultWorkingDirectory)'
-              item_pattern: 'azCopy-linux-signed/azcopy-*arm64.deb'
+              artifactName: 'azCopy-linux-signed'
+              downloadPath: '$(System.DefaultWorkingDirectory)'
+              itemPattern: 'azCopy-linux-signed/azcopy-*arm64.deb'
 
           - script: |
               sudo dpkg --info azcopy-*arm64.deb
