@@ -473,16 +473,6 @@ stages:
 
           - task: PublishBuildArtifacts@1
             inputs:
-              artifactName: 'azCopy-binaries'
-            displayName: 'Publish binaries'
-            condition: succeededOrFailed()
-
-          - script: |
-              rm -rf $(Build.ArtifactStagingDirectory)\azcopy_windows_v7_arm.exe
-            displayName: 'Remove arm7 binary from staging directory'
-
-          - task: PublishBuildArtifacts@1
-            inputs:
               artifactName: 'azCopy-windows-temp'
             displayName: 'Publish Artifacts'
             condition: succeededOrFailed()
@@ -743,11 +733,27 @@ stages:
               ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
               Pattern: 'azcopy_windows*'
 
+          - script: |
+              cp azCopy-windows-temp/* .
+              mv azCopy-windows-temp $(work_dir)
+            displayName: 'Add signed windows binary to staging directory'
+            workingDirectory: '$(Build.ArtifactStagingDirectory)'
+
+          # Push signed images to artifact directory
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-binaries-signed'
+            displayName: 'Publish Signed Artifacts'
+
           # Validate signed images have md5sum changed
           - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
+              rm -rf  $(Build.ArtifactStagingDirectory)/*
+              mv $(work_dir)/azCopy-windows-temp .
+              rm -rf azCopy-windows-temp/azcopy_windows_v7_arm.exe
+              chmod 755 azCopy-windows-temp/*
+              rm -rf azCopy-windows-temp/*.md
             displayName: 'Make Artifacts executable'
+            workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
           - script: |
               chmod 755 $(work_dir)/azCopy-binaries/azcopy_linux_amd64
@@ -873,11 +879,11 @@ stages:
               sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
 
-          # - template: setup/esrp_sign_notarize_macos.yml
-          #   parameters:
-          #     FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-          #     ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-          #     Pattern: '*.zip'
+          - template: setup/esrp_sign_notarize_macos.yml
+            parameters:
+              FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
+              ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+              Pattern: '*.zip'
 
           # Validate signed images have md5sum changed
           - script: |
@@ -988,13 +994,6 @@ stages:
               sudo apt install apt-transport-https -y
               sudo apt install dotnet-sdk-6.0 -y
             displayName: "Update dependencies"
-
-          - template: setup/esrp_sign_linux.yml
-            parameters:
-              FolderPath: '$(Build.ArtifactStagingDirectory)/azCopy-binaries'
-              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-              Pattern: 'azcopy_linux*'
-              DisplayName: 'ESRP CodeSigning azCopy linux binaries'
 
           - template: setup/esrp_sign_windows.yml
             parameters:
@@ -1519,6 +1518,9 @@ stages:
             value: 'azcopyvnextrelease'
           - name: Test_Mode
             value: ${{ parameters.test_mode }}
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+
 
         steps:
 
@@ -1556,7 +1558,7 @@ stages:
             displayName: 'Create drop.zip file and install azcopy deb package'
 
           - script: |
-              cp NOTICE.txt $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed
+              cp $(work_dir)/NOTICE.txt $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed
               cd $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed
               echo "Contents of $(Build.ArtifactStagingDirectory)/azCopy-binaries-signed:"
               ls -l
