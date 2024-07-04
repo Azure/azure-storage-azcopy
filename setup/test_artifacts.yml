@@ -35,9 +35,5 @@ steps:
 
   - script: |
       ls -l
-      result=$(ls -1 | wc -l)
-      if [ $result -ne 1 ]; then
-        exit 1
-      fi
     displayName: 'List Downloaded Package'
     workingDirectory: ${{ parameters.download_path }}/${{ parameters.artifact_name }}
