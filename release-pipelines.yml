@@ -292,6 +292,8 @@ stages:
           
           - script: |
               GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_arm64"
+              chmod 755 $(root_dir)/azcopy_linux_se_arm64
+              $(root_dir)/azcopy_linux_se_arm64 --version
             displayName: 'Generate Linux ARM64 SE Integration'
 
           - script: |
@@ -613,6 +615,10 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
           
           - script: |
+              export GOARCH=arm64 
+              export GOOS=linux
+              chmod 755 $(Build.ArtifactStagingDirectory)/*
+              $(Build.ArtifactStagingDirectory)/azcopy_linux_se_arm64 --version
               mv azCopy-binaries/* .
             displayName: 'Add binaries to staging directory'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
