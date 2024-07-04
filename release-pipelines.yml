@@ -1055,7 +1055,7 @@ stages:
           - script: |
               azcopy_linux_amd64 --version
               azcopy_linux_se_amd64 --version
-            displayNameName: 'Test signed linux binaries'
+            displayName: 'Test signed linux binaries'
             workingDirectory: '$(System.DefaultWorkingDirectory)'
 
           - template: setup/test_artifacts.yml
@@ -1191,7 +1191,7 @@ stages:
           - script: |
               azcopy_linux_arm64 --version
               azcopy_linux_se_arm64 --version
-            displayNameName: 'Test signed linux binaries'
+            displayName: 'Test signed linux binaries'
             workingDirectory: '$(System.DefaultWorkingDirectory)'
 
           - template: setup/test_artifacts.yml
