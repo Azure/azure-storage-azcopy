@@ -114,15 +114,15 @@ stages:
               cp $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)
             displayName: 'List the binaries and add to staging directory'
 
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-binaries'
-            displayName: 'Publish binaries'
-            condition: succeededOrFailed()
+          # - task: PublishBuildArtifacts@1
+          #   inputs:
+          #     artifactName: 'azCopy-linux_temp'
+          #   displayName: 'Publish binaries'
+          #   condition: succeededOrFailed()
           
-          - script: |
-              rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
-            displayName: "Remove binaries from staging directory"
+          # - script: |
+          #     rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
+          #   displayName: "Remove binaries from staging directory"
 
           - script: |
               export GOARCH=amd64
@@ -299,15 +299,15 @@ stages:
               cp -r $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)
             displayName: 'List the binaries and add to staging directory'
 
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-binaries'
-            displayName: 'Publish binaries'
-            condition: succeededOrFailed()
+          # - task: PublishBuildArtifacts@1
+          #   inputs:
+          #     artifactName: 'azCopy-binaries'
+          #   displayName: 'Publish binaries'
+          #   condition: succeededOrFailed()
           
-          - script: |
-              rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
-            displayName: "Remove binaries from staging directory"
+          # - script: |
+          #     rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
+          #   displayName: "Remove binaries from staging directory"
 
           - script: |
               export GOARCH=arm64
@@ -613,9 +613,25 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
           
           - script: |
+              mv azCopy-linux-temp/azcopy_linux*  .
+              mv azCopy-linux-temp $(System.DefaultWorkingDirectory)
+            displayName: 'Add binaries to staging directory'
+            workingDirectory: '$(Build.ArtifactStagingDirectory)'
+
+          # Push linux binaries to artifact directory
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-linux-signed'
+            displayName: 'Publish Signed Artifacts'
+          
+          - script: |
+              mv $(System.DefaultWorkingDirectory)/azCopy-linux-temp .
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
+              md5sum azCopy-linux-temp/*
             displayName: 'List Artifacts'
+            workingDirectory: '$(Build.ArtifactStagingDirectory)'
+
+          
 
           - script: |
               mkdir mariner && chmod 755 mariner
