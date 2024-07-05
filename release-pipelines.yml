@@ -1129,7 +1129,7 @@ stages:
       
       - job: Set_3
         timeoutInMinutes: 120
-       strategy:
+        strategy:
           matrix:
             Ubuntu_tar_arm64:
               vmImage: 'Ubuntu-22.04'
