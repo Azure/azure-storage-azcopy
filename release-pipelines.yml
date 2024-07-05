@@ -1039,27 +1039,8 @@ stages:
               item_pattern: 'azCopy-linux-signed/azcopy_linux_*amd64*.tar.gz'
 
           - script: |
-              #!/bin/bash
-
-              # Define the path to the .tar.gz file and the extraction directory
-              # Define variables
               TAR_GZ_FILE=$(ls azcopy_linux_amd64*.tar.gz)
               EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
-
-              # Check if the file exists and is a regular file
-              if [ ! -f "$TAR_GZ_FILE" ]; then
-                  echo "Error: File $TAR_GZ_FILE does not exist."
-                  exit 1
-              fi
-
-              # Verify the file type
-              file_type=$(file -b "$TAR_GZ_FILE")
-              echo "File type: $file_type"
-
-              if [[ "$file_type" != *"gzip compressed data"* ]]; then
-                  echo "Error: The file is not a valid .tar.gz file"
-                  exit 1
-              fi
 
               # Create extraction directory
               mkdir -p "$EXTRACT_DIR"
@@ -1080,12 +1061,6 @@ stages:
                   cd "${matching_dirs[0]}"
               else
                   echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
-                  exit 1
-              fi
-
-              # Check if azcopy exists and is executable
-              if [ ! -x "./azcopy" ]; then
-                  echo "Error: azcopy not found or not executable in ${matching_dirs[0]}"
                   exit 1
               fi
 
