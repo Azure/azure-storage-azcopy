@@ -1118,7 +1118,6 @@ stages:
           - checkout: none
           - script: |
               sudo apt update
-              sudo apt-get install libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
             displayName: "GLIBC Version"
@@ -1873,7 +1872,7 @@ stages:
                   echo "##vso[task.setvariable variable=is_preview]$is_preview"
                 fi
 
-                while IFS=, read -r distro archType repoName releaseName; do
+                while IFS=, read -r distro archetype repoName releaseName; do
 
                   # If the package is preview, publish to mariner preview package
                   if [[ $distro == *"Mariner-2.0"* ]]; then
@@ -1884,14 +1883,14 @@ stages:
 
                   echo "Uploading packages for $distro"
                   echo "Repo Name: $repoName"
-                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archType} $repoName $releaseName
+                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
                 done < <(tail -n +3 ../packages.csv)
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
             - script: |
-                  while IFS=, read -r distro archType repoName releaseName; do
-                    if [[ $ArchType == *"Arm"* ]]; then
+                  while IFS=, read -r distro archetype repoName releaseName; do
+                    if [[ $archetype == *"Arm"* ]]; then
                       echo "Skipping for ARM type on $distro"
                     else
                       if [[ $distro == *"Mariner-2.0"* ]]; then
@@ -1954,4 +1953,3 @@ stages:
                   python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
-
