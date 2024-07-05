@@ -1092,14 +1092,10 @@ stages:
               # Run azcopy commands
               ./azcopy --version
               ./azcopy --help
-
             displayName: 'Check Version and Help'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
-           - script: |
-              #!/bin/bash
 
-              # Define the path to the .tar.gz file and the extraction directory
-              # Define variables
+           - script: |
               TAR_GZ_FILE=$(ls azcopy_linux_se_amd64*.tar.gz)
               EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_se"
 
@@ -1128,7 +1124,6 @@ stages:
               # Run azcopy commands
               ./azcopy --version
               ./azcopy --help
-
             displayName: 'Check Version and Help'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
       
