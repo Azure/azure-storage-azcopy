@@ -1095,7 +1095,7 @@ stages:
             displayName: 'Check Version and Help'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
-           - script: |
+          - script: |
               TAR_GZ_FILE=$(ls azcopy_linux_se_amd64*.tar.gz)
               EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_se"
 
@@ -1187,7 +1187,7 @@ stages:
             displayName: 'Check Version and Help for arm64 tar.gz'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
-           - script: |
+          - script: |
               TAR_GZ_FILE=$(ls azcopy_linux_se_arm64*.tar.gz)
               EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_se"
 
