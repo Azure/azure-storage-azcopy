@@ -1883,23 +1883,14 @@ stages:
 
                   echo "Uploading packages for $distro"
                   echo "Repo Name: $repoName"
-<<<<<<< HEAD
-                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archType} $repoName $releaseName
-=======
                   pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
->>>>>>> e4ba9bb0e3388bdc1f91423060d83707172d1084
                 done < <(tail -n +3 ../packages.csv)
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
             - script: |
-<<<<<<< HEAD
-                  while IFS=, read -r distro archType repoName releaseName; do
-                    if [[ $archType == *"Arm"* ]]; then
-=======
                   while IFS=, read -r distro archetype repoName releaseName; do
                     if [[ $archetype == *"Arm"* ]]; then
->>>>>>> e4ba9bb0e3388bdc1f91423060d83707172d1084
                       echo "Skipping for ARM type on $distro"
                     else
                       if [[ $distro == *"Mariner-2.0"* ]]; then
