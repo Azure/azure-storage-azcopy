@@ -292,8 +292,6 @@ stages:
           
           - script: |
               GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_arm64"
-              chmod 755 $(root_dir)/azcopy_linux_se_arm64
-              $(root_dir)/azcopy_linux_se_arm64 --version
             displayName: 'Generate Linux ARM64 SE Integration'
 
           - script: |
@@ -615,7 +613,6 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
           
           - script: |
-              rm -rf azcopy_linux*
               sudo ls -lRt azCopy-linux-temp
               md5sum azCopy-linux-temp/*
             displayName: 'List Artifacts'
@@ -668,7 +665,7 @@ stages:
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/*
-              md5sum $(Build.ArtifactStagingDirectory)/mariner/*
+              md5sum $(Build.ArtifactStagingDirectory)/mariner/* 
             displayName: 'List Signed Artifacts'
           
           # Push signed images to artifact directory
@@ -741,6 +738,7 @@ stages:
           - script: |
               cp azCopy-windows-temp/* .
               mv azCopy-windows-temp $(work_dir)
+              ls -ltR $(Build.ArtifactStagingDirectory)
             displayName: 'Add signed windows binary to staging directory'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
@@ -756,7 +754,6 @@ stages:
               mv $(work_dir)/azCopy-windows-temp .
               rm -rf azCopy-windows-temp/azcopy_windows_v7_arm.exe
               chmod 755 azCopy-windows-temp/*
-              rm -rf azCopy-windows-temp/*.md
             displayName: 'Make Artifacts executable'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
@@ -947,6 +944,7 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
               rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
+              rm -rf $(Build.ArtifactStagingDirectory)/*.md
             displayName:  'Copy and list signed mac binary to staging directory'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
