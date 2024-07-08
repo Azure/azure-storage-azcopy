@@ -1872,7 +1872,7 @@ stages:
                   echo "##vso[task.setvariable variable=is_preview]$is_preview"
                 fi
 
-                while IFS=, read -r distro archType repoName releaseName; do
+                while IFS=, read -r distro archeType repoName releaseName; do
 
                   # If the package is preview, publish to mariner preview package
                   if [[ $distro == *"Mariner-2.0"* ]]; then
@@ -1883,14 +1883,14 @@ stages:
 
                   echo "Uploading packages for $distro"
                   echo "Repo Name: $repoName"
-                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archType} $repoName $releaseName
+                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archeType} $repoName $releaseName
                 done < <(tail -n +3 ../packages.csv)
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
             - script: |
-                  while IFS=, read -r distro archType repoName releaseName; do
-                    if [[ $ArchType == *"Arm"* ]]; then
+                  while IFS=, read -r distro archeType repoName releaseName; do
+                    if [[ $archeType == *"Arm"* ]]; then
                       echo "Skipping for ARM type on $distro"
                     else
                       if [[ $distro == *"Mariner-2.0"* ]]; then
