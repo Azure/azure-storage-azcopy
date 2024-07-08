@@ -457,63 +457,6 @@ func (s *S2STestSuite) Scenario_S2SContainerSingleFileStripTopDir(svm *ScenarioV
 	}, false)
 }
 
-func (s *S2STestSuite) Scenario_S2SAccount(svm *ScenarioVariationManager) {
-	svm.Skip("TODO : use new account")
-	// Scale up from service to object
-	srcAccount := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()}))
-	dstAccount := GetRootResource(svm, common.ELocation.Blob())
-	srcContainer := CreateResource[ContainerResourceManager](svm, srcAccount, ResourceDefinitionContainer{})
-	dstContainer := CreateResource[ContainerResourceManager](svm, dstAccount, ResourceDefinitionContainer{})
-
-	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
-
-	// Create destination directories
-	srcObjs := make(ObjectResourceMappingFlat)
-	for _, dir := range dirsToCreate {
-		obj := ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
-		if dstContainer.Location() != common.ELocation.Blob() {
-			srcObjs[dir] = obj
-		}
-		for i := range 10 {
-			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
-			srcObjs[name] = obj
-		}
-
-	}
-
-	for _, obj := range srcObjs {
-		if obj.EntityType != common.EEntityType.Folder() {
-			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-		}
-	}
-
-	sasOpts := GenericAccountSignatureValues{}
-
-	RunAzCopy(
-		svm,
-		AzCopyCommand{
-			Verb: AzCopyVerbCopy,
-			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcAccount, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
-				TryApplySpecificAuthType(dstAccount, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
-			},
-			Flags: CopyFlags{
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(true),
-				},
-			},
-		})
-
-	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
-		Objects: srcObjs,
-	}, true)
-}
-
 func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFiles(svm *ScenarioVariationManager) {
 	// Scale up from service to object
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
