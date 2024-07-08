@@ -736,6 +736,7 @@ stages:
               Pattern: 'azcopy_windows*'
 
           - script: |
+              rm -rf azCopy-windows-temp/*.md
               cp azCopy-windows-temp/* .
               mv azCopy-windows-temp $(work_dir)
               ls -ltR $(Build.ArtifactStagingDirectory)
