@@ -489,17 +489,19 @@ func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariat
 	RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbCopy,
 		Targets: []ResourceManager{
-			TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/test_file*"}),
+			TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm),
 			dstContainer,
 		},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
-				BlockSizeMB: pointerTo(4.0),
+				BlockSizeMB:    pointerTo(4.0),
+				IncludePattern: pointerTo("test_file*"),
+				Recursive:      pointerTo(true),
 			},
 		},
 	})
 
-	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, srcContainer.ContainerName()+"/"+fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
 	}, true)
 }
