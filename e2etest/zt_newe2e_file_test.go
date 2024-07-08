@@ -363,19 +363,19 @@ func (s *FileTestSuite) Scenario_DownloadDirectory(svm *ScenarioVariationManager
 
 func (s *FileTestSuite) Scenario_SingleFileUploadWildcard(svm *ScenarioVariationManager) {
 	size := common.MegaByte
-	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
+	fileName := fmt.Sprintf("test_file_upload_%dB_fullname.txt", size)
 	body := NewRandomObjectContentContainer(svm, int64(size))
 
-	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
-		GetObject(svm, fileName, common.EEntityType.File())
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
-		GetObject(svm, fileName, common.EEntityType.File())
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
 
 	RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
-		Targets: []ResourceManager{TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/*"}), dstObj},
+		Targets: []ResourceManager{TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/*"}), dstContainer},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				BlockSizeMB: pointerTo(4.0),
