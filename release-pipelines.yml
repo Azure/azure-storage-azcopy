@@ -66,6 +66,17 @@ stages:
             value: $(root_dir)/archives
 
         steps:
+          #TODO: Change the org name after merging to main
+          - script: |
+              git clone https://github.com/dphulkar-msft/azure-storage-azcopy
+            displayName: 'Checkout Code'
+            workingDirectory: $(System.DefaultWorkingDirectory)
+
+          - script: |
+              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+            displayName: 'Checkout Branch'
+            workingDirectory: $(System.DefaultWorkingDirectory)/azure-storage-azcopy
+
           # Custom script to install Go-lang
           - task: ShellScript@2
             inputs:
@@ -224,6 +235,17 @@ stages:
             value: $(root_dir)/archives
 
         steps:
+          #TODO: Change the org name after merging to main
+          - script: |
+              git clone https://github.com/dphulkar-msft/azure-storage-azcopy
+            displayName: 'Checkout Code'
+            workingDirectory: $(System.DefaultWorkingDirectory)
+
+          - script: |
+              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+            displayName: 'Checkout Branch'
+            workingDirectory: $(System.DefaultWorkingDirectory)/azure-storage-azcopy
+
           # Custom script to install Go-lang
           - task: ShellScript@2
             inputs:
