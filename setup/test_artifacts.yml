@@ -23,7 +23,7 @@ steps:
 
   - task: ShellScript@2
     inputs:
-      scriptPath: "$(System.DefaultWorkingDirectory)/go_installer.sh"
+      scriptPath: "$(System.DefaultWorkingDirectory)/azure-storage-azcopy/go_installer.sh"
       args: "$(System.DefaultWorkingDirectory)/ ${{ parameters.go_version }}"
     displayName: "GoTool Custom Setup"
 
