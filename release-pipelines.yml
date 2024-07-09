@@ -117,7 +117,7 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
           
-          - template: azcopy-version-check-linux.yml
+          - template: setup/azcopy-version-check-linux.yml
             parameters:
               azcopy_executable: $(root_dir)/azcopy_linux_amd64
 
@@ -275,7 +275,7 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
           
-          - template: azcopy-version-check-linux.yml
+          - template: setup/azcopy-version-check-linux.yml
             parameters:
               azcopy_executable: $(root_dir)/azcopy_linux_arm64
 
