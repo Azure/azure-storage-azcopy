@@ -66,11 +66,8 @@ stages:
             value: $(root_dir)/archives
 
         steps:
-          # #TODO: Change the org name after merging to main
-          # - script: |
-          #     git clone https://github.com/dphulkar-msft/azure-storage-azcopy
-          #   displayName: 'Checkout Code'
-          #   workingDirectory: $(System.DefaultWorkingDirectory)
+          - checkout: self
+            displayName: 'Checkout repository'
 
           # - script: |
           #     git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
@@ -235,11 +232,8 @@ stages:
             value: $(root_dir)/archives
 
         steps:
-        #   #TODO: Change the org name after merging to main
-        # - script: |
-        #     git clone https://github.com/dphulkar-msft/azure-storage-azcopy
-        #   displayName: 'Checkout Code'
-        #   workingDirectory: $(System.DefaultWorkingDirectory)
+          - checkout: self
+            displayName: 'Checkout repository'
 
         # - script: |
         #     git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
