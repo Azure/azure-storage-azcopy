@@ -3,7 +3,6 @@ import requests
 import sys
 import os
 from xml.dom import minidom
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 
 
 sasUrl = sys.argv[1]

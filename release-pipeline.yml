@@ -61,17 +61,13 @@ stages:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+            value: '$(Build.SourcesDirectory)'
           - name: archives
             value: $(root_dir)/archives
 
         steps:
-          #TODO: remove this after merging to main
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
+          - checkout: self
+            displayName: 'Checkout repository'
 
           # Custom script to install Go-lang
           - task: ShellScript@2
@@ -123,30 +119,10 @@ stages:
           - script: |
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
-
-          - script: |
-              export GOARCH=amd64
-              export GOOS=linux
-              # Run azcopy --version and capture the output
-              azcopyOutput=$($(root_dir)/azcopy_linux_amd64 --version)
-
-              # Extract the version part
-              if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                if [[ -n "$version" ]]; then
-                  echo "Extracted version: $version"
-                  
-                  # Set the pipeline variable (for Azure DevOps)
-                  echo "##vso[task.setvariable variable=azcopy_version]$version"
-                else
-                  echo "Unable to extract version from azcopy output"
-                  exit 1
-                fi
-              else
-                echo "azcopy version string not found in output"
-                exit 1
-              fi
-            displayName: 'Verify and extract the generated build version'
+          
+          - template: setup/azcopy_version_check_linux.yml
+            parameters:
+              azcopy_executable: $(root_dir)/azcopy_linux_amd64
 
           - script: |
               linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
@@ -246,17 +222,13 @@ stages:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+            value: '$(Build.SourcesDirectory)'
           - name: archives
             value: $(root_dir)/archives
 
         steps:
-          #TODO: remove this after merging to main
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
+          - checkout: self
+            displayName: 'Checkout repository'
 
           # Custom script to install Go-lang
           - task: ShellScript@2
@@ -308,29 +280,10 @@ stages:
           - script: |
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
-
-          - script: |
-              export GOARCH=arm64
-              export GOOS=linux
-              azcopyOutput=$($(root_dir)/azcopy_linux_arm64 --version)
-
-                # Extract the version part
-                if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                  version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                  if [[ -n "$version" ]]; then
-                    echo "Extracted version: $version"
-                    
-                    # Set the pipeline variable (for Azure DevOps)
-                    echo "##vso[task.setvariable variable=azcopy_version]$version"
-                  else
-                    echo "Unable to extract version from azcopy output"
-                    exit 1
-                  fi
-                else
-                  echo "azcopy version string not found in output"
-                  exit 1
-                fi
-            displayName: 'Verify and extract the generated build version'
+          
+          - template: setup/azcopy_version_check_linux.yml
+            parameters:
+              azcopy_executable: $(root_dir)/azcopy_linux_arm64
 
           - script: |
               linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
@@ -613,6 +566,7 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
           
           - script: |
+              rm -rf azcopy_linux*
               sudo ls -lRt azCopy-linux-temp
               md5sum azCopy-linux-temp/*
             displayName: 'List Artifacts'
@@ -665,7 +619,7 @@ stages:
           - script: |
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/*
-              md5sum $(Build.ArtifactStagingDirectory)/mariner/* 
+              md5sum $(Build.ArtifactStagingDirectory)/mariner/*
             displayName: 'List Signed Artifacts'
           
           # Push signed images to artifact directory
@@ -736,10 +690,8 @@ stages:
               Pattern: 'azcopy_windows*'
 
           - script: |
-              rm -rf azCopy-windows-temp/*.md
               cp azCopy-windows-temp/* .
               mv azCopy-windows-temp $(work_dir)
-              ls -ltR $(Build.ArtifactStagingDirectory)
             displayName: 'Add signed windows binary to staging directory'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
@@ -755,6 +707,7 @@ stages:
               mv $(work_dir)/azCopy-windows-temp .
               rm -rf azCopy-windows-temp/azcopy_windows_v7_arm.exe
               chmod 755 azCopy-windows-temp/*
+              rm -rf azCopy-windows-temp/*.md
             displayName: 'Make Artifacts executable'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
@@ -945,7 +898,6 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
               rm -rf $(Build.ArtifactStagingDirectory)/*.zip
               sudo ls -ltR $(Build.ArtifactStagingDirectory)
-              rm -rf $(Build.ArtifactStagingDirectory)/*.md
             displayName:  'Copy and list signed mac binary to staging directory'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
@@ -973,6 +925,7 @@ stages:
           vmImage: $(vmImage)
         steps:
           - checkout: none
+          
           - script: |
               sudo apt update
               sudo apt --fix-broken install
@@ -1115,13 +1068,14 @@ stages:
             - ImageOverride -equals $(AgentName)
         steps:
           - checkout: none
+          
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
             displayName: "GLIBC Version"
-
+  
           - template: setup/test_artifacts.yml
             parameters:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
@@ -1210,6 +1164,7 @@ stages:
 
         steps:
           - checkout: none
+
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
@@ -1265,10 +1220,16 @@ stages:
 
         steps:
           - checkout: none
+
           - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
+
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1306,6 +1267,7 @@ stages:
 
         steps:
           - checkout: none
+
           - script: |
               sudo yum update -y
               sudo yum install git -y
@@ -1353,7 +1315,7 @@ stages:
 
         steps:
           - checkout: none
-
+          
           - script: |
               sudo tdnf update -y
               sudo tdnf install git -y
@@ -1612,7 +1574,6 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
 
           - script: |
-              
               sudo apt-get install -y zip
               cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
               sudo dpkg --info azcopy-*x86_64.deb
@@ -1872,7 +1833,7 @@ stages:
                   echo "##vso[task.setvariable variable=is_preview]$is_preview"
                 fi
 
-                while IFS=, read -r distro archeType repoName releaseName; do
+                while IFS=, read -r distro archetype repoName releaseName; do
 
                   # If the package is preview, publish to mariner preview package
                   if [[ $distro == *"Mariner-2.0"* ]]; then
@@ -1883,14 +1844,14 @@ stages:
 
                   echo "Uploading packages for $distro"
                   echo "Repo Name: $repoName"
-                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archeType} $repoName $releaseName
+                  pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
                 done < <(tail -n +3 ../packages.csv)
               displayName: 'Add uploaded packages to repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
 
             - script: |
-                  while IFS=, read -r distro archeType repoName releaseName; do
-                    if [[ $archeType == *"Arm"* ]]; then
+                  while IFS=, read -r distro archetype repoName releaseName; do
+                    if [[ $archetype == *"Arm"* ]]; then
                       echo "Skipping for ARM type on $distro"
                     else
                       if [[ $distro == *"Mariner-2.0"* ]]; then
@@ -1953,4 +1914,3 @@ stages:
                   python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
                 displayName: 'Updating version number'
                 workingDirectory: $(root_dir)
-
