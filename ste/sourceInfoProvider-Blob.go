@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"context"
 	"crypto/md5"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -33,6 +34,7 @@ import (
 type blobSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
 	source *blob.Client
+	ctx    context.Context
 }
 
 func (p *blobSourceInfoProvider) IsDFSSource() bool {
@@ -48,9 +50,7 @@ func (p *blobSourceInfoProvider) RawSource() string {
 }
 
 func (p *blobSourceInfoProvider) ReadLink() (string, error) {
-	ctx := p.jptm.Context()
-
-	resp, err := p.source.DownloadStream(ctx, &blob.DownloadStreamOptions{
+	resp, err := p.source.DownloadStream(p.ctx, &blob.DownloadStreamOptions{
 		CPKInfo:      p.jptm.CpkInfo(),
 		CPKScopeInfo: p.jptm.CpkScopeInfo(),
 	})
@@ -58,7 +58,7 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 		return "", err
 	}
 
-	symlinkBuf, err := io.ReadAll(resp.NewRetryReader(ctx, &blob.RetryReaderOptions{
+	symlinkBuf, err := io.ReadAll(resp.NewRetryReader(p.ctx, &blob.RetryReaderOptions{
 		MaxRetries:   5,
 		OnFailedRead: common.NewBlobReadLogFunc(p.jptm, p.jptm.Info().Source),
 	}))
@@ -125,6 +125,10 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 	ret.source = blobClient
 
+	ctx := jptm.Context()
+	ctx = withPipelineNetworkStats(ctx, nil)
+	ret.ctx = ctx
+
 	return ret, nil
 }
 
@@ -136,7 +140,7 @@ func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 
 	sourceDatalakeClient := dsc.NewFileSystemClient(p.jptm.Info().SrcContainer).NewFileClient(p.jptm.Info().SrcFilePath)
 
-	resp, err := sourceDatalakeClient.GetAccessControl(p.jptm.Context(), nil)
+	resp, err := sourceDatalakeClient.GetAccessControl(p.ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +160,7 @@ func (p *blobSourceInfoProvider) BlobType() blob.BlobType {
 
 func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, error) {
 	// We can't set a custom LMT on HNS, so it doesn't make sense to swap here.
-	properties, err := p.source.GetProperties(p.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: p.jptm.CpkInfo()})
+	properties, err := p.source.GetProperties(p.ctx, &blob.GetPropertiesOptions{CPKInfo: p.jptm.CpkInfo()})
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -168,7 +172,7 @@ func (p *blobSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	if count <= common.MaxRangeGetSize {
 		rangeGetContentMD5 = to.Ptr(true)
 	}
-	response, err := p.source.DownloadStream(p.jptm.Context(),
+	response, err := p.source.DownloadStream(p.ctx,
 		&blob.DownloadStreamOptions{
 			Range:              blob.HTTPRange{Offset: offset, Count: count},
 			RangeGetContentMD5: rangeGetContentMD5,
@@ -182,7 +186,7 @@ func (p *blobSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 		return response.ContentMD5, nil
 	} else {
 		// compute md5
-		body := response.NewRetryReader(p.jptm.Context(), &blob.RetryReaderOptions{MaxRetries: MaxRetryPerDownloadBody})
+		body := response.NewRetryReader(p.ctx, &blob.RetryReaderOptions{MaxRetries: MaxRetryPerDownloadBody})
 		defer body.Close()
 		h := md5.New()
 		if _, err = io.Copy(h, body); err != nil {

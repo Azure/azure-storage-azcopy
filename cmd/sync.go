@@ -37,6 +37,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var LocalToFileShareWarnMsg = "AzCopy sync is supported but not fully recommended for Azure Files. AzCopy sync doesn't support differential copies at scale, and some file fidelity might be lost."
+
 type rawSyncCmdArgs struct {
 	src       string
 	dst       string
@@ -150,6 +152,21 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
 		return cooked, err
+	}
+
+	// display a warning message to console and job log file if there is a sync operation being performed from local to file share.
+	// Reference : https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-files#synchronize-files
+	if cooked.fromTo == common.EFromTo.LocalFile() {
+
+		glcm.Warn(LocalToFileShareWarnMsg)
+		if jobsAdmin.JobsAdmin != nil {
+			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
+		}
+		if raw.dryrun {
+			glcm.Dryrun(func(_ common.OutputFormat) string {
+				return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
+			})
+		}
 	}
 
 	switch cooked.fromTo {
@@ -753,13 +770,13 @@ func init() {
 
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
+				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("Cannot perform sync due to error: " + err.Error())
+				glcm.Error("Cannot perform sync due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 			if cooked.dryrunMode {
 				glcm.Exit(nil, common.EExitCode.Success())

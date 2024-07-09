@@ -121,6 +121,7 @@ func (svm *ScenarioVariationManager) Assert(comment string, assertion Assertion,
 		}
 
 		svm.isInvalid = true // We've now failed, so we flip the shared bad flag
+		svm.t.Fail()
 	}
 }
 

@@ -21,7 +21,13 @@
 package common
 
 import (
+	"encoding/json"
+	"fmt"
+	"reflect"
 	"runtime"
+	"strings"
+
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 type EnvironmentVariable struct {
@@ -82,18 +88,77 @@ func (EnvironmentVariable) UserDir() EnvironmentVariable {
 	}
 }
 
-const (
-	AutologinTypeSPN    = "spn"
-	AutologinTypeMSI    = "msi"
-	AutologinTypeDevice = "device"
-	AutologinTypeAzCLI  = "azcli"
-	AutologinTypePsCred = "pscred"
-)
+var EAutoLoginType = AutoLoginType(0)
+
+type AutoLoginType uint8
+
+func (AutoLoginType) Device() AutoLoginType     { return AutoLoginType(0) }
+func (AutoLoginType) SPN() AutoLoginType        { return AutoLoginType(1) }
+func (AutoLoginType) MSI() AutoLoginType        { return AutoLoginType(2) }
+func (AutoLoginType) AzCLI() AutoLoginType      { return AutoLoginType(3) }
+func (AutoLoginType) PsCred() AutoLoginType     { return AutoLoginType(4) }
+func (AutoLoginType) Workload() AutoLoginType   { return AutoLoginType(5) }
+func (AutoLoginType) TokenStore() AutoLoginType { return AutoLoginType(255) } // Storage Explorer internal integration only. Do not add this to ValidAutoLoginTypes.
+
+func (d AutoLoginType) String() string {
+	return strings.ToLower(enum.StringInt(d, reflect.TypeOf(d)))
+}
+
+func (d *AutoLoginType) Parse(s string) error {
+	// allow empty to mean "Enable"
+	if s == "" {
+		*d = EAutoLoginType.Device()
+		return nil
+	}
+
+	val, err := enum.ParseInt(reflect.TypeOf(d), s, true, true)
+	if err == nil {
+		*d = val.(AutoLoginType)
+	}
+	return err
+}
+
+// MarshalJSON customizes the JSON encoding for AutoLoginType
+func (d AutoLoginType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+// UnmarshalJSON customizes the JSON decoding for AutoLoginType
+func (d *AutoLoginType) UnmarshalJSON(data []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	if strValue, ok := v.(string); ok {
+		return d.Parse(strValue)
+	}
+	// Handle numeric values
+	if numValue, ok := v.(float64); ok {
+		if numValue < 0 || numValue > 255 {
+			return fmt.Errorf("value out of range for _token_source_refresh: %v", numValue)
+		}
+		*d = AutoLoginType(uint8(numValue))
+		return nil
+	}
+
+	return fmt.Errorf("unsupported type for AutoLoginType: %T", v)
+}
+
+func ValidAutoLoginTypes() []string {
+	return []string{
+		EAutoLoginType.Device().String() + " (Device code workflow)",
+		EAutoLoginType.SPN().String() + " (Service Principal)",
+		EAutoLoginType.MSI().String() + " (Managed Service Identity)",
+		EAutoLoginType.AzCLI().String() + " (Azure CLI)",
+		EAutoLoginType.PsCred().String() + " (Azure PowerShell)",
+		EAutoLoginType.Workload().String() + " (Workload Identity)",
+	}
+}
 
 func (EnvironmentVariable) AutoLoginType() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_AUTO_LOGIN_TYPE",
-		Description: "Specify the credential type to access Azure Resource without invoking the login command and using the OS secret store, available values SPN, MSI, DEVICE, AZCLI, and PSCRED  - sequentially for Service Principal, Managed Service Identity, Device workflow, Azure CLI, or Azure PowerShell.",
+		Description: "Specify the credential type to access Azure Resource without invoking the login command and using the OS secret store, available values are " + strings.Join(ValidAutoLoginTypes(), ", ") + ".",
 	}
 }
 
