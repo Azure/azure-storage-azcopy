@@ -66,13 +66,6 @@ stages:
             value: $(root_dir)/archives
 
         steps:
-          #TODO: remove this after merging to main
-          # - script: |
-          #     wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-          #     chmod 777 $(work_dir)/go_installer.sh
-          #     sudo ls -lRt $(work_dir)/
-          #   displayName: 'list'
-
           # Custom script to install Go-lang
           - task: ShellScript@2
             inputs:
@@ -123,30 +116,30 @@ stages:
           - script: |
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
+          
+          - template: azcopy-version-check-linux.yml
+            parameters:
+              azcopy_executable: $(root_dir)/azcopy_linux_amd64
 
-          - script: |
-              export GOARCH=amd64
-              export GOOS=linux
-              # Run azcopy --version and capture the output
-              azcopyOutput=$($(root_dir)/azcopy_linux_amd64 --version)
+          # - script: |
+          #     # Run azcopy --version and capture the output
+          #     azcopyOutput=$($(root_dir)/azcopy_linux_amd64 --version)
 
-              # Extract the version part
-              if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                if [[ -n "$version" ]]; then
-                  echo "Extracted version: $version"
-                  
-                  # Set the pipeline variable (for Azure DevOps)
-                  echo "##vso[task.setvariable variable=azcopy_version]$version"
-                else
-                  echo "Unable to extract version from azcopy output"
-                  exit 1
-                fi
-              else
-                echo "azcopy version string not found in output"
-                exit 1
-              fi
-            displayName: 'Verify and extract the generated build version'
+          #     # Extract the version part
+          #     if echo "$azcopyOutput" | grep -q "azcopy version"; then
+          #       version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+          #       if [[ -n "$version" ]]; then
+          #         echo "Extracted version: $version"
+          #         echo "##vso[task.setvariable variable=azcopy_version]$version"
+          #       else
+          #         echo "Unable to extract version from azcopy output"
+          #         exit 1
+          #       fi
+          #     else
+          #       echo "azcopy version string not found in output"
+          #       exit 1
+          #     fi
+          #   displayName: 'Verify and extract the generated build version'
 
           - script: |
               linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
@@ -251,13 +244,6 @@ stages:
             value: $(root_dir)/archives
 
         steps:
-          #TODO: remove this after merging to main
-          - script: |
-              wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/az-pipelineTest/go_installer.sh -P $(work_dir)/
-              chmod 777 $(work_dir)/go_installer.sh
-              sudo ls -lRt $(work_dir)/
-            displayName: 'list'
-
           # Custom script to install Go-lang
           - task: ShellScript@2
             inputs:
@@ -292,8 +278,6 @@ stages:
           
           - script: |
               GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_arm64"
-              chmod 755 $(root_dir)/azcopy_linux_se_arm64
-              $(root_dir)/azcopy_linux_se_arm64 --version
             displayName: 'Generate Linux ARM64 SE Integration'
 
           - script: |
@@ -310,27 +294,31 @@ stages:
           - script: |
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
+          
+          - template: azcopy-version-check-linux.yml
+            parameters:
+              azcopy_executable: $(root_dir)/azcopy_linux_arm64
 
-          - script: |
-              azcopyOutput=$($(root_dir)/azcopy_linux_arm64 --version)
+          # - script: |
+          #     azcopyOutput=$($(root_dir)/azcopy_linux_arm64 --version)
 
-                # Extract the version part
-                if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                  version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                  if [[ -n "$version" ]]; then
-                    echo "Extracted version: $version"
+          #       # Extract the version part
+          #       if echo "$azcopyOutput" | grep -q "azcopy version"; then
+          #         version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+          #         if [[ -n "$version" ]]; then
+          #           echo "Extracted version: $version"
                     
-                    # Set the pipeline variable (for Azure DevOps)
-                    echo "##vso[task.setvariable variable=azcopy_version]$version"
-                  else
-                    echo "Unable to extract version from azcopy output"
-                    exit 1
-                  fi
-                else
-                  echo "azcopy version string not found in output"
-                  exit 1
-                fi
-            displayName: 'Verify and extract the generated build version'
+          #           # Set the pipeline variable (for Azure DevOps)
+          #           echo "##vso[task.setvariable variable=azcopy_version]$version"
+          #         else
+          #           echo "Unable to extract version from azcopy output"
+          #           exit 1
+          #         fi
+          #       else
+          #         echo "azcopy version string not found in output"
+          #         exit 1
+          #       fi
+          #   displayName: 'Verify and extract the generated build version'
 
           - script: |
               linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
@@ -1610,7 +1598,6 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
 
           - script: |
-              
               sudo apt-get install -y zip
               cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
               sudo dpkg --info azcopy-*x86_64.deb
