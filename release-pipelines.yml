@@ -1216,11 +1216,12 @@ stages:
             - ImageOverride -equals $(agentName)
 
         steps:
-          - checkout: self
           - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
+
+          - checkout: self
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1257,11 +1258,12 @@ stages:
             - ImageOverride -equals $(agentName)
 
         steps:
-          - checkout: self
           - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
+
+          - checkout: self
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1304,12 +1306,12 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         steps:
-          - checkout: self
-
           - script: |
               sudo tdnf update -y
               sudo tdnf install git -y
             displayName: 'Install dependencies'
+          
+          - checkout: self
       
           - template: setup/test_artifacts.yml
             parameters:
