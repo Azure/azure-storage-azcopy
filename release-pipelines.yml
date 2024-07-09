@@ -1069,7 +1069,7 @@ stages:
           - checkout: self
           - script: |
               sudo apt update
-              sudo apt-get install libsecret-1-dev
+              sudo apt-get install libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
             displayName: "GLIBC Version"
