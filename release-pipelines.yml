@@ -61,7 +61,7 @@ stages:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(Build.SourcesDirectory)/azure-storage-azcopy'
+            value: '$(Build.SourcesDirectory)'
           - name: archives
             value: $(root_dir)/archives
 
@@ -241,7 +241,7 @@ stages:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(Build.SourcesDirectory)/azure-storage-azcopy'
+            value: '$(Build.SourcesDirectory)'
           - name: archives
             value: $(root_dir)/archives
 
