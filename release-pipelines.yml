@@ -924,7 +924,7 @@ stages:
         pool:
           vmImage: $(vmImage)
         steps:
-          - checkout: none
+          - checkout: self
           - script: |
               sudo apt update
               sudo apt --fix-broken install
@@ -975,7 +975,7 @@ stages:
         pool:
           vmImage: $(vmImage)
         steps:
-          - checkout: none
+          - checkout: self
           - script: |
               sudo apt update
               sudo apt --fix-broken install
@@ -1066,7 +1066,7 @@ stages:
           demands:
             - ImageOverride -equals $(AgentName)
         steps:
-          - checkout: none
+          - checkout: self
           - script: |
               sudo apt update
               sudo apt --fix-broken install
@@ -1160,7 +1160,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         steps:
-          - checkout: none
+          - checkout: self
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
@@ -1215,7 +1215,7 @@ stages:
             - ImageOverride -equals $(agentName)
 
         steps:
-          - checkout: none
+          - checkout: self
           - script: |
               sudo yum update -y
               sudo yum install git -y
@@ -1256,7 +1256,7 @@ stages:
             - ImageOverride -equals $(agentName)
 
         steps:
-          - checkout: none
+          - checkout: self
           - script: |
               sudo yum update -y
               sudo yum install git -y
@@ -1303,7 +1303,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         steps:
-          - checkout: none
+          - checkout: self
 
           - script: |
               sudo tdnf update -y
