@@ -9,22 +9,21 @@ parameters:
     type: string
 
 steps:
-  # - checkout: self
-  #   displayName: 'Checkout repository'
+  
   #TODO: Change the org name after merging to main
-  # - script: |
-  #     git clone https://github.com/dphulkar-msft/azure-storage-azcopy
-  #   displayName: 'Checkout Code'
-  #   workingDirectory: $(System.DefaultWorkingDirectory)
+  - script: |
+      git clone https://github.com/dphulkar-msft/azure-storage-azcopy
+    displayName: 'Checkout Code'
+    workingDirectory: $(System.DefaultWorkingDirectory)
 
-  # - script: |
-  #     git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-  #   displayName: 'Checkout Branch'
-  #   workingDirectory: $(System.DefaultWorkingDirectory)/azure-storage-azcopy
+  - script: |
+      git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+    displayName: 'Checkout Branch'
+    workingDirectory: $(System.DefaultWorkingDirectory)/azure-storage-azcopy
 
   - task: ShellScript@2
     inputs:
-      scriptPath: "$(Build.SourcesDirectory)/go_installer.sh"
+      scriptPath: "$(System.DefaultWorkingDirectory)/go_installer.sh"
       args: "$(System.DefaultWorkingDirectory)/ ${{ parameters.go_version }}"
     displayName: "GoTool Custom Setup"
 

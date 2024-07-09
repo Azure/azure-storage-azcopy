@@ -924,7 +924,8 @@ stages:
         pool:
           vmImage: $(vmImage)
         steps:
-          - checkout: self
+          - checkout: none
+          
           - script: |
               sudo apt update
               sudo apt --fix-broken install
@@ -975,7 +976,7 @@ stages:
         pool:
           vmImage: $(vmImage)
         steps:
-          - checkout: self
+          - checkout: none
           - script: |
               sudo apt update
               sudo apt --fix-broken install
@@ -1066,14 +1067,15 @@ stages:
           demands:
             - ImageOverride -equals $(AgentName)
         steps:
-          - checkout: self
+          - checkout: none
+          
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
             displayName: "GLIBC Version"
-
+  
           - template: setup/test_artifacts.yml
             parameters:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
@@ -1161,7 +1163,8 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         steps:
-          - checkout: self
+          - checkout: none
+
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
@@ -1216,12 +1219,17 @@ stages:
             - ImageOverride -equals $(agentName)
 
         steps:
+          - checkout: none
+
           - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
 
-          - checkout: self
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1258,12 +1266,12 @@ stages:
             - ImageOverride -equals $(agentName)
 
         steps:
+          - checkout: none
+
           - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
-
-          - checkout: self
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1306,12 +1314,12 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         steps:
+          - checkout: none
+          
           - script: |
               sudo tdnf update -y
               sudo tdnf install git -y
             displayName: 'Install dependencies'
-          
-          - checkout: self
       
           - template: setup/test_artifacts.yml
             parameters:
