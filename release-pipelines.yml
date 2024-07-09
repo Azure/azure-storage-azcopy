@@ -69,25 +69,6 @@ stages:
           - checkout: self
             displayName: 'Checkout repository'
 
-          - script: |
-              ls -al $(Build.SourcesDirectory) # List files to confirm the script is there
-              chmod +x $(Build.SourcesDirectory)/go_installer.sh
-            displayName: 'Run go_installer.sh script'
-
-          # - checkout: none
-
-          # - script: |
-          #     git clone https://github.com/dphulkar-msft/azure-storage-azcopy
-          #   displayName: 'Checkout Code'
-          #   workingDirectory: $(root_dir)
-          
-          # # list commits from past 12hrs
-          # - script: |
-          #     git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-          #     git --no-pager log --since="12 hours ago" --stat
-          #   displayName: 'List Commits'
-          #   workingDirectory: $(work_dir)
-
           # Custom script to install Go-lang
           - task: ShellScript@2
             inputs:
@@ -248,11 +229,6 @@ stages:
         steps:
           - checkout: self
             displayName: 'Checkout repository'
-
-        # - script: |
-        #     git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-        #   displayName: 'Checkout Branch'
-        #   workingDirectory: $(System.DefaultWorkingDirectory)/azure-storage-azcopy
 
           # Custom script to install Go-lang
           - task: ShellScript@2
