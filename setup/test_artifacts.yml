@@ -9,9 +9,8 @@ parameters:
     type: string
 
 steps:
-  #TODO: Change the org name after merging to main
   - script: |
-      git clone https://github.com/dphulkar-msft/azure-storage-azcopy
+      git clone https://github.com/Azure/azure-storage-azcopy
     displayName: 'Checkout Code'
     workingDirectory: $(System.DefaultWorkingDirectory)
 

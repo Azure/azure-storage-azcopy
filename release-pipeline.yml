@@ -150,7 +150,7 @@ stages:
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           - script: |
-              fpm -s dir -t deb -n azcopy --rpm-digest sha256 -C pkgDir/ \
+              fpm -s dir -t deb -n azcopy -C pkgDir/ \
               -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -310,7 +310,7 @@ stages:
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           - script: |
-              fpm -s dir -t deb -n azcopy --rpm-digest sha256 -C pkgDir/ \
+              fpm -s dir -t deb -n azcopy -C pkgDir/ \
               -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -1792,9 +1792,8 @@ stages:
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
-            # TODO: replace org name while merging to main
             - script: |
-                wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
+                wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
                 cat ./packages.csv
               displayName: 'Fetch packages.csv'
               workingDirectory: $(Build.ArtifactStagingDirectory)/
@@ -1902,9 +1901,8 @@ stages:
                   azcopy --version
                 displayName: 'Installing azcopy'
               
-              # TODO: change org name while merging to main
               - script: |
-                  wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
+                  wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
                   ls -l
                 displayName: 'Getting Python script'
                 workingDirectory: $(root_dir)
