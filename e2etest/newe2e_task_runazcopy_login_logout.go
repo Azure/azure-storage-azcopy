@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 )
@@ -44,10 +45,16 @@ func (a *AzCopyInteractiveStdout) String() string {
 func RunAzCopyLoginLogout(a Asserter, verb AzCopyVerb) AzCopyStdout {
 	out := NewAzCopyInteractiveStdout(a)
 
-	command := exec.Cmd{
-		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
-		Args: []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(verb)},
+	args := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(verb)}
 
+	tenantId := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth.TenantID
+	if verb == AzCopyVerbLogin && tenantId != "" {
+		args = append(args, fmt.Sprintf("--tenant-id=%s", tenantId))
+	}
+
+	command := exec.Cmd{
+		Path:   GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
+		Args:   args,
 		Stdout: out,
 	}
 
