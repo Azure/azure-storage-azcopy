@@ -782,6 +782,7 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/*
+              rm -rf $(Build.ArtifactStagingDirectory)/*.md
             displayName: 'List Signed Artifacts'
           
           # Push signed images to artifact directory
