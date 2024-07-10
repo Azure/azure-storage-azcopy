@@ -23,6 +23,7 @@ package common
 import (
 	"errors"
 	"fmt"
+	"github.com/keybase/go-keychain"
 	"sync"
 )
 
