@@ -18,7 +18,6 @@ func Scenario_CopySync(svm *ScenarioVariationManager, env *AzCopyEnvironment) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
-	//dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
 	// The object must exist already if we're syncing.
 	if azCopyVerb == AzCopyVerbSync {
 		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
@@ -35,10 +34,6 @@ func Scenario_CopySync(svm *ScenarioVariationManager, env *AzCopyEnvironment) {
 		ObjectName: pointerTo("test"),
 		Body:       body,
 	})
-	//srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{
-	//	ObjectName: pointerTo("test"),
-	//	Body:       body,
-	//})
 
 	// no local->local
 	if srcObj.Location().IsLocal() && dstObj.Location().IsLocal() {
