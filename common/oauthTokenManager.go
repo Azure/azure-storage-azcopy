@@ -254,7 +254,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 		ApplicationID:           ApplicationID,
-		DeviceCodeInfo:          azidentity.AuthenticationRecord{},
+		DeviceCodeInfo:          &azidentity.AuthenticationRecord{},
 		Persist:                 persist,
 	}
 
@@ -384,9 +384,9 @@ type OAuthTokenInfo struct {
 	// In this case AzCopy refresh token on behalf of caller.
 	// For more details, please refer to
 	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
-	ClientID       string `json:"_client_id"`
-	DeviceCodeInfo azidentity.AuthenticationRecord
-	Persist        bool `json:"_persist"`
+	ClientID       string                           `json:"_client_id"`
+	DeviceCodeInfo *azidentity.AuthenticationRecord `json:"_authentication_record,omitempty"`
+	Persist        bool                             `json:"_persist"`
 }
 
 // IdentityInfo contains info for MSI.
@@ -652,8 +652,8 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 			Name: TokenCache,
 		}
 	}
-	// Read the record
-	record := credInfo.DeviceCodeInfo
+	// Read the record=
+	record := IffNotNil(credInfo.DeviceCodeInfo, azidentity.AuthenticationRecord{})
 	tc, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
 		TenantID:                       credInfo.Tenant,
 		ClientID:                       ApplicationID,
@@ -680,7 +680,7 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 			fmt.Println("INFO: If you plan to use AzCopy with a B2B account (where the account's home tenant is separate from the tenant of the target storage account), please sign in under the target tenant with --tenant-id")
 		}
 		// Store the record
-		credInfo.DeviceCodeInfo = record
+		credInfo.DeviceCodeInfo = &record
 	}
 
 	credInfo.TokenCredential = tc
