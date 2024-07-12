@@ -61,11 +61,14 @@ stages:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+            value: '$(Build.SourcesDirectory)'
           - name: archives
             value: $(root_dir)/archives
 
         steps:
+          - checkout: self
+            displayName: 'Checkout repository'
+
           # Custom script to install Go-lang
           - task: ShellScript@2
             inputs:
@@ -117,29 +120,9 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
           
-          - template: azcopy-version-check-linux.yml
+          - template: setup/azcopy_version_check_linux.yml
             parameters:
               azcopy_executable: $(root_dir)/azcopy_linux_amd64
-
-          # - script: |
-          #     # Run azcopy --version and capture the output
-          #     azcopyOutput=$($(root_dir)/azcopy_linux_amd64 --version)
-
-          #     # Extract the version part
-          #     if echo "$azcopyOutput" | grep -q "azcopy version"; then
-          #       version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-          #       if [[ -n "$version" ]]; then
-          #         echo "Extracted version: $version"
-          #         echo "##vso[task.setvariable variable=azcopy_version]$version"
-          #       else
-          #         echo "Unable to extract version from azcopy output"
-          #         exit 1
-          #       fi
-          #     else
-          #       echo "azcopy version string not found in output"
-          #       exit 1
-          #     fi
-          #   displayName: 'Verify and extract the generated build version'
 
           - script: |
               linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
@@ -167,7 +150,7 @@ stages:
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           - script: |
-              fpm -s dir -t deb -n azcopy --rpm-digest sha256 -C pkgDir/ \
+              fpm -s dir -t deb -n azcopy -C pkgDir/ \
               -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -239,11 +222,14 @@ stages:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+            value: '$(Build.SourcesDirectory)'
           - name: archives
             value: $(root_dir)/archives
 
         steps:
+          - checkout: self
+            displayName: 'Checkout repository'
+
           # Custom script to install Go-lang
           - task: ShellScript@2
             inputs:
@@ -295,30 +281,9 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/azcopy*
             displayName: "Remove binaries from staging directory"
           
-          - template: azcopy-version-check-linux.yml
+          - template: setup/azcopy_version_check_linux.yml
             parameters:
               azcopy_executable: $(root_dir)/azcopy_linux_arm64
-
-          # - script: |
-          #     azcopyOutput=$($(root_dir)/azcopy_linux_arm64 --version)
-
-          #       # Extract the version part
-          #       if echo "$azcopyOutput" | grep -q "azcopy version"; then
-          #         version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-          #         if [[ -n "$version" ]]; then
-          #           echo "Extracted version: $version"
-                    
-          #           # Set the pipeline variable (for Azure DevOps)
-          #           echo "##vso[task.setvariable variable=azcopy_version]$version"
-          #         else
-          #           echo "Unable to extract version from azcopy output"
-          #           exit 1
-          #         fi
-          #       else
-          #         echo "azcopy version string not found in output"
-          #         exit 1
-          #       fi
-          #   displayName: 'Verify and extract the generated build version'
 
           - script: |
               linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
@@ -345,7 +310,7 @@ stages:
           # using fpm tool for packaging of our binary & performing post-install operations
           # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
           - script: |
-              fpm -s dir -t deb -n azcopy --rpm-digest sha256 -C pkgDir/ \
+              fpm -s dir -t deb -n azcopy -C pkgDir/ \
               -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
               --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
               --url "https://github.com/Azure/azure-storage-azcopy" \
@@ -817,6 +782,7 @@ stages:
               rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
               sudo ls -lRt $(Build.ArtifactStagingDirectory)
               md5sum $(Build.ArtifactStagingDirectory)/*
+              rm -rf $(Build.ArtifactStagingDirectory)/*.md
             displayName: 'List Signed Artifacts'
           
           # Push signed images to artifact directory
@@ -960,6 +926,7 @@ stages:
           vmImage: $(vmImage)
         steps:
           - checkout: none
+          
           - script: |
               sudo apt update
               sudo apt --fix-broken install
@@ -1102,12 +1069,14 @@ stages:
             - ImageOverride -equals $(AgentName)
         steps:
           - checkout: none
+          
           - script: |
               sudo apt update
+              sudo apt-get install libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
             displayName: "GLIBC Version"
-
+  
           - template: setup/test_artifacts.yml
             parameters:
               go_version: '$(AZCOPY_GOLANG_VERSION)'
@@ -1196,6 +1165,7 @@ stages:
 
         steps:
           - checkout: none
+
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
@@ -1251,10 +1221,16 @@ stages:
 
         steps:
           - checkout: none
+
           - script: |
               sudo yum update -y
               sudo yum install git -y
             displayName: 'Install Git'
+
+          # get glibc version with which build is done
+          - script: |
+             ldd --version
+            displayName: "GLIBC Version"
 
           - template: setup/test_artifacts.yml
             parameters:
@@ -1292,6 +1268,7 @@ stages:
 
         steps:
           - checkout: none
+
           - script: |
               sudo yum update -y
               sudo yum install git -y
@@ -1339,7 +1316,7 @@ stages:
 
         steps:
           - checkout: none
-
+          
           - script: |
               sudo tdnf update -y
               sudo tdnf install git -y
@@ -1715,12 +1692,10 @@ stages:
             
           - ${{ if eq(parameters.post_release, true) }}:
 
-              # add release tags & push to github
-              #TODO: update github connection and repo name while merging to main
               - task: GithubRelease@1
                 inputs:
-                  githubConnection: 'dphulkar-msft-github-rel'
-                  repositoryName: 'dphulkar-msft/azure-storage-azcopy'
+                  githubConnection: 'azcopy-github-connection'
+                  repositoryName: 'Azure/azure-storage-azcopy'
                   action: 'edit'
 
                   target: '$(Build.SourceVersion)'
@@ -1816,9 +1791,8 @@ stages:
               displayName: 'Upload files'
               workingDirectory: $(Build.ArtifactStagingDirectory)
 
-            # TODO: replace org name while merging to main
             - script: |
-                wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
+                wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/packages.csv -O packages.csv
                 cat ./packages.csv
               displayName: 'Fetch packages.csv'
               workingDirectory: $(Build.ArtifactStagingDirectory)/
@@ -1926,9 +1900,8 @@ stages:
                   azcopy --version
                 displayName: 'Installing azcopy'
               
-              # TODO: change org name while merging to main
               - script: |
-                  wget https://raw.githubusercontent.com/dphulkar-msft/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
+                  wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
                   ls -l
                 displayName: 'Getting Python script'
                 workingDirectory: $(root_dir)
