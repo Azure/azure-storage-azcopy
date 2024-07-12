@@ -7,8 +7,8 @@ parameters:
     type: string
     default: 'azcopy-'
 
-  - name: test_mode
-    displayName: 'Test Mode'
+  - name: publish_to_container
+    displayName: 'Publish To Container'
     type: boolean
     default: false
 
@@ -1542,8 +1542,8 @@ stages:
             value: 'azcopyprivatedrops'
           - name: Release_Account_Name
             value: 'azcopyvnextrelease'
-          - name: Test_Mode
-            value: ${{ parameters.test_mode }}
+          - name: Publish_To_Container
+            value: ${{ parameters.publish_to_container }}
           - name: work_dir
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
@@ -1619,10 +1619,10 @@ stages:
 
                 today=$(date +"%Y%m%d")
                 
-                if [ $(Test_Mode) = "True" ]; then
-                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-                else
+                if [ $(Publish_To_Container) = "True" ]; then
                   container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+                else
+                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
                 fi
                 echo "Artifacts will be uploaded to: $container_url"
                 
