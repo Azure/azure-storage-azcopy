@@ -127,7 +127,7 @@ func (s *FileTestSuite) Scenario_GuessMimeType(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(svm, size)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
-		GetObject(svm, fileName, common.EEntityType.File()) // awkward capitalization to see if AzCopy catches it.
+		GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
@@ -225,7 +225,7 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 
 func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(svm, 63*common.MegaByte)
-	name := "test_upload_preserve_last_mtime"
+	name := "test_63mb"
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
 
