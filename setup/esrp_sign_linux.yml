@@ -1,0 +1,25 @@
+parameters:
+  FolderPath: ''
+  ESRP_AZCOPY_KEY_CODE: ''
+  Pattern: ''
+  DisplayName: ''
+
+steps:
+- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@1
+  displayName: ${{ parameters.DisplayName }}
+  inputs:
+    ConnectedServiceName: 'PMC ESRP AzCopy Signing'
+    FolderPath: ${{ parameters.FolderPath }}
+    Pattern: ${{ parameters.Pattern }}
+    signConfigType: inlineSignParams
+    VerboseLogin: true
+    inlineOperation: |
+      [
+        {
+          "KeyCode" : "${{ parameters.ESRP_AZCOPY_KEY_CODE }}",
+          "OperationCode" : "LinuxSign",
+          "Parameters" : {},
+          "ToolName" : "sign",
+          "ToolVersion" : "1.0"
+        }
+      ]
