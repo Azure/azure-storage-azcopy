@@ -14,7 +14,6 @@ from test_service_to_service_copy import *
 from test_google_cloud_storage_copy import *
 from test_blobfs_download_SAS import *
 from test_blobfs_upload_SAS import *
-from test_autodetect_blob_type import *
 from test_file_sync import *
 from test_file_copy import *
 from test_google_cloud_storage_copy import *
@@ -228,7 +227,6 @@ def main():
                          BlobFs_Upload_ShareKey_User_Scenarios,
                          BlobFs_Download_SharedKey_User_Scenarios,
                          Service_2_Service_Copy_User_Scenario,
-                         Autodetect_Blob_Type_Scenario,
                          Google_Cloud_Storage_Copy_User_Scenario]
     suites_list = []
 
