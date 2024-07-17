@@ -11,11 +11,19 @@ func init() {
 
 type AutoDetectBlobTypeTestSuite struct{}
 
+<<<<<<< HEAD
 func (s *AutoDetectBlobTypeTestSuite) Scenario_AutoInferBlobTypeVHD(svm *ScenarioVariationManager) {
 	fileName := "myVHD.vHd" // awkward capitalization to see if AzCopy catches it.
 	body := NewRandomObjectContentContainer(svm, 4*common.MegaByte)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
+=======
+func (s *AutoDetectBlobTypeTestSuite) Scenario_AutoInferDetectBlobTypeVHD(svm *ScenarioVariationManager) {
+	fileName := "myVHD.vHd" // awkward capitalization to see if AzCopy catches it.
+	body := NewRandomObjectContentContainer(svm, 4*common.MegaByte)
+
+	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File(), common.ELocation.Blob()})), ResourceDefinitionContainer{}).
+>>>>>>> main
 		GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
@@ -38,6 +46,7 @@ func (s *AutoDetectBlobTypeTestSuite) Scenario_AutoInferBlobTypeVHD(svm *Scenari
 		Body: body,
 		ObjectProperties: ObjectProperties{
 			BlobProperties: BlobProperties{
+<<<<<<< HEAD
 				Type: pointerTo(blob.BlobTypePageBlob),
 			},
 		},
@@ -103,6 +112,9 @@ func (s *AutoDetectBlobTypeTestSuite) Scenario_DetectBlobTypeBlobBlob(svm *Scena
 		ObjectProperties: ObjectProperties{
 			BlobProperties: BlobProperties{
 				Type: pointerTo(blob.BlobTypeBlockBlob),
+=======
+				Type: common.Iff(srcObj.Location() == common.ELocation.Blob(), pointerTo(blob.BlobTypeBlockBlob), pointerTo(blob.BlobTypePageBlob)),
+>>>>>>> main
 			},
 		},
 	}, true)
