@@ -136,7 +136,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Group", vProps.BlobFSProperties.Group, oProps.BlobFSProperties.Group)
 				ValidatePropertyPtr(a, "ACL", vProps.BlobFSProperties.ACL, oProps.BlobFSProperties.ACL)
 			case common.ELocation.Local():
-				ValidateTimePtr(a, "Last modified time", vProps.FileProperties.LastModifiedTime, oProps.FileProperties.LastModifiedTime)
+				ValidateTimePtr(a, "Last modified time", vProps.LastModifiedTime, oProps.LastModifiedTime)
 			}
 		},
 	})

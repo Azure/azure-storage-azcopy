@@ -280,14 +280,14 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 				}
 
 				out[fullPath] = ObjectProperties{
-					EntityType: common.EEntityType.Folder(),
-					Metadata:   resp.Metadata,
+					EntityType:       common.EEntityType.Folder(),
+					Metadata:         resp.Metadata,
+					LastModifiedTime: v.Properties.LastModified,
 					FileProperties: FileProperties{
 						FileAttributes:    v.Attributes,
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
-						LastModifiedTime:  v.Properties.LastModified,
 					},
 				}
 			}
@@ -317,13 +317,13 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 						contentType:        resp.ContentType,
 						contentMD5:         resp.ContentMD5,
 					},
-					Metadata: resp.Metadata,
+					Metadata:         resp.Metadata,
+					LastModifiedTime: v.Properties.LastModified,
 					FileProperties: FileProperties{
 						FileAttributes:    v.Attributes,
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
-						LastModifiedTime:  v.Properties.LastModified,
 					},
 				}
 			}
@@ -538,14 +538,14 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 		}
 
 		out = ObjectProperties{
-			EntityType: f.entityType, // It should be OK to just return entity type, getproperties should fail with the wrong restype
-			Metadata:   resp.Metadata,
+			EntityType:       f.entityType, // It should be OK to just return entity type, getproperties should fail with the wrong restype
+			Metadata:         resp.Metadata,
+			LastModifiedTime: resp.LastModified,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
-				LastModifiedTime:  resp.LastModified,
 			},
 		}
 	case common.EEntityType.File():
@@ -570,13 +570,13 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				contentType:        resp.ContentType,
 				contentMD5:         resp.ContentMD5,
 			},
-			Metadata: resp.Metadata,
+			Metadata:         resp.Metadata,
+			LastModifiedTime: resp.LastModified,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
-				LastModifiedTime:  resp.LastModified,
 			},
 		}
 	default:

@@ -295,12 +295,10 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 }
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
-	out := ObjectProperties{}
-
 	stats, err := os.Stat(l.getWorkingPath())
 	a.NoError("failed to get stat", err)
 	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
-	out.FileProperties = FileProperties{
+	out := ObjectProperties{
 		LastModifiedTime: lmt,
 	}
 
@@ -313,10 +311,12 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 
 		perms := smb.GetSDDL(a)
 
-		out.FileProperties.FileAttributes = PtrOf(attr.String())
-		out.FileProperties.FileCreationTime = PtrOf(props.FileCreationTime())
-		out.FileProperties.FileLastWriteTime = PtrOf(props.FileLastWriteTime())
-		out.FileProperties.FilePermissions = common.Iff(perms == "", nil, &perms)
+		out.FileProperties = FileProperties{
+			FileAttributes:    PtrOf(attr.String()),
+			FileCreationTime:  PtrOf(props.FileCreationTime()),
+			FileLastWriteTime: PtrOf(props.FileLastWriteTime()),
+			FilePermissions:   common.Iff(perms == "", nil, &perms),
+		}
 	}
 
 	return out
