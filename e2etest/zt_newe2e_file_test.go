@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"math"
 )
 
 func init() {
@@ -81,7 +82,13 @@ func (s *FileTestSuite) Scenario_CompleteSparseFileUpload(svm *ScenarioVariation
 }
 
 func (s *FileTestSuite) Scenario_PartialSparseFileUpload(svm *ScenarioVariationManager) {
-	body := NewPartialSparseObjectContentContainer(svm, 16*common.MegaByte)
+	size := 16 * common.MegaByte
+	ranges := make([]Range, 0)
+	for i := 0; i < size; i += 8 * common.MegaByte {
+		end := math.Min(float64(i+4*common.MegaByte), float64(size))
+		ranges = append(ranges, Range{Start: int64(i), End: int64(end)})
+	}
+	body := NewPartialSparseObjectContentContainer(svm, int64(size), ranges)
 	name := "test_partial_sparse_file"
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
@@ -127,7 +134,7 @@ func (s *FileTestSuite) Scenario_GuessMimeType(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(svm, size)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
-		GetObject(svm, fileName, common.EEntityType.File()) // awkward capitalization to see if AzCopy catches it.
+		GetObject(svm, fileName, common.EEntityType.File())
 	srcObj.Create(svm, body, ObjectProperties{})
 
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{}).
@@ -201,7 +208,7 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
 
-	srcObjLMT := srcObj.GetProperties(svm).FileProperties.LastModifiedTime
+	srcObjLMT := srcObj.GetProperties(svm).LastModifiedTime
 
 	RunAzCopy(
 		svm,
@@ -216,16 +223,14 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 		ObjectProperties: ObjectProperties{
-			FileProperties: FileProperties{
-				LastModifiedTime: srcObjLMT,
-			},
+			LastModifiedTime: srcObjLMT,
 		},
 	}, false)
 }
 
 func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager) {
 	body := NewRandomObjectContentContainer(svm, 63*common.MegaByte)
-	name := "test_upload_preserve_last_mtime"
+	name := "test_63mb"
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
 

@@ -44,7 +44,6 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			// Sync is not included at this moment, because sync requires
 			Verb: azCopyVerb,
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
@@ -72,7 +71,6 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
 
 	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
@@ -84,19 +82,11 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *Sce
 		if dstContainer.Location() != common.ELocation.Blob() {
 			srcObjs[dir] = obj
 		}
-		// The object must exist already if we're syncing.
-		if azCopyVerb == AzCopyVerbSync {
-			CreateResource[ObjectResourceManager](svm, dstContainer, ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}})
-		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
 			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
 			srcObjs[name] = obj
-			if azCopyVerb == AzCopyVerbSync {
-				CreateResource[ObjectResourceManager](svm, dstContainer, ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))})
-			}
 		}
-
 	}
 
 	if azCopyVerb == AzCopyVerbSync {
@@ -106,6 +96,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *Sce
 		}
 	}
 
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
 	for _, obj := range srcObjs {
 		if obj.EntityType != common.EEntityType.Folder() {
 			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
