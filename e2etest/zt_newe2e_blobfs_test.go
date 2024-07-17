@@ -12,14 +12,9 @@ func init() {
 type BlobFSTestSuite struct{}
 
 func (s *BlobFSTestSuite) Scenario_UploadFile(svm *ScenarioVariationManager) {
-<<<<<<< HEAD
-	fileName := "test_1k.txt"
-	body := NewRandomObjectContentContainer(svm, common.KiloByte)
-=======
 	fileName := "test.txt"
 	size := ResolveVariation(svm, []int64{common.KiloByte, 64 * common.MegaByte})
 	body := NewRandomObjectContentContainer(svm, size)
->>>>>>> main
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -44,13 +39,8 @@ func (s *BlobFSTestSuite) Scenario_UploadFile(svm *ScenarioVariationManager) {
 	}, true)
 }
 
-<<<<<<< HEAD
-func (s *BlobFSTestSuite) Scenario_UploadFile64MB(svm *ScenarioVariationManager) {
-	fileName := "test_64mb.txt"
-=======
 func (s *BlobFSTestSuite) Scenario_UploadFileMultiflushOAuth(svm *ScenarioVariationManager) {
 	fileName := "test_multiflush_64MB_file.txt"
->>>>>>> main
 	body := NewRandomObjectContentContainer(svm, 64*common.MegaByte)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
@@ -61,36 +51,7 @@ func (s *BlobFSTestSuite) Scenario_UploadFileMultiflushOAuth(svm *ScenarioVariat
 	dstService := acct.GetService(svm, common.ELocation.BlobFS())
 	dstContainer := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
 
-<<<<<<< HEAD
-	RunAzCopy(svm, AzCopyCommand{
-		Verb:    AzCopyVerbCopy,
-		Targets: []ResourceManager{srcObj, dstContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{})},
-		Flags: CopyFlags{
-			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive: pointerTo(true),
-			},
-		},
-	})
-
-	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
-		Body: body,
-	}, true)
-}
-
-func (s *BlobFSTestSuite) Scenario_UploadFileUnevenMultiflushOAuth(svm *ScenarioVariationManager) {
-	fileName := "test_uneven_multiflush_64MB_file.txt"
-	body := NewRandomObjectContentContainer(svm, 64*common.MegaByte)
-
-	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
-		GetObject(svm, fileName, common.EEntityType.File())
-	srcObj.Create(svm, body, ObjectProperties{})
-
-	acct := GetAccount(svm, PrimaryHNSAcct)
-	dstService := acct.GetService(svm, common.ELocation.BlobFS())
-	dstContainer := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
-=======
 	flushThreshold := ResolveVariation(svm, []uint32{15, 16}) // uneven, even
->>>>>>> main
 
 	// Upload the file using AzCopy @ 1MB blocks, 15 block flushes (5 flushes, 4 15 blocks, 1 4 blocks)
 	RunAzCopy(svm, AzCopyCommand{
@@ -101,41 +62,7 @@ func (s *BlobFSTestSuite) Scenario_UploadFileUnevenMultiflushOAuth(svm *Scenario
 				Recursive:   pointerTo(true),
 				BlockSizeMB: pointerTo(1.0),
 			},
-<<<<<<< HEAD
-			ADLSFlushThreshold: pointerTo(uint32(15)),
-		},
-	})
-
-	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
-		Body: body,
-	}, true)
-}
-
-func (s *BlobFSTestSuite) Scenario_UploadFileEvenMultiflushOAuth(svm *ScenarioVariationManager) {
-	fileName := "test_even_multiflush_64MB_file.txt"
-	body := NewRandomObjectContentContainer(svm, 64*common.MegaByte)
-
-	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
-		GetObject(svm, fileName, common.EEntityType.File())
-	srcObj.Create(svm, body, ObjectProperties{})
-
-	acct := GetAccount(svm, PrimaryHNSAcct)
-	dstService := acct.GetService(svm, common.ELocation.BlobFS())
-	dstContainer := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{})
-
-	// Upload the file using AzCopy @ 1MB blocks, 16 block flushes (4 16 block flushes)
-	RunAzCopy(svm, AzCopyCommand{
-		Verb:    AzCopyVerbCopy,
-		Targets: []ResourceManager{srcObj, dstContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{})},
-		Flags: CopyFlags{
-			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive:   pointerTo(true),
-				BlockSizeMB: pointerTo(1.0),
-			},
-			ADLSFlushThreshold: pointerTo(uint32(16)),
-=======
 			ADLSFlushThreshold: pointerTo(flushThreshold),
->>>>>>> main
 		},
 	})
 
@@ -176,14 +103,9 @@ func (s *BlobFSTestSuite) Scenario_Upload100Files(svm *ScenarioVariationManager)
 }
 
 func (s *BlobFSTestSuite) Scenario_DownloadFile(svm *ScenarioVariationManager) {
-<<<<<<< HEAD
-	fileName := "test_1k.txt"
-	body := NewRandomObjectContentContainer(svm, common.KiloByte)
-=======
 	fileName := "test.txt"
 	size := ResolveVariation(svm, []int64{common.KiloByte, 64 * common.MegaByte})
 	body := NewRandomObjectContentContainer(svm, size)
->>>>>>> main
 
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -209,37 +131,6 @@ func (s *BlobFSTestSuite) Scenario_DownloadFile(svm *ScenarioVariationManager) {
 	}, true)
 }
 
-<<<<<<< HEAD
-func (s *BlobFSTestSuite) Scenario_DownloadFile64MB(svm *ScenarioVariationManager) {
-	fileName := "test_64mb.txt"
-	body := NewRandomObjectContentContainer(svm, common.KiloByte)
-
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
-		GetObject(svm, fileName, common.EEntityType.File())
-
-	acct := GetAccount(svm, PrimaryHNSAcct)
-	srcService := acct.GetService(svm, common.ELocation.BlobFS())
-	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
-	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
-	srcObj.Create(svm, body, ObjectProperties{})
-
-	RunAzCopy(svm, AzCopyCommand{
-		Verb:    AzCopyVerbCopy,
-		Targets: []ResourceManager{srcObj.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}), dstObj},
-		Flags: CopyFlags{
-			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive: pointerTo(true),
-			},
-		},
-	})
-
-	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
-		Body: body,
-	}, true)
-}
-
-=======
->>>>>>> main
 func (s *BlobFSTestSuite) Scenario_Download100Files(svm *ScenarioVariationManager) {
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	acct := GetAccount(svm, PrimaryHNSAcct)
