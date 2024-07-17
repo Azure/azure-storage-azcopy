@@ -302,13 +302,6 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 		LastModifiedTime: lmt,
 	}
 
-	stats, err := os.Stat(l.getWorkingPath())
-	a.NoError("failed to get stat", err)
-	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
-	out.FileProperties = FileProperties{
-		LastModifiedTime: lmt,
-	}
-
 	// OS-triggered code, implemented in newe2e_resource_managers_local_windows.go
 	if smb, ok := any(l).(localSMBPropertiesManager); ok {
 		props := smb.GetSMBProperties(a)
