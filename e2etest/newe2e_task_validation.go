@@ -23,6 +23,16 @@ func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
 	a.Assert(name+" must match", Equal{Deep: true}, expected, real)
 }
 
+func ValidateTimePtr(a Asserter, name string, expected, real *time.Time) {
+	if expected == nil {
+		return
+	}
+	expectedTime := expected.UTC().Truncate(time.Second)
+	realTime := real.UTC().Truncate(time.Second)
+
+	a.Assert(name+" must match", Equal{Deep: true}, expectedTime, realTime)
+}
+
 func ValidateMetadata(a Asserter, expected, real common.Metadata) {
 	if expected == nil {
 		return
@@ -125,6 +135,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Owner", vProps.BlobFSProperties.Owner, oProps.BlobFSProperties.Owner)
 				ValidatePropertyPtr(a, "Group", vProps.BlobFSProperties.Group, oProps.BlobFSProperties.Group)
 				ValidatePropertyPtr(a, "ACL", vProps.BlobFSProperties.ACL, oProps.BlobFSProperties.ACL)
+			case common.ELocation.Local():
+				ValidateTimePtr(a, "Last modified time", vProps.LastModifiedTime, oProps.LastModifiedTime)
 			}
 		},
 	})
