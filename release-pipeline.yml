@@ -690,6 +690,7 @@ stages:
               Pattern: 'azcopy_windows*'
 
           - script: |
+              rm -rf azCopy-windows-temp/*.md
               cp azCopy-windows-temp/* .
               mv azCopy-windows-temp $(work_dir)
             displayName: 'Add signed windows binary to staging directory'
