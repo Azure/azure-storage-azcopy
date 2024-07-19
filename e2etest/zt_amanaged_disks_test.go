@@ -138,7 +138,7 @@ func TestAAA(t *testing.T) {
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
 				// try giving the service some time to think
-				time.Sleep(time.Second * 30)
+				time.Sleep(time.Second * 5)
 			},
 		},
 		testFiles{
