@@ -22,10 +22,11 @@ package e2etest
 
 import (
 	"flag"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Purpose: Tests for the special cases that relate to moving managed disks (default local VHD to page blob; special handling for
@@ -118,7 +119,7 @@ func TestManagedDisks_SnapshotOAuth(t *testing.T) {
 }
 
 // Service issue causes occasional flickers in feature functionality; enough that testing is problematic. Temporarily disabled until issue is resolved.
-func TestManagedDisks_OAuthRequired(t *testing.T) {
+func TestAAA(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Limit runs to Linux so no simultaneous runs occur")
 		return
