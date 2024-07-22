@@ -301,6 +301,7 @@ type FileProperties struct {
 	FileCreationTime  *time.Time
 	FileLastWriteTime *time.Time
 	FilePermissions   *string
+	LastModifiedTime  *time.Time
 }
 
 func (f FileProperties) hasCustomTimes() bool {

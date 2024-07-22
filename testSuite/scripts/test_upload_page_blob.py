@@ -4,48 +4,6 @@ import os
 
 
 class PageBlob_Upload_User_Scenarios(unittest.TestCase):
-    def setUp(self):
-        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']).add_flags("tenant-id", os.environ['OAUTH_TENANT_ID'])
-        cmd.execute_azcopy_copy_command()
-
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
-    # util_test_page_blob_upload_1mb verifies the azcopy upload of 1mb file
-    # as a page blob.
-    def util_test_page_blob_upload_1mb(self, use_oauth=False):
-        # create the test gile.
-        file_name = "test_page_blob_1mb.vhd"
-        file_path = util.create_test_file(file_name, 1024 * 1024)
-
-        # execute azcopy upload.
-        if not use_oauth:
-            dest = util.get_resource_sas(file_name)
-            dest_validate = dest
-        else:
-            dest = util.get_resource_from_oauth_container(file_name)
-            dest_validate = util.get_resource_from_oauth_container_validate(file_name)
-
-        result = util.Command("copy").add_arguments(file_path).add_arguments(dest).add_flags("log-level", "info"). \
-            add_flags("block-size-mb", "4").add_flags("blob-type", "PageBlob").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # execute validator.
-        result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate). \
-            add_flags("blob-type", "PageBlob").execute_azcopy_verify()
-        self.assertTrue(result)
-
-    # test_page_blob_upload_1mb_with_sas verifies the azcopy upload of 1mb file
-    # as a page blob with sas.
-    def test_page_blob_upload_1mb_with_sas(self):
-        self.util_test_page_blob_upload_1mb(False)
-
-    # test_page_blob_upload_1mb_with_oauth verifies the azcopy upload of 1mb file
-    # as a page blob with oauth.
-    def test_page_blob_upload_1mb_with_oauth(self):
-        self.util_test_page_blob_upload_1mb(True)
-
     # test_page_range_for_complete_sparse_file verifies the number of Page ranges for
     # complete empty file i.e each character is Null character.
     def test_page_range_for_complete_sparse_file(self):

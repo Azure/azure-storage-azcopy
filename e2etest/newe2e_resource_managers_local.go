@@ -311,12 +311,10 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 
 		perms := smb.GetSDDL(a)
 
-		out.FileProperties = FileProperties{
-			FileAttributes:    PtrOf(attr.String()),
-			FileCreationTime:  PtrOf(props.FileCreationTime()),
-			FileLastWriteTime: PtrOf(props.FileLastWriteTime()),
-			FilePermissions:   common.Iff(perms == "", nil, &perms),
-		}
+		out.FileProperties.FileAttributes = PtrOf(attr.String())
+		out.FileProperties.FileCreationTime = PtrOf(props.FileCreationTime())
+		out.FileProperties.FileLastWriteTime = PtrOf(props.FileLastWriteTime())
+		out.FileProperties.FilePermissions = common.Iff(perms == "", nil, &perms)
 	}
 
 	return out
