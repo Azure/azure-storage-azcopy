@@ -119,7 +119,7 @@ func TestManagedDisks_SnapshotOAuth(t *testing.T) {
 }
 
 // Service issue causes occasional flickers in feature functionality; enough that testing is problematic. Temporarily disabled until issue is resolved.
-func TestManagedDisks_Aaa(t *testing.T) {
+func TestManagedDisks_OAuthRequired(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Limit runs to Linux so no simultaneous runs occur")
 		return
@@ -138,7 +138,7 @@ func TestManagedDisks_Aaa(t *testing.T) {
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
 				// try giving the service some time to think
-				time.Sleep(time.Second * 5)
+				time.Sleep(time.Second * 30)
 			},
 		},
 		testFiles{
