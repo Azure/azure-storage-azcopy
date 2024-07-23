@@ -43,7 +43,6 @@ type FileClientStub interface {
 	URL() string
 }
 
-
 // azureFileSenderBase implements both IFolderSender and (most of) IFileSender.
 // Why implement both interfaces in the one type, even though they are largely unrelated? Because it
 // makes functions like newAzureFilesUploader easier to reason about, since they always return the same type.
@@ -112,7 +111,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	sURL, _ := file.ParseURL(serviceClient.URL())
 	addFileRequestIntent := (sURL.SAS.Signature() == "") // We are using oAuth
-	
+
 	shareClient := serviceClient.NewShareClient(shareName)
 	if shareSnapshot != "" {
 		shareClient, err = shareClient.WithSnapshot(shareSnapshot)
@@ -145,7 +144,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		smbPropertiesToApply: file.SMBProperties{},
 		permissionsToApply:   file.Permissions{},
 		sip:                  sip,
-		metadataToApply:      props.SrcMetadata,
+		metadataToApply:      FixBustedMetadata(props.SrcMetadata),
 	}, nil
 }
 
@@ -485,7 +484,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 	if len(segments) == 0 {
 		// If we are trying to create root, perform GetProperties instead.
 		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
-		// some operations like SetMetadata or SetProperties will fail. 
+		// some operations like SetMetadata or SetProperties will fail.
 		// TODO: Remove this block once the bug is fixed.
 		_, err := directoryClient.GetProperties(ctx, nil)
 		return err

@@ -130,7 +130,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer p
 		numChunks:              numChunks,
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:        props.SrcMetadata,
+		metadataToApply:        FixBustedMetadata(props.SrcMetadata),
 		blobTagsToApply:        props.SrcBlobTags,
 		destBlobTier:           destBlobTier,
 		filePacer:              NewNullAutoPacer(), // defer creation of real one to Prologue
