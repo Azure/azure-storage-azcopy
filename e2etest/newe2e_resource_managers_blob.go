@@ -139,6 +139,7 @@ func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
 func (b *BlobServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -348,6 +349,7 @@ func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
 func (b *BlobContainerResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -658,6 +660,9 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 			Type:      resp.BlobType,
 			Tags: func() map[string]string {
 				out := make(map[string]string)
+				if b.internalAccount.AccountType() == EAccountType.PremiumPageBlobs() {
+					return out
+				}
 				resp, err := b.internalClient.GetTags(ctx, nil)
 				a.NoError("Get tags", err)
 				for _, tag := range resp.BlobTagSet {
@@ -721,6 +726,7 @@ func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
 func (b *BlobObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
