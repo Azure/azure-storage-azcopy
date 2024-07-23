@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/grpcctl"
 	"net"
 	"net/http"
 	"net/url"
@@ -354,6 +355,17 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))
 	if err != nil {
 		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %w", err)
+	}
+
+	// Seed the grpc state with what we retrieved from the env var
+	if tokenInfo.LoginType == EAutoLoginType.GRPC() {
+		g := globalRPCOAuthTokenState
+		g.Mutex.L.Lock()
+		g.Token = tokenInfo.AccessToken
+		g.Live = time.Now()
+		g.Expiry = tokenInfo.Expires()
+		g.Mutex.L.Unlock()
+		g.Mutex.Broadcast()
 	}
 
 	if tokenInfo.LoginType != EAutoLoginType.TokenStore() {
@@ -746,6 +758,12 @@ type AuthenticateToken interface {
 	Authenticate(ctx context.Context, opts *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error)
 }
 
+func (credInfo *OAuthTokenInfo) GetGRPCOAuthCredential() (azcore.TokenCredential, error) {
+	tc := globalRPCOAuthTokenState
+	credInfo.TokenCredential = tc
+	return tc, nil
+}
+
 func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, error) {
 	// Token Credential is cached.
 	if credInfo.TokenCredential != nil {
@@ -757,6 +775,8 @@ func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, er
 	}
 
 	switch credInfo.LoginType {
+	case EAutoLoginType.GRPC():
+		return credInfo.GetGRPCOAuthCredential()
 	case EAutoLoginType.MSI():
 		return credInfo.GetManagedIdentityCredential()
 	case EAutoLoginType.SPN():
@@ -788,6 +808,79 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 		_, _ = OAuthTokenInfo.GetTokenStoreCredential()
 	}
 	return &OAuthTokenInfo, nil
+}
+
+// ====================================================================================
+
+var globalRPCOAuthTokenState = &GRPCOAuthToken{Mutex: sync.NewCond(&sync.Mutex{})}
+
+func init() {
+	grpcctl.Subscribe(grpcctl.GlobalServer, func(token *grpcctl.OAuthTokenUpdate) {
+		g := globalRPCOAuthTokenState
+		g.Mutex.L.Lock()
+
+		if AzcopyCurrentJobLogger != nil {
+			AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Received fresh OAuth token."))
+		}
+
+		g.Token = token.Token
+		g.Live = token.Live
+		g.Expiry = token.Expiry
+		g.Wiggle = token.Wiggle
+
+		g.Mutex.L.Unlock()
+		g.Mutex.Broadcast()
+	})
+}
+
+type GRPCOAuthToken struct {
+	Token  string
+	Live   time.Time
+	Expiry time.Time
+	// Time in seconds before expiry we'll act like it is expired
+	Wiggle time.Duration
+
+	Mutex *sync.Cond
+}
+
+func (g *GRPCOAuthToken) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
+retry:
+	g.Mutex.L.Lock()
+	exp := g.Expiry.Add(-g.Wiggle)
+	totalDuration := g.Expiry.Sub(g.Live)
+	if time.Now().After(exp) || g.Token == "" {
+		if AzcopyCurrentJobLogger != nil {
+			AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Token is expired or invalid (invalid: %v, now: %v, expiry: %v)", g.Token == "", time.Now(), exp))
+		}
+
+		waitch := make(chan bool)
+		go func() {
+			g.Mutex.Wait()
+			waitch <- true
+		}()
+
+		// Time out eventually, so that AzCopy can exit.
+		select {
+		case <-waitch:
+			close(waitch)
+		case <-time.After(totalDuration * 3):
+			close(waitch)
+			return azcore.AccessToken{}, errors.New("timed out waiting for new token (3x last live duration)")
+		}
+
+		goto retry
+	}
+
+	t := g.Token
+	e := g.Expiry
+	defer g.Mutex.L.Unlock()
+	return azcore.AccessToken{
+		Token: t,
+		// e could be zero and the result would be the same
+		// azcore will """refresh""" every 30s
+		// but we'll hand it back the same token (or whatever has been updated to)
+		ExpiresOn: e,
+	}, nil
 }
 
 // ====================================================================================

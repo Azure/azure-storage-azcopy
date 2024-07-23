@@ -24,8 +24,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/grpcctl"
 	"io"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -62,6 +64,7 @@ var azcopySkipVersionCheck bool
 var isPipeDownload bool
 var retryStatusCodes string
 var debugMemoryProfile string
+var grpcServerPort uint16
 
 type jobLoggerInfo struct {
 	jobID         common.JobID
@@ -228,6 +231,21 @@ var rootCmd = &cobra.Command{
 			beginDetectNewVersion()
 		}
 
+		if grpcServerPort != 0 {
+			// Initialize the grpc server
+			l, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcServerPort))
+			if err != nil {
+				return fmt.Errorf("grpcfailed: initialize server: %w", err)
+			}
+
+			go func() {
+				err = grpcctl.GlobalGRPCServer.Serve(l)
+				if err != nil {
+					panic("grpcfailed: " + err.Error())
+				}
+			}()
+		}
+
 		if debugSkipFiles != "" {
 			for _, v := range strings.Split(debugSkipFiles, ";") {
 				if strings.HasPrefix(v, "/") {
@@ -295,8 +313,14 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false, "Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. Assists with testing cases around file modifications between scanning and usage")
 	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "", "Used when debugging, to tell AzCopy to cancel the job midway. List of relative paths to skip in the STE.")
 
+	// special remote control flag
+	rootCmd.PersistentFlags().Uint16Var(&grpcServerPort, "grpc-server-port", 0, "Used in specific scenarios; defaults to 0 (disabled). If set, listens on the requested port. Protocol spec is in grpcctl/internal.")
+
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+
+	// currently for use in the ev2 extension
+	_ = rootCmd.PersistentFlags().MarkHidden("enable-grpc-server")
 
 	// special flags to be used in case of unexpected service errors.
 	rootCmd.PersistentFlags().StringVar(&retryStatusCodes, "retry-status-codes", "", "Comma-separated list of HTTP status codes to retry on. (default '408;429;500;502;503;504')")

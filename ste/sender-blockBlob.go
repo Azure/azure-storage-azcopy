@@ -194,7 +194,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, pacer pacer, srcInfoProvid
 		pacer:               pacer,
 		blockIDs:            make([]string, numChunks),
 		headersToApply:      props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:     props.SrcMetadata,
+		metadataToApply:     FixBustedMetadata(props.SrcMetadata),
 		blobTagsToApply:     props.SrcBlobTags,
 		destBlobTier:        destBlobTier,
 		muBlockIDs:          &sync.Mutex{},

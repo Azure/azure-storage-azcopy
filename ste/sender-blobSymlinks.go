@@ -46,7 +46,7 @@ func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISou
 		jptm:              jptm,
 		sip:               sip,
 		destinationClient: destinationClient,
-		metadataToApply:   props.SrcMetadata.Clone(), // We're going to modify it, so we should clone it.
+		metadataToApply:   FixBustedMetadata(props.SrcMetadata), // We're going to modify it, so we should clone it.
 		headersToApply:    props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
 		blobTagsToApply:   props.SrcBlobTags,
 		destBlobTier:      destBlobTier,
