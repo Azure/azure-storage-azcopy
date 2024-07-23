@@ -266,9 +266,10 @@ type ObjectResourceManager interface {
 }
 
 type ObjectProperties struct {
-	EntityType  common.EntityType
-	HTTPHeaders contentHeaders
-	Metadata    common.Metadata
+	EntityType       common.EntityType
+	HTTPHeaders      contentHeaders
+	Metadata         common.Metadata
+	LastModifiedTime *time.Time
 
 	BlobProperties   BlobProperties
 	BlobFSProperties BlobFSProperties
@@ -281,7 +282,6 @@ type BlobProperties struct {
 	BlockBlobAccessTier *blob.AccessTier
 	PageBlobAccessTier  *pageblob.PremiumPageBlobAccessTier
 	VersionId           *string
-	LastModifiedTime    *time.Time
 	LeaseState          *lease.StateType
 	LeaseDuration       *lease.DurationType
 	LeaseStatus         *lease.StatusType

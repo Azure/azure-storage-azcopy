@@ -649,13 +649,13 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 			contentMD5:         resp.ContentMD5,
 		},
 		Metadata: resp.Metadata,
+		LastModifiedTime: func() *time.Time {
+			if resp.LastModified == nil {
+				return nil
+			}
+			return to.Ptr(resp.LastModified.UTC())
+		}(),
 		BlobProperties: BlobProperties{
-			LastModifiedTime: func() *time.Time {
-				if resp.LastModified == nil {
-					return nil
-				}
-				return to.Ptr(resp.LastModified.UTC())
-			}(),
 			VersionId: resp.VersionID,
 			Type:      resp.BlobType,
 			Tags: func() map[string]string {
