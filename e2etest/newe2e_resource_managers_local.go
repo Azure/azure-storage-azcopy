@@ -295,7 +295,12 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 }
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
-	out := ObjectProperties{}
+	stats, err := os.Stat(l.getWorkingPath())
+	a.NoError("failed to get stat", err)
+	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
+	out := ObjectProperties{
+		LastModifiedTime: lmt,
+	}
 
 	// OS-triggered code, implemented in newe2e_resource_managers_local_windows.go
 	if smb, ok := any(l).(localSMBPropertiesManager); ok {

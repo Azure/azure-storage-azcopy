@@ -34,6 +34,20 @@ func NewZeroObjectContentContainer(size int64) ObjectContentContainer {
 	return &ObjectContentContainerBuffer{Data: make([]byte, size)}
 }
 
+type Range struct {
+	Start int64
+	End   int64
+}
+
+func NewPartialSparseObjectContentContainer(a Asserter, size int64, dataRanges []Range) ObjectContentContainer {
+	buf := make([]byte, size)
+	for _, r := range dataRanges {
+		_, err := rand.Read(buf[r.Start:r.End])
+		a.NoError("Generate random data", err)
+	}
+	return &ObjectContentContainerBuffer{buf}
+}
+
 func NewStringObjectContentContainer(data string) ObjectContentContainer {
 	return &ObjectContentContainerBuffer{Data: []byte(data)}
 }
