@@ -923,11 +923,14 @@ stages:
         strategy:
           matrix:
             Ubuntu_amd64:
-              agentName: "blobfuse-ubuntu22"
-              vmImage: 'Ubuntu-22.04'
-              container: 'test-cnt-ubn-22'
+              imageName: 'ubuntu-20.04'
+              container: 'test-cnt-ubn-20'
+              AgentName: "blobfuse-ubuntu20"
         pool:
-          vmImage: $(vmImage)
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(agentName)
+
         steps:
           - checkout: none
           
@@ -1544,11 +1547,13 @@ stages:
         strategy:
           matrix:
             Ubuntu_amd64:
-              agentName: "blobfuse-ubuntu22"
-              vmImage: 'Ubuntu-22.04'
-              container: 'test-cnt-ubn-22'
+              imageName: 'ubuntu-20.04'
+              container: 'test-cnt-ubn-20'
+              AgentName: "blobfuse-ubuntu20"
         pool:
-          vmImage: $(vmImage)
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(agentName)
           
         variables:
           - name: Test_Release_Account_Name
