@@ -22,11 +22,10 @@ package e2etest
 
 import (
 	"flag"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"runtime"
 	"testing"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // Purpose: Tests for the special cases that relate to moving managed disks (default local VHD to page blob; special handling for
