@@ -99,10 +99,12 @@ stages:
 
           - script: |
               GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_amd64"
+              $(root_dir)/azcopy_linux_amd64 --version
             displayName: 'Generate Linux AMD64'
 
           - script: |
               GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_amd64"
+              $(root_dir)/azcopy_linux_se_amd64 --version
             displayName: 'Generate Linux AMD64 SE Integration'
 
           - script: |
