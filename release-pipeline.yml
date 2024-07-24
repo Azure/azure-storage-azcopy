@@ -1555,11 +1555,12 @@ stages:
           - name: Publish_To_Container
             value: ${{ parameters.publish_to_container }}
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
+            value: '$(Build.SourcesDirectory)'
 
         steps:
-
+          - checkout: self
+            displayName: 'Checkout repository'
+            
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Linux Build Artifacts'
             inputs:
