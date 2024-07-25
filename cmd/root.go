@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/grpcctl"
 	"io"
 	"log"
 	"net"
@@ -231,19 +230,10 @@ var rootCmd = &cobra.Command{
 			beginDetectNewVersion()
 		}
 
-		if grpcServerPort != 0 {
-			// Initialize the grpc server
-			l, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcServerPort))
-			if err != nil {
-				return fmt.Errorf("grpcfailed: initialize server: %w", err)
+		if common.GrpcShim.Available() {
+			if any(common.GrpcShim).(common.GrpcCtl).SetupGrpc(grpcServerPort) != nil {
+				return err
 			}
-
-			go func() {
-				err = grpcctl.GlobalGRPCServer.Serve(l)
-				if err != nil {
-					panic("grpcfailed: " + err.Error())
-				}
-			}()
 		}
 
 		if debugSkipFiles != "" {
@@ -313,8 +303,10 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&azcopyAwaitAllowOpenFiles, "await-open", false, "Used when debugging, to tell AzCopy to await `open` on stdin, after scanning but before opening the first file. Assists with testing cases around file modifications between scanning and usage")
 	rootCmd.PersistentFlags().StringVar(&debugSkipFiles, "debug-skip-files", "", "Used when debugging, to tell AzCopy to cancel the job midway. List of relative paths to skip in the STE.")
 
-	// special remote control flag
-	rootCmd.PersistentFlags().Uint16Var(&grpcServerPort, "grpc-server-port", 0, "Used in specific scenarios; defaults to 0 (disabled). If set, listens on the requested port. Protocol spec is in grpcctl/internal.")
+	// special remote control flag, only available if the build enabled it.
+	if common.GrpcShim.Available() {
+		rootCmd.PersistentFlags().StringVar(&grpcServerPort, "grpc-server-addr", "", "Used in specific scenarios; defaults to disabled. If set, listens on the requested port (e.g. 127.0.0.1:9879). Protocol spec is in grpcctl/internal.")
+	}
 
 	// reserved for partner teams
 	_ = rootCmd.PersistentFlags().MarkHidden("cancel-from-stdin")

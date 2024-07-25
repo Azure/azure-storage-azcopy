@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/grpcctl"
 	"net"
 	"net/http"
 	"net/url"
@@ -815,22 +814,24 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 var globalRPCOAuthTokenState = &GRPCOAuthToken{Mutex: sync.NewCond(&sync.Mutex{})}
 
 func init() {
-	grpcctl.Subscribe(grpcctl.GlobalServer, func(token *grpcctl.OAuthTokenUpdate) {
-		g := globalRPCOAuthTokenState
-		g.Mutex.L.Lock()
+	if GrpcShim.Available() {
+		any(GrpcShim).(GrpcCtl).SetupOAuthSubscription(func(token *OAuthTokenUpdate) {
+			g := globalRPCOAuthTokenState
+			g.Mutex.L.Lock()
 
-		if AzcopyCurrentJobLogger != nil {
-			AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Received fresh OAuth token."))
-		}
+			if AzcopyCurrentJobLogger != nil {
+				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Received fresh OAuth token."))
+			}
 
-		g.Token = token.Token
-		g.Live = token.Live
-		g.Expiry = token.Expiry
-		g.Wiggle = token.Wiggle
+			g.Token = token.Token
+			g.Live = token.Live
+			g.Expiry = token.Expiry
+			g.Wiggle = token.Wiggle
 
-		g.Mutex.L.Unlock()
-		g.Mutex.Broadcast()
-	})
+			g.Mutex.L.Unlock()
+			g.Mutex.Broadcast()
+		})
+	}
 }
 
 type GRPCOAuthToken struct {
