@@ -936,6 +936,7 @@ stages:
           
           - script: |
               sudo apt update
+              sudo apt-get install pkg-config libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
             displayName: "GLIBC Version"
