@@ -941,7 +941,20 @@ stages:
 
         steps:
           - checkout: none
-          
+
+            #TODO remove
+          - script: |
+              # Locate the azcopy binary
+              which azcopy
+
+              # Verify the binary
+              file $(which azcopy)
+              azcopy --version
+
+              ls /usr/local/bin/azcopy
+              ls /usr/bin/azcopy
+            displayName: 'Check azcopy version if any'
+            
           - script: |
               sudo apt update
               sudo apt-get install pkg-config libsecret-1-dev -y
