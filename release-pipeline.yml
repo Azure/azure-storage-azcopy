@@ -920,16 +920,24 @@ stages:
     jobs:
       - job: Set_1
         timeoutInMinutes: 120
+        # strategy:
+        #   matrix:
+        #     Ubuntu_amd64:
+        #       imageName: 'ubuntu-20.04'
+        #       container: 'test-cnt-ubn-20'
+        #       AgentName: "blobfuse-ubuntu20"
+        # pool:
+        #   name: "blobfuse-ubuntu-pool"
+        #   demands:
+        #     - ImageOverride -equals $(agentName)
         strategy:
           matrix:
             Ubuntu_amd64:
-              imageName: 'ubuntu-20.04'
-              container: 'test-cnt-ubn-20'
-              AgentName: "blobfuse-ubuntu20"
+              agentName: "blobfuse-ubuntu22"
+              vmImage: 'Ubuntu-22.04'
+              container: 'test-cnt-ubn-22'
         pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(agentName)
+          vmImage: $(vmImage)
 
         steps:
           - checkout: none
@@ -1545,16 +1553,24 @@ stages:
     condition: succeeded('TestArtifacts')
     jobs:
       - job: ReleaseToContainer
+        # strategy:
+        #   matrix:
+        #     Ubuntu_amd64:
+        #       imageName: 'ubuntu-20.04'
+        #       container: 'test-cnt-ubn-20'
+        #       AgentName: "blobfuse-ubuntu20"
+        # pool:
+        #   name: "blobfuse-ubuntu-pool"
+        #   demands:
+        #     - ImageOverride -equals $(agentName)
         strategy:
           matrix:
             Ubuntu_amd64:
-              imageName: 'ubuntu-20.04'
-              container: 'test-cnt-ubn-20'
-              AgentName: "blobfuse-ubuntu20"
+              agentName: "blobfuse-ubuntu22"
+              vmImage: 'Ubuntu-22.04'
+              container: 'test-cnt-ubn-22'
         pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(agentName)
+          vmImage: $(vmImage)
           
         variables:
           - name: Test_Release_Account_Name
