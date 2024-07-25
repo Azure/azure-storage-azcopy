@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.26.0
+
+### Security fixes
+
+1. Draft security fixes
+
 ## Version 10.25.1
 
 ### Security fixes

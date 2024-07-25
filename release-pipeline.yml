@@ -1670,8 +1670,6 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         steps:
-          - checkout: none
-          
           - script: |
               echo ${{ parameters.tag }}
             displayName: 'Tag Name'
@@ -1734,7 +1732,7 @@ stages:
                     $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*
                     $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
                   changeLogCompareToRelease: 'lastFullRelease'
-                  changeLogType: 'commitBased'
+                  changeLogFile: '$(Build.SourcesDirectory)/ChangeLog.md'
                   isDraft: ${{ parameters.draft }}
                   isPreRelease: ${{ parameters.prerelease }}
                   assetUploadMode: replace
