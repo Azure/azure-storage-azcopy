@@ -267,6 +267,7 @@ type CopySyncCommonFlags struct {
 	TrailingDot             *common.TrailingDotOption    `flag:"trailing-dot"`
 	CPKByName               *string                      `flag:"cpk-by-name"`
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
+	IncludePattern          *string                      `flag:"include-pattern"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
