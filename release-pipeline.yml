@@ -961,6 +961,13 @@ stages:
               chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries/*
               $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version
               $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_se_amd64 --version
+
+              # Locate the azcopy binary
+              which azcopy
+
+              # Verify the binary
+              file $(which azcopy)
+              azcopy --version
             displayName: 'Test signed linux binaries'
 
           - task: DownloadBuildArtifacts@0
