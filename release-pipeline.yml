@@ -947,6 +947,7 @@ stages:
               $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version
               $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_se_amd64 --version
               rm -rf /usr/local/bin/azcopy
+              rm -rf /usr/bin/azcopy
             displayName: 'Test signed linux binaries'
 
           - task: DownloadBuildArtifacts@0
@@ -1581,6 +1582,7 @@ stages:
               sudo apt-get install -y zip
               cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
               rm -rf /usr/local/bin/azcopy
+              rm -rf /usr/bin/azcopy
               sudo dpkg --info azcopy-*x86_64.deb
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
