@@ -99,12 +99,10 @@ stages:
 
           - script: |
               GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_amd64"
-              $(root_dir)/azcopy_linux_amd64 --version
             displayName: 'Generate Linux AMD64'
 
           - script: |
               GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_amd64"
-              $(root_dir)/azcopy_linux_se_amd64 --version
             displayName: 'Generate Linux AMD64 SE Integration'
 
           - script: |
@@ -147,7 +145,6 @@ stages:
               cp NOTICE.txt $(linux_amd64_dir)/
               cp NOTICE.txt $(linux_se_amd64_dir)/
               cp NOTICE.txt pkgDir/usr/bin/
-              ./pkgDir/usr/bin/azcopy --version
             displayName: 'Copy required files for packaging'
 
           # using fpm tool for packaging of our binary & performing post-install operations
@@ -928,26 +925,11 @@ stages:
               container: 'test-cnt-ubn-22'
         pool:
           vmImage: $(vmImage)
-
         steps:
           - checkout: none
 
-            #TODO remove
-          - script: |
-              # Locate the azcopy binary
-              which azcopy
-
-              # Verify the binary
-              file $(which azcopy)
-              azcopy --version
-
-              ls /usr/local/bin/azcopy
-              ls /usr/bin/azcopy
-            displayName: 'Check azcopy version if any'
-
           - script: |
               sudo apt update
-              sudo apt-get install pkg-config libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
             displayName: "GLIBC Version"
@@ -975,7 +957,6 @@ stages:
               itemPattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
 
           - script: |
-              ls -ltR azcopy-*x86_64.deb
               sudo dpkg --info azcopy-*x86_64.deb
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
