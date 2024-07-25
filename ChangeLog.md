@@ -1,6 +1,22 @@
 
 # Change Log
 
+## Version 10.26.0
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
+## Bug Fixes
+
+1. Fixed an issue where AzCopy would fail to unmarshal the `_token_refresh_source` property correctly when performing copy jobs from OAuth-attached containers. ([#2710](https://github.com/Azure/azure-storage-azcopy/pull/2710))
+#TBD: is this required to be added in bug-fix section as its a CI pipeline change?? Check on this
+2. Fixed a CI pipeline in Azure DevOps to automatically detect CVEs declared against our dependencies. ([#2705](https://github.com/Azure/azure-storage-azcopy/pull/2705))
+
+### Dependency updates
+
+1. Golang 1.22.4 -> 1.22.5
+
 ## Version 10.25.1
 
 ### Security fixes
