@@ -1713,6 +1713,7 @@ stages:
           vmImage: $(vmImage)
           
         variables:
+          - group: AZCOPY_TESTS_VAR
           - name: Test_Release_Account_Name
             value: 'azcopyprivatedrops'
           - name: Release_Account_Name
