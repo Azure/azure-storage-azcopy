@@ -962,7 +962,7 @@ stages:
               arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
               echo "ARM64 Folder name: $arm64FolderName"
 
-              m1Arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64_*")
+              m1Arm64FolderName=$(find unzipped_m1_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64_*")
               echo "M1 ARM64 Folder name: $m1Arm64FolderName" 
 
               # Check if there is exactly one matching directory for amd64
