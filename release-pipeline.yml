@@ -1520,7 +1520,7 @@ stages:
               ./azcopy --help
             displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
 
-       - job: Set_9
+      - job: Set_9
         timeoutInMinutes: 360
         strategy:
           matrix:
@@ -1829,7 +1829,7 @@ stages:
 
         steps:
           - checkout: none
-          
+
           - script: |
               echo ${{ parameters.tag }}
             displayName: 'Tag Name'
