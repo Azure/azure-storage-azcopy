@@ -1814,86 +1814,90 @@ stages:
                 if [ $(Publish_To_M1_Container) = "True" ]; then
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$(M1_CONTAINER_URL)" --put-md5=true
                 fi
-                
-      - job: ReleaseAzcopy
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Ubuntu-22:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
 
-        steps:
-          - checkout: none
 
-          - script: |
-              echo ${{ parameters.tag }}
-            displayName: 'Tag Name'
-          
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Linux Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+ - ${{ if eq(parameters.post_release, true) }}:
+    - stage: ReleaseArtifacts
+      dependsOn: TestArtifacts
+      condition: succeeded('TestArtifacts')
+      jobs:  
+        - job: ReleaseToGithub
+          timeoutInMinutes: 120
+          strategy:
+            matrix:
+              Ubuntu-22:
+                vmImage: 'Ubuntu-20.04'
+                AgentName: "blobfuse-ubuntu20"
+          pool:
+            name: "blobfuse-ubuntu-pool"
+            demands:
+              - ImageOverride -equals $(AgentName)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Windows Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-windows-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+          steps:
+            - checkout: none
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Mac Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-mac-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
-          
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
-              md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
-            displayName: 'List Artifacts'
-
-          - script: |
-              sudo apt-get clean
-              sudo apt-get update --fix-missing
-              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-              sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt update 
-              sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-3.1 -y
-            displayName: "Update dependencies"
+            - script: |
+                echo ${{ parameters.tag }}
+              displayName: 'Tag Name'
             
-          - ${{ if eq(parameters.post_release, true) }}:
+            - task: DownloadBuildArtifacts@0
+              displayName: 'Download Linux Build Artifacts'
+              inputs:
+                artifactName: 'azCopy-linux-signed'
+                downloadPath: $(Build.ArtifactStagingDirectory)
 
-              - task: GithubRelease@1
-                inputs:
-                  githubConnection: 'azcopy-github-connection'
-                  repositoryName: 'Azure/azure-storage-azcopy'
-                  action: 'edit'
+            - task: DownloadBuildArtifacts@0
+              displayName: 'Download Windows Build Artifacts'
+              inputs:
+                artifactName: 'azCopy-windows-signed'
+                downloadPath: $(Build.ArtifactStagingDirectory)
 
-                  target: '$(Build.SourceVersion)'
-                  tagSource: 'userSpecifiedTag'
+            - task: DownloadBuildArtifacts@0
+              displayName: 'Download Mac Build Artifacts'
+              inputs:
+                artifactName: 'azCopy-mac-signed'
+                downloadPath: $(Build.ArtifactStagingDirectory)
+            
+            - script: |
+                sudo ls -lRt $(Build.ArtifactStagingDirectory)
+                md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
+                md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
+                md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
+                md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
+                md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
+              displayName: 'List Artifacts'
 
-                  title: ${{ parameters.tag }}
-                  tag: ${{ parameters.tag }}
-                  
-                  assets: |
-                    $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
-                    $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*
-                    $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
-                  changeLogCompareToRelease: 'lastFullRelease'
-                  changeLogType: 'commitBased'
-                  isDraft: ${{ parameters.draft }}
-                  isPreRelease: ${{ parameters.prerelease }}
-                  assetUploadMode: replace
+            - script: |
+                sudo apt-get clean
+                sudo apt-get update --fix-missing
+                wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+                sudo dpkg -i packages-microsoft-prod.deb 
+                sudo apt update 
+                sudo apt install apt-transport-https -y
+                sudo apt install dotnet-sdk-3.1 -y
+              displayName: "Update dependencies"
+              
+            - task: GithubRelease@1
+              inputs:
+                githubConnection: 'azcopy-github-connection'
+                repositoryName: 'Azure/azure-storage-azcopy'
+                action: 'edit'
+
+                target: '$(Build.SourceVersion)'
+                tagSource: 'userSpecifiedTag'
+
+                title: ${{ parameters.tag }}
+                tag: ${{ parameters.tag }}
+                
+                assets: |
+                  $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
+                  $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*
+                  $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
+                changeLogCompareToRelease: 'lastFullRelease'
+                changeLogType: 'commitBased'
+                isDraft: ${{ parameters.draft }}
+                isPreRelease: ${{ parameters.prerelease }}
+                assetUploadMode: replace
 
   - ${{ if eq(parameters.publish_artifacts, true) }}:
     - stage: PublishArtifacts
