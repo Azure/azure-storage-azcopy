@@ -1816,7 +1816,7 @@ stages:
                 fi
 
 
- - ${{ if eq(parameters.post_release, true) }}:
+  - ${{ if eq(parameters.post_release, true) }}:
     - stage: ReleaseArtifacts
       dependsOn: TestArtifacts
       condition: succeeded('TestArtifacts')
