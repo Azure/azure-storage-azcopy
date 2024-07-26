@@ -537,7 +537,7 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
     
-      - job: Set_4
+      - job: Set_5
         timeoutInMinutes: 360
         strategy:
           matrix:
@@ -1591,7 +1591,7 @@ stages:
               ./azcopy --help
             displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
       
-      - job: Set_9
+      - job: Set_10
         timeoutInMinutes: 120
         strategy:
           matrix:
