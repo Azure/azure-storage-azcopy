@@ -1719,6 +1719,8 @@ stages:
             value: 'azcopyvnextrelease'
           - name: Publish_To_Container
             value: ${{ parameters.publish_to_container }}
+          - name: Publish_To_M1_Container
+            value: ${{ parameters.publish_to_m1_container }}
           - name: work_dir
             value: '$(Build.SourcesDirectory)'
 
@@ -1809,10 +1811,8 @@ stages:
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
-                if [ -z "$M1_CONTAINER_URL" ]; then
-                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" $(M1_CONTAINER_URL) --put-md5=true
-                else
-                  echo "Azcopy M1 build not uploaded as M1_CONTAINER_URL variable is not set"
+                if [ $(Publish_To_M1_Container) = "True" ]; then
+                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$(M1_CONTAINER_URL)" --put-md5=true
                 fi
                 
       - job: ReleaseAzcopy
