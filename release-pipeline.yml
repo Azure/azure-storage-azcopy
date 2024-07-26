@@ -1720,7 +1720,7 @@ stages:
           - name: Publish_To_Container
             value: ${{ parameters.publish_to_container }}
           - name: Publish_To_M1_Container
-            value: ${{ parameters.publish_to_m1_container }}
+            value: ${{ parameters.publish_m1_build_to_container }}
           - name: work_dir
             value: '$(Build.SourcesDirectory)'
 
