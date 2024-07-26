@@ -9,7 +9,7 @@
 
 ### New Features
 
-1. AzCopy now supports distribution through package managers for Red Hat Enterprise Linux (RHEL), Ubuntu,Mariner, Debian, SUSE, Rocky, and CentOS. ([#2728](https://github.com/Azure/azure-storage-azcopy/pull/2728))
+1. AzCopy now supports distribution through package managers for Red Hat Enterprise Linux (RHEL), Ubuntu, Mariner, Debian, SUSE, Rocky and CentOS. ([#2728](https://github.com/Azure/azure-storage-azcopy/pull/2728))
 
 ### Dependency updates
 
