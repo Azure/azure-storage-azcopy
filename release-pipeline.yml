@@ -1713,7 +1713,7 @@ stages:
                     $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*
                     $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
                   changeLogCompareToRelease: 'lastFullRelease'
-                  changeLogFile: 'commitBased'
+                  changeLogType: 'commitBased'
                   isDraft: ${{ parameters.draft }}
                   isPreRelease: ${{ parameters.prerelease }}
                   assetUploadMode: replace
