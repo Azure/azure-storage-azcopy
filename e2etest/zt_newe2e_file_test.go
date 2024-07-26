@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strconv"
 	"math"
 )
 
@@ -249,4 +250,263 @@ func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager)
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
 	}, false)
+}
+
+func (s *FileTestSuite) Scenario_UploadDirectory(svm *ScenarioVariationManager) {
+	// Scale up from service to object
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+	// Create destination directories
+	srcObjs := make(ObjectResourceMappingFlat)
+	for _, dir := range dirsToCreate {
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+		if dstContainer.Location() != common.ELocation.Blob() {
+			srcObjs[dir] = obj
+		}
+		for i := range 3 {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			srcObjs[name] = obj
+		}
+	}
+
+	for _, obj := range srcObjs {
+		if obj.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		}
+	}
+
+	srcDir := srcContainer.GetObject(svm, dirsToCreate[0], common.EEntityType.Folder())
+	dstDir := dstContainer.GetObject(svm, dirsToCreate[0], common.EEntityType.Folder())
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcDir, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstDir, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+				AsSubdir: pointerTo(false),
+			},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, true)
+}
+
+func (s *FileTestSuite) Scenario_DownloadDirectory(svm *ScenarioVariationManager) {
+	// Scale up from service to object
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+
+	dirsToCreate := []string{"dir_file_copy_test", "dir_file_copy_test/sub_dir_copy_test"}
+
+	// Create destination directories
+	srcObjs := make(ObjectResourceMappingFlat)
+	for _, dir := range dirsToCreate {
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(dir), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}
+		if dstContainer.Location() != common.ELocation.Blob() {
+			srcObjs[dir] = obj
+		}
+		for i := range 3 {
+			name := dir + "/test" + strconv.Itoa(i) + ".txt"
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			srcObjs[name] = obj
+		}
+	}
+
+	for _, obj := range srcObjs {
+		if obj.EntityType != common.EEntityType.Folder() {
+			CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+		}
+	}
+
+	srcDir := srcContainer.GetObject(svm, dirsToCreate[0], common.EEntityType.Folder())
+	dstDir := dstContainer.GetObject(svm, dirsToCreate[0], common.EEntityType.Folder())
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcDir, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstDir, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+				AsSubdir: pointerTo(false),
+			},
+		})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, true)
+}
+
+func (s *FileTestSuite) Scenario_SingleFileUploadWildcard(svm *ScenarioVariationManager) {
+	size := common.MegaByte
+	fileName := fmt.Sprintf("test_file_upload_%dB_fullname.txt", size)
+	body := NewRandomObjectContentContainer(svm, int64(size))
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	dstObj := dstContainer.GetObject(svm, fileName, common.EEntityType.File())
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/*"}), dstContainer},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				BlockSizeMB: pointerTo(4.0),
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, true)
+}
+
+func (s *FileTestSuite) Scenario_AllFileUploadWildcard(svm *ScenarioVariationManager) {
+	size := common.KiloByte
+	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
+	body := NewRandomObjectContentContainer(svm, int64(size))
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/*"}),
+			dstContainer,
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				BlockSizeMB: pointerTo(4.0),
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+	}, true)
+}
+
+func (s *FileTestSuite) Scenario_AllFileDownloadWildcard(svm *ScenarioVariationManager) {
+	size := common.KiloByte
+	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
+	body := NewRandomObjectContentContainer(svm, int64(size))
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/*"}),
+			dstContainer,
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				BlockSizeMB: pointerTo(4.0),
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+	}, true)
+}
+
+func (s *FileTestSuite) Scenario_SeveralFileUploadWildcard(svm *ScenarioVariationManager) {
+	size := common.KiloByte
+	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
+	body := NewRandomObjectContentContainer(svm, int64(size))
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{Wildcard: "/test_file*"}),
+			dstContainer,
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				BlockSizeMB: pointerTo(4.0),
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+	}, true)
+}
+
+func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariationManager) {
+	size := common.KiloByte
+	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
+	body := NewRandomObjectContentContainer(svm, int64(size))
+
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
+	srcObj.Create(svm, body, ObjectProperties{})
+
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm),
+			dstContainer,
+		},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				BlockSizeMB:    pointerTo(4.0),
+				IncludePattern: pointerTo("test_file*"),
+				Recursive:      pointerTo(true),
+			},
+		},
+	})
+
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, srcContainer.ContainerName()+"/"+fileName, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: body,
+	}, true)
 }
