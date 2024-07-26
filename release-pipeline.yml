@@ -581,7 +581,7 @@ stages:
                 echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
 
           - script: |
-              darwin_m1_arm_dir="$(work_dir)/azcopy_darwin_m1_arm64$(azcopy_version)"
+              darwin_m1_arm_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=darwin_m1_arm_dir]$darwin_m1_arm_dir"
             
               mkdir -p $darwin_m1_arm_dir
