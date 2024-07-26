@@ -2045,51 +2045,51 @@ stages:
               displayName: 'Publish the repository'
               workingDirectory: $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/
             
-- ${{ if eq(parameters.update_version, true) }}:
-  - stage: UpdateLatestVersion
-    dependsOn: ReleaseArtifacts
-    condition: succeeded('ReleaseArtifacts')
-    jobs:
-      - job: UpdateVersion       
-        pool:
-          vmImage: 'ubuntu-20.04'
-        variables:
-          - group: AZCOPY_TESTS_VAR
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-        
-        steps:
-          - checkout: none
+  - ${{ if eq(parameters.update_version, true) }}:
+    - stage: UpdateLatestVersion
+      dependsOn: ReleaseArtifacts
+      condition: succeeded('ReleaseArtifacts')
+      jobs:
+        - job: UpdateVersion       
+          pool:
+            vmImage: 'ubuntu-20.04'
+          variables:
+            - group: AZCOPY_TESTS_VAR
+            - name: root_dir
+              value: '$(System.DefaultWorkingDirectory)'
+          
+          steps:
+            - checkout: none
 
-          - ${{ if eq(parameters.update_version, true) }}:
-              - script: |
-                  sudo apt-get install python3 -y
-                  python3 --version
-                displayName: 'Installing Python'
+            - ${{ if eq(parameters.update_version, true) }}:
+                - script: |
+                    sudo apt-get install python3 -y
+                    python3 --version
+                  displayName: 'Installing Python'
 
-              - task: DownloadBuildArtifacts@0
-                displayName: 'Download Build Artifacts'
-                inputs:
-                  artifactName: 'azCopy-linux-signed'
-                  downloadPath: $(Build.ArtifactStagingDirectory)
-              
-              # install azcopy
-              - script: |
-                  cd $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
-                  ls azcopy*.arm64.deb
-                  sudo dpkg --info azcopy-*arm64.deb
-                  sudo dpkg -i azcopy-*arm64.deb
-                  azcopy --version
-                displayName: 'Installing azcopy'
-              
-              - script: |
-                  wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
-                  ls -l
-                displayName: 'Getting Python script'
-                workingDirectory: $(root_dir)
+                - task: DownloadBuildArtifacts@0
+                  displayName: 'Download Build Artifacts'
+                  inputs:
+                    artifactName: 'azCopy-linux-signed'
+                    downloadPath: $(Build.ArtifactStagingDirectory)
+                
+                # install azcopy
+                - script: |
+                    cd $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
+                    ls azcopy*.arm64.deb
+                    sudo dpkg --info azcopy-*arm64.deb
+                    sudo dpkg -i azcopy-*arm64.deb
+                    azcopy --version
+                  displayName: 'Installing azcopy'
+                
+                - script: |
+                    wget https://raw.githubusercontent.com/Azure/azure-storage-azcopy/`echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`/setup/releaseVersionUpdate.py
+                    ls -l
+                  displayName: 'Getting Python script'
+                  workingDirectory: $(root_dir)
 
-              - script: |
-                  pip install azure-storage-blob
-                  python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
-                displayName: 'Updating version number'
-                workingDirectory: $(root_dir)
+                - script: |
+                    pip install azure-storage-blob
+                    python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
+                  displayName: 'Updating version number'
+                  workingDirectory: $(root_dir)
