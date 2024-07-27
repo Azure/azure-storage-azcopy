@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"golang.org/x/sys/unix"
 	"path/filepath"
-	"strings"
 )
 
 // ===== OS-Specific hash adapter changes =====
