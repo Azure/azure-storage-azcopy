@@ -867,7 +867,6 @@ stages:
           - script: |
               mkdir -p unzipped_amd64
               mkdir -p unzipped_arm64
-              mkdir -p unzipped_m1_arm64
               unzip -o azcopy*amd64*.zip -d unzipped_amd64
               unzip -o azcopy*arm64*.zip -d unzipped_arm64
 
@@ -876,7 +875,7 @@ stages:
               echo "AMD64 Folder name: $amd64FolderName"
 
               arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
-              echo "ARM64 Folder name: $arm64FolderName" 
+              echo "ARM64 Folder name: $arm64FolderName"
 
               # Check if there is exactly one matching directory for amd64
               if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
@@ -888,7 +887,7 @@ stages:
                   exit 1
               fi
 
-              cd $(Build.ArtifactStagingDirectory)  
+              cd $(Build.ArtifactStagingDirectory)
 
               # Check if there is exactly one matching directory for arm64
               if [ $(echo "$arm64FolderName" | wc -l) -eq 1 ]; then
@@ -1422,7 +1421,7 @@ stages:
               ./azcopy --help
             displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
  
-      - job: Set_10
+      - job: Set_9
         timeoutInMinutes: 120
         strategy:
           matrix:
