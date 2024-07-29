@@ -569,13 +569,9 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)
            
           - script: |
-<<<<<<< HEAD
               GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
-=======
-              GOOS=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
->>>>>>> 4cc789372f86bd096361a7595971bb633eebfaf8
             displayName: 'MacOS M1 Build with ARM64'
-
+            
           - task: Bash@3
             displayName: 'Extract AZCopy version'
             inputs:
