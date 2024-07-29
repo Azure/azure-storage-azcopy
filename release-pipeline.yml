@@ -569,7 +569,7 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)
            
           - script: |
-              CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
+              GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
             displayName: 'MacOS M1 Build with ARM64'
 
           - task: Bash@3
@@ -1713,7 +1713,6 @@ stages:
           vmImage: $(vmImage)
           
         variables:
-          - group: AZCOPY_TESTS_VAR
           - name: Test_Release_Account_Name
             value: 'azcopyprivatedrops'
           - name: Release_Account_Name
@@ -1813,7 +1812,8 @@ stages:
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
                 if [ $(Publish_To_M1_Container) = "True" ]; then
-                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$(M1_CNT_SAS_URL)" --put-md5=true
+                  m1_container_url="https://$(Release_Account_Name).blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
+                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
                 fi
 
 
