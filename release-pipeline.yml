@@ -12,11 +12,6 @@ parameters:
     type: boolean
     default: false
 
-  - name: publish_m1_build_to_container
-    displayName: 'Publish M1 build To Container'
-    type: boolean
-    default: false
-
   - name: post_release
     displayName: 'Post Release on Github'
     type: boolean
@@ -1555,8 +1550,6 @@ stages:
             value: 'azcopyvnextrelease'
           - name: Publish_To_Container
             value: ${{ parameters.publish_to_container }}
-          - name: Publish_To_M1_Container
-            value: ${{ parameters.publish_m1_build_to_container }}
           - name: work_dir
             value: '$(Build.SourcesDirectory)'
 
@@ -1646,12 +1639,6 @@ stages:
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
-
-                if [ $(Publish_To_M1_Container) = "True" ]; then
-                  m1_container_url="https://$(Release_Account_Name).blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
-                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
-                fi
-
 
   - ${{ if eq(parameters.post_release, true) }}:
     - stage: ReleaseArtifacts
