@@ -569,9 +569,10 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)
            
           - script: |
+              uname -m
               GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
             displayName: 'MacOS M1 Build with ARM64'
-            
+
           - task: Bash@3
             displayName: 'Extract AZCopy version'
             inputs:
@@ -1557,6 +1558,8 @@ stages:
               itemPattern: azCopy-mac-signed/azcopy_darwin_m1_arm64*.zip
 
           - script: |
+              uname -m
+
               # Install Homebrew if not already installed
               if ! command -v brew &> /dev/null
               then
