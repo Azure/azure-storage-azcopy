@@ -537,86 +537,7 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
     
-      - job: Set_5
-        timeoutInMinutes: 360
-        strategy:
-          matrix:
-            MacOS M1:
-              imageName: 'macos-14'
-              type: 'mac-os'
-        pool:
-          vmImage: $(imageName)
-
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-          - name: archives
-            value: $(root_dir)/archives
-
-        steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Mac'
-            workingDirectory: $(System.DefaultWorkingDirectory)
-           
-          - script: |
-              uname -m
-              GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
-            displayName: 'MacOS M1 Build with ARM64'
-
-          - task: Bash@3
-            displayName: 'Extract AZCopy version'
-            inputs:
-              targetType: 'inline'
-              script: |
-                azcopy_version=$($(root_dir)/azcopy --version | awk '{print $3}' | cut -d'-' -f1)
-                echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version" 
-
-          - script: |
-              darwin_m1_arm_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"
-              echo "##vso[task.setvariable variable=darwin_m1_arm_dir]$darwin_m1_arm_dir"
-            
-              mkdir -p $darwin_m1_arm_dir
-              mkdir -p $(archives)
-            displayName: 'Create required directories'
-
-          - script: |
-              cp NOTICE.txt $(darwin_m1_arm_dir)
-              cp $(root_dir)/azcopy  $(darwin_m1_arm_dir)
-            displayName: 'Copy required files for packaging'
-
-          - task: ArchiveFiles@2
-            displayName: 'Archive MacOS M1 ARM64 Build (must happen before signing/notarization)'
-            inputs:
-              rootFolderOrFile: '$(darwin_m1_arm_dir)'
-              archiveFile: '$(archives)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
-            continueOnError: true
-
-          - script: |
-              cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)
-            displayName: 'Copy zip to staging directory'
-
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-mac-temp'
-            displayName: 'Publish Artifacts'
-            condition: succeededOrFailed()
-        
-          - task: ComponentGovernanceComponentDetection@0
-            inputs:
-              scanType: 'Register'
-              verbosity: 'Verbose'
-              alertWarningLevel: 'High'
-
+      #TODO: support build for mac m1
     # BuildArtifacts end here
       
   - stage: SignArtifacts
@@ -953,18 +874,14 @@ stages:
               mkdir -p unzipped_arm64
               mkdir -p unzipped_m1_arm64
               unzip -o azcopy*amd64*.zip -d unzipped_amd64
-              unzip -o azcopy_darwin_arm64*.zip -d unzipped_arm64
-              unzip -o azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
+              unzip -o azcopy*arm64*.zip -d unzipped_arm64
 
               # Use find to retrieve the folder name
               amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
               echo "AMD64 Folder name: $amd64FolderName"
 
               arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
-              echo "ARM64 Folder name: $arm64FolderName"
-
-              m1Arm64FolderName=$(find unzipped_m1_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64*")
-              echo "M1 ARM64 Folder name: $m1Arm64FolderName" 
+              echo "ARM64 Folder name: $arm64FolderName" 
 
               # Check if there is exactly one matching directory for amd64
               if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
@@ -985,17 +902,6 @@ stages:
                   mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
               else
                   echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
-                  exit 1
-              fi
-
-              cd $(Build.ArtifactStagingDirectory)
-              # Check if there is exactly one matching directory for arm64
-              if [ $(echo "$m1Arm64FolderName" | wc -l) -eq 1 ]; then
-                  echo "Found matching M1 ARM64 directory: $m1Arm64FolderName"
-                  cd "$m1Arm64FolderName"
-                  mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_m1_arm64
-              else
-                  echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$m1Arm64FolderName" | wc -l)."
                   exit 1
               fi
 
@@ -1520,80 +1426,7 @@ stages:
               ./azcopy --version
               ./azcopy --help
             displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
-
-      - job: Set_9
-        timeoutInMinutes: 360
-        strategy:
-          matrix:
-            MacOS M1:
-              imageName: 'macos-14'
-              type: 'mac-os'
-        pool:
-          vmImage: $(imageName)
-
-        variables:
-          - name: root_dir
-            value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
-        steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Mac'
-            workingDirectory: $(System.DefaultWorkingDirectory)
-
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-mac-signed'
-              downloadPath: $(Build.ArtifactStagingDirectory)
-              itemPattern: azCopy-mac-signed/azcopy_darwin_m1_arm64*.zip
-
-          - script: |
-              uname -m
-
-              # Install Homebrew if not already installed
-              if ! command -v brew &> /dev/null
-              then
-                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-                echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/$(whoami)/.zprofile
-                eval "$(/opt/homebrew/bin/brew shellenv)"
-              fi
-
-              # Define variables
-              ZIP_FILE_PATH=$(ls $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/azcopy_darwin_m1_arm64*.zip)
-              EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
-
-              # Create extraction directory
-              mkdir -p $EXTRACT_DIR
-
-              # Extract the zip file
-              unzip $ZIP_FILE_PATH -d $EXTRACT_DIR
-
-              # Find the directory matching the pattern
-              matching_dirs=($EXTRACT_DIR/azcopy_darwin_m1_arm64*)
-
-              # Check if there is exactly one matching directory
-              if [ ${#matching_dirs[@]} -eq 1 ]; then
-                  cd "${matching_dirs[0]}"
-              else
-                  echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
-                  exit 1
-              fi
-
-              # Run the azcopy version command
-              ./azcopy --version
-              ./azcopy --help
-            displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
-      
+ 
       - job: Set_10
         timeoutInMinutes: 120
         strategy:
