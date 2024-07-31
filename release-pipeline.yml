@@ -1628,7 +1628,7 @@ stages:
             displayName: 'Extract Files and Run Version and Help Command on Windows'
        # TestArtifacts ends here
 
-  - stage: ReleaseArtifacts
+  - stage: ReleaseToContainer
     dependsOn: TestArtifacts
     condition: succeeded('TestArtifacts')
     jobs:
@@ -1747,7 +1747,7 @@ stages:
                 fi
 
   - ${{ if eq(parameters.post_release, true) }}:
-    - stage: ReleaseArtifacts
+    - stage: ReleaseToGithub
       dependsOn: TestArtifacts
       condition: succeeded('TestArtifacts')
       jobs:  
