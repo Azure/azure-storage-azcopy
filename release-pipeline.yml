@@ -1790,8 +1790,8 @@ stages:
 
   - ${{ if eq(parameters.publish_artifacts, true) }}:
     - stage: PublishArtifacts
-      dependsOn: ReleaseArtifacts
-      condition: succeeded('ReleaseArtifacts')
+      dependsOn: ReleaseToContainer
+      condition: succeeded('ReleaseToContainer')
       jobs:
         - job: PublishArtifacts
           timeoutInMinutes: 120
@@ -1940,8 +1940,8 @@ stages:
             
   - ${{ if eq(parameters.update_version, true) }}:
     - stage: UpdateLatestVersion
-      dependsOn: ReleaseArtifacts
-      condition: succeeded('ReleaseArtifacts')
+      dependsOn: ReleaseToContainer
+      condition: succeeded('ReleaseToContainer')
       jobs:
         - job: UpdateVersion       
           pool:
