@@ -541,7 +541,7 @@ stages:
         timeoutInMinutes: 360
         strategy:
           matrix:
-            Ubuntu-20:
+            MacOS-14-ARM64:
               imageName: 'ubuntu-latest'
               type: 'linux'
         pool:
@@ -1653,17 +1653,17 @@ stages:
             value: '$(Build.SourcesDirectory)'
 
         steps:
-          # - task: DownloadBuildArtifacts@0
-          #   displayName: 'Download Linux Build Artifacts'
-          #   inputs:
-          #     artifactName: 'azCopy-linux-signed'
-          #     downloadPath: $(Build.ArtifactStagingDirectory)
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Linux Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-linux-signed'
+              downloadPath: $(Build.ArtifactStagingDirectory)
 
-          # - task: DownloadBuildArtifacts@0
-          #   displayName: 'Download Windows Build Artifacts'
-          #   inputs:
-          #     artifactName: 'azCopy-windows-signed'
-          #     downloadPath: $(Build.ArtifactStagingDirectory)
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Windows Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-windows-signed'
+              downloadPath: $(Build.ArtifactStagingDirectory)
 
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Mac Build Artifacts'
