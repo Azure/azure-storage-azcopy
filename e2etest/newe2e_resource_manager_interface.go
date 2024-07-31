@@ -15,6 +15,8 @@ import (
 type GetURIOptions struct {
 	RemoteOpts RemoteURIOpts
 	AzureOpts  AzureURIOpts
+	// The wildcard string to append to the end of a resource URI.
+	Wildcard string
 }
 
 type RemoteURIOpts struct {
@@ -76,7 +78,7 @@ func TryApplySpecificAuthType(rm ResourceManager, cred ExplicitCredentialTypes, 
 		return rrm.WithSpecificAuthType(cred, a, opts...)
 	}
 
-	return CreateAzCopyTarget(rm, EExplicitCredentialType.None(), a)
+	return CreateAzCopyTarget(rm, EExplicitCredentialType.None(), a, opts...)
 }
 
 // ExplicitCredentialTypes defines a more explicit enum for credential types as AzCopy's internal definition is very loose (e.g. Anonymous can be public or SAS); accepts the URI as-is.
@@ -264,9 +266,10 @@ type ObjectResourceManager interface {
 }
 
 type ObjectProperties struct {
-	EntityType  common.EntityType
-	HTTPHeaders contentHeaders
-	Metadata    common.Metadata
+	EntityType       common.EntityType
+	HTTPHeaders      contentHeaders
+	Metadata         common.Metadata
+	LastModifiedTime *time.Time
 
 	BlobProperties   BlobProperties
 	BlobFSProperties BlobFSProperties
@@ -279,7 +282,6 @@ type BlobProperties struct {
 	BlockBlobAccessTier *blob.AccessTier
 	PageBlobAccessTier  *pageblob.PremiumPageBlobAccessTier
 	VersionId           *string
-	LastModifiedTime    *time.Time
 	LeaseState          *lease.StateType
 	LeaseDuration       *lease.DurationType
 	LeaseStatus         *lease.StatusType
@@ -301,6 +303,7 @@ type FileProperties struct {
 	FileCreationTime  *time.Time
 	FileLastWriteTime *time.Time
 	FilePermissions   *string
+	LastModifiedTime  *time.Time
 }
 
 func (f FileProperties) hasCustomTimes() bool {
