@@ -8,7 +8,7 @@ steps:
         GITHUB_OWNER="Azure"
         GITHUB_REPO="azure-storage-azcopy"
         GITHUB_WORKFLOW_FILE="build_m1.yml"
-        GITHUB_REF="dphulkar/m1_build"
+        GITHUB_REF="main"
         GITHUB_WORKFLOW_NAME="Build AzCopy for M1 Mac"
         ARTIFACTS_DIR="downloaded_artifacts"  # Directory to save the downloaded artifacts
 
