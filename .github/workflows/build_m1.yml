@@ -3,7 +3,8 @@
 
 name: Build AzCopy for M1 Mac
 
-on workflow_dispatch:
+on: 
+  workflow_dispatch:
 
 permissions:
   id-token: write
