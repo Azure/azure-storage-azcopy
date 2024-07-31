@@ -3,14 +3,6 @@
 
 name: Build AzCopy for M1 Mac
 
-on:
-  workflow_dispatch:
-    inputs:
-      m1_url:
-        description: 'Target object in storage without SAS'
-        required: false
-        type: string
-
 permissions:
   id-token: write
   contents: read
