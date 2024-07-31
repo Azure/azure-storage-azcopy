@@ -1,0 +1,50 @@
+parameters:
+  FolderPath: ''
+  ESRP_AZCOPY_WIN_KEY_CODE: ''
+  Pattern: '*.exe'
+
+steps:
+- task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+  displayName: 'Sign Windows executable'
+  inputs:
+    ConnectedServiceName: 'ESRP KeyVault identity'
+    AppRegistrationClientId: '77acb45d-e931-4568-9bfc-d0607bdf3759'
+    AppRegistrationTenantId: '72f988bf-86f1-41af-91ab-2d7cd011db47'
+    AuthAKVName: 'azcopy-esrp-kv'
+    AuthCertName: 'azcopy-auth'
+    AuthSignCertName: 'azcopy-sign-test'
+    FolderPath: ${{ parameters.FolderPath }}
+    Pattern: ${{ parameters.Pattern }}
+    signConfigType: inlineSignParams
+    inlineOperation: |
+      [
+        {
+          "keyCode": "${{ parameters.ESRP_AZCOPY_WIN_KEY_CODE }}",
+          "operationSetCode": "SigntoolSign",
+          "parameters": [
+            {
+              "parameterName": "OpusName",
+              "parameterValue": "Microsoft"
+            },
+            {
+              "parameterName": "OpusInfo",
+              "parameterValue": "http://www.microsoft.com"
+            },
+            {
+              "parameterName": "PageHash",
+              "parameterValue": "/NPH"
+            },
+            {
+              "parameterName": "FileDigest",
+              "parameterValue": "/fd sha256"
+            },
+            {
+              "parameterName": "TimeStamp",
+              "parameterValue": "/tr \"http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer\" /td sha256"
+            }
+          ],
+          "toolName": "signtool.exe",
+          "toolVersion": "6.2.9304.0"
+        }
+      ]
+    SessionTimeout: 30

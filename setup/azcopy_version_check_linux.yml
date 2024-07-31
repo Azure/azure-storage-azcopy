@@ -1,0 +1,23 @@
+parameters:
+  azcopy_executable: ''
+
+steps:
+  - script: |
+      # Run azcopy --version and capture the output
+      azcopyOutput=$(${{ parameters.azcopy_executable }} --version)
+
+      # Extract the version part
+      if echo "$azcopyOutput" | grep -q "azcopy version"; then
+        version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+        if [[ -n "$version" ]]; then
+          echo "Extracted version: $version"
+          echo "##vso[task.setvariable variable=azcopy_version]$version"
+        else
+          echo "Unable to extract version from azcopy output"
+          exit 1
+        fi
+      else
+        echo "azcopy version string not found in output"
+        exit 1
+      fi
+    displayName: 'Verify and extract the generated build version'
