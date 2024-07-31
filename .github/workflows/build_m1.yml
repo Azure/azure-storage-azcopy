@@ -8,7 +8,7 @@ on:
     inputs:
       m1_url:
         description: 'Target object in storage without SAS'
-        required: true
+        required: false
         type: string
 
 permissions:
@@ -28,14 +28,12 @@ jobs:
           go-version: '1.22.5'
 
       - name: Build
-        run: CGO_ENABLED=1 go build -o azcopy_darwin_arm64
+        run: |
+          mkdir -p output
+          CGO_ENABLED=1 go build -o output/azcopy_darwin_m1_arm64
 
-      - name: Azure Login
-        uses: Azure/login@v2.1.0
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-                
-      - name: Upload to AzCopy to M1 container
-        run: AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy_darwin_arm64 copy "azcopy_darwin_arm64" "${{ inputs.m1_url }}"
+          name: build-artifacts
+          path: output/
