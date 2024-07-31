@@ -1649,6 +1649,8 @@ stages:
             value: 'azcopyvnextrelease'
           - name: Publish_To_Container
             value: ${{ parameters.publish_to_container }}
+          - name: Publish_To_M1_Container
+            value: ${{ parameters.publish_to_m1_container }}
           - name: work_dir
             value: '$(Build.SourcesDirectory)'
 
