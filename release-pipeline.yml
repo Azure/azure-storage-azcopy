@@ -1742,8 +1742,7 @@ stages:
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
                 if [ $(Publish_To_M1_Container) = "True" ]; then
-                  #TODO: change the container name
-                  m1_container_url="https://azcopyprivatedrops.blob.core.windows.net/m1drop/azcopy-$azcopy_version-$today"
+                  m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
                 fi
 
