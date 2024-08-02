@@ -1,6 +1,7 @@
 # AzCopy v10
 wendi
  wendi
+wendi
 
 AzCopy v10 is a command-line utility that you can use to copy data to and from containers and file shares in Azure Storage accounts.
 AzCopy V10 presents easy-to-use commands that are optimized for high performance and throughput.
