@@ -1200,6 +1200,8 @@ stages:
               itemPattern: 'azCopy-linux-signed/azcopy-*arm64.deb'
 
           - script: |
+              rm -rf /usr/bin/azcopy
+              rm -rf /usr/local/bin/azcopy
               sudo dpkg --info azcopy-*arm64.deb
               sudo dpkg -i azcopy-*arm64.deb
             displayName: 'Install Package'
@@ -1860,6 +1862,8 @@ stages:
             
             # install azcopy
             - script: |
+                rm -rf /usr/local/bin/azcopy
+                rm -rf /usr/bin/azcopy
                 cd $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
                 ls azcopy*.arm64.deb
                 sudo dpkg --info azcopy-*arm64.deb
