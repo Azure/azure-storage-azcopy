@@ -1,5 +1,6 @@
 // Be certain to add the build tags below when we use a specialized implementation.
 // This file contains forwards to default, fallback implementations of os operations
+//go:build !windows
 // +build !windows
 
 package common

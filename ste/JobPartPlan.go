@@ -2,9 +2,10 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -12,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 18
+const DataSchemaVersion common.Version = 19
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -296,6 +297,9 @@ type JobPartPlanDstBlob struct {
 
 	// Controls uploading of MD5 hashes
 	PutMd5 bool
+
+	// Specifies tamper proof storage to store MD5 hash
+	TamperProof string
 
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
