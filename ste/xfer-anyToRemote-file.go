@@ -25,15 +25,14 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"hash"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 	"sync"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -370,8 +369,6 @@ func anyToRemote_file(jptm IJobPartTransferMgr, info *TransferInfo, pacer pacer,
 	// Step 6: Go through the file and schedule chunk messages to send each chunk
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
 
-	fmt.Printf("storageurl: %s", jptm.TamperProofLocation())
-
 }
 
 var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching stopped")
@@ -385,7 +382,6 @@ var jobCancelledLocalPrefetchErr = errors.New("job was cancelled; Pre-fetching s
 // To take advantage of the good sequential read performance provided by many file systems,
 // and to be able to compute an MD5 hash for the file, we work sequentially through the file here.
 func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common.CloseableReaderAt, srcSize int64, s sender, sourceFileFactory common.ChunkReaderSourceFactory, srcInfoProvider ISourceInfoProvider) {
-
 	// For generic send
 	chunkSize := s.ChunkSize()
 	numChunks := s.NumChunks()
@@ -494,7 +490,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		md5Channel <- md5Hasher.Sum(nil)
 	}
 
-	// Write to tamperproof storage here
+	// Upload MD5 Hash to tamper proof storage
 	uploadHash(md5Hasher, jptm.TamperProofLocation(), jptm.Info().Destination)
 
 }

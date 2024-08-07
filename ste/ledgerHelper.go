@@ -34,6 +34,7 @@ type Response struct {
 	State   string  `json:"state"`
 }
 
+// Results from a hash download
 type HashResult struct {
 	Success bool
 	Message string
