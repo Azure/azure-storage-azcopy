@@ -56,7 +56,9 @@ var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
+var azcopyFromToFlag string
 var azcopySkipVersionCheck bool
+var isBlobToPipe bool
 var retryStatusCodes string
 
 type jobLoggerInfo struct {
@@ -136,6 +138,10 @@ var rootCmd = &cobra.Command{
 
 		}
 
+		if azcopyFromToFlag == "BlobPipe" {
+			isBlobToPipe = true
+		}
+
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
 
@@ -180,7 +186,7 @@ var rootCmd = &cobra.Command{
 			common.IncludeAfterFlagName, IncludeAfterDateFilter{}.FormatAsUTC(adjustedTime))
 		jobsAdmin.JobsAdmin.LogToJobLog(startTimeMessage, common.LogInfo)
 
-		if !azcopySkipVersionCheck {
+		if !azcopySkipVersionCheck && !isBlobToPipe {
 			// spawn a routine to fetch and compare the local application's version against the latest version available
 			// if there's a newer version that can be used, then write the suggestion to stderr
 			// however if this takes too long the message won't get printed
@@ -220,7 +226,7 @@ func Execute(logPathFolder, jobPlanFolder string, maxFileAndSocketHandles int, j
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
-		if !azcopySkipVersionCheck {
+		if !azcopySkipVersionCheck && !isBlobToPipe {
 			// our commands all control their own life explicitly with the lifecycle manager
 			// only commands that don't explicitly exit actually reach this point (e.g. help commands and login commands)
 			select {
@@ -267,6 +273,8 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
 	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
 	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
+
+	rootCmd.PersistentFlags().StringVar(&azcopyFromToFlag, "from-to", "", "Used to check if from-to is BlobPipe type then avoid version check as it appends version update info log which causes failure in download.")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where

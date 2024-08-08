@@ -15,6 +15,7 @@ pr:
       - main
 
 jobs:
+
   - job: Build
     timeoutInMinutes: 360
     strategy:
