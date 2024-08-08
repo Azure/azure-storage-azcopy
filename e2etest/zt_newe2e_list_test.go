@@ -131,7 +131,7 @@ func (s *ListSuite) Scenario_ListProperties(svm *ScenarioVariationManager) {
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{
 			Path:             blobName,
 			ContentLength:    "1.00 KiB",
-			LastModifiedTime: props.BlobProperties.LastModifiedTime,
+			LastModifiedTime: props.LastModifiedTime,
 			VersionId:        versionId,
 			BlobType:         common.IffNotNil(props.BlobProperties.Type, ""),
 			BlobAccessTier:   common.IffNotNil(props.BlobProperties.BlockBlobAccessTier, ""),
@@ -185,7 +185,7 @@ func (s *ListSuite) Scenario_ListProperties_TextOutput(svm *ScenarioVariationMan
 		expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{
 			Path:             blobName,
 			ContentLength:    "1.00 KiB",
-			LastModifiedTime: props.BlobProperties.LastModifiedTime,
+			LastModifiedTime: props.LastModifiedTime,
 			VersionId:        versionId,
 			BlobType:         common.IffNotNil(props.BlobProperties.Type, ""),
 			BlobAccessTier:   common.IffNotNil(props.BlobProperties.BlockBlobAccessTier, ""),
@@ -241,7 +241,7 @@ func (s *ListSuite) Scenario_ListPropertiesInvalid(svm *ScenarioVariationManager
 		expectedObjects[AzCopyOutputKey{Path: blobName}] = cmd.AzCopyListObject{
 			Path:             blobName,
 			ContentLength:    "1.00 KiB",
-			LastModifiedTime: props.BlobProperties.LastModifiedTime,
+			LastModifiedTime: props.LastModifiedTime,
 		}
 	}
 

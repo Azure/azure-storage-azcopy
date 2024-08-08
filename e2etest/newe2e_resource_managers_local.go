@@ -55,7 +55,9 @@ func (l *LocalContainerResourceManager) Level() cmd.LocationLevel {
 }
 
 func (l *LocalContainerResourceManager) URI(opts ...GetURIOptions) string {
-	return l.RootPath
+	base := l.RootPath
+	base = addWildCard(base, opts...)
+	return base
 }
 
 func (l *LocalContainerResourceManager) Parent() ResourceManager {
@@ -217,7 +219,9 @@ func (l *LocalObjectResourceManager) Level() cmd.LocationLevel {
 }
 
 func (l *LocalObjectResourceManager) URI(opts ...GetURIOptions) string {
-	return filepath.Join(l.container.RootPath, l.objectPath)
+	base := filepath.Join(l.container.RootPath, l.objectPath)
+	base = addWildCard(base, opts...)
+	return base
 }
 
 func (l *LocalObjectResourceManager) Parent() ResourceManager {
@@ -295,7 +299,12 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 }
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
-	out := ObjectProperties{}
+	stats, err := os.Stat(l.getWorkingPath())
+	a.NoError("failed to get stat", err)
+	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
+	out := ObjectProperties{
+		LastModifiedTime: lmt,
+	}
 
 	// OS-triggered code, implemented in newe2e_resource_managers_local_windows.go
 	if smb, ok := any(l).(localSMBPropertiesManager); ok {
@@ -306,12 +315,10 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 
 		perms := smb.GetSDDL(a)
 
-		out.FileProperties = FileProperties{
-			FileAttributes:    PtrOf(attr.String()),
-			FileCreationTime:  PtrOf(props.FileCreationTime()),
-			FileLastWriteTime: PtrOf(props.FileLastWriteTime()),
-			FilePermissions:   common.Iff(perms == "", nil, &perms),
-		}
+		out.FileProperties.FileAttributes = PtrOf(attr.String())
+		out.FileProperties.FileCreationTime = PtrOf(props.FileCreationTime())
+		out.FileProperties.FileLastWriteTime = PtrOf(props.FileLastWriteTime())
+		out.FileProperties.FilePermissions = common.Iff(perms == "", nil, &perms)
 	}
 
 	return out

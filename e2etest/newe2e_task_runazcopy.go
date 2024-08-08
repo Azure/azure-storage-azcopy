@@ -68,6 +68,8 @@ type CreateAzCopyTargetOptions struct {
 	// SASTokenOptions expects a GenericSignatureValues, which can contain account signatures, or a service signature.
 	SASTokenOptions GenericSignatureValues
 	Scheme          string
+	// The wildcard string to append to the end of a resource URI.
+	Wildcard string
 }
 
 func CreateAzCopyTarget(rm ResourceManager, authType ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
@@ -161,6 +163,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 		opts.AzureOpts.SASValues = tgt.Opts.SASTokenOptions
 		opts.RemoteOpts.Scheme = tgt.Opts.Scheme
+		opts.Wildcard = tgt.Opts.Wildcard
 	} else if target.Location() == common.ELocation.S3() {
 		intendedAuthType = EExplicitCredentialType.S3()
 	} else if target.Location() == common.ELocation.GCP() {
@@ -169,7 +172,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 	switch intendedAuthType {
 	case EExplicitCredentialType.PublicAuth(), EExplicitCredentialType.None():
-		return target.URI() // no SAS, no nothing.
+		return target.URI(opts) // no SAS, no nothing.
 	case EExplicitCredentialType.SASToken():
 		opts.AzureOpts.WithSAS = true
 		return target.URI(opts)
@@ -224,10 +227,10 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 			}
 		}
 
-		return target.URI() // Generate like public
+		return target.URI(opts) // Generate like public
 	default:
 		a.Error("unsupported credential type")
-		return target.URI()
+		return target.URI(opts)
 	}
 }
 

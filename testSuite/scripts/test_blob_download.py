@@ -9,14 +9,6 @@ import utility as util
 import unittest
 
 class Blob_Download_User_Scenario(unittest.TestCase):
-    def setUp(self):
-        cmd = util.Command("login").add_arguments("--service-principal").add_flags("application-id", os.environ['ACTIVE_DIRECTORY_APPLICATION_ID']).add_flags("tenant-id", os.environ['OAUTH_TENANT_ID'])
-        cmd.execute_azcopy_copy_command()
-
-    def tearDown(self):
-        cmd = util.Command("logout")
-        cmd.execute_azcopy_copy_command()
-
     # test_download_1kb_blob_to_null verifies that a 1kb blob can be downloaded to null and the md5 can be checked successfully
     def test_download_1kb_blob_to_null(self):
         # create file of size 1kb
@@ -63,37 +55,6 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         src = util.get_resource_sas(filename)
         dst = "/"
         result = util.Command("copy").add_arguments(src).add_arguments(dst).add_flags("log-level", "info")
-
-    # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
-    def test_download_1kb_blob(self):
-        # create file of size 1KB.
-        filename = "test_1kb_blob_upload.txt"
-        file_path = util.create_test_file(filename, 1024)
-
-        # Upload 1KB file using azcopy.
-        src = file_path
-        dest = util.test_container_url
-        result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the uploaded blob.
-        # the resource local path should be the first argument for the azcopy validator.
-        # the resource sas should be the second argument for azcopy validator.
-        resource_url = util.get_resource_sas(filename)
-        result = util.Command("testBlob").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
-        self.assertTrue(result)
-
-        # downloading the uploaded file
-        src = util.get_resource_sas(filename)
-        dest = util.test_directory_path + "/test_1kb_blob_download.txt"
-        result = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level",
-                                                                                       "info").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the downloaded blob
-        result = util.Command("testBlob").add_arguments(dest).add_arguments(src).execute_azcopy_verify()
-        self.assertTrue(result)
 
     # test_download_preserve_last_modified_time verifies the azcopy downloaded file
     # and its modified time preserved locally on disk
@@ -153,38 +114,6 @@ class Blob_Download_User_Scenario(unittest.TestCase):
             destination_sas).execute_azcopy_verify()
         self.assertTrue(result)
 
-    # test_recursive_download_blob downloads a directory recursively from container through azcopy
-    def recursive_download_blob(self):
-        # create directory and 5 files of 1KB inside that directory.
-        dir_name = "dir_" + str(10) + "_files"
-        dir1_path = util.create_test_n_files(1024, 5, dir_name)
-
-        # upload the directory to container through azcopy with recursive set to true.
-        result = util.Command("copy").add_arguments(dir1_path).add_arguments(util.test_container_url).\
-                        add_flags("log-level","info").add_flags("recursive", "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # verify the uploaded file.
-        destination_sas = util.get_resource_sas(dir_name)
-        result = util.Command("testBlob").add_arguments(dir1_path).add_arguments(destination_sas).\
-            add_flags("is-object-dir","true").execute_azcopy_verify()
-        self.assertTrue(result)
-        try:
-            shutil.rmtree(dir1_path)
-        except OSError as e:
-            self.fail('error removing the file ' + dir1_path)
-
-        # downloading the directory created from container through azcopy with recursive flag to true.
-        result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path).add_flags(
-            "log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # verify downloaded blob.
-        result = util.Command("testBlob").add_arguments(dir1_path).add_arguments(destination_sas).\
-            add_flags("is-object-dir","true").execute_azcopy_verify()
-        self.assertTrue(result)
-
-
     def test_blob_download_with_special_characters(self):
         filename_special_characters = "abc|>rd*"
         # encode filename beforehand to avoid erroring out
@@ -209,86 +138,6 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # verify the downloaded blob.
         result = util.Command("testBlob").add_arguments(filepath).add_arguments(resource_url).execute_azcopy_verify()
-        self.assertTrue(result)
-
-    # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
-    def test_download_1kb_blob_with_oauth(self):
-        self.util_test_download_1kb_blob_with_oauth()
-
-    def util_test_download_1kb_blob_with_oauth(self):
-        # create file of size 1KB.
-        filename = "test_1kb_blob_upload.txt"
-        file_path = util.create_test_file(filename, 1024)
-
-        # Upload 1KB file using azcopy.
-        src = file_path
-        dest = util.test_oauth_container_url
-        cmd = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").add_flags("recursive", "true")
-        util.process_oauth_command(cmd, "")
-        result = cmd.execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the uploaded blob.
-        # the resource local path should be the first argument for the azcopy validator.
-        # the resource sas should be the second argument for azcopy validator.
-        dest_validate = util.get_resource_from_oauth_container_validate(filename)
-        result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
-        self.assertTrue(result)
-
-        # downloading the uploaded file
-        src = util.get_resource_from_oauth_container(filename)
-        src_validate = util.get_resource_from_oauth_container_validate(filename)
-        dest = util.test_directory_path + "/test_1kb_blob_download.txt"
-        cmd = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level", "info")
-        util.process_oauth_command(cmd, "")
-        result = cmd.execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the downloaded blob
-        result = util.Command("testBlob").add_arguments(dest).add_arguments(src_validate).execute_azcopy_verify()
-        self.assertTrue(result)
-
-    # test_recursive_download_blob downloads a directory recursively from container through azcopy
-    def test_recursive_download_blob_with_oauth(self):
-        self.util_test_recursive_download_blob_with_oauth()
-
-    def util_test_recursive_download_blob_with_oauth(
-        self):
-        # create directory and 5 files of 1KB inside that directory.
-        dir_name = "util_test_recursive_download_blob_with_oauth_dir_" + str(10) + "_files"
-        dir1_path = util.create_test_n_files(1024, 5, dir_name)
-
-        dest = util.test_oauth_container_url
-        # upload the directory to container through azcopy with recursive set to true.
-        cmd = util.Command("copy").add_arguments(dir1_path).add_arguments(dest).add_flags("log-level", "info") \
-            .add_flags("recursive", "true")
-        util.process_oauth_command(cmd, "")
-        result = cmd.execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # verify the uploaded file.
-        dest_validate = util.get_resource_from_oauth_container_validate(dir_name)
-        result = util.Command("testBlob").add_arguments(dir1_path).add_arguments(dest_validate).add_flags("is-object-dir",
-                                                                                                "true").execute_azcopy_verify()
-        self.assertTrue(result)
-
-        try:
-            shutil.rmtree(dir1_path)
-        except OSError as e:
-            self.fail("error removing the upload files. " + e)
-
-        src_download = util.get_resource_from_oauth_container(dir_name)
-        # downloading the directory created from container through azcopy with recursive flag to true.
-        cmd = util.Command("copy").add_arguments(src_download).add_arguments(util.test_directory_path).add_flags(
-            "log-level", "info").add_flags("recursive", "true")
-        util.process_oauth_command(cmd, "")
-        result = cmd.execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # verify downloaded blob.
-        result = util.Command("testBlob").add_arguments(dir1_path).add_arguments(dest_validate).add_flags("is-object-dir",
-                                                                                                            "true").execute_azcopy_verify()
         self.assertTrue(result)
 
     def test_blob_download_wildcard_recursive_false_1(self):

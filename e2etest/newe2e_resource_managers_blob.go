@@ -2,6 +2,8 @@ package e2etest
 
 import (
 	"bytes"
+	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -137,6 +139,7 @@ func (b *BlobServiceResourceManager) ListContainers(a Asserter) []string {
 func (b *BlobServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -346,6 +349,7 @@ func (b *BlobContainerResourceManager) Level() cmd.LocationLevel {
 func (b *BlobContainerResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -508,84 +512,101 @@ func (b *BlobObjectResourceManager) CreateWithOptions(a Asserter, body ObjectCon
 		})
 		a.NoError("Block blob upload", err)
 	case blob.BlobTypePageBlob:
+		// TODO : Investigate bug in multistep uploader for PageBlob. (WI 28334208)
 		client := b.Container.internalClient.NewPageBlobClient(b.Path)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultPageBlobChunkSize)
+		size := body.Size()
+		_, err := client.Create(
+			ctx,
+			size,
+			&pageblob.CreateOptions{
+				Tags:         blobProps.Tags,
+				Metadata:     properties.Metadata,
+				Tier:         blobProps.PageBlobAccessTier,
+				HTTPHeaders:  properties.HTTPHeaders.ToBlob(),
+				CPKInfo:      opts.CpkOptions.GetCPKInfo(),
+				CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
+			})
+		a.NoError("Page blob create", err)
 
-		msu := &MultiStepUploader{
-			Parallel:  true,
-			BlockSize: blockSize,
-			Init: func(size int64) error {
-				_, err := client.Create(
-					ctx,
-					size,
-					&pageblob.CreateOptions{
-						Tags:         blobProps.Tags,
-						Metadata:     properties.Metadata,
-						Tier:         blobProps.PageBlobAccessTier,
-						HTTPHeaders:  properties.HTTPHeaders.ToBlob(),
-						CPKInfo:      opts.CpkOptions.GetCPKInfo(),
-						CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
-					})
+		msu := &MultiStepUploader{BlockSize: blockSize}
+		blockCount := msu.GetBlockCount(size)
+		reader := body.Reader()
 
-				return err
-			},
-			UploadRange: func(block io.ReadSeekCloser, state MultiStepUploaderState) error {
-				_, err := client.UploadPages(
-					ctx,
-					block,
-					blob.HTTPRange{Offset: state.Offset, Count: state.BlockSize},
-					&pageblob.UploadPagesOptions{
-						TransactionalValidation: blob.TransferValidationTypeComputeCRC64(),
-						CPKInfo:                 opts.CpkOptions.GetCPKInfo(),
-						CPKScopeInfo:            opts.CpkOptions.GetCPKScopeInfo(),
-					})
-				return err
-			},
+		offset := int64(0)
+		blockIndex := int64(0)
+
+		for range blockCount {
+			buf := make([]byte, blockSize)
+			n, err := reader.Read(buf)
+			if err != nil && err != io.EOF {
+				a.Assert(fmt.Sprintf("failed to read content (offset %d (block %d/%d), total %d): %s", offset, blockIndex, blockCount, size, err.Error()), Equal{}, true)
+			}
+			buf = buf[:n] // reduce buffer size for block
+
+			_, err = client.UploadPages(
+				ctx,
+				streaming.NopCloser(bytes.NewReader(buf)),
+				blob.HTTPRange{Offset: offset, Count: int64(n)},
+				&pageblob.UploadPagesOptions{
+					TransactionalValidation: blob.TransferValidationTypeComputeCRC64(),
+					CPKInfo:                 opts.CpkOptions.GetCPKInfo(),
+					CPKScopeInfo:            opts.CpkOptions.GetCPKScopeInfo(),
+				})
+			a.NoError("Page blob upload", err)
+			offset += int64(n)
+			blockIndex++
 		}
-
-		a.NoError("Upload Page Blob", msu.UploadContents(body))
 	case blob.BlobTypeAppendBlob:
+		// TODO : Investigate bug in multistep uploader for AppendBlob. (WI 28334208)
 		blockSize := DerefOrDefault(opts.BlockSize, common.DefaultBlockBlobBlockSize)
-		bodySize := body.Size()
+		size := body.Size()
 
-		if bodySize < blockSize*common.MaxNumberOfBlocksPerBlob {
+		if size < blockSize*common.MaxNumberOfBlocksPerBlob {
 			// resize until fits
-			for ; bodySize >= common.MaxNumberOfBlocksPerBlob*blockSize; blockSize = 2 * blockSize {
+			for ; size >= common.MaxNumberOfBlocksPerBlob*blockSize; blockSize = 2 * blockSize {
 			}
 		}
 
 		client := b.Container.internalClient.NewAppendBlobClient(b.Path)
 
-		msu := &MultiStepUploader{
-			BlockSize: blockSize,
-			Parallel:  false, // Must be serial
-			Init: func(size int64) error {
-				_, err := client.Create(ctx, &appendblob.CreateOptions{
-					HTTPHeaders:  properties.HTTPHeaders.ToBlob(),
-					CPKInfo:      opts.CpkOptions.GetCPKInfo(),
-					CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
-					Tags:         blobProps.Tags,
-					Metadata:     properties.Metadata,
-				})
+		_, err := client.Create(ctx, &appendblob.CreateOptions{
+			HTTPHeaders:  properties.HTTPHeaders.ToBlob(),
+			CPKInfo:      opts.CpkOptions.GetCPKInfo(),
+			CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
+			Tags:         blobProps.Tags,
+			Metadata:     properties.Metadata,
+		})
+		a.NoError("Append blob create", err)
 
-				return err
-			},
-			UploadRange: func(block io.ReadSeekCloser, state MultiStepUploaderState) error {
-				_, err := client.AppendBlock(ctx, block, &appendblob.AppendBlockOptions{
-					TransactionalValidation: blob.TransferValidationTypeComputeCRC64(),
-					AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{
-						AppendPosition: &state.Offset,
-						MaxSize:        pointerTo(state.Offset + state.BlockSize - 1),
-					},
-					CPKInfo:      opts.CpkOptions.GetCPKInfo(),
-					CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
-				})
+		msu := &MultiStepUploader{BlockSize: blockSize}
+		blockCount := msu.GetBlockCount(size)
+		reader := body.Reader()
 
-				return err
-			},
+		offset := int64(0)
+		blockIndex := int64(0)
+
+		for range blockCount {
+			buf := make([]byte, blockSize)
+			n, err := reader.Read(buf)
+			if err != nil && err != io.EOF {
+				a.Assert(fmt.Sprintf("failed to read content (offset %d (block %d/%d), total %d): %s", offset, blockIndex, blockCount, size, err.Error()), Equal{}, true)
+			}
+			buf = buf[:n] // reduce buffer size for block
+
+			_, err = client.AppendBlock(ctx, streaming.NopCloser(bytes.NewReader(buf)), &appendblob.AppendBlockOptions{
+				TransactionalValidation: blob.TransferValidationTypeComputeCRC64(),
+				AppendPositionAccessConditions: &appendblob.AppendPositionAccessConditions{
+					AppendPosition: pointerTo(offset),
+					MaxSize:        pointerTo(offset + int64(n)),
+				},
+				CPKInfo:      opts.CpkOptions.GetCPKInfo(),
+				CPKScopeInfo: opts.CpkOptions.GetCPKScopeInfo(),
+			})
+			a.NoError("Append blob upload", err)
+			offset += int64(n)
+			blockIndex++
 		}
-
-		a.NoError("Upload append blob", msu.UploadContents(body))
 	}
 
 	TrackResourceCreation(a, b)
@@ -628,17 +649,20 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 			contentMD5:         resp.ContentMD5,
 		},
 		Metadata: resp.Metadata,
+		LastModifiedTime: func() *time.Time {
+			if resp.LastModified == nil {
+				return nil
+			}
+			return to.Ptr(resp.LastModified.UTC())
+		}(),
 		BlobProperties: BlobProperties{
-			LastModifiedTime: func() *time.Time {
-				if resp.LastModified == nil {
-					return nil
-				}
-				return to.Ptr(resp.LastModified.UTC())
-			}(),
 			VersionId: resp.VersionID,
 			Type:      resp.BlobType,
 			Tags: func() map[string]string {
 				out := make(map[string]string)
+				if b.internalAccount.AccountType() == EAccountType.PremiumPageBlobs() {
+					return out
+				}
 				resp, err := b.internalClient.GetTags(ctx, nil)
 				a.NoError("Get tags", err)
 				for _, tag := range resp.BlobTagSet {
@@ -702,6 +726,7 @@ func (b *BlobObjectResourceManager) Level() cmd.LocationLevel {
 func (b *BlobObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := blobStripSAS(b.internalClient.URL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }

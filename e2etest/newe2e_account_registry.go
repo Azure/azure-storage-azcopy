@@ -124,6 +124,7 @@ func DeleteAccount(a Asserter, arm AccountResourceManager) {
 const (
 	PrimaryStandardAcct string = "PrimaryStandard"
 	PrimaryHNSAcct      string = "PrimaryHNS"
+	PremiumPageBlobAcct string = "PremiumPageBlob"
 )
 
 func AccountRegistryInitHook(a Asserter) {
@@ -140,10 +141,16 @@ func AccountRegistryInitHook(a Asserter) {
 			accountKey:  acctInfo.HNS.AccountKey,
 			accountType: EAccountType.HierarchicalNamespaceEnabled(),
 		}
+		AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
+			accountName: acctInfo.PremiumPage.AccountName,
+			accountKey:  acctInfo.PremiumPage.AccountKey,
+			accountType: EAccountType.PremiumPageBlobs(),
+		}
 	} else {
 		// Create standard accounts
 		AccountRegistry[PrimaryStandardAcct] = CreateAccount(a, EAccountType.Standard(), nil)
 		AccountRegistry[PrimaryHNSAcct] = CreateAccount(a, EAccountType.HierarchicalNamespaceEnabled(), nil)
+		AccountRegistry[PremiumPageBlobAcct] = CreateAccount(a, EAccountType.PremiumPageBlobs(), nil)
 	}
 }
 

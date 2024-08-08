@@ -209,7 +209,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	if fileerror.HasCode(err, fileerror.ParentNotFound) {
 		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
+		jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy is going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
 		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.shareClient, u.jptm.GetFolderCreationTracker())
 		if err != nil {
 			u.jptm.FailActiveUpload("Creating parent directory", err)

@@ -11,7 +11,22 @@ import (
 	filesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 )
+
+func addWildCard(uri string, optList ...GetURIOptions) string {
+	wildcard := FirstOrZero(optList).Wildcard
+	if wildcard == "" {
+		return uri
+	}
+	if strings.Contains(uri, "?") {
+		uri = strings.Replace(uri, "?", wildcard+"?", 1)
+	} else {
+		uri += wildcard
+	}
+
+	return uri
+}
 
 type AzureAccountResourceManager struct {
 	accountName string

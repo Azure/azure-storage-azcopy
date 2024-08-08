@@ -84,6 +84,7 @@ func (b *BlobFSServiceResourceManager) Level() cmd.LocationLevel {
 func (b *BlobFSServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.internalClient.DFSURL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -178,6 +179,7 @@ func (b *BlobFSFileSystemResourceManager) Level() cmd.LocationLevel {
 func (b *BlobFSFileSystemResourceManager) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.internalClient.DFSURL())
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -312,6 +314,7 @@ func (b *BlobFSPathResourceProvider) Level() cmd.LocationLevel {
 func (b *BlobFSPathResourceProvider) URI(opts ...GetURIOptions) string {
 	base := dfsStripSAS(b.getFileClient().DFSURL()) // obj type doesn't matter here, URL is the same under the hood
 	base = b.internalAccount.ApplySAS(base, b.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }

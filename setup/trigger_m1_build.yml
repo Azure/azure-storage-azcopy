@@ -1,0 +1,132 @@
+steps:
+  - task: Bash@3
+    inputs:
+      targetType: 'inline'
+      script: |
+        echo "Triggering GitHub Actions workflow"
+
+        GITHUB_OWNER="Azure"
+        GITHUB_REPO="azure-storage-azcopy"
+        GITHUB_WORKFLOW_FILE="build_m1.yml"
+        GITHUB_REF="main"
+        GITHUB_WORKFLOW_NAME="Build AzCopy for M1 Mac"
+        ARTIFACTS_DIR="downloaded_artifacts"  # Directory to save the downloaded artifacts
+
+        GITHUB_API_URL="https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/actions/workflows/$GITHUB_WORKFLOW_FILE/dispatches"
+        
+        # Create the JSON payload
+        PAYLOAD=$(jq -n --arg ref "$GITHUB_REF" '{ref: $ref}')
+        
+        # Trigger the workflow
+        response=$(curl -w "%{http_code}" -X POST -H "Authorization: Bearer $(GITHUB_TOKEN)" -H "Accept: application/vnd.github.v3+json" $GITHUB_API_URL -d "$PAYLOAD")
+        echo "response: $response"
+
+        if [ $response -eq 204 ]; then
+          echo "Successfully triggered the workflow"
+        else
+          echo "Failed to trigger the workflow $response"
+          exit 1
+        fi
+
+
+        # GitHub API URL to list workflows
+        WORKFLOWS_URL="https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/actions/workflows"
+
+        # Retrieve workflows
+        response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(GITHUB_TOKEN)" "$WORKFLOWS_URL")
+
+        # Extract the workflow ID for the specified workflow name
+        workflow_id=$(echo $response | jq -r --arg workflow_name "$GITHUB_WORKFLOW_NAME" '.workflows[] | select(.name == $workflow_name) | .id')
+
+        if [ -z "$workflow_id" ]; then
+          echo "Workflow not found"
+          exit 1
+        else
+          echo "Workflow ID: $workflow_id"
+        fi
+
+        # Interval between polls (in seconds)
+        POLL_INTERVAL=15
+
+        # GitHub API URL to list workflow runs
+        WORKFLOW_RUNS_URL="https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/actions/workflows/$workflow_id/runs"
+
+        # Function to check the status of the latest workflow run
+        check_status() {
+          runs_response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(GITHUB_TOKEN)" "$WORKFLOW_RUNS_URL")
+
+          latest_run_status=$(echo $runs_response | jq -r '.workflow_runs[0].status')
+          latest_run_conclusion=$(echo $runs_response | jq -r '.workflow_runs[0].conclusion')
+          latest_run_id=$(echo $runs_response | jq -r '.workflow_runs[0].id')
+
+          if [ -z "$latest_run_id" ]; then
+            echo "No runs found for the workflow"
+            exit 1
+          else
+            echo "Latest Run ID: $latest_run_id"
+            echo "Latest Run Status: $latest_run_status"
+            echo "Latest Run Conclusion: $latest_run_conclusion"
+          fi
+
+          if [ "$latest_run_status" == "completed" ]; then
+            if [ "$latest_run_conclusion" == "success" ]; then
+              echo "Workflow run succeeded."
+              download_artifacts_and_extract $latest_run_id
+              exit 0
+            else
+              echo "Workflow run failed or was cancelled."
+              exit 1
+            fi
+          fi
+        }
+
+        # Function to download the artifacts from the specified workflow run
+        download_artifacts_and_extract() {
+          local run_id=$1
+          ARTIFACTS_URL="https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/actions/runs/$run_id/artifacts"
+
+          # Create directory for artifacts
+          mkdir -p $ARTIFACTS_DIR
+
+          # Retrieve the list of artifacts
+          artifacts_response=$(curl -s -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer $(GITHUB_TOKEN)" "$ARTIFACTS_URL")
+
+          # Extract the artifact download URLs
+          artifact_count=$(echo $artifacts_response | jq '.artifacts | length')
+          echo "Found $artifact_count artifacts."
+
+          if [ $artifact_count -eq 1 ]; then
+            artifact_name=$(echo $artifacts_response | jq -r ".artifacts[$i].name")
+            artifact_url=$(echo $artifacts_response | jq -r ".artifacts[$i].archive_download_url")
+            
+            echo "Downloading artifact: $artifact_name"
+            
+            download_response=$(curl -w "%{http_code}" -L -o "$ARTIFACTS_DIR/$artifact_name.zip" -H "Authorization: Bearer $(GITHUB_TOKEN)" "$artifact_url")
+            echo "download response: $download_response"
+
+            if [ $? -eq 0 ]; then
+              echo "Successfully downloaded $artifact_name to $ARTIFACTS_DIR"
+              # Extract the artifact
+              mkdir -p $ARTIFACTS_DIR/unzipped_artifacts
+              ls -ltR $ARTIFACTS_DIR/
+              unzip -o $ARTIFACTS_DIR/$artifact_name* -d "$ARTIFACTS_DIR/unzipped_artifacts"
+              mv $ARTIFACTS_DIR/unzipped_artifacts/azcopy_darwin_m1_arm64 $(Build.ArtifactStagingDirectory)/azcopy
+            else
+              echo "Failed to download $artifact_name"
+              exit 1
+            fi
+          else
+            echo "No artifacts found for the specified workflow run."
+            exit 1
+          fi
+        }
+
+        # Poll the workflow status until it completes
+        while true; do
+          check_status
+          echo "Workflow run is still in progress. Checking again in $POLL_INTERVAL seconds..."
+          sleep $POLL_INTERVAL
+        done
+
+    displayName: 'Trigger GitHub Actions workflow'
+
