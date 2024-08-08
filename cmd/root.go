@@ -191,7 +191,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		if common.GrpcShim.Available() {
-			if any(common.GrpcShim).(common.GrpcCtl).SetupGrpc(grpcServerPort) != nil {
+			if any(common.GrpcShim).(common.GrpcCtl).SetupGrpc(grpcServerPort, common.AzcopyCurrentJobLogger) != nil {
 				return err
 			}
 		}
