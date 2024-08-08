@@ -56,7 +56,6 @@ var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
 var azcopyCurrentJobID common.JobID
-var azcopyFromToFlag string
 var azcopySkipVersionCheck bool
 var isPipeDownload bool
 var retryStatusCodes string
@@ -139,11 +138,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Access the value of the "from-to" flag
-		azcopyFromToFlag, err := cmd.Flags().GetString("from-to")
+		fromToFlagValue, err := cmd.Flags().GetString("from-to")
 		if err != nil {
 			return fmt.Errorf("error accessing 'from-to' flag: %v", err)
 		}
-		if azcopyFromToFlag == "BlobPipe" {
+		if fromToFlagValue == "BlobPipe" {
 			isPipeDownload = true
 		}
 
