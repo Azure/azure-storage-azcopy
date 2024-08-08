@@ -137,10 +137,13 @@ var rootCmd = &cobra.Command{
 
 		}
 
-		// Access the value of the "from-to" flag
-		fromToFlagValue, err := cmd.Flags().GetString("from-to")
-		if err != nil {
-			return fmt.Errorf("error accessing 'from-to' flag: %v", err)
+		var fromToFlagValue string
+		if cmd.Flags().Changed("from-to") {
+			// Access the value of the "from-to" flag
+			fromToFlagValue, err = cmd.Flags().GetString("from-to")
+			if err != nil {
+				return fmt.Errorf("error accessing 'from-to' flag: %v", err)
+			}
 		}
 		if fromToFlagValue == "BlobPipe" {
 			isPipeDownload = true
