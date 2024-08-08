@@ -138,6 +138,11 @@ var rootCmd = &cobra.Command{
 
 		}
 
+		// Access the value of the "from-to" flag
+		azcopyFromToFlag, err := cmd.Flags().GetString("from-to")
+		if err != nil {
+			return fmt.Errorf("error accessing 'from-to' flag: %v", err)
+		}
 		if azcopyFromToFlag == "BlobPipe" {
 			isPipeDownload = true
 		}
@@ -273,9 +278,6 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
 	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
 	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
-
-	//rootCmd.PersistentFlags().StringVar(&azcopyFromToFlag, "from-to", "", "Used here to check if from-to is BlobPipe or FilePipe type then avoid version check as it appends version update info log which causes failure in download.")
-	_ = rootCmd.PersistentFlags().MarkHidden("from-to")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
