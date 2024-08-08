@@ -3,11 +3,11 @@ package common
 import "time"
 
 /*
-grpc_shim.go implements a shim that allows for GRPC functionality to reasonably disappear
+grpc_shim.go implements a shim that allows for GRPC functionality to reasonably disappear, removing all package references to grpcctl, and grpc in general.
 */
 
 type GrpcCtl interface {
-	SetupGrpc(string) error
+	SetupGrpc(string, ILoggerResetable) error
 	SetupOAuthSubscription(update func(*OAuthTokenUpdate))
 }
 

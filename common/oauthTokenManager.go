@@ -811,24 +811,34 @@ func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 
 // ====================================================================================
 
-var globalRPCOAuthTokenState = &GRPCOAuthToken{Mutex: sync.NewCond(&sync.Mutex{})}
+var globalGRPCOAuthTokenLock = &sync.RWMutex{}
+
+// Pass in the RLocker to the sync.Cond so we're only requesting read locks, not write locks.
+var globalRPCOAuthTokenState = &GRPCOAuthToken{Mutex: sync.NewCond(globalGRPCOAuthTokenLock.RLocker())}
 
 func init() {
 	if GrpcShim.Available() {
 		any(GrpcShim).(GrpcCtl).SetupOAuthSubscription(func(token *OAuthTokenUpdate) {
 			g := globalRPCOAuthTokenState
-			g.Mutex.L.Lock()
+			globalGRPCOAuthTokenLock.Lock() // Grab the write lock
 
 			if AzcopyCurrentJobLogger != nil {
-				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Received fresh OAuth token."))
+				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Received fresh OAuth token. (invalid: %v, exp: %v, now: %v, expiry: %v)", g.Token == "", time.Now().After(g.Expiry), time.Now(), g.Expiry))
 			}
 
+			// Write the fresh token we've been handed
 			g.Token = token.Token
 			g.Live = token.Live
 			g.Expiry = token.Expiry
 			g.Wiggle = token.Wiggle
+			g.GiveUp = false // We've stopped giving up, if we've received a fresh token.
 
-			g.Mutex.L.Unlock()
+			if AzcopyCurrentJobLogger != nil {
+				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Broadcasting new OAuth token."))
+			}
+
+			// Drop the lock, let "clients" know there's a new token.
+			globalGRPCOAuthTokenLock.Unlock()
 			g.Mutex.Broadcast()
 		})
 	}
@@ -841,32 +851,66 @@ type GRPCOAuthToken struct {
 	// Time in seconds before expiry we'll act like it is expired
 	Wiggle time.Duration
 
+	// If we don't receive an oauth token for an extended period of time, just give up and fail fast. It's too long to wait for say, 50k files to fail at their own pace.
+	GiveUp bool
+
+	// Using a sync.Cond, we allow "clients" to drop their lock and await a fresh token signal.
 	Mutex *sync.Cond
 }
 
 func (g *GRPCOAuthToken) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	g.Mutex.L.Lock()         // Grab the read lock
+	defer g.Mutex.L.Unlock() // Defer the drop lock, so we don't need to mentally consider this lock.
+
 retry:
-	g.Mutex.L.Lock()
+	if g.GiveUp { // Add an escape catch, this way new requests after we've given up also give up immediately. This reduces failure time.
+		return azcore.AccessToken{}, fmt.Errorf("timed out waiting for new token (GiveUp set)")
+	}
+
 	exp := g.Expiry.Add(-g.Wiggle)
 	totalDuration := g.Expiry.Sub(g.Live)
-	if time.Now().After(exp) || g.Token == "" {
+
+	if time.Now().After(exp) || // The token is naturally expired, this should happen.
+		g.Token == "" || // The token is empty...
+		totalDuration < 0 { // The token couldn't have been valid...
+		// Log any potential issues with the token.
 		if AzcopyCurrentJobLogger != nil {
-			AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Token is expired or invalid (invalid: %v, now: %v, expiry: %v)", g.Token == "", time.Now(), exp))
+			AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Token is expired or invalid (invalid: %v, exp: %v, now: %v, expiry: %v)", g.Token == "" || totalDuration < 0, time.Now().After(exp), time.Now(), exp))
 		}
 
+		// Begin waiting for a fresh token.
+		waitBegin := time.Now()
 		waitch := make(chan bool)
+
 		go func() {
+			// g.Mutex.Wait silently releases, then re-captures the (read) mutex.
+			// For duration,
 			g.Mutex.Wait()
+			if AzcopyCurrentJobLogger != nil {
+				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Released."))
+			}
+
+			// send wait unblock
 			waitch <- true
 		}()
 
 		// Time out eventually, so that AzCopy can exit.
 		select {
 		case <-waitch:
+			if AzcopyCurrentJobLogger != nil {
+				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Received signal from waitch"))
+			}
 			close(waitch)
 		case <-time.After(totalDuration * 3):
+			g.Mutex.L.Lock()    // Grab the write lock.
+			g.GiveUp = true     // Tell everybody we're giving up.
+			g.Mutex.Broadcast() // Unblock our waiter, *and* everybody else, now that we know we're giving up.
+			g.Mutex.L.Unlock()  // Drop the write lock.
+
+			<-waitch // We must wait for our waiter, because that signals that we have our original lock back. If we drop without it, we may drop somebody else's (or nobody else's)
 			close(waitch)
-			return azcore.AccessToken{}, errors.New("timed out waiting for new token (3x last live duration)")
+
+			return azcore.AccessToken{}, fmt.Errorf("timed out waiting for new token (3x last live duration) (Began waiting %v, finished %v, duration %v)", waitBegin, time.Now(), totalDuration*3)
 		}
 
 		goto retry
@@ -874,7 +918,6 @@ retry:
 
 	t := g.Token
 	e := g.Expiry
-	defer g.Mutex.L.Unlock()
 	return azcore.AccessToken{
 		Token: t,
 		// e could be zero and the result would be the same
