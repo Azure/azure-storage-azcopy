@@ -121,6 +121,10 @@ stages:
             displayName: 'Generate Linux AMD64 SE Integration'
 
           - script: |
+              GOARCH=amd64 GOOS=linux go build -tags "netgo,grpc" -o "$(root_dir)/azcopy_linux_grpc_amd64"
+            displayName: 'Generate Linux AMD64 GRPC integration'
+
+          - script: |
               sudo ls -lRt $(root_dir)/
               cp $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)
             displayName: 'List the binaries and add to staging directory'
@@ -145,9 +149,13 @@ stages:
 
               linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
+              
+              linux_grpc_amd64_dir="$(work_dir)/azcopy_linux_grpc_amd64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=linux_grpc_amd64_dir]$linux_grpc_amd64_dir"
 
               mkdir -p $linux_amd64_dir
               mkdir -p $linux_se_amd64_dir
+              mkdir -p $linux_grpc_amd64_dir
               mkdir -p $(archives)
               ls -ltR $(work_dir)
             displayName: 'Create required directories'
@@ -156,9 +164,11 @@ stages:
               mkdir -p pkgDir/usr/bin/
               mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
               mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
+              mv $(root_dir)/azcopy_linux_grpc_amd64 $(linux_grpc_amd64_dir)/azcopy
               cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
               cp NOTICE.txt $(linux_amd64_dir)/
               cp NOTICE.txt $(linux_se_amd64_dir)/
+              cp NOTICE.txt $(linux_grpc_amd64_dir)/
               cp NOTICE.txt pkgDir/usr/bin/
             displayName: 'Copy required files for packaging'
 
@@ -195,11 +205,19 @@ stages:
             continueOnError: true
 
           - task: ArchiveFiles@2
-            displayName: 'Archive Amd Linux Build'
+            displayName: 'Archive AMD64 Linux Build'
             inputs:
               rootFolderOrFile: '$(linux_amd64_dir)'
               archiveType: tar
               archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive AMD64 GRPC Linux Build'
+            inputs:
+              rootFolderOrFile: '$(linux_grpc_amd64_dir)'
+              archiveType: tar
+              archiveFile: '$(archives)/azcopy_linux_grpc_amd64_$(azcopy_version).tar.gz'
             continueOnError: true
 
           - script: |
@@ -282,6 +300,10 @@ stages:
             displayName: 'Generate Linux ARM64 SE Integration'
 
           - script: |
+              GOARCH=arm64 GOOS=linux go build -tags "netgo,grpc" -o "$(root_dir)/azcopy_linux_grpc_arm64"
+            displayName: 'Generate Linux ARM64 GRPC integration'
+
+          - script: |
               sudo ls -lRt $(root_dir)/
               cp -r $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)
             displayName: 'List the binaries and add to staging directory'
@@ -306,9 +328,13 @@ stages:
 
               linux_se_arm64_dir="$(work_dir)/azcopy_linux_se_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=linux_se_arm64_dir]$linux_se_arm64_dir"
+              
+              linux_grpc_arm64_dir="$(work_dir)/azcopy_linux_grpc_arm64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=linux_grpc_arm64_dir]$linux_grpc_arm64_dir"
 
               mkdir -p $linux_arm64_dir
               mkdir -p $linux_se_arm64_dir
+              mkdir -p $linux_grpc_arm64_dir
               mkdir -p $(archives)
             displayName: 'Create required directories'
 
@@ -317,8 +343,10 @@ stages:
               cp NOTICE.txt pkgDir/usr/bin/
               mv $(root_dir)/azcopy_linux_arm64 $(linux_arm64_dir)/azcopy
               mv $(root_dir)/azcopy_linux_se_arm64 $(linux_se_arm64_dir)/azcopy
+              mv $(root_dir)/azcopy_linux_grpc_arm64 $(linux_grpc_arm64_dir)/azcopy
               cp $(linux_arm64_dir)/azcopy pkgDir/usr/bin/
               cp NOTICE.txt $(linux_arm64_dir)/
+              cp NOTICE.txt $(linux_grpc_arm64_dir)/
               cp NOTICE.txt $(linux_se_arm64_dir)/
             displayName: 'Copy required files for packaging'
 
@@ -361,7 +389,15 @@ stages:
               archiveType: tar
               archiveFile: '$(archives)/azcopy_linux_se_arm64_$(azcopy_version).tar.gz'
             continueOnError: true
-          
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive GRPC Linux Build'
+            inputs:
+              rootFolderOrFile: '$(linux_grpc_arm64_dir)'
+              archiveType: tar
+              archiveFile: '$(archives)/azcopy_linux_grpc_arm64_$(azcopy_version).tar.gz'
+            continueOnError: true
+
           - script: |
               cp -r $(archives)/* $(Build.ArtifactStagingDirectory)
             workingDirectory: $(root_dir)
@@ -415,8 +451,24 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
+              go build -tags "netgo,grpc" -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_grpc_amd64.exe"
+            displayName: 'Generate Windows amd64 GRPC integration'
+            env:
+              GOARCH: amd64
+              GOOS: windows
+              CGO_ENABLED: 0
+
+          - script: |
               go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_386.exe"
             displayName: 'Generate Windows i386'
+            env:
+              GOARCH: 386
+              GOOS: windows
+              CGO_ENABLED: 0
+
+          - script: |
+              go build -tags "netgo,grpc" -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_grpc_386.exe"
+            displayName: 'Generate Windows i386 GRPC integration'
             env:
               GOARCH: 386
               GOOS: windows
@@ -492,11 +544,19 @@ stages:
 
           - script: |
               CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
-            displayName: 'Generate MacOS Build with AMD64'
+            displayName: 'Build MacOS AMD64'
+
+          - script: |
+              CGO_ENABLED=1 go build -tags "grpc" -o "$(root_dir)/azcopy_darwin_grpc_amd64"
+            displayName: 'Build MacOS ARM64 GRPC integration'
            
           - script: |
               GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64"
-            displayName: 'Test Cross-compiled MacOS Build with ARM64'
+            displayName: 'Build Cross-compiled MacOS ARM64'
+
+          - script: |
+              GOARCH=arm64 CGO_ENABLED=1 go build -tags "grpc" -o "$(root_dir)/azcopy_darwin_grpc_arm64"
+            displayName: 'Build MacOS ARM64 GRPC integration'
 
           - task: Bash@3
             displayName: 'Extract AZCopy version'
@@ -509,20 +569,32 @@ stages:
           - script: |
               darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
+              
+              darwin_grpc_amd_dir="$(work_dir)/azcopy_darwin_grpc_amd64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=darwin_grpc_amd_dir]$darwin_grpc_amd_dir"
 
               darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
               
+              darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
+              
               mkdir -p $darwin_amd_dir
+              mkdir -p $darwin_grpc_amd_dir
               mkdir -p $darwin_arm_dir
+              mkdir -p $darwin_grpc_arm_dir
               mkdir -p $(archives)
             displayName: 'Create required directories'
 
           - script: |
               cp NOTICE.txt $(darwin_amd_dir)
+              cp NOTICE.txt $(darwin_grpc_amd_dir)
               cp NOTICE.txt $(darwin_arm_dir)
+              cp NOTICE.txt $(darwin_grpc_arm_dir)
               mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
+              mv $(root_dir)/azcopy_darwin_grpc_amd64 $(darwin_grpc_amd_dir)/azcopy
               mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
+              mv $(root_dir)/azcopy_darwin_grpc_arm64 $(darwin_grpc_arm_dir)/azcopy
             displayName: 'Copy required files for packaging'
 
           - task: ArchiveFiles@2
@@ -533,10 +605,24 @@ stages:
             continueOnError: true
 
           - task: ArchiveFiles@2
+            displayName: 'Archive MacOS GRPC AMD64 Build (must happen before signing/notarization)'
+            inputs:
+              rootFolderOrFile: '$(darwin_grpc_amd_dir)'
+              archiveFile: '$(archives)/azcopy_grpc_darwin_amd64_$(azcopy_version).zip'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
             displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
             inputs:
               rootFolderOrFile: '$(darwin_arm_dir)'
               archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive MacOS GRPC ARM64 Build (must happen before signing/notarization)'
+            inputs:
+              rootFolderOrFile: '$(darwin_grpc_arm_dir)'
+              archiveFile: '$(archives)/azcopy_grpc_darwin_arm64_$(azcopy_version).zip'
             continueOnError: true
 
           - script: |
@@ -833,6 +919,9 @@ stages:
               windows_amd64="$(work_dir)/azcopy_windows_amd64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
 
+              windows_grpc_amd64="$(work_dir)/azcopy_windows_grpc_amd64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=windows_grpc_amd64]$windows_grpc_amd64"
+
               windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
 
@@ -841,27 +930,38 @@ stages:
 
               windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
               echo "##vso[task.setvariable variable=windows_386]$windows_386"
+              
+              windows_grpc_386="$(work_dir)/azcopy_windows_grpc_386_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=windows_grpc_386]$windows_grpc_386"
 
               mkdir -p $windows_amd64
+              mkdir -p $windows_grpc_amd64
               mkdir -p $windows_arm64
               mkdir -p $windows_se_arm64
               mkdir -p $windows_386
+              mkdir -p $windows_grpc_386
               mkdir -p $(archives)
             displayName: 'Create required directories'
 
           - script: |
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_grpc_amd64.exe $(windows_grpc_amd64)/azcopy.exe
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)/azcopy.exe
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_se_arm64.exe $(windows_se_arm64)/azcopy.exe
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_grpc_386.exe $(windows_grpc_386)/azcopy.exe
               cp NOTICE.txt $(windows_amd64)
+              cp NOTICE.txt $(windows_grpc_amd64)
               cp NOTICE.txt $(windows_arm64)
               cp NOTICE.txt $(windows_386)
               cp NOTICE.txt $(windows_se_arm64)
+              cp NOTICE.txt $(windows_grpc_386)
               zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
               zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
               zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
               zip -r $(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip .
+              zip -r $(archives)/azcopy_windows_grpc_amd64_$(azcopy_version).zip .
+              zip -r $(archives)/azcopy_windows_grpc_386_$(azcopy_version).zip .
             displayName: 'Copy required files'
           
           - task: ArchiveFiles@2
@@ -869,6 +969,13 @@ stages:
             inputs:
               rootFolderOrFile: '$(windows_amd64)'
               archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Windows 64 bit GRPC AMD Build'
+            inputs:
+              rootFolderOrFile: '$(windows_grpc_amd64)'
+              archiveFile: '$(archives)/azcopy_windows_grpc_amd64_$(azcopy_version).zip'
             continueOnError: true
 
           - task: ArchiveFiles@2
@@ -890,6 +997,13 @@ stages:
             inputs:
               rootFolderOrFile: '$(windows_se_arm64)'
               archiveFile: '$(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Windows GRPC 32 bit Build'
+            inputs:
+              rootFolderOrFile: '$(windows_386)'
+              archiveFile: '$(archives)/azcopy_windows_grpc_386_$(azcopy_version).zip'
             continueOnError: true
 
           - script: |
@@ -981,18 +1095,28 @@ stages:
 
           - script: |
               mkdir -p unzipped_amd64
+              mkdir -p unzipped_grpc_amd64
               mkdir -p unzipped_arm64
+              mkdir -p unzipped_grpc_arm64
               mkdir -p unzipped_m1_arm64
-              unzip -o azcopy*amd64*.zip -d unzipped_amd64
+              unzip -o azcopy_darwin_amd64*.zip -d unzipped_amd64
+              unzip -o azcopy_darwin_grpc_amd64*.zip -d unzipped_grpc_amd64
               unzip -o azcopy_darwin_arm64*.zip -d unzipped_arm64
+              unzip -o azcopy_darwin_grpc_arm64*.zip -d unzipped_grpc_arm64
               unzip -o azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
 
               # Use find to retrieve the folder name
               amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
               echo "AMD64 Folder name: $amd64FolderName"
+              
+              grpcAMD64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
+              echo "AMD64 Folder name: $grpcAMD64FolderName"
 
               arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
               echo "ARM64 Folder name: $arm64FolderName"
+              
+              grpcARM64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
+              echo "grpc ARM64 Folder name: $grpcARM64FolderName"
 
               m1Arm64FolderName=$(find unzipped_m1_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64*")
               echo "ARM64 M1 Folder name: $m1Arm64FolderName"
@@ -1006,6 +1130,18 @@ stages:
                   echo "Error: Expected exactly one matching AMD64 directory, found $(echo "$amd64FolderName" | wc -l)."
                   exit 1
               fi
+              
+              cd $(Build.ArtifactStagingDirectory)
+              
+              # Check if there is exactly one matching directory for amd64
+              if [ $(echo "$grpcAMD64FolderName" | wc -l) -eq 1 ]; then
+                  echo "Found matching grpc AMD64 directory: $grpcAMD64FolderName"
+                  cd "$grpcAMD64FolderName"
+                  mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_grpc_amd64
+              else
+                  echo "Error: Expected exactly one matching GRPC AMD64 directory, found $(echo "$grpcAMD64FolderName" | wc -l)."
+                  exit 1
+              fi
 
               cd $(Build.ArtifactStagingDirectory)
 
@@ -1016,6 +1152,18 @@ stages:
                   mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
               else
                   echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
+                  exit 1
+              fi
+              
+              cd $(Build.ArtifactStagingDirectory)
+              
+              # Check if there is exactly one matching directory for arm64
+              if [ $(echo "$grpcARM64FolderName" | wc -l) -eq 1 ]; then
+                  echo "Found matching ARM64 directory: $arm64FolderName"
+                  cd "$grpcARM64FolderName"
+                  mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_grpc_arm64
+              else
+                  echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$grpcARM64FolderName" | wc -l)."
                   exit 1
               fi
 
@@ -1072,6 +1220,7 @@ stages:
               ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries/
               chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries/*
               $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version
+              $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_grpc_amd64 --version
               $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_se_amd64 --version
               rm -rf /usr/local/bin/azcopy
               rm -rf /usr/bin/azcopy
@@ -1163,6 +1312,38 @@ stages:
 
               # Find the directory matching the pattern
               matching_dirs=("$EXTRACT_DIR"/azcopy_linux_se_amd64*)
+
+              # Check if there is exactly one matching directory
+              if [ ${#matching_dirs[@]} -eq 1 ]; then
+                  echo "Found matching directory: ${matching_dirs[0]}"
+                  cd "${matching_dirs[0]}"
+              else
+                  echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+                  exit 1
+              fi
+
+              # Run azcopy commands
+              ./azcopy --version
+              ./azcopy --help
+            displayName: 'Check Version and Help'
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+
+          - script: |
+              TAR_GZ_FILE=$(ls azcopy_linux_grpc_amd64*.tar.gz)
+              EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_grpc"
+
+              # Create extraction directory
+              mkdir -p "$EXTRACT_DIR"
+
+              # Extract the .tar.gz file
+              tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
+              if [ $? -ne 0 ]; then
+                  echo "Error: Failed to extract $TAR_GZ_FILE"
+                  exit 1
+              fi
+
+              # Find the directory matching the pattern
+              matching_dirs=("$EXTRACT_DIR"/azcopy_linux_grpc_amd64*)
 
               # Check if there is exactly one matching directory
               if [ ${#matching_dirs[@]} -eq 1 ]; then
@@ -1273,6 +1454,39 @@ stages:
             displayName: 'Check Version and Help for SE arm64 tar.gz'
             workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
+          - script: |
+              TAR_GZ_FILE=$(ls azcopy_linux_grpc_arm64*.tar.gz)
+              EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_grpc"
+
+              # Create extraction directory
+              mkdir -p "$EXTRACT_DIR"
+
+              # Extract the .tar.gz file
+              tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
+              if [ $? -ne 0 ]; then
+                  echo "Error: Failed to extract $TAR_GZ_FILE"
+                  exit 1
+              fi
+
+              # Find the directory matching the pattern
+              matching_dirs=("$EXTRACT_DIR"/azcopy_linux_grpc_arm64*)
+
+              # Check if there is exactly one matching directory
+              if [ ${#matching_dirs[@]} -eq 1 ]; then
+                  echo "Found matching directory: ${matching_dirs[0]}"
+                  cd "${matching_dirs[0]}"
+              else
+                  echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+                  exit 1
+              fi
+
+              # Run azcopy commands
+              ./azcopy --version
+              ./azcopy --help
+
+            displayName: 'Check Version and Help for SE arm64 tar.gz'
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+
       - job: Set_4
         timeoutInMinutes: 120
         strategy:
@@ -1306,6 +1520,7 @@ stages:
               ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries
               chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries/*
               $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_arm64 --version
+              $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_grpc_arm64 --version
               $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_se_arm64 --version
             displayName: 'Test signed linux binaries'
 
@@ -1470,7 +1685,7 @@ stages:
               fi
 
               # Define variables
-              ZIP_FILE_PATH=$(ls $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/azcopy*amd64*.zip)
+              ZIP_FILE_PATH=$(ls $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/azcopy_darwin_amd64*.zip)
               EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
 
               # Create extraction directory
@@ -1490,6 +1705,41 @@ stages:
                   exit 1
               fi
 
+              # Run the azcopy version command
+              ./azcopy --version
+              ./azcopy --help
+            displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
+
+          - script: |
+              # Install Homebrew if not already installed
+              if ! command -v brew &> /dev/null
+              then
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/$(whoami)/.zprofile
+                eval "$(/opt/homebrew/bin/brew shellenv)"
+              fi
+              
+              # Define variables
+              ZIP_FILE_PATH=$(ls $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/azcopy_darwin_grpc_amd64*.zip)
+              EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
+              
+              # Create extraction directory
+              mkdir -p $EXTRACT_DIR
+              
+              # Extract the zip file
+              unzip $ZIP_FILE_PATH -d $EXTRACT_DIR
+              
+              # Find the directory matching the pattern
+              matching_dirs=($EXTRACT_DIR/azcopy_darwin_grpc_amd64*)
+              
+              # Check if there is exactly one matching directory
+              if [ ${#matching_dirs[@]} -eq 1 ]; then
+                  cd "${matching_dirs[0]}"
+              else
+                  echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+                  exit 1
+              fi
+              
               # Run the azcopy version command
               ./azcopy --version
               ./azcopy --help
@@ -1525,10 +1775,10 @@ stages:
                 $extractDir = "$(Build.ArtifactStagingDirectory)\extracted"
                 
                 # Find the zip file matching the pattern
-                $zipFile = Get-ChildItem -Path $artifactDir -Filter "azcopy*amd64*.zip" | Select-Object -First 1
+                $zipFile = Get-ChildItem -Path $artifactDir -Filter "azcopy_windows_amd64*.zip" | Select-Object -First 1
 
                 if ($null -eq $zipFile) {
-                  Write-Error "No zip file found matching pattern 'azcopy*amd64*.zip' in directory: $artifactDir"
+                  Write-Error "No zip file found matching pattern 'azcopy_windows_amd64*.zip' in directory: $artifactDir"
                   exit 1
                 }
 
@@ -1778,7 +2028,7 @@ stages:
               sudo dpkg --info azcopy-*x86_64.deb
               sudo dpkg -i azcopy-*x86_64.deb
               sudo apt-get install build-essential -y
-            displayName: 'Create drop.zip file and install azcopy deb package'
+            displayName: 'Install azcopy & zip deb packages'
 
           - script: |
               cp $(work_dir)/NOTICE.txt $(Build.ArtifactStagingDirectory)/azCopy-binaries
