@@ -12,6 +12,11 @@ parameters:
     type: boolean
     default: false
 
+  - name: publish_to_m1_container
+    displayName: 'Publish To M1 Container'
+    type: boolean
+    default: false      
+
   - name: post_release
     displayName: 'Post Release on Github'
     type: boolean
@@ -532,7 +537,85 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
     
-      #TODO: support build for mac m1
+      - job: Set_5
+        timeoutInMinutes: 360
+        strategy:
+          matrix:
+            MacOS-14-ARM64:
+              imageName: 'ubuntu-latest'
+              type: 'linux'
+        pool:
+          vmImage: $(imageName)
+
+        variables:
+          - group: AZCOPY_TESTS_VAR
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(Build.SourcesDirectory)'
+          - name: archives
+            value: $(root_dir)/archives
+          - name: Publish_To_M1_Container
+            value: ${{ parameters.publish_to_m1_container }}
+
+        steps:
+          - task: GoTool@0
+            env:
+              GO111MODULE: 'on'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION)
+
+          - script: |
+              echo 'Running GO Vet'
+              go vet 
+            displayName: 'Golang Vet'
+            workingDirectory: $(System.DefaultWorkingDirectory)
+
+          - script: |
+              CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
+            displayName: 'Generate build'
+
+          - template: setup/azcopy_version_check_linux.yml
+            parameters:
+              azcopy_executable: $(root_dir)/azcopy
+
+          - template: setup/trigger_m1_build.yml
+          
+          - script: |
+              mkdir -p $(archives)
+              darwin_arm64_m1_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"
+              
+              echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
+              mkdir -p $darwin_arm64_m1_dir
+              
+              cp NOTICE.txt $darwin_arm64_m1_dir
+              cp $(Build.ArtifactStagingDirectory)/azcopy  $darwin_arm64_m1_dir
+            displayName: 'Copy required files for packaging'
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
+            inputs:
+              rootFolderOrFile: '$(darwin_arm64_m1_dir)'
+              archiveFile: '$(archives)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
+            continueOnError: true
+
+          - script: |
+              rm -rf $(Build.ArtifactStagingDirectory)/azcopy
+              cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)
+            displayName: 'Copy zip to staging directory'
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-mac-temp'
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
+        
+          - task: ComponentGovernanceComponentDetection@0
+            inputs:
+              scanType: 'Register'
+              verbosity: 'Verbose'
+              alertWarningLevel: 'High'
+
     # BuildArtifacts end here
       
   - stage: SignArtifacts
@@ -867,8 +950,10 @@ stages:
           - script: |
               mkdir -p unzipped_amd64
               mkdir -p unzipped_arm64
+              mkdir -p unzipped_m1_arm64
               unzip -o azcopy*amd64*.zip -d unzipped_amd64
-              unzip -o azcopy*arm64*.zip -d unzipped_arm64
+              unzip -o azcopy_darwin_arm64*.zip -d unzipped_arm64
+              unzip -o azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
 
               # Use find to retrieve the folder name
               amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
@@ -876,6 +961,9 @@ stages:
 
               arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
               echo "ARM64 Folder name: $arm64FolderName"
+
+              m1Arm64FolderName=$(find unzipped_m1_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64*")
+              echo "ARM64 M1 Folder name: $m1Arm64FolderName"
 
               # Check if there is exactly one matching directory for amd64
               if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
@@ -896,6 +984,18 @@ stages:
                   mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_arm64
               else
                   echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
+                  exit 1
+              fi
+
+              cd $(Build.ArtifactStagingDirectory)
+
+              # Check if there is exactly one matching directory for arm64
+              if [ $(echo "$m1Arm64FolderName" | wc -l) -eq 1 ]; then
+                  echo "Found matching ARM64 M1 directory: $m1Arm64FolderName"
+                  cd "$m1Arm64FolderName"
+                  mv azcopy $(Build.ArtifactStagingDirectory)/azcopy_darwin_m1_arm64
+              else
+                  echo "Error: Expected exactly one matching ARM64 M1 directory, found $(echo "$m1Arm64FolderName" | wc -l)."
                   exit 1
               fi
 
@@ -1528,7 +1628,7 @@ stages:
             displayName: 'Extract Files and Run Version and Help Command on Windows'
        # TestArtifacts ends here
 
-  - stage: ReleaseArtifacts
+  - stage: ReleaseToContainer
     dependsOn: TestArtifacts
     condition: succeeded('TestArtifacts')
     jobs:
@@ -1549,6 +1649,8 @@ stages:
             value: 'azcopyvnextrelease'
           - name: Publish_To_Container
             value: ${{ parameters.publish_to_container }}
+          - name: Publish_To_M1_Container
+            value: ${{ parameters.publish_to_m1_container }}
           - name: work_dir
             value: '$(Build.SourcesDirectory)'
 
@@ -1639,8 +1741,13 @@ stages:
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
+                if [ $(Publish_To_M1_Container) = "True" ]; then
+                  m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
+                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
+                fi
+
   - ${{ if eq(parameters.post_release, true) }}:
-    - stage: ReleaseArtifacts
+    - stage: ReleaseToGithub
       dependsOn: TestArtifacts
       condition: succeeded('TestArtifacts')
       jobs:  
@@ -1662,43 +1769,6 @@ stages:
             - script: |
                 echo ${{ parameters.tag }}
               displayName: 'Tag Name'
-            
-            - task: DownloadBuildArtifacts@0
-              displayName: 'Download Linux Build Artifacts'
-              inputs:
-                artifactName: 'azCopy-linux-signed'
-                downloadPath: $(Build.ArtifactStagingDirectory)
-
-            - task: DownloadBuildArtifacts@0
-              displayName: 'Download Windows Build Artifacts'
-              inputs:
-                artifactName: 'azCopy-windows-signed'
-                downloadPath: $(Build.ArtifactStagingDirectory)
-
-            - task: DownloadBuildArtifacts@0
-              displayName: 'Download Mac Build Artifacts'
-              inputs:
-                artifactName: 'azCopy-mac-signed'
-                downloadPath: $(Build.ArtifactStagingDirectory)
-            
-            - script: |
-                sudo ls -lRt $(Build.ArtifactStagingDirectory)
-                md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.deb
-                md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.rpm
-                md5sum $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*.tar.gz
-                md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*.zip
-                md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*.zip
-              displayName: 'List Artifacts'
-
-            - script: |
-                sudo apt-get clean
-                sudo apt-get update --fix-missing
-                wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-                sudo dpkg -i packages-microsoft-prod.deb 
-                sudo apt update 
-                sudo apt install apt-transport-https -y
-                sudo apt install dotnet-sdk-3.1 -y
-              displayName: "Update dependencies"
               
             - task: GithubRelease@1
               inputs:
@@ -1712,10 +1782,6 @@ stages:
                 title: ${{ parameters.tag }}
                 tag: ${{ parameters.tag }}
                 
-                assets: |
-                  $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*
-                  $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*
-                  $(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*
                 changeLogCompareToRelease: 'lastFullRelease'
                 changeLogType: 'commitBased'
                 isDraft: ${{ parameters.draft }}
@@ -1724,8 +1790,8 @@ stages:
 
   - ${{ if eq(parameters.publish_artifacts, true) }}:
     - stage: PublishArtifacts
-      dependsOn: ReleaseArtifacts
-      condition: succeeded('ReleaseArtifacts')
+      dependsOn: ReleaseToContainer
+      condition: succeeded('ReleaseToContainer')
       jobs:
         - job: PublishArtifacts
           timeoutInMinutes: 120
@@ -1874,8 +1940,8 @@ stages:
             
   - ${{ if eq(parameters.update_version, true) }}:
     - stage: UpdateLatestVersion
-      dependsOn: ReleaseArtifacts
-      condition: succeeded('ReleaseArtifacts')
+      dependsOn: ReleaseToContainer
+      condition: succeeded('ReleaseToContainer')
       jobs:
         - job: UpdateVersion       
           pool:
