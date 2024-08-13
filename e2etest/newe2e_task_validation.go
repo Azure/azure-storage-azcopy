@@ -5,14 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
@@ -306,5 +307,19 @@ func parseAzCopyListObject(a Asserter, line string) cmd.AzCopyListObject {
 		LeaseDuration:    lease.DurationType(properties[string(cmd.LeaseDuration)]),
 		ArchiveStatus:    blob.ArchiveStatus(properties[string(cmd.ArchiveStatus)]),
 		ContentLength:    properties["Content Length"],
+	}
+}
+
+// This function validates that the azcopy stdout does not contains the infoMsg string
+func ValidateDoesNotContainsOutput(a Asserter, stdout AzCopyStdout, infoMsg string) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	for _, line := range stdout.RawStdout() {
+		if strings.Contains(line, infoMsg) {
+			fmt.Println(stdout.String())
+			a.Error("unexpected message found in azcopy output")
+			return
+		}
 	}
 }
