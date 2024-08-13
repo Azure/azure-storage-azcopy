@@ -8,6 +8,7 @@ import (
 )
 
 func init() {
+	suiteManager.RegisterSuite(&WorkloadIdentitySuite{})
 }
 
 type WorkloadIdentitySuite struct{}
