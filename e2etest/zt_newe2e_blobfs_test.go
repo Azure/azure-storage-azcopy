@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	//suiteManager.RegisterSuite(&BlobFSTestSuite{})
+	suiteManager.RegisterSuite(&BlobFSTestSuite{})
 }
 
 type BlobFSTestSuite struct{}
