@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"io/fs"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
@@ -312,6 +313,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	err = command.Wait()
+	fmt.Println("Error--------------------------: ", err)
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),

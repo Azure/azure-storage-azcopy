@@ -157,7 +157,7 @@ func (s *BlobTestSuite) Scenario_DownloadBlob(svm *ScenarioVariationManager) {
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.OAuth(), EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
 				dstObj,
 			},
 			Flags: CopyFlags{
@@ -207,25 +207,21 @@ func (s *BlobTestSuite) Scenario_DownloadBlobRecursive(svm *ScenarioVariationMan
 }
 
 func (s *BlobTestSuite) Scenario_DownloadBlobFromToBlobPipe(svm *ScenarioVariationManager) {
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
-	srcObject := srcContainer.GetObject(svm, "dir_5_files", common.EEntityType.Folder())
-
-	srcObjs := make(ObjectResourceMappingFlat)
-	for i := range 5 {
-		name := "dir_5_files/test" + strconv.Itoa(i) + ".txt"
-		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
-		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
-		srcObjs[name] = obj
-	}
+	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
+		ObjectName: pointerTo("test"),
+		Body:       body,
+	})
 
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObject, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.OAuth(), EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
 				dstContainer,
 			},
 			Flags: CopyFlags{
