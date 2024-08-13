@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"io/fs"
 	"os"
@@ -9,8 +10,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
