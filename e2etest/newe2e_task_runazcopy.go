@@ -313,6 +313,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	err = command.Wait()
+	fmt.Println("Error out--------------------------: ", command.Stdout)
+	fmt.Println("Error err--------------------------: ", command.Stderr)
 	fmt.Println("Error--------------------------: ", err)
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
