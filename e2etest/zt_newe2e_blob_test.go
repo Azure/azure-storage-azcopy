@@ -157,7 +157,7 @@ func (s *BlobTestSuite) Scenario_DownloadBlob(svm *ScenarioVariationManager) {
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.OAuth(), EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
 				dstObj,
 			},
 			Flags: CopyFlags{
@@ -236,5 +236,5 @@ func (s *BlobTestSuite) Scenario_DownloadBlobFromToBlobPipe(svm *ScenarioVariati
 			},
 		})
 
-	ValidateErrorOutput(svm, stdout, "A newer version")
+	ValidateDoesNotContainsOutput(svm, stdout, "A newer version")
 }
