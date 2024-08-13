@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -232,6 +231,5 @@ func (s *BlobTestSuite) Scenario_DownloadBlobFromToBlobPipe(svm *ScenarioVariati
 				},
 			},
 		})
-	fmt.Println("**************Output: ", stdout)
 	ValidateDoesNotContainsOutput(svm, stdout, "A newer version")
 }
