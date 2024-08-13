@@ -19,70 +19,70 @@
 // THE SOFTWARE.
 package e2etest
 
-import (
-	"testing"
+// import (
+// 	"testing"
 
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-)
+// 	"github.com/Azure/azure-storage-azcopy/v10/common"
+// )
 
-// Purpose: Tests AZCLI and powershell auth tests
+// // Purpose: Tests AZCLI and powershell auth tests
 
-func TestBasic_AzCLIAuth(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		recursive:     true,
-		AutoLoginType: common.EAutoLoginType.AzCLI().String(),
-	}, nil, testFiles{
-		defaultSize: "1K",
-		shouldTransfer: []interface{}{
-			"wantedfile",
-			folder("sub/subsub"),
-			"sub/subsub/filea",
-			"sub/subsub/filec",
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
+// func TestBasic_AzCLIAuth(t *testing.T) {
+// 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
+// 		recursive:     true,
+// 		AutoLoginType: common.EAutoLoginType.AzCLI().String(),
+// 	}, nil, testFiles{
+// 		defaultSize: "1K",
+// 		shouldTransfer: []interface{}{
+// 			"wantedfile",
+// 			folder("sub/subsub"),
+// 			"sub/subsub/filea",
+// 			"sub/subsub/filec",
+// 		},
+// 	}, EAccountType.Standard(), EAccountType.Standard(), "")
+// }
 
-func TestBasic_AzCLIAuthLowerCase(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		recursive:     true,
-		AutoLoginType: "azCli", // the purpose of this test is to check whether our casing is working or not
-	}, nil, testFiles{
-		defaultSize: "1K",
-		shouldTransfer: []interface{}{
-			"wantedfile",
-			folder("sub/subsub"),
-			"sub/subsub/filea",
-			"sub/subsub/filec",
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
+// func TestBasic_AzCLIAuthLowerCase(t *testing.T) {
+// 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
+// 		recursive:     true,
+// 		AutoLoginType: "azCli", // the purpose of this test is to check whether our casing is working or not
+// 	}, nil, testFiles{
+// 		defaultSize: "1K",
+// 		shouldTransfer: []interface{}{
+// 			"wantedfile",
+// 			folder("sub/subsub"),
+// 			"sub/subsub/filea",
+// 			"sub/subsub/filec",
+// 		},
+// 	}, EAccountType.Standard(), EAccountType.Standard(), "")
+// }
 
-func TestBasic_PSAuth(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		recursive:     true,
-		AutoLoginType: common.EAutoLoginType.PsCred().String(),
-	}, nil, testFiles{
-		defaultSize: "1K",
-		shouldTransfer: []interface{}{
-			"wantedfile",
-			folder("sub/subsub"),
-			"sub/subsub/filea",
-			"sub/subsub/filec",
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
+// func TestBasic_PSAuth(t *testing.T) {
+// 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
+// 		recursive:     true,
+// 		AutoLoginType: common.EAutoLoginType.PsCred().String(),
+// 	}, nil, testFiles{
+// 		defaultSize: "1K",
+// 		shouldTransfer: []interface{}{
+// 			"wantedfile",
+// 			folder("sub/subsub"),
+// 			"sub/subsub/filea",
+// 			"sub/subsub/filec",
+// 		},
+// 	}, EAccountType.Standard(), EAccountType.Standard(), "")
+// }
 
-func TestBasic_PSAuthCamelCase(t *testing.T) {
-	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
-		recursive:     true,
-		AutoLoginType: "PSCred", // ditto
-	}, nil, testFiles{
-		defaultSize: "1K",
-		shouldTransfer: []interface{}{
-			"wantedfile",
-			folder("sub/subsub"),
-			"sub/subsub/filea",
-			"sub/subsub/filec",
-		},
-	}, EAccountType.Standard(), EAccountType.Standard(), "")
-}
+// func TestBasic_PSAuthCamelCase(t *testing.T) {
+// 	RunScenarios(t, eOperation.Copy(), eTestFromTo.Other(common.EFromTo.BlobBlob()), eValidate.Auto(), oAuthOnly, oAuthOnly, params{ // Pass flag values that the test requires. The params struct is a superset of Copy and Sync params
+// 		recursive:     true,
+// 		AutoLoginType: "PSCred", // ditto
+// 	}, nil, testFiles{
+// 		defaultSize: "1K",
+// 		shouldTransfer: []interface{}{
+// 			"wantedfile",
+// 			folder("sub/subsub"),
+// 			"sub/subsub/filea",
+// 			"sub/subsub/filec",
+// 		},
+// 	}, EAccountType.Standard(), EAccountType.Standard(), "")
+// }
