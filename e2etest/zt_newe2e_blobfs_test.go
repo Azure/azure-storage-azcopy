@@ -1,9 +1,8 @@
 package e2etest
 
 import (
-	"strconv"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strconv"
 )
 
 func init() {

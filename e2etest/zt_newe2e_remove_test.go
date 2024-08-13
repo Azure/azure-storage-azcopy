@@ -1,11 +1,10 @@
 package e2etest
 
 import (
-	"strconv"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strconv"
 )
 
 func init() {

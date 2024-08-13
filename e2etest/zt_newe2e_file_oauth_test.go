@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"fmt"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 

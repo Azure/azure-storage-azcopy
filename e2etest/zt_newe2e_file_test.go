@@ -3,10 +3,9 @@ package e2etest
 import (
 	"context"
 	"fmt"
-	"math"
-	"strconv"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strconv"
+	"math"
 )
 
 func init() {
