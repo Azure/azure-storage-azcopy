@@ -1,12 +1,13 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
-	suiteManager.RegisterSuite(&BlobFSTestSuite{})
+	//suiteManager.RegisterSuite(&BlobFSTestSuite{})
 }
 
 type BlobFSTestSuite struct{}

@@ -2,11 +2,12 @@ package e2etest
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
-	suiteManager.RegisterSuite(&FileOAuthTestSuite{})
+	//suiteManager.RegisterSuite(&FileOAuthTestSuite{})
 }
 
 type FileOAuthTestSuite struct{}

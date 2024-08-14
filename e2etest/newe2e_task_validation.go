@@ -312,9 +312,9 @@ func parseAzCopyListObject(a Asserter, line string) cmd.AzCopyListObject {
 
 // This function validates that the azcopy stdout does not contains the infoMsg string
 func ValidateDoesNotContainsOutput(a Asserter, stdout AzCopyStdout, infoMsg string) {
-	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
-		return
-	}
+	// if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+	// 	return
+	// }
 	for _, line := range stdout.RawStdout() {
 		if strings.Contains(line, infoMsg) {
 			fmt.Println(stdout.String())
