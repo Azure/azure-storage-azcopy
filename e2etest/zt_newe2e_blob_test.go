@@ -204,25 +204,22 @@ type BlobTestSuite struct{}
 // }
 
 func (s *BlobTestSuite) Scenario_DownloadBlobFromToBlobPipe(svm *ScenarioVariationManager) {
-
-	//dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-
+	// Scale up from service to object
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
 	// Scale up from service to object
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
 		Body:       body,
 	})
 
-	sasOpts := GenericAccountSignatureValues{}
 	stdout, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: AzCopyVerbCopy,
 			Targets: []ResourceManager{
-				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: sasOpts,
-				}),
+				TryApplySpecificAuthType(srcObj, ResolveVariation(svm, []ExplicitCredentialTypes{EExplicitCredentialType.OAuth(), EExplicitCredentialType.SASToken()}), svm, CreateAzCopyTargetOptions{}),
+				dstObj,
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
@@ -231,5 +228,6 @@ func (s *BlobTestSuite) Scenario_DownloadBlobFromToBlobPipe(svm *ScenarioVariati
 				},
 			},
 		})
+
 	ValidateDoesNotContainsOutput(svm, stdout, "A newer version")
 }
