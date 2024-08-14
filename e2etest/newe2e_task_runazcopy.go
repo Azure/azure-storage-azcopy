@@ -317,6 +317,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
+	exitcode := command.ProcessState.ExitCode()
+	fmt.Println(exitcode)
 
 	a.Cleanup(func(a ScenarioAsserter) {
 		if stdout, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok {
