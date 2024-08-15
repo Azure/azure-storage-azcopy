@@ -228,7 +228,7 @@ func (s *appendBlobSenderBase) GetMD5(offset, count int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
+	if len(response.ContentMD5) > 0 {
 		return response.ContentMD5, nil
 	} else {
 		// compute md5

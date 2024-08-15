@@ -1320,7 +1320,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		blobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
 	}
 	if err != nil {
-		return fmt.Errorf("fatal: Could not create client: " + err.Error())
+		return fmt.Errorf("fatal: Could not create client: %w", err)
 	}
 
 	// step 3: start download
