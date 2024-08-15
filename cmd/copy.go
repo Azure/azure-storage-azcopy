@@ -1347,6 +1347,20 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
+	// get the concurrency environment value 
+	userDefnConcurrencyStr := glcm.getEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
+
+	// convert the concurrency value to int
+	concurrencyValue, err := strconv.Atoi(userDefnConcurrencyStr)
+
+	//handle the error if the conversion fails
+	if err != nil {
+		return fmt.Errorf("fatal: cannot convert the concurrency value to int due to error: %s", err.Error())
+		//do nothing use default concurrency value of 5 as is 
+	}
+	//set parallelism to the concurrency integer
+	pipingUploadParallelism := concurrencyValue
+
 	// if no block size is set, then use default value
 	if blockSize == 0 {
 		blockSize = pipingDefaultBlockSize
