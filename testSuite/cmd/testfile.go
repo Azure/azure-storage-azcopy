@@ -267,7 +267,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 		os.Exit(1)
 	}
 
-	if testFileCmd.CheckContentMD5 && (get.ContentMD5 == nil || len(get.ContentMD5) == 0) {
+	if testFileCmd.CheckContentMD5 && (len(get.ContentMD5) == 0) {
 		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}

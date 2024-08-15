@@ -1359,7 +1359,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		}
 
 		// convert the concurrency value to int
-		concurrencyValue, err := strconv.ParseInt(userDefnConcurrencyStr, 10, 64)
+		concurrencyValue, err := strconv.ParseInt(userDefnConcurrencyStr, 10, 32)
 
 		//handle the error if the conversion fails
 		if err != nil {
