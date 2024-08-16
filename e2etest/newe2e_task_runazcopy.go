@@ -308,11 +308,12 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	err = command.Start()
 	a.Assert("run command", IsNil{}, err)
 
-	if isLaunchedByDebugger {
-		beginAzCopyDebugging(in)
-	}
+	//if isLaunchedByDebugger {
+	beginAzCopyDebugging(in)
+	//}
 
 	err = command.Wait()
+	fmt.Println("Error********", err)
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
