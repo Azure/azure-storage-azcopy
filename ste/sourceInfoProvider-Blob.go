@@ -23,12 +23,11 @@ package ste
 import (
 	"context"
 	"crypto/md5"
-	"io"
-	"time"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"io"
+	"time"
 )
 
 // Source info provider for Azure blob
@@ -183,7 +182,7 @@ func (p *blobSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(response.ContentMD5) > 0 {
+	if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
 		return response.ContentMD5, nil
 	} else {
 		// compute md5

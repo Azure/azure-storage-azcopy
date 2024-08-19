@@ -24,13 +24,12 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"io"
-	"sync"
-	"time"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"io"
+	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
@@ -341,7 +340,7 @@ func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(response.ContentMD5) > 0 {
+		if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
 			return response.ContentMD5, nil
 		} else {
 			// compute md5
