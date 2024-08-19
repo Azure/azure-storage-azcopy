@@ -1910,7 +1910,7 @@ stages:
                 while IFS=, read -r distro archetype repoName releaseName; do
 
                   # If the package is preview, publish to mariner preview package
-                  if [[ $distro == *"Mariner-2.0"* || $distro == *"Mariner-3.0"* ]]; then
+                  if [[ $distro == *"Mariner-2.0"* ]]; then
                     if [ $is_preview = "true" ]; then
                       repoName=$(echo $repoName | sed 's/prod/preview/')
                     fi
@@ -1928,7 +1928,7 @@ stages:
                     if [[ $archetype == *"Arm"* ]]; then
                       echo "Skipping for ARM type on $distro"
                     else
-                      if [[ $distro == *"Mariner-2.0"* || $distro == *"Mariner-3.0"* ]]; then
+                      if [[ $distro == *"Mariner-2.0"* ]]; then
                         if [ "$(is_preview)" = "true" ]; then
                           repoName=$(echo $repoName | sed 's/prod/preview/')
                         fi
