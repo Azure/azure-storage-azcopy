@@ -144,9 +144,9 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("error accessing 'from-to' flag: %v", err)
 			}
-		}
-		if fromToFlagValue == "BlobPipe" {
-			isPipeDownload = true
+			if fromToFlagValue == "BlobPipe" {
+				isPipeDownload = true
+			}
 		}
 
 		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
