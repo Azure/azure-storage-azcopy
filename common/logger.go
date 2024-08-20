@@ -59,10 +59,10 @@ type jobLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	jobID             JobID
-	minimumLevelToLog LogLevel // The maximum customer-desired log level for this job
-	file              io.WriteCloser          // The job's log file
-	logFileFolder     string            // The log file's parent folder, needed for opening the file at the right place
-	logger            *log.Logger       // The Job's logger
+	minimumLevelToLog LogLevel       // The maximum customer-desired log level for this job
+	file              io.WriteCloser // The job's log file
+	logFileFolder     string         // The log file's parent folder, needed for opening the file at the right place
+	logger            *log.Logger    // The Job's logger
 	sanitizer         LogSanitizer
 	logFileNameSuffix string // Used to allow more than 1 log per job, ex: front-end and back-end logs should be separate
 }
@@ -88,7 +88,7 @@ func (jl *jobLogger) OpenLog() {
 	jl.file = file
 
 	flags := log.LstdFlags | log.LUTC
-	utcMessage := fmt.Sprintf("Log times are in UTC. Local time is " + time.Now().Format("2 Jan 2006 15:04:05"))
+	utcMessage := fmt.Sprintf("Log times are in UTC. Local time is %s", time.Now().Format("2 Jan 2006 15:04:05"))
 
 	jl.logger = log.New(jl.file, "", flags)
 	// Log the Azcopy Version
