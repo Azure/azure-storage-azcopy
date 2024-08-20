@@ -359,11 +359,11 @@ func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
 */
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
-								  sourceSAS string,
-								  destinationSAS string,
-								  srcServiceClient *common.ServiceClient,
-								  dstServiceClient *common.ServiceClient,
-								  srcIsOAuth bool) bool {
+	sourceSAS string,
+	destinationSAS string,
+	srcServiceClient *common.ServiceClient,
+	dstServiceClient *common.ServiceClient,
+	srcIsOAuth bool) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which are not empty and have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
@@ -392,14 +392,14 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 		mmf := planFile.Map()
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		args := &ste.AddJobPartArgs{
-			PartNum: partNum,
-			PlanFile: planFile,
-			ExistingPlanMMF: mmf,
-			SrcClient: srcServiceClient,
-			DstClient: dstServiceClient,
-			SrcIsOAuth: srcIsOAuth,
+			PartNum:           partNum,
+			PlanFile:          planFile,
+			ExistingPlanMMF:   mmf,
+			SrcClient:         srcServiceClient,
+			DstClient:         dstServiceClient,
+			SrcIsOAuth:        srcIsOAuth,
 			ScheduleTransfers: false,
-			CompletionChan: nil,
+			CompletionChan:    nil,
 		}
 		jm.AddJobPart2(args)
 	}
@@ -615,7 +615,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 			var perfAdjustmentReq common.PerfAdjustmentReq
 
 			if time.Since(lastPerfAdjustTime) < minIntervalBetweenPerfAdjustment {
-				err = fmt.Errorf("Performance Adjustment already in progress. Please try after " +
+				err = fmt.Errorf("Performance Adjustment already in progress. Please try after %s",
 					lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
 			}
 
