@@ -1,14 +1,13 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
-	//suiteManager.RegisterSuite(&WorkloadIdentitySuite{})
+	suiteManager.RegisterSuite(&WorkloadIdentitySuite{})
 }
 
 type WorkloadIdentitySuite struct{}

@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"os"
 	"testing"
 )
 
@@ -30,22 +29,6 @@ type TestFrameworkHook struct {
 }
 
 func TestNewE2E(t *testing.T) {
-
-	os.Setenv("NEW_E2E_APPLICATION_ID", "6e664d29-7531-4a2f-8ec8-f04ac1f99b6c")
-	os.Setenv("NEW_E2E_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47")
-	os.Setenv("NEW_E2E_CLIENT_SECRET", "OMx8Q~1fP~X-UTgKGBn_j3vNBP~tRYaarYqwwa-.")
-	os.Setenv("NEW_E2E_STATIC_APPLICATION_ID", "6e664d29-7531-4a2f-8ec8-f04ac1f99b6c")
-	os.Setenv("NEW_E2E_STATIC_TENANT_ID", "72f988bf-86f1-41af-91ab-2d7cd011db47")
-	os.Setenv("NEW_E2E_APPLICATION_ID", "6e664d29-7531-4a2f-8ec8-f04ac1f99b6c")
-	os.Setenv("NEW_E2E_STATIC_CLIENT_SECRET", "OMx8Q~1fP~X-UTgKGBn_j3vNBP~tRYaarYqwwa-.")
-	os.Setenv("AZCOPY_E2E_LOG_OUTPUT", "/home/azureuser")
-	os.Setenv("NEW_E2E_AZCOPY_PATH", "/home/azureuser/go/src/azure-storage-azcopy/azcopy")
-	os.Setenv("NEW_E2E_STANDARD_ACCOUNT_NAME", "azcopye2epipeline")
-	os.Setenv("NEW_E2E_STANDARD_ACCOUNT_KEY", "U6IPcw4JXZQFmLAQ1GgBWLIcW6phz3VdJGwR1amXhSFkP8FqzKxFMaqnkW3K8/JamTllYGGYtknXVOT8jCKVAg==")
-	os.Setenv("NEW_E2E_HNS_ACCOUNT_NAME", "azcopye2ehnstest1")
-	os.Setenv("NEW_E2E_HNS_ACCOUNT_NAME", "azcopye2ehnstest1")
-	os.Setenv("NEW_E2E_SUBSCRIPTION_ID", "")
-
 	a := &FrameworkAsserter{t: t}
 
 	t.Cleanup(func() {

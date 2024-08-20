@@ -1,14 +1,13 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
-	//suiteManager.RegisterSuite(&BasicFunctionalitySuite{})
+	suiteManager.RegisterSuite(&BasicFunctionalitySuite{})
 }
 
 type BasicFunctionalitySuite struct{}
