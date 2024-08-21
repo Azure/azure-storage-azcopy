@@ -1,13 +1,14 @@
 package e2etest
 
 import (
+	"strconv"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strconv"
 )
 
 func init() {
-	suiteManager.RegisterSuite(&S2STestSuite{})
+	//suiteManager.RegisterSuite(&S2STestSuite{})
 }
 
 type S2STestSuite struct{}

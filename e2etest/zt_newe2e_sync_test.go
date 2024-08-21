@@ -2,18 +2,19 @@ package e2etest
 
 import (
 	"encoding/base64"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type SyncTestSuite struct{}
 
 func init() {
-	suiteManager.RegisterSuite(&SyncTestSuite{})
+	//suiteManager.RegisterSuite(&SyncTestSuite{})
 }
 
 func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationManager) {

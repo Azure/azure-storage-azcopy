@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"io/fs"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
@@ -49,10 +50,11 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy   AzCopyVerb = "copy"
-	AzCopyVerbSync   AzCopyVerb = "sync"
-	AzCopyVerbRemove AzCopyVerb = "remove"
-	AzCopyVerbList   AzCopyVerb = "list"
+	AzCopyVerbCopy     AzCopyVerb = "copy"
+	AzCopyVerbSync     AzCopyVerb = "sync"
+	AzCopyVerbRemove   AzCopyVerb = "remove"
+	AzCopyVerbList     AzCopyVerb = "list"
+	AzCopyVerbJobsList AzCopyVerb = "jobs list"
 )
 
 type AzCopyTarget struct {
@@ -236,9 +238,9 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 // RunAzCopy todo define more cleanly, implement
 func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *AzCopyJobPlan) {
-	if a.Dryrun() {
-		return nil, &AzCopyJobPlan{}
-	}
+	// if a.Dryrun() {
+	// 	return nil, &AzCopyJobPlan{}
+	// }
 	var flagMap map[string]string
 	var envMap map[string]string
 
