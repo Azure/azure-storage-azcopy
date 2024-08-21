@@ -35,9 +35,10 @@ func (a *HiddenFileDataAdapter) getHashPath(relativePath string) string {
 	return filepath.Join(basePath, dir, fName)
 }
 
-func (a *HiddenFileDataAdapter) getDataPath(relativePath string) string {
-	return filepath.Join(a.dataBasePath, relativePath)
-}
+// Commenting out this function as it is not used in the codebase
+// func (a *HiddenFileDataAdapter) getDataPath(relativePath string) string {
+// 	return filepath.Join(a.dataBasePath, relativePath)
+// }
 
 func (a *HiddenFileDataAdapter) GetHashData(relativePath string) (*SyncHashData, error) {
 	metaFile := a.getHashPath(relativePath)
