@@ -116,7 +116,7 @@ type loginCmdArgs struct {
 
 func (lca loginCmdArgs) process() error {
 	// Login type consolidation to allow backward compatibility.
-	// Commenting the warning message till we decie on when to depricate these options
+	// Commenting the warning message till we decide on when to deprecate these options
 	// if lca.servicePrincipal || lca.identity {
 	// 	glcm.Warn("The flags --service-principal and --identity will be deprecated in a future release. Please use --login-type=SPN or --login-type=MSI instead.")
 	// }
