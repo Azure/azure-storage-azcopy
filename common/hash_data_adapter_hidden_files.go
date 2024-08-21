@@ -83,9 +83,8 @@ func (a *HiddenFileDataAdapter) SetHashData(relativePath string, data *SyncHashD
 
 	// Push types around to check for OS-specific hide file method
 	if adapter, canHide := any(a).(interface{ HideFile(string) error }); canHide {
-		dataFile := a.getDataPath(relativePath)
-
-		err := adapter.HideFile(dataFile)
+		metaFile := a.getHashPath(relativePath)
+		err := adapter.HideFile(metaFile)
 		if err != nil {
 			return fmt.Errorf("failed to hide file: %w", err)
 		}
