@@ -21,7 +21,7 @@ steps:
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.buildname }} storage container create --name "testcontainer" --account-name ${{ parameters.storage-account-name }}
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.build-name }} storage container create --name "testcontainer" --account-name "azcopye2epipeline"
         echo "Hello, Azure!" > myfile.txt
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.buildname }} storage blob upload --account-name ${{ parameters.storage-account-name }} --container-name "testcontainer" --name myfile.txt --file myfile.txt
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.buildname }} cp "https://${{ parameters.storage-account-name }}.blob.core.windows.net/${{ parameters.container-name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.build-name }} storage blob upload --account-name "azcopye2epipeline" --container-name "testcontainer" --name myfile.txt --file myfile.txt
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.build-name }} cp "https://${{ parameters.storage-account-name }}.blob.core.windows.net/${{ parameters.container-name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
