@@ -1,5 +1,5 @@
 parameters:
-  - name: buildname
+  - name: build-name
     type: string
   - name: storage-account-name
     type: string
