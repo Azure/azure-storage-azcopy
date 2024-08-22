@@ -437,9 +437,9 @@ jobs:
 
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
-          build-name: azcopy_linux_amd64
-          container-name: 'testcontainer1'
-          storage-account-name: $(AZCOPY_E2E_ACCOUNT_NAME)
+          build_name: azcopy_linux_amd64
+          container_name: 'testcontainer1'
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
 
   - job: Test_Scenarios_Windows
     timeoutInMinutes: 360
@@ -467,9 +467,9 @@ jobs:
 
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
-          build-name: azcopy_windows_amd64.exe
-          container-name: 'testcontainer1'
-          storage-account-name: $(AZCOPY_E2E_ACCOUNT_NAME)
+          build_name: azcopy_windows_amd64.exe
+          container_name: 'testcontainer1'
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
 
   - job: Test_Scenarios_MacOS
     timeoutInMinutes: 360
