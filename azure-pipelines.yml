@@ -438,8 +438,6 @@ jobs:
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
           BuildName: azcopy_linux_amd64
-        displayName: 'Run Scenarios on Linux'
-        condition: eq(variables.type, 'linux')
 
   - job: Test_Scenarios_Windows
     timeoutInMinutes: 360
@@ -468,8 +466,6 @@ jobs:
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
           Build: azcopy_windows_amd64.exe
-        displayName: 'Run Scenarios on Windows'
-        condition: eq(variables.type, 'windows')
 
   - job: Test_Scenarios_MacOS
     timeoutInMinutes: 360
@@ -499,5 +495,3 @@ jobs:
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
           Build: azcopy_darwin_amd64
-        displayName: 'Run Scenarios on MacOS'
-        condition: eq(variables.type, 'macos')
