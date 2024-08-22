@@ -1,0 +1,28 @@
+parameters:
+  - name: buildname
+    type: string
+  - name: storage-account-name
+    type: string
+  - name: container-name
+    type: string
+
+steps:
+  - task: Bash@3
+    displayName: 'Install Azure CLI'
+    inputs:
+      targetType: 'inline'
+      script: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+  - task: AzureCLI@2
+    displayName: 'Run Scenarios'
+    inputs:
+      azureSubscription: 'ESRP KeyVault identity'
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.buildname }} storage container create --name ${{ parameters.container-name }} --account-name ${{ parameters.storage-account-name }}
+        echo "Hello, Azure!" > myfile.txt
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.buildname }} storage blob upload --account-name ${{ parameters.storage-account-name }} --container-name ${{ parameters.container-name }} --name myfile.txt --file myfile.txt
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI ${{ parameters.buildname }} cp "https://${{ parameters.storage-account-name }}.blob.core.windows.net/${{ parameters.container-name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+    workingDirectory: $(Build.ArtifactStagingDirectory)
