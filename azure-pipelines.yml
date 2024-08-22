@@ -418,7 +418,7 @@ jobs:
         Ubuntu:
           imageName: 'ubuntu-latest'
           type: 'linux'
-         Windows:
+        Windows:
           imageName: 'windows-latest'
           type: 'windows'
         MacOS:
