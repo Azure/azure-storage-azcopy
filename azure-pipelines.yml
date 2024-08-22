@@ -498,6 +498,6 @@ jobs:
 
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
-          build-name: azcopy_darwin_amd64
-          container-name: 'testcontainer1'
-          storage-account-name: $(AZCOPY_E2E_ACCOUNT_NAME)
+          build_name: azcopy_darwin_amd64
+          container_name: 'testcontainer1'
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
