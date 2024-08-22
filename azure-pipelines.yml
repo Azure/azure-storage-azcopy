@@ -429,7 +429,7 @@ jobs:
       vmImage: $(imageName)
 
     steps:
-      -checkout: none
+      - checkout: none
 
       - task: GoTool@0
         name: 'Set_up_Golang'
