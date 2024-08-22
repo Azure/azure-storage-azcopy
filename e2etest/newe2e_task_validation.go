@@ -308,3 +308,58 @@ func parseAzCopyListObject(a Asserter, line string) cmd.AzCopyListObject {
 		ContentLength:    properties["Content Length"],
 	}
 }
+
+type DryrunOp uint8
+
+const (
+	DryrunOpCopy DryrunOp = iota + 1
+	DryrunOpDelete
+	DryrunOpProperties
+)
+
+// ValidateDryRunOutput validates output for items in the expected map; expected must equal output
+func ValidateDryRunOutput(a Asserter, output AzCopyStdout, rootSrc ResourceManager, rootDst ResourceManager, expected map[string]DryrunOp) {
+	if dryrun, ok := a.(DryrunAsserter); ok && dryrun.Dryrun() {
+		return
+	}
+
+	a.AssertNow("Output must not be nil", Not{IsNil{}}, output)
+	stdout, ok := output.(*AzCopyParsedDryrunStdout)
+	a.AssertNow("Output must be dryrun stdout", Equal{}, ok, true)
+
+	// validation must have nothing in it, and nothing should miss in output.
+	validation := CloneMap(expected)
+
+	uriPrefs := GetURIOptions{
+		LocalOpts: LocalURIOpts{
+			PreferUNCPath: true,
+		},
+	}
+
+	srcBase := rootSrc.URI(uriPrefs)
+	var dstBase string
+	if rootDst != nil {
+		dstBase = rootDst.URI(uriPrefs)
+	}
+
+	for _, v := range stdout.Transfers {
+		// Determine the op.
+		op := common.Iff(v.FromTo.IsDelete(), DryrunOpDelete, common.Iff(v.FromTo.IsSetProperties(), DryrunOpProperties, DryrunOpCopy))
+
+		// Try to find the item in expected.
+		relPath := strings.TrimPrefix( // Ensure we start with the rel path, not a separator
+			strings.ReplaceAll( // Isolate path separators
+				strings.TrimPrefix(v.Source, srcBase), // Isolate the relpath
+				"\\", "/",
+			),
+			"/",
+		)
+		//a.Log("base %s source %s rel %s", srcBase, v.Source, relPath)
+		expectedOp, ok := validation[relPath]
+		a.Assert(fmt.Sprintf("Expected %s in map", relPath), Equal{}, ok, true)
+		a.Assert(fmt.Sprintf("Expected %s to match", relPath), Equal{}, op, expectedOp)
+		if rootDst != nil {
+			a.Assert(fmt.Sprintf("Expected %s dest url to match expected dest url", relPath), Equal{}, v.Destination, common.GenerateFullPath(dstBase, relPath))
+		}
+	}
+}

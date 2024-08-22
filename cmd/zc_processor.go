@@ -63,6 +63,49 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 	}
 }
 
+type DryrunTransfer struct {
+	FromTo      common.FromTo
+	Source      string
+	Destination string
+}
+
+func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
+	var surrogate struct {
+		FromTo      string
+		Source      string
+		Destination string
+	}
+
+	err := json.Unmarshal(bytes, &surrogate)
+	if err != nil {
+		return fmt.Errorf("failed to parse dryrun transfer: %w", err)
+	}
+
+	err = d.FromTo.Parse(surrogate.FromTo)
+	if err != nil {
+		return fmt.Errorf("failed to parse fromto: %w", err)
+	}
+
+	d.Source = surrogate.Source
+	d.Destination = surrogate.Destination
+
+	return nil
+}
+
+func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
+	surrogate := struct {
+		FromTo      string
+		Source      string
+		Destination string
+	}{
+		d.FromTo.String(),
+		d.Source,
+		d.Destination,
+	}
+
+	return json.Marshal(surrogate)
+}
+
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
 
 	// Escape paths on destinations where the characters are invalid
@@ -99,27 +142,37 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 	if s.dryrunMode {
 		glcm.Dryrun(func(format common.OutputFormat) string {
+			prettySrcRelativePath, prettyDstRelativePath := srcRelativePath, dstRelativePath
+
+			fromTo := s.copyJobTemplate.FromTo
+			if fromTo.From().IsRemote() {
+				prettySrcRelativePath, err = url.PathUnescape(prettySrcRelativePath)
+				if err != nil {
+					prettySrcRelativePath = srcRelativePath // Fall back, because it's better than failing.
+				}
+			}
+
+			if fromTo.To().IsRemote() {
+				prettyDstRelativePath, err = url.PathUnescape(prettyDstRelativePath)
+				if err != nil {
+					prettyDstRelativePath = dstRelativePath // Fall back, because it's better than failing.
+				}
+			}
+
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(copyTransfer)
+				tx := DryrunTransfer{
+					FromTo: s.copyJobTemplate.FromTo,
+					Source: common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
+				}
+
+				if fromTo.To() != common.ELocation.None() && fromTo.To() != common.ELocation.Unknown() {
+					tx.Destination = common.GenerateFullPath(s.copyJobTemplate.DestinationRoot.Value, prettyDstRelativePath)
+				}
+
+				jsonOutput, err := json.Marshal(tx)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
-				prettySrcRelativePath, prettyDstRelativePath := srcRelativePath, dstRelativePath
-
-				fromTo := s.copyJobTemplate.FromTo
-				if fromTo.From().IsRemote() {
-					prettySrcRelativePath, err = url.PathUnescape(prettySrcRelativePath)
-					if err != nil {
-						prettySrcRelativePath = srcRelativePath // Fall back, because it's better than failing.
-					}
-				}
-
-				if fromTo.To().IsRemote() {
-					prettyDstRelativePath, err = url.PathUnescape(prettyDstRelativePath)
-					if err != nil {
-						prettyDstRelativePath = dstRelativePath // Fall back, because it's better than failing.
-					}
-				}
 
 				// if remove then To() will equal to common.ELocation.Unknown()
 				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { // remove

@@ -171,26 +171,73 @@ func (a *AzCopyParsedCopySyncRemoveStdout) Write(p []byte) (n int, err error) {
 }
 
 type AzCopyParsedDryrunStdout struct {
-	AzCopyParsedStdout
-	listenChan chan<- common.JsonOutputTemplate
+	AzCopyRawStdout
 
-	ScheduledTransfers map[string]common.CopyTransfer
+	fromTo common.FromTo // fallback for text output
+
+	listenChan chan<- cmd.DryrunTransfer
+
+	Transfers []cmd.DryrunTransfer
+	JsonMode  bool
 }
 
-func (a *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
-	if a.listenChan == nil {
-		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
-			if line.MessageType == common.EOutputMessageType.Dryrun().String() {
-				var tx common.CopyTransfer
-				err = json.Unmarshal([]byte(line.MessageContent), &tx)
-				if err != nil {
-					return
+func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
+	lines := strings.Split(string(p), "\n")
+	for _, str := range lines {
+		if !d.JsonMode {
+			// DRYRUN: <TYPE> <RESOURCE> [to] <RESOURCE>
+			if !strings.HasPrefix(str, "DRYRUN: ") {
+				continue
+			}
+
+			str = strings.TrimPrefix(str, "DRYRUN: ")
+			resources := strings.Split(str, " ")
+
+			var tx cmd.DryrunTransfer
+
+			switch strings.ToLower(resources[0]) {
+			case "remove":
+				tx.FromTo = (common.FromTo(tx.FromTo.From()) << 8) | common.FromTo(common.ELocation.Unknown())
+			case "set-properties":
+				tx.FromTo = (common.FromTo(tx.FromTo.From()) << 8) | common.FromTo(common.ELocation.None())
+			case "copy":
+				tx.FromTo = d.fromTo
+			default:
+				continue
+			}
+
+			resources = resources[1:]
+			for _, v := range resources {
+				if strings.ToLower(v) == "to" {
+					continue
 				}
 
-				a.ScheduledTransfers[tx.Source] = tx
+				if tx.Source == "" {
+					tx.Source = v
+				} else if tx.Destination == "" {
+					tx.Destination = v
+				}
 			}
-		})
+
+			d.Transfers = append(d.Transfers, tx)
+		} else {
+			var out common.JsonOutputTemplate
+			err = json.Unmarshal(p, &out)
+			if err != nil {
+				continue
+			}
+
+			if out.MessageType != common.EOutputMessageType.Dryrun().String() {
+				continue
+			}
+
+			var tx cmd.DryrunTransfer
+			err = json.Unmarshal([]byte(out.MessageContent), &tx)
+			if err != nil {
+				continue
+			}
+		}
 	}
 
-	return a.AzCopyParsedStdout.Write(p)
+	return d.AzCopyRawStdout.Write(p)
 }

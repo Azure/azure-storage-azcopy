@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"testing"
@@ -70,7 +71,7 @@ func (sm *ScenarioManager) RunScenario() {
 		func() {
 			defer func() {
 				if err := recover(); err != nil {
-					sm.testingT.Logf("Variation %s dryrun panicked: %v", svm.VariationName(), err)
+					sm.testingT.Logf("Variation %s dryrun panicked: %v\n%s", svm.VariationName(), err, string(debug.Stack()))
 					svm.InvalidateScenario()
 				}
 			}()

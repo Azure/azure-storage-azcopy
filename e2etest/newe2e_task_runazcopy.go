@@ -282,10 +282,18 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	var out = commandSpec.Stdout
 	if out == nil {
 		switch {
+		case strings.EqualFold(flagMap["dry-run"], "true") && (strings.EqualFold(flagMap["output-type"], "json") || strings.EqualFold(flagMap["output-type"], "text") || flagMap["output-type"] == ""): //  Dryrun has its own special sort of output, that supports non-json output.
+			jsonMode := strings.EqualFold(flagMap["outputType"], "json")
+			var fromTo common.FromTo
+			if !jsonMode && len(commandSpec.Targets) >= 2 {
+				fromTo = common.FromTo(commandSpec.Targets[0].Location())<<8 | common.FromTo(commandSpec.Targets[1].Location())
+			}
+			out = &AzCopyParsedDryrunStdout{
+				JsonMode: jsonMode,
+				fromTo:   fromTo,
+			}
 		case !strings.EqualFold(flagMap["output-type"], "json"): // Won't parse non-computer-readable outputs
 			out = &AzCopyRawStdout{}
-		case strings.EqualFold(flagMap["dryrun"], "true"): //  Dryrun has its own special sort of output
-			out = &AzCopyParsedDryrunStdout{}
 		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
 			out = &AzCopyParsedCopySyncRemoveStdout{}
 		case commandSpec.Verb == AzCopyVerbList:

@@ -174,6 +174,8 @@ func parseFlagTag(tag string) flagTag {
 	return out
 }
 
+type RawFlags map[string]string
+
 // The below structs are intended to be mixed and matched as much as possible,
 // such that a variety of verbs can be used with a single struct (e.g. copy and sync)
 // in a test, without rewriting all the flags for every use case.
