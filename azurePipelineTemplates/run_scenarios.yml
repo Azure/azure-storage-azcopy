@@ -14,10 +14,15 @@ steps:
       script: |
         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
+  # # azcli login
+  # - script: |
+  #     az login --identity --username 96122e98-2015-4cb5-a90b-d421a2d64f21
+  #   displayName: 'Azure CLI login'
+
   - task: AzureCLI@2
     displayName: 'Run Scenarios'
     inputs:
-      azureSubscription: 'ESRP KeyVault identity'
+      azureSubscription: 'AzTest-SP'
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
