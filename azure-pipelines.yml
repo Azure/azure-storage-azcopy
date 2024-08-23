@@ -414,7 +414,7 @@ stages:
             # this runs even if the job was canceled (only if the mutex was acquired by this job)
             condition: and(always(), eq(variables['isMutexSet'], 'true'))
 
-  - stage:
+  - stage: RunScenarios
     dependsOn: BuildArtifacts
     condition: succeeded('BuildArtifacts')
     jobs:
