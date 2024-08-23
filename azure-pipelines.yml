@@ -121,7 +121,7 @@ stages:
               alertWarningLevel: 'High'
 
   - stage: RunTest
-      jobs:
+    jobs:
       - job: E2E_Test
         timeoutInMinutes: 360
         # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
