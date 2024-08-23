@@ -452,7 +452,7 @@ stages:
         timeoutInMinutes: 360
         strategy:
           matrix:
-          Windows:
+            Windows:
               imageName: 'windows-latest'
               type: 'windows'
         pool:
