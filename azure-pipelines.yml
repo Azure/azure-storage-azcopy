@@ -145,6 +145,11 @@ stages:
               artifactName: 'drop'
               downloadPath: $(Build.ArtifactStagingDirectory)
 
+          - script: |
+              chmod 755 $(Build.ArtifactStagingDirectory)/drop/azcopy_linux_amd64
+            displayName: 'Provided required permissions to azcopy_linux_amd64'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
+
           - template: azurePipelineTemplates/run_scenarios.yml
             parameters:
               build_name: azcopy_linux_amd64
@@ -176,10 +181,15 @@ stages:
               artifactName: 'drop'
               downloadPath: $(Build.ArtifactStagingDirectory)
 
+          - script: |
+              chmod 755 $(Build.ArtifactStagingDirectory)/drop/azcopy_windows_amd64.exe
+            displayName: 'Provided required permissions to azcopy_windows_amd64.exe'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
+
           - template: azurePipelineTemplates/run_scenarios.yml
             parameters:
               build_name: azcopy_windows_amd64.exe
-              container_name: 'testcontainer1'
+              container_name: 'testcontainer2'
               storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
 
       - job: Test_Scenarios_MacOS
@@ -208,10 +218,15 @@ stages:
               artifactName: 'drop'
               downloadPath: $(Build.ArtifactStagingDirectory)
 
+          - script: |
+              chmod 755 $(Build.ArtifactStagingDirectory)/drop/azcopy_darwin_amd64
+            displayName: 'Provided required permissions to azcopy_darwin_amd64'
+            workingDirectory: $(Build.ArtifactStagingDirectory)
+
           - template: azurePipelineTemplates/run_scenarios.yml
             parameters:
               build_name: azcopy_darwin_amd64
-              container_name: 'testcontainer1'
+              container_name: 'testcontainer3'
               storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
 
       - job: E2E_Test
