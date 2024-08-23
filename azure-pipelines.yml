@@ -120,8 +120,100 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-  - stage: RunTest
-    jobs:
+      - job: Test_Scenarios_Linux
+        timeoutInMinutes: 360
+        dependsOn: Build
+        strategy:
+          matrix:
+            Ubuntu:
+              imageName: 'ubuntu-latest'
+              type: 'linux'
+        pool:
+          vmImage: $(imageName)
+
+        steps:
+          - checkout: none
+
+          - task: GoTool@0
+            name: 'Set_up_Golang'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'drop'
+              downloadPath: $(Build.ArtifactStagingDirectory)
+
+          - template: azurePipelineTemplates/run_scenarios.yml
+            parameters:
+              build_name: azcopy_linux_amd64
+              container_name: 'testcontainer1'
+              storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+
+      - job: Test_Scenarios_Windows
+        timeoutInMinutes: 360
+        dependsOn: Build
+        strategy:
+          matrix:
+            Windows:
+              imageName: 'windows-latest'
+              type: 'windows'
+        pool:
+          vmImage: $(imageName)
+
+        steps:
+          - checkout: none
+
+          - task: GoTool@0
+            name: 'Set_up_Golang'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'drop'
+              downloadPath: $(Build.ArtifactStagingDirectory)
+
+          - template: azurePipelineTemplates/run_scenarios.yml
+            parameters:
+              build_name: azcopy_windows_amd64.exe
+              container_name: 'testcontainer1'
+              storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+
+      - job: Test_Scenarios_MacOS
+        timeoutInMinutes: 360
+        dependsOn: Build
+        strategy:
+          matrix:
+            MacOS:
+              imageName: 'macos-latest'
+              type: 'macos'
+          
+        pool:
+          vmImage: $(imageName)
+
+        steps:
+          - checkout: none
+
+          - task: GoTool@0
+            name: 'Set_up_Golang'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'drop'
+              downloadPath: $(Build.ArtifactStagingDirectory)
+
+          - template: azurePipelineTemplates/run_scenarios.yml
+            parameters:
+              build_name: azcopy_darwin_amd64
+              container_name: 'testcontainer1'
+              storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+
       - job: E2E_Test
         timeoutInMinutes: 360
         # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
@@ -414,97 +506,97 @@ stages:
             # this runs even if the job was canceled (only if the mutex was acquired by this job)
             condition: and(always(), eq(variables['isMutexSet'], 'true'))
 
-  - stage: RunScenarios
-    dependsOn: BuildArtifacts
-    condition: succeeded('BuildArtifacts')
-    jobs:
-      - job: Test_Scenarios_Linux
-        timeoutInMinutes: 360
-        strategy:
-          matrix:
-            Ubuntu:
-              imageName: 'ubuntu-latest'
-              type: 'linux'
-        pool:
-          vmImage: $(imageName)
+  # - stage: RunScenarios
+  #   dependsOn: BuildArtifacts
+  #   condition: succeeded('BuildArtifacts')
+  #   jobs:
+  #     - job: Test_Scenarios_Linux
+  #       timeoutInMinutes: 360
+  #       strategy:
+  #         matrix:
+  #           Ubuntu:
+  #             imageName: 'ubuntu-latest'
+  #             type: 'linux'
+  #       pool:
+  #         vmImage: $(imageName)
 
-        steps:
-          - checkout: none
+  #       steps:
+  #         - checkout: none
 
-          - task: GoTool@0
-            name: 'Set_up_Golang'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+  #         - task: GoTool@0
+  #           name: 'Set_up_Golang'
+  #           inputs:
+  #             version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'drop'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Build Artifacts'
+  #           inputs:
+  #             artifactName: 'drop'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - template: azurePipelineTemplates/run_scenarios.yml
-            parameters:
-              build_name: azcopy_linux_amd64
-              container_name: 'testcontainer1'
-              storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+  #         - template: azurePipelineTemplates/run_scenarios.yml
+  #           parameters:
+  #             build_name: azcopy_linux_amd64
+  #             container_name: 'testcontainer1'
+  #             storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
 
-      - job: Test_Scenarios_Windows
-        timeoutInMinutes: 360
-        strategy:
-          matrix:
-            Windows:
-              imageName: 'windows-latest'
-              type: 'windows'
-        pool:
-          vmImage: $(imageName)
+  #     - job: Test_Scenarios_Windows
+  #       timeoutInMinutes: 360
+  #       strategy:
+  #         matrix:
+  #           Windows:
+  #             imageName: 'windows-latest'
+  #             type: 'windows'
+  #       pool:
+  #         vmImage: $(imageName)
 
-        steps:
-          - checkout: none
+  #       steps:
+  #         - checkout: none
 
-          - task: GoTool@0
-            name: 'Set_up_Golang'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+  #         - task: GoTool@0
+  #           name: 'Set_up_Golang'
+  #           inputs:
+  #             version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'drop'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Build Artifacts'
+  #           inputs:
+  #             artifactName: 'drop'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - template: azurePipelineTemplates/run_scenarios.yml
-            parameters:
-              build_name: azcopy_windows_amd64.exe
-              container_name: 'testcontainer1'
-              storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+  #         - template: azurePipelineTemplates/run_scenarios.yml
+  #           parameters:
+  #             build_name: azcopy_windows_amd64.exe
+  #             container_name: 'testcontainer1'
+  #             storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
 
-      - job: Test_Scenarios_MacOS
-        timeoutInMinutes: 360
-        strategy:
-          matrix:
-            MacOS:
-              imageName: 'macos-latest'
-              type: 'macos'
+  #     - job: Test_Scenarios_MacOS
+  #       timeoutInMinutes: 360
+  #       strategy:
+  #         matrix:
+  #           MacOS:
+  #             imageName: 'macos-latest'
+  #             type: 'macos'
           
-        pool:
-          vmImage: $(imageName)
+  #       pool:
+  #         vmImage: $(imageName)
 
-        steps:
-          - checkout: none
+  #       steps:
+  #         - checkout: none
 
-          - task: GoTool@0
-            name: 'Set_up_Golang'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+  #         - task: GoTool@0
+  #           name: 'Set_up_Golang'
+  #           inputs:
+  #             version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'drop'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+  #         - task: DownloadBuildArtifacts@0
+  #           displayName: 'Download Build Artifacts'
+  #           inputs:
+  #             artifactName: 'drop'
+  #             downloadPath: $(Build.ArtifactStagingDirectory)
 
-          - template: azurePipelineTemplates/run_scenarios.yml
-            parameters:
-              build_name: azcopy_darwin_amd64
-              container_name: 'testcontainer1'
-              storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+  #         - template: azurePipelineTemplates/run_scenarios.yml
+  #           parameters:
+  #             build_name: azcopy_darwin_amd64
+  #             container_name: 'testcontainer1'
+  #             storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
