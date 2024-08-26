@@ -467,12 +467,22 @@ stages:
             downloadPath: $(Build.ArtifactStagingDirectory)
 
         - script: |
-            chmod 755 $(Build.ArtifactStagingDirectory)/drop/*
-          displayName: 'Provided required permissions for executables'
-          workingDirectory: $(Build.ArtifactStagingDirectory)
+          chmod +x $(Build.ArtifactStagingDirectory)/drop/*
+        displayName: 'Provide required permissions for executables'
+        workingDirectory: $(Build.ArtifactStagingDirectory)
+        condition: or(eq(variables['agent.os'], 'Linux'), eq(variables['agent.os'], 'macOS'))
+
+      - powershell: |
+          # Unblock files in the drop directory
+          Get-ChildItem -Path $(Build.ArtifactStagingDirectory)/drop/* | ForEach-Object {
+            Unblock-File -Path $_.FullName
+          }
+        displayName: 'Unblock files for executables'
+        workingDirectory: $(Build.ArtifactStagingDirectory)
+        condition: eq(variables['agent.os'], 'Windows')
 
         - template: azurePipelineTemplates/run_scenarios.yml
           parameters:
-            build_name: $(build_name)
+            build_name: $(Build.ArtifactStagingDirectory)/drop/$(build_name)
             container_name: $(container_name)
             storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
