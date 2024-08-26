@@ -11,12 +11,12 @@ steps:
     inputs:
       azureSubscription: azcopyTestScenarios
       addSpnToEnvironment: true
-      scriptType: 'bash'
+      scriptType: pscore
       scriptLocation: inlineScript
       inlineScript: |
         # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
         # We will update this workaround once the fix is available in the older version of AzCopy.
-        
+
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         echo "Hello, Azure!" > myfile.txt
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
