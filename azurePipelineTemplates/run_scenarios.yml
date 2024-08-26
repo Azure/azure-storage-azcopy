@@ -16,7 +16,7 @@ steps:
 
   - task: AzureCLI@2
     inputs:
-      azureSubscription: azcopytestworkloadidentity
+      azureSubscription: azcopyTestScenarios
       addSpnToEnvironment: true
       scriptType: 'bash'
       scriptLocation: inlineScript
