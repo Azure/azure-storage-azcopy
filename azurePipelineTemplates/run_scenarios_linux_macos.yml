@@ -26,30 +26,30 @@ steps:
         if ($IsWindows) {
           $env:GOOS = "windows"
           $env:GOARCH = "amd64"
-          $suffix = ".exe"
           $build_name = "azcopy_windows_amd64.exe"
-          $display_name = "Windows"
+          $env:AZCOPY_AUTO_LOGIN_TYPE="AzCLI"
         } elseif ($IsLinux) {
           $env:GOOS = "linux"
           $env:GOARCH = "amd64"
-          $tags = "netgo"
           $build_name = "azcopy_linux_amd64"
-          $display_name = "Linux"
         } elseif ($IsMacOS) {
           $env:GOOS = "darwin"
           $env:GOARCH = "amd64"
           $env:CGO_ENABLED = "1"
           $build_name = "azcopy_darwin_amd64"
-          $display_name = "MacOS"
         } else {
           Write-Error "Unsupported operating system"
           exit 1
         }
 
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $build_name make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        $env:AZCOPY_AUTO_LOGIN_TYPE="AzCLI"
+
+        go build -cover -o $build_name
+
+        $build_name make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         echo "Hello, Azure!" > myfile.txt
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $build_name cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
-        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $build_name cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+        $build_name cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        $build_name cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
         # Check if the command succeeded
         if ($LASTEXITCODE -eq 0) {
             Write-Output "AzCopy command succeeded."
