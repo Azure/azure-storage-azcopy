@@ -1,0 +1,31 @@
+parameters:
+  - name: build_name
+    type: string
+  - name: storage_account_name
+    type: string
+  - name: container_name
+    type: string
+
+steps:
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: azcopyTestScenarios
+      addSpnToEnvironment: true
+      scriptType: pscore
+      scriptLocation: inlineScript
+      inlineScript: |
+        # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
+        # We will update this workaround once the fix is available in the older version of AzCopy.
+
+        $env:AZCOPY_AUTO_LOGIN_TYPE = "AzCLI"
+        & "$(Build.ArtifactStagingDirectory)\drop\$(${{ parameters.build_name }})" make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        echo "Hello, Azure!" > myfile.txt
+        & "$(Build.ArtifactStagingDirectory)\drop\$(${{ parameters.build_name }})" cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        & "$(Build.ArtifactStagingDirectory)\drop\$(${{ parameters.build_name }})" cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+        # Check if the command succeeded
+        if ($LASTEXITCODE -eq 0) {
+          Write-Output "AzCopy command succeeded."
+        } else {
+          Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
+        }
+    displayName: 'Run Scenarios to check if older version of AzCopy appends version check error message to piped download'

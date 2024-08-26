@@ -480,8 +480,16 @@ jobs:
         workingDirectory: $(Build.ArtifactStagingDirectory)
         condition: eq(variables['agent.os'], 'Windows')
 
-      - template: azurePipelineTemplates/run_scenarios.yml
+      - template: azurePipelineTemplates/run_scenarios_linux_macos.yml
         parameters:
-          build_name: $(Build.ArtifactStagingDirectory)/drop/$(build_name)
+          build_name: $(build_name)
           container_name: $(container_name)
           storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+        condition: or(eq(variables['agent.os'], 'Linux'), eq(variables['agent.os'], 'macOS'))
+        
+      - template: azurePipelineTemplates/run_scenarios_windows.yml
+        parameters:
+          build_name: $(build_name)
+          container_name: $(container_name)
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+        condition: eq(variables['agent.os'], 'Windows')
