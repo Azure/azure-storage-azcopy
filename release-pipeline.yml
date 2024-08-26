@@ -1718,7 +1718,7 @@ stages:
           - task: AzureCLI@2
             displayName: 'Azure CLI'
             inputs:
-              azureSubscription: 'AzTest-SP'
+              azureSubscription: 'ESRP KeyVault identity'
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
