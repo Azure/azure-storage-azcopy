@@ -120,97 +120,54 @@ stages:
               verbosity: 'Verbose'
               alertWarningLevel: 'High'
 
-      - job: Test_Scenarios_Linux
+      - job: Test_Scenarios
         timeoutInMinutes: 360
         dependsOn: Build
         strategy:
           matrix:
-            Ubuntu:
+            Linux:
               imageName: 'ubuntu-latest'
               type: 'linux'
-        pool:
-          vmImage: $(imageName)
-
-        steps:
-          - checkout: none
-
-          - task: GoTool@0
-            name: 'Set_up_Golang'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'drop'
-              downloadPath: $(Build.ArtifactStagingDirectory)
-
-          - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/drop/azcopy_linux_amd64
-            displayName: 'Provided required permissions to azcopy_linux_amd64'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
-
-          - template: azurePipelineTemplates/run_scenarios.yml
-            parameters:
-              build_name: azcopy_linux_amd64
+              build_name: 'azcopy_linux_amd64'
               container_name: 'testcontainer1'
-              storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-
-      - job: Test_Scenarios_Windows
-        timeoutInMinutes: 360
-        dependsOn: Build
-        strategy:
-          matrix:
             Windows:
-              imageName: 'windows-latest'
+              imageName: 'ubuntu-latest'
               type: 'windows'
-        pool:
-          vmImage: $(imageName)
-
-        steps:
-          - checkout: none
-
-          - task: GoTool@0
-            name: 'Set_up_Golang'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'drop'
-              downloadPath: $(Build.ArtifactStagingDirectory)
-
-          - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/drop/azcopy_windows_amd64.exe
-            displayName: 'Provided required permissions to azcopy_windows_amd64.exe'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
-
-          - template: azurePipelineTemplates/run_scenarios.yml
-            parameters:
-              build_name: azcopy_windows_amd64.exe
+              build_name: 'azcopy_windows_amd64.exe'
               container_name: 'testcontainer2'
-              storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-
-      - job: Test_Scenarios_MacOS
-        timeoutInMinutes: 360
-        dependsOn: Build
-        strategy:
-          matrix:
             MacOS:
-              imageName: 'macos-latest'
+              imageName: 'ubuntu-latest'
               type: 'macos'
-          
+              build_name: 'azcopy_darwin_amd64'
+              container_name: 'testcontainer3'
+            
         pool:
           vmImage: $(imageName)
 
         steps:
           - checkout: none
 
+          - task: PowerShell@2
+            inputs: 
+              targetType: 'inline'
+              script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+              pwsh: 'true'
+            displayName: 'Install Powershell Az Module'
+
           - task: GoTool@0
-            name: 'Set_up_Golang'
             inputs:
               version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+
+          - bash: |
+              echo "##vso[task.setvariable variable=CGO_ENABLED]0"
+            displayName: 'Set CGO_ENABLED for Windows'
+            condition: eq(variables.type, 'windows')
+
+          - bash: |
+              npm install -g azurite
+              mkdir azurite
+              azurite --silent --location azurite --debug azurite\debug.log &
+            displayName: 'Install and Run Azurite'
 
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
@@ -219,14 +176,14 @@ stages:
               downloadPath: $(Build.ArtifactStagingDirectory)
 
           - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/drop/azcopy_darwin_amd64
-            displayName: 'Provided required permissions to azcopy_darwin_amd64'
+              chmod 755 $(Build.ArtifactStagingDirectory)/drop/*
+            displayName: 'Provided required permissions for executables'
             workingDirectory: $(Build.ArtifactStagingDirectory)
 
           - template: azurePipelineTemplates/run_scenarios.yml
             parameters:
-              build_name: azcopy_darwin_amd64
-              container_name: 'testcontainer3'
+              build_name: $(build_name)
+              container_name: $(container_name)
               storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
 
       - job: E2E_Test

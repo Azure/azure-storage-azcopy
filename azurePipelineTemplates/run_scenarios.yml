@@ -7,13 +7,6 @@ parameters:
     type: string
 
 steps:
-  - task: Bash@3
-    displayName: 'Install Azure CLI'
-    inputs:
-      targetType: 'inline'
-      script: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-
   - task: AzureCLI@2
     inputs:
       azureSubscription: azcopyTestScenarios
@@ -21,33 +14,17 @@ steps:
       scriptType: 'bash'
       scriptLocation: inlineScript
       inlineScript: |
+        # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
+        # We will update this workaround once the fix is available in the older version of AzCopy.
+        
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         echo "Hello, Azure!" > myfile.txt
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
-    displayName: 'Run Scenarios'
-
-
-  # # azcli login
-  # - script: |
-  #     az login --identity --username 4953f610-3529-409e-9672-bf61afd6bad2
-  #   displayName: 'Azure CLI login'
-
-  # - script: |
-  #     AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} make "https://${{ parameters.container_name }}.blob.core.windows.net/${{ parameters.storage_account_name }}"
-  #     echo "Hello, Azure!" > myfile.txt
-  #     AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
-  #     AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
-  #   displayName: 'Run Scenarios'
-
-  # - task: AzureCLI@2
-  #   displayName: 'Run Scenarios'
-  #   inputs:
-  #     azureSubscription: 'AzTest-SP'
-  #     scriptType: bash
-  #     scriptLocation: inlineScript
-  #     inlineScript: |
-  #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} make "https://${{ parameters.container_name }}.blob.core.windows.net/${{ parameters.storage_account_name }}"
-  #       echo "Hello, Azure!" > myfile.txt
-  #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
-  #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+        # Check if the command succeeded
+        if ($LASTEXITCODE -eq 0) {
+            Write-Output "AzCopy command succeeded."
+        } else {
+            Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
+        }
+    displayName: 'Run Scenarios to check if older version of AzCopy appends version check error message to piped download'
