@@ -467,10 +467,10 @@ stages:
             downloadPath: $(Build.ArtifactStagingDirectory)
 
         - script: |
-          chmod +x $(Build.ArtifactStagingDirectory)/drop/*
-        displayName: 'Provide required permissions for executables'
-        workingDirectory: $(Build.ArtifactStagingDirectory)
-        condition: or(eq(variables['agent.os'], 'Linux'), eq(variables['agent.os'], 'macOS'))
+            chmod +x $(Build.ArtifactStagingDirectory)/drop/*
+          displayName: 'Provide required permissions for executables'
+          workingDirectory: $(Build.ArtifactStagingDirectory)
+          condition: or(eq(variables['agent.os'], 'Linux'), eq(variables['agent.os'], 'macOS'))
 
       - powershell: |
           # Unblock files in the drop directory
