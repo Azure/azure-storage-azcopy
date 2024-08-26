@@ -46,8 +46,6 @@ steps:
           exit 1
         }
 
-        export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
-
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $build_name make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         echo "Hello, Azure!" > myfile.txt
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $build_name cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
