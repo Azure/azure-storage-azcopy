@@ -16,7 +16,7 @@ steps:
 
   # azcli login
   - script: |
-      az login --identity --username 96122e98-2015-4cb5-a90b-d421a2d64f21
+      az login --identity --username 4953f610-3529-409e-9672-bf61afd6bad2
     displayName: 'Azure CLI login'
 
   - script: |
