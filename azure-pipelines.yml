@@ -421,12 +421,12 @@ jobs:
           build_name: 'azcopy_linux_amd64'
           container_name: 'testcontainer1'
         Windows:
-          imageName: 'ubuntu-latest'
+          imageName: 'windows-latest'
           type: 'windows'
           build_name: 'azcopy_windows_amd64.exe'
           container_name: 'testcontainer2'
         MacOS:
-          imageName: 'ubuntu-latest'
+          imageName: 'macos-latest'
           type: 'macos'
           build_name: 'azcopy_darwin_amd64'
           container_name: 'testcontainer3'
@@ -459,37 +459,28 @@ jobs:
           azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
 
-      - task: DownloadBuildArtifacts@0
-        displayName: 'Download Build Artifacts'
-        inputs:
-          artifactName: 'drop'
-          downloadPath: $(Build.ArtifactStagingDirectory)
+      # - task: DownloadBuildArtifacts@0
+      #   displayName: 'Download Build Artifacts'
+      #   inputs:
+      #     artifactName: 'drop'
+      #     downloadPath: $(Build.ArtifactStagingDirectory)
 
-      - script: |
-          chmod +x $(Build.ArtifactStagingDirectory)/drop/*
-        displayName: 'Provide required permissions for executables'
-        workingDirectory: $(Build.ArtifactStagingDirectory)
-        condition: or(eq(variables['agent.os'], 'Linux'), eq(variables['agent.os'], 'macOS'))
+      # - script: |
+      #     chmod +x $(Build.ArtifactStagingDirectory)/drop/*
+      #   displayName: 'Provide required permissions for executables'
+      #   workingDirectory: $(Build.ArtifactStagingDirectory)
+      #   condition: or(eq(variables['agent.os'], 'Linux'), eq(variables['agent.os'], 'macOS'))
 
-      - powershell: |
-          # Unblock files in the drop directory
-          Get-ChildItem -Path $(Build.ArtifactStagingDirectory)/drop/* | ForEach-Object {
-            Unblock-File -Path $_.FullName
-          }
-        displayName: 'Unblock files for executables'
-        workingDirectory: $(Build.ArtifactStagingDirectory)
-        condition: eq(variables['agent.os'], 'Windows')
+      # - powershell: |
+      #     # Unblock files in the drop directory
+      #     Get-ChildItem -Path $(Build.ArtifactStagingDirectory)/drop/* | ForEach-Object {
+      #       Unblock-File -Path $_.FullName
+      #     }
+      #   displayName: 'Unblock files for executables'
+      #   workingDirectory: $(Build.ArtifactStagingDirectory)
+      #   condition: eq(variables['agent.os'], 'Windows')
 
       - template: azurePipelineTemplates/run_scenarios_linux_macos.yml
         parameters:
-          build_name: $(build_name)
           container_name: $(container_name)
           storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-        condition: or(eq(variables['agent.os'], 'Linux'), eq(variables['agent.os'], 'macOS'))
-        
-      - template: azurePipelineTemplates/run_scenarios_windows.yml
-        parameters:
-          build_name: $(build_name)
-          container_name: $(container_name)
-          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-        condition: eq(variables['agent.os'], 'Windows')

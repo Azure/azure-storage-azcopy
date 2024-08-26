@@ -17,12 +17,43 @@ steps:
         # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
         # We will update this workaround once the fix is available in the older version of AzCopy.
 
+        # Print "Building executable"
+        Write-Output "Building executable"
+        
+        # Set platform-specific environment variables and tags
+        $tags = ""
+        $suffix = ""
+        $build_name = ""
+        $display_name = ""
+        if ($IsWindows) {
+          $env:GOOS = "windows"
+          $env:GOARCH = "amd64"
+          $suffix = ".exe"
+          $build_name = "azcopy_windows_amd64.exe"
+          $display_name = "Windows"
+        } elseif ($IsLinux) {
+          $env:GOOS = "linux"
+          $env:GOARCH = "amd64"
+          $tags = "netgo"
+          $build_name = "azcopy_linux_amd64"
+          $display_name = "Linux"
+        } elseif ($IsMacOS) {
+          $env:GOOS = "darwin"
+          $env:GOARCH = "amd64"
+          $env:CGO_ENABLED = "1"
+          $build_name = "azcopy_darwin_amd64"
+          $display_name = "MacOS"
+        } else {
+          Write-Error "Unsupported operating system"
+          exit 1
+        }
+
         export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
 
-        ${{ parameters.build_name }} make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $build_name make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         echo "Hello, Azure!" > myfile.txt
-        ${{ parameters.build_name }} cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
-        ${{ parameters.build_name }} cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $build_name cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $build_name cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
         # Check if the command succeeded
         if ($LASTEXITCODE -eq 0) {
             Write-Output "AzCopy command succeeded."
