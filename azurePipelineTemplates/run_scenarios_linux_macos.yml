@@ -1,6 +1,4 @@
 parameters:
-  - name: build_name
-    type: string
   - name: storage_account_name
     type: string
   - name: container_name
