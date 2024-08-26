@@ -3,6 +3,8 @@ parameters:
     type: string
   - name: storage_account_name
     type: string
+  - name: storage_account_key
+    type: string
   - name: container_name
     type: string
 
@@ -14,17 +16,34 @@ steps:
       script: |
         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-  # azcli login
-  - script: |
-      az login --identity --username 4953f610-3529-409e-9672-bf61afd6bad2
-    displayName: 'Azure CLI login'
-
-  - script: |
-      AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} make "https://${{ parameters.container_name }}.blob.core.windows.net/${{ parameters.storage_account_name }}"
-      echo "Hello, Azure!" > myfile.txt
-      AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
-      AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: azcopytestworkloadidentity
+      addSpnToEnvironment: true
+      scriptType: pscore
+      scriptLocation: inlineScript
+      inlineScript: |
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} make "https://${{ parameters.container_name }}.blob.core.windows.net/${{ parameters.storage_account_name }}"
+        echo "Hello, Azure!" > myfile.txt
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+    env:
+      AZCOPY_E2E_ACCOUNT_KEY: {{ parameters.storage_account_name }}
+      AZCOPY_E2E_ACCOUNT_NAME: {{ parameters.storage_account_key }}
     displayName: 'Run Scenarios'
+
+
+  # # azcli login
+  # - script: |
+  #     az login --identity --username 4953f610-3529-409e-9672-bf61afd6bad2
+  #   displayName: 'Azure CLI login'
+
+  # - script: |
+  #     AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} make "https://${{ parameters.container_name }}.blob.core.windows.net/${{ parameters.storage_account_name }}"
+  #     echo "Hello, Azure!" > myfile.txt
+  #     AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+  #     AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
+  #   displayName: 'Run Scenarios'
 
   # - task: AzureCLI@2
   #   displayName: 'Run Scenarios'
