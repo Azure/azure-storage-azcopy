@@ -18,6 +18,7 @@ steps:
     inputs:
       azureSubscription: azcopytestworkloadidentity
       addSpnToEnvironment: true
+      scriptType: 'bash'
       scriptLocation: inlineScript
       inlineScript: |
         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $(Build.ArtifactStagingDirectory)/drop/${{ parameters.build_name }} make "https://${{ parameters.container_name }}.blob.core.windows.net/${{ parameters.storage_account_name }}"
