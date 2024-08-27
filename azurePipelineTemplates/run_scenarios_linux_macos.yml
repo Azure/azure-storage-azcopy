@@ -46,11 +46,11 @@ steps:
 
         go build -cover -o $build_name
 
-        $build_name make "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        & $build_name "make" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         echo "Hello, Azure!" > myfile.txt
-        $build_name cp myfile.txt "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
-        $build_name cp "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" --from-to=BlobPipe --check-md5 FailIfDifferentOrMissing > filename
-        # Check if the command succeeded
+        & $build_name "cp" "myfile.txt" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        & $build_name "cp" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" "--from-to=BlobPipe" "--check-md5" "FailIfDifferentOrMissing" > filename
+
         if ($LASTEXITCODE -eq 0) {
             Write-Output "AzCopy command succeeded."
         } else {
