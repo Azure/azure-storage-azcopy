@@ -6,6 +6,7 @@ parameters:
 
 steps:
   - task: AzureCLI@2
+    displayName: "Run Scenarios"
     inputs:
       azureSubscription: azcopyTestScenarios
       addSpnToEnvironment: true
@@ -49,6 +50,8 @@ steps:
             exit 1
         }
         Write-Output "Executable built successfully: $build_name"
+
+        ######################################################## Scenario 1 ########################################################
 
         # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
         # We will update this workaround once the fix is available in the older version of AzCopy.
