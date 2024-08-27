@@ -412,7 +412,6 @@ jobs:
 
   - job: Test_Scenarios
     timeoutInMinutes: 360
-    dependsOn: Build
     strategy:
       matrix:
         Linux:
@@ -457,7 +456,7 @@ jobs:
           azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
 
-      - template: azurePipelineTemplates/run_scenarios_linux_macos.yml
+      - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
           container_name: $(container_name)
           storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
