@@ -12,9 +12,6 @@ steps:
       scriptType: pscore
       scriptLocation: inlineScript
       inlineScript: |
-        # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
-        # We will update this workaround once the fix is available in the older version of AzCopy.
-
         # Print "Building executable"
         Write-Output "Building executable"
         
@@ -45,6 +42,9 @@ steps:
         $env:AZCOPY_AUTO_LOGIN_TYPE="AzCLI"
 
         go build -cover -o $build_name
+
+        # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
+        # We will update this workaround once the fix is available in the older version of AzCopy.
 
         & $build_name "make" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         echo "Hello, Azure!" > myfile.txt
