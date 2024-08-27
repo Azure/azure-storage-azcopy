@@ -43,17 +43,23 @@ steps:
 
         go build -cover -o $build_name
 
+        # Check if the executable was created
+        if (-Not (Test-Path "./$build_name")) {
+            Write-Error "Executable not found: $build_name"
+            exit 1
+        }
+        Write-Output "Executable built successfully: $build_name"
+
         # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
         # We will update this workaround once the fix is available in the older version of AzCopy.
 
-        & $build_name "make" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        & "./$build_name" "make" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         echo "Hello, Azure!" > myfile.txt
-        & $build_name "cp" "myfile.txt" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
-        & $build_name "cp" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" "--from-to=BlobPipe" "--check-md5" "FailIfDifferentOrMissing" > filename
+        & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+        & "./$build_name" "cp" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" "--from-to=BlobPipe" "--check-md5" "FailIfDifferentOrMissing" > filename
 
         if ($LASTEXITCODE -eq 0) {
             Write-Output "AzCopy command succeeded."
         } else {
             Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
         }
-    displayName: 'Run Scenarios to check if older version of AzCopy appends version check error message to piped download'

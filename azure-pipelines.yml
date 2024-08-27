@@ -457,27 +457,6 @@ jobs:
           azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
 
-      # - task: DownloadBuildArtifacts@0
-      #   displayName: 'Download Build Artifacts'
-      #   inputs:
-      #     artifactName: 'drop'
-      #     downloadPath: $(Build.ArtifactStagingDirectory)
-
-      # - script: |
-      #     chmod +x $(Build.ArtifactStagingDirectory)/drop/*
-      #   displayName: 'Provide required permissions for executables'
-      #   workingDirectory: $(Build.ArtifactStagingDirectory)
-      #   condition: or(eq(variables['agent.os'], 'Linux'), eq(variables['agent.os'], 'macOS'))
-
-      # - powershell: |
-      #     # Unblock files in the drop directory
-      #     Get-ChildItem -Path $(Build.ArtifactStagingDirectory)/drop/* | ForEach-Object {
-      #       Unblock-File -Path $_.FullName
-      #     }
-      #   displayName: 'Unblock files for executables'
-      #   workingDirectory: $(Build.ArtifactStagingDirectory)
-      #   condition: eq(variables['agent.os'], 'Windows')
-
       - template: azurePipelineTemplates/run_scenarios_linux_macos.yml
         parameters:
           container_name: $(container_name)
