@@ -4,6 +4,13 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -12,12 +19,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/pageblob"
-	"io"
-	"net/http"
-	"net/url"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
@@ -409,7 +410,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 
-	if testBlobCmd.CheckContentMD5 && (get.ContentMD5 == nil || len(get.ContentMD5) == 0) {
+	if testBlobCmd.CheckContentMD5 && len(get.ContentMD5) == 0 {
 		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}
@@ -729,7 +730,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 
-	if testBlobCmd.CheckContentMD5 && (get.ContentMD5 == nil || len(get.ContentMD5) == 0) {
+	if testBlobCmd.CheckContentMD5 && len(get.ContentMD5) == 0 {
 		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}

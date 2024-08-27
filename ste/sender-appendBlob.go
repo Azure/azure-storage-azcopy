@@ -25,12 +25,13 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"io"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"io"
-	"time"
 
 	"golang.org/x/sync/semaphore"
 
@@ -228,7 +229,7 @@ func (s *appendBlobSenderBase) GetMD5(offset, count int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
+	if len(response.ContentMD5) > 0 {
 		return response.ContentMD5, nil
 	} else {
 		// compute md5
