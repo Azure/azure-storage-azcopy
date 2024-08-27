@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
 	"time"
@@ -332,4 +333,59 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+}
+
+func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
+
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionObject{
+		Body: NewZeroObjectContentContainer(1024 * 1024 * 5),
+	})
+	dstCt := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+	svm.InsertVariationSeparator("Blob-")
+
+	blobType := ResolveVariation(svm, []common.BlobType{common.EBlobType.BlockBlob(), common.EBlobType.PageBlob(), common.EBlobType.AppendBlob()})
+
+	multiBlock := "single"
+	if blobType == common.EBlobType.BlockBlob() {
+		svm.InsertVariationSeparator("-")
+		multiBlock = ResolveVariation(svm, []string{"single-block", "multi-block"})
+	}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				srcObj,
+				AzCopyTarget{dstCt, EExplicitCredentialType.SASToken(), CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: dstCt.ContainerName(),
+						Permissions: PtrOf(blobsas.ContainerPermissions{
+							Read:   true,
+							Add:    true,
+							Create: true,
+							Write:  true,
+							Tag:    false,
+						}).String(),
+					},
+				}},
+			},
+			Flags: CopyFlags{
+				BlobTags: common.Metadata{
+					"foo":   PtrOf("bar"),
+					"alpha": PtrOf("beta"),
+				},
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: common.Iff(multiBlock != "single-block",
+						PtrOf(0.5),
+						nil),
+				},
+				BlobType: &blobType,
+			},
+			ShouldFail: true,
+		},
+	)
+
+	ValidateErrorOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission")
 }
