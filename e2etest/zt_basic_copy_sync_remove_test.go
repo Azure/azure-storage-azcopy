@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -860,6 +861,12 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 				hashFile := filepath.Join(hashStorageDir, ".asdf.txt"+common.AzCopyHashDataStream)
 				_, err = os.Stat(hashFile)
 				a.AssertNoErr(err)
+
+				attributes, err := syscall.GetFileAttributes(syscall.StringToUTF16Ptr(hashFile))
+				a.AssertNoErr(err)
+				// Check if the file is hidden
+				isHidden := attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
+				assert.True(t, isHidden, "The file should be hidden")
 			},
 		},
 		testFiles{
