@@ -70,7 +70,7 @@ steps:
 
         ######################################################## Scenario 2 ########################################################
 
-        # Test copying from Object Replication Policy source to destination container
+        # Test copying from Object Replication Policy source container to destination container
         # Assign an object replication policy to a storage account. 
         # Perform azcopy copy opertaion to copy the blob to another container.
 
