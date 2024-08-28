@@ -862,11 +862,19 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 				_, err = os.Stat(hashFile)
 				a.AssertNoErr(err)
 
-				attributes, err := syscall.GetFileAttributes(syscall.StringToUTF16Ptr(hashFile))
-				a.AssertNoErr(err)
-				// Check if the metadata file is hidden
-				isHidden := attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
-				assert.True(t, isHidden, "The file should be hidden")
+				if runtime.GOOS == "windows" {
+					attributes, err := syscall.GetFileAttributes(syscall.StringToUTF16Ptr(hashFile))
+					a.AssertNoErr(err)
+					// Check if the metadata file is hidden
+					isHidden := attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
+					assert.True(t, isHidden, "The file should be hidden")
+
+				} else if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+					fileName := os.Base(hashFile)
+					// On Unix-based systems, hidden files start with a dot
+					isHidden := strings.HasPrefix(fileName, ".")
+					assert.True(t, isHidden, "The file should be hidden")
+				}
 			},
 		},
 		testFiles{
