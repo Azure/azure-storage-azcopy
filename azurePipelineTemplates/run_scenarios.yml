@@ -60,9 +60,27 @@ steps:
         echo "Hello, Azure!" > myfile.txt
         & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
         & "./$build_name" "cp" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" "--from-to=BlobPipe" "--check-md5" "FailIfDifferentOrMissing" > filename
+        & "./$build_name" "rm" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}" --recursive
 
         if ($LASTEXITCODE -eq 0) {
             Write-Output "AzCopy command succeeded."
         } else {
             Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
         }
+
+        ######################################################## Scenario 2 ########################################################
+
+        # Test copying from Object Replication Policy source to destination container
+        # Assign an object replication policy to a storage account. 
+        # Perform azcopy copy opertaion to copy the blob to another container.
+
+        echo "Hello, Azure!" > myfile.txt
+        & "./$build_name" "cp" "myfile.txt" "https://azcopyorpsrcaccount.blob.core.windows.net/srcorpcontainer"
+        & "./$build_name" "cp" "https://azcopyorpsrcaccount.blob.core.windows.net/srcorpcontainer" "https://azcopyorpdestaccount.blob.core.windows.net/testcontainer" --recursive
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Output "AzCopy command succeeded."
+        } else {
+            Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
+        }
+
