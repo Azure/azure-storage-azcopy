@@ -72,7 +72,7 @@ steps:
 
         # Test copying from Object Replication Policy source container to destination container
         # Assign an object replication policy to a storage account. 
-        # Perform azcopy copy opertaion to copy the blob to another container.
+        # Perform azcopy copy operation to copy the blob to another container.
 
         echo "Hello, Azure!" > myfile.txt
         & "./$build_name" "cp" "myfile.txt" "https://azcopyorpsrcaccount.blob.core.windows.net/srcorpcontainer"
