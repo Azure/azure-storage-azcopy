@@ -864,7 +864,7 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 
 				attributes, err := syscall.GetFileAttributes(syscall.StringToUTF16Ptr(hashFile))
 				a.AssertNoErr(err)
-				// Check if the file is hidden
+				// Check if the metadata file is hidden
 				isHidden := attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
 				assert.True(t, isHidden, "The file should be hidden")
 			},
