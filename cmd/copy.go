@@ -1349,21 +1349,21 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// get the concurrency environment value
-	userDefnConcurrencyStr := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
+	concurrencyEnvVar := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
 
 	pipingUploadParallelism := pipingUploadParallelism
-	if userDefnConcurrencyStr != "" {
+	if concurrencyEnvVar != "" {
 		// handle when the concurrency value is AUTO
-		if userDefnConcurrencyStr == "AUTO" {
+		if concurrencyEnvVar == "AUTO" {
 			return errors.New("concurrency auto-tuning is not possible when using redirection transfers (AZCOPY_CONCURRENCY_VALUE = AUTO)")
 		}
 
 		// convert the concurrency value to int
-		concurrencyValue, err := strconv.ParseInt(userDefnConcurrencyStr, 10, 32)
+		concurrencyValue, err := strconv.ParseInt(concurrencyEnvVar, 10, 32)
 
 		//handle the error if the conversion fails
 		if err != nil {
-			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %s", userDefnConcurrencyStr, err.Error())
+			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %w", concurrencyEnvVar, err)
 		}
 
 		pipingUploadParallelism = int(concurrencyValue)
