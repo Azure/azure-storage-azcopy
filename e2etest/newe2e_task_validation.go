@@ -308,3 +308,13 @@ func parseAzCopyListObject(a Asserter, line string) cmd.AzCopyListObject {
 		ContentLength:    properties["Content Length"],
 	}
 }
+
+func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	jobsListStdout, ok := stdout.(*AzCopyParsedJobsListStdout)
+	a.AssertNow("stdout must be AzCopyParsedJobsListStdout", Equal{}, ok, true)
+	a.Assert("map of objects must be equivalent in size", Equal{}, expectedJobIDs, jobsListStdout.JobsCount)
+}
