@@ -101,7 +101,7 @@ steps:
         & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/srcorpcontainer"
 
         echo "Copy the test file from the source container to the destination container testcontainer under storage account azcopyorpdestaccount"
-        & "./$build_name" "cp" "https:///${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{parameters.orp_source_container_name}}" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}" --recursive
+        & "./$build_name" "cp" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{parameters.orp_source_container_name}}" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}" --recursive
 
         if ($LASTEXITCODE -eq 0) {
             Write-Output "Successfully executed the scenario."
