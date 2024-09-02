@@ -56,20 +56,28 @@ steps:
         # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
         # We will update this workaround once the fix is available in the older version of AzCopy.
 
+        echo "Scenario 1: Test successful copying from BlobToPipe"
+
+        echo "Create container ${{ parameters.container_name }} under storage account ${{ parameters.storage_account_name }}"
         & "./$build_name" "make" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+
+        echo "Copy a test file from local to the created container"
         echo "Hello, Azure!" > myfile.txt
         & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+
         & "./$build_name" "cp" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" "--from-to=BlobPipe" "--check-md5" "FailIfDifferentOrMissing" > filename
         
-
         if ($LASTEXITCODE -eq 0) {
-            Write-Output "AzCopy command succeeded."
+            Write-Output "Successfully executed the scenario."
         } else {
             Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
         }
 
         # Perform cleanup
+        echo "Perform cleanup"
+        echo "Remove the test file from the container"
         & "./$build_name" "rm" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
+        echo "Remove the container from the storage account"
         & az storage container delete --name ${{ parameters.container_name }} --account-name ${{ parameters.storage_account_name }}
 
         ######################################################## Scenario 2 ########################################################
@@ -78,17 +86,24 @@ steps:
         # Assign an object replication policy to a storage account. 
         # Perform azcopy copy operation to copy the blob to another container.
 
+        echo "Scenario 2: Test copying from Object Replication Policy source container to destination container"
+
+        echo "Create test file myfile.txt and copy the file to the source container srcorpcontainer under storage account azcopyorpsrcaccount having the ORP policy"
         echo "Hello, Azure!" > myfile.txt
         & "./$build_name" "cp" "myfile.txt" "https://azcopyorpsrcaccount.blob.core.windows.net/srcorpcontainer"
+
+        echo "Copy the test file from the source container to the destination container testcontainer under storage account azcopyorpdestaccount"
         & "./$build_name" "cp" "https://azcopyorpsrcaccount.blob.core.windows.net/srcorpcontainer" "https://azcopyorpdestaccount.blob.core.windows.net/testcontainer" --recursive
 
         if ($LASTEXITCODE -eq 0) {
-            Write-Output "AzCopy command succeeded."
+            Write-Output "Successfully executed the scenario."
         } else {
             Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
         }
 
         # Perform cleanup
-        & "./$build_name" "rm" "https://azcopyorpdestaccount.blob.core.windows.net/testcontainer/ myfile.txt"
+        echo "Perform cleanup"
+        echo "Remove the test file from the destination container"
+        & "./$build_name" "rm" "https://azcopyorpdestaccount.blob.core.windows.net/testcontainer/myfile.txt"
 
 
