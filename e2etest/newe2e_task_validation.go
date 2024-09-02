@@ -5,14 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
@@ -316,5 +317,5 @@ func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int)
 
 	jobsListStdout, ok := stdout.(*AzCopyParsedJobsListStdout)
 	a.AssertNow("stdout must be AzCopyParsedJobsListStdout", Equal{}, ok, true)
-	a.Assert("map of objects must be equivalent in size", Equal{}, expectedJobIDs, jobsListStdout.JobsCount)
+	a.Assert("No of jobs executed should be equivalent", Equal{}, expectedJobIDs, jobsListStdout.JobsCount)
 }
