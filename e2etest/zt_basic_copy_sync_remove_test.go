@@ -24,13 +24,6 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -38,6 +31,15 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
+	"golang.org/x/sys/windows"
 )
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
@@ -863,14 +865,16 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 				a.AssertNoErr(err)
 
 				if runtime.GOOS == "windows" {
-					attributes, err := syscall.GetFileAttributes(syscall.StringToUTF16Ptr(hashFile))
-					a.AssertNoErr(err)
+					attributes, err := windows.GetFileAttributes(windows.StringToUTF16Ptr(hashFile))
+					if err != nil {
+						a.AssertNoErr(err)
+					}
 					// Check if the metadata file is hidden
-					isHidden := attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0
+					isHidden := attributes&windows.FILE_ATTRIBUTE_HIDDEN != 0
 					assert.True(t, isHidden, "The file should be hidden")
 
 				} else if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-					fileName := os.Base(hashFile)
+					fileName := filepath.Base(hashFile)
 					// On Unix-based systems, hidden files start with a dot
 					isHidden := strings.HasPrefix(fileName, ".")
 					assert.True(t, isHidden, "The file should be hidden")
