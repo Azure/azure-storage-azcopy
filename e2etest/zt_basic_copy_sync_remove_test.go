@@ -39,7 +39,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/sys/windows"
 )
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
@@ -865,14 +864,8 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 				a.AssertNoErr(err)
 
 				if runtime.GOOS == "windows" {
-					attributes, err := windows.GetFileAttributes(windows.StringToUTF16Ptr(hashFile))
-					if err != nil {
-						a.AssertNoErr(err)
-					}
-					// Check if the metadata file is hidden
-					isHidden := attributes&windows.FILE_ATTRIBUTE_HIDDEN != 0
-					assert.True(t, isHidden, "The file should be hidden")
-
+					isHidden := osScenarioHelper{}.IsFileHidden(a, hashFile)
+					assert.True(t, isHidden, "The metadata file should be hidden")
 				} else if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
 					fileName := filepath.Base(hashFile)
 					// On Unix-based systems, hidden files start with a dot
