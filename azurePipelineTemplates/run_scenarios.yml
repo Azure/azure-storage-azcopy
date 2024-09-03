@@ -11,6 +11,14 @@ parameters:
     type: string
   - name: destination_container_name
     type: string
+  - name: goos
+    type: string
+  - name: goarch
+    type: string
+  - name: cgo_enabled
+    type: string
+  - name: build_name
+    type: string
 
 steps:
   - task: AzureCLI@2
@@ -24,30 +32,11 @@ steps:
         # Print "Building executable"
         Write-Output "Building executable"
         
-        # Set platform-specific environment variables and tags
-        $tags = ""
-        $suffix = ""
-        $build_name = ""
-        $display_name = ""
-        if ($IsWindows) {
-          $env:GOOS = "windows"
-          $env:GOARCH = "amd64"
-          $build_name = "azcopy_windows_amd64.exe"
-          $env:AZCOPY_AUTO_LOGIN_TYPE="AzCLI"
-        } elseif ($IsLinux) {
-          $env:GOOS = "linux"
-          $env:GOARCH = "amd64"
-          $build_name = "azcopy_linux_amd64"
-        } elseif ($IsMacOS) {
-          $env:GOOS = "darwin"
-          $env:GOARCH = "amd64"
-          $env:CGO_ENABLED = "1"
-          $build_name = "azcopy_darwin_amd64"
-        } else {
-          Write-Error "Unsupported operating system"
-          exit 1
-        }
-
+        # Set environment variables
+        $build_name = ${{ parameters.build_name }}
+        $env:GOOS = ${{ parameters.goos }}
+        $env:GOARCH = ${{ parameters.goarch }}
+        $env:CGO_ENABLED = ${{ parameters.cgo_enabled }}
         $env:AZCOPY_AUTO_LOGIN_TYPE="AzCLI"
 
         go build -cover -o $build_name
@@ -66,7 +55,7 @@ steps:
 
         echo "Scenario 1: Test successful copying from BlobToPipe"
 
-        echo "Create container ${{ parameters.container_name }} under storage account ${{ parameters.storage_account_name }}"
+        echo "Creating container '${{ parameters.container_name }}' in storage account '${{ parameters.storage_account_name }}'"
         & "./$build_name" "make" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
 
         echo "Copy a test file from local to the created container"
@@ -96,11 +85,11 @@ steps:
 
         echo "Scenario 2: Test copying from Object Replication Policy source container to destination container"
 
-        echo "Create test file myfile.txt and copy the file to the source container srcorpcontainer under storage account azcopyorpsrcaccount having the ORP policy"
+        echo "Creating a test file named 'myfile.txt' and copying it to the source container '${{ parameters.orp_source_container_name }}' within the storage account '${{ parameters.orp_source_account_name }}', which has the ORP policy applied."
         echo "Hello, Azure!" > myfile.txt
-        & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/srcorpcontainer"
+        & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}"
 
-        echo "Copy the test file from the source container to the destination container testcontainer under storage account azcopyorpdestaccount"
+        echo "Copy the test file from the source container to the destination container '${{ parameters.orp_destination_container_name }}' in storage account '${{ parameters.orp_destination_account_name }}'."
         & "./$build_name" "cp" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{parameters.orp_source_container_name}}" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}" --recursive
 
         if ($LASTEXITCODE -eq 0) {
@@ -112,6 +101,6 @@ steps:
         # Perform cleanup
         echo "Perform cleanup"
         echo "Remove the test file from the destination container"
-        & "./$build_name" "rm" "https://azcopyorpdestaccount.blob.core.windows.net/testcontainer/myfile.txt"
+        & "./$build_name" "rm" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}/myfile.txt"
 
 

@@ -410,7 +410,7 @@ jobs:
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
 
-  - job: Test_Scenarios
+  - job: Additional_E2E_Test
     timeoutInMinutes: 360
     strategy:
       matrix:
@@ -419,17 +419,25 @@ jobs:
           type: 'linux'
           build_name: 'azcopy_linux_amd64'
           container_name: 'testcontainer1'
+          GOOS: 'linux'
+          GOARCH: 'amd64'
+          CGO_ENABLED: '0'
         Windows:
           imageName: 'windows-latest'
           type: 'windows'
           build_name: 'azcopy_windows_amd64.exe'
           container_name: 'testcontainer2'
+          GOOS: 'windows'
+          GOARCH: 'amd64'
+          CGO_ENABLED: '0'
         MacOS:
           imageName: 'macos-latest'
           type: 'macos'
           build_name: 'azcopy_darwin_amd64'
           container_name: 'testcontainer3'
-        
+          GOOS: 'darwin'
+          GOARCH: 'amd64'
+          CGO_ENABLED: '1'
     pool:
       vmImage: $(imageName)
 
@@ -464,3 +472,7 @@ jobs:
           orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
           orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
           destination_container_name: $(DESTINATION_CONTAINER_NAME)
+          GOOS: $(GOOS)
+          GOARCH: $(GOARCH)
+          CGO_ENABLED: $(CGO_ENABLED)
+          build_name: $(build_name)
