@@ -33,10 +33,10 @@ steps:
         Write-Output "Building executable"
         
         # Set environment variables
-        $build_name = ${{ parameters.build_name }}
-        $env:GOOS = ${{ parameters.goos }}
-        $env:GOARCH = ${{ parameters.goarch }}
-        $env:CGO_ENABLED = ${{ parameters.cgo_enabled }}
+        $build_name = '${{ parameters.build_name }}'
+        $env:GOOS = '${{ parameters.goos }}'
+        $env:GOARCH = '${{ parameters.goarch }}'
+        $env:CGO_ENABLED = '${{ parameters.cgo_enabled }}'
         $env:AZCOPY_AUTO_LOGIN_TYPE="AzCLI"
 
         go build -cover -o $build_name
