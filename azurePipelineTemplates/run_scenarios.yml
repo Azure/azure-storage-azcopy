@@ -103,5 +103,4 @@ steps:
         echo "Remove the test file from the source and destination container"
         & "./$build_name" "rm" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}/myfile.txt"
         & "./$build_name" "rm" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
-
-
+        
