@@ -421,7 +421,6 @@ jobs:
           container_name: 'testcontainer1'
           GOOS: 'linux'
           GOARCH: 'amd64'
-          CGO_ENABLED: '0'
         Windows:
           imageName: 'windows-latest'
           type: 'windows'
@@ -429,7 +428,6 @@ jobs:
           container_name: 'testcontainer2'
           GOOS: 'windows'
           GOARCH: 'amd64'
-          CGO_ENABLED: '0'
         MacOS:
           imageName: 'macos-latest'
           type: 'macos'
@@ -437,7 +435,6 @@ jobs:
           container_name: 'testcontainer3'
           GOOS: 'darwin'
           GOARCH: 'amd64'
-          CGO_ENABLED: '1'
     pool:
       vmImage: $(imageName)
 
@@ -474,5 +471,4 @@ jobs:
           destination_container_name: $(DESTINATION_CONTAINER_NAME)
           GOOS: $(GOOS)
           GOARCH: $(GOARCH)
-          CGO_ENABLED: $(CGO_ENABLED)
           build_name: $(build_name)

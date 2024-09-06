@@ -15,8 +15,6 @@ parameters:
     type: string
   - name: goarch
     type: string
-  - name: cgo_enabled
-    type: string
   - name: build_name
     type: string
 
@@ -36,8 +34,10 @@ steps:
         $build_name = '${{ parameters.build_name }}'
         $env:GOOS = '${{ parameters.goos }}'
         $env:GOARCH = '${{ parameters.goarch }}'
-        $env:CGO_ENABLED = '${{ parameters.cgo_enabled }}'
         $env:AZCOPY_AUTO_LOGIN_TYPE="AzCLI"
+        if ($IsMacOS) {
+            $env:CGO_ENABLED = "1"
+        }
 
         go build -cover -o $build_name
 
