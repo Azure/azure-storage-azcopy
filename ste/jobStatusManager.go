@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -37,13 +38,14 @@ type JobPartCreatedMsg struct {
 
 type xferDoneMsg = common.TransferDetail
 type jobStatusManager struct {
-	js              common.ListJobSummaryResponse
-	respChan        chan common.ListJobSummaryResponse
-	listReq         chan struct{}
-	partCreated     chan JobPartCreatedMsg
-	xferDone        chan xferDoneMsg
-	xferDoneDrained chan struct{} // To signal that all xferDone have been processed
-	statusMgrDone   chan struct{} // To signal statusManager has closed
+	js               common.ListJobSummaryResponse
+	respChan         chan common.ListJobSummaryResponse
+	listReq          chan struct{}
+	partCreated      chan JobPartCreatedMsg
+	xferDone         chan xferDoneMsg
+	xferDoneDrained  chan struct{} // To signal that all xferDone have been processed
+	statusMgrDone    chan struct{} // To signal statusManager has closed
+	isXferDoneClosed bool          // True (closed)
 }
 
 func (jm *jobMgr) waitToDrainXferDone() {
@@ -69,7 +71,23 @@ func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
 }
 
 func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
-	jm.jstm.xferDone <- msg
+	//jm.jstm.xferDone, ok <- msg
+	//if !ok {
+	//	fmt.Println("cannot send message on closed channel")
+	//}
+
+	// jm.jstm.xferDone <- msg
+
+	if jm.jstm.isXferDoneClosed {
+		fmt.Println("Cannot send message on closed channel")
+		return
+	}
+	select {
+	case jm.jstm.xferDone <- msg:
+		fmt.Println("Message sent successfully!")
+	default:
+		fmt.Println("Cannot send message on channel")
+	}
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
