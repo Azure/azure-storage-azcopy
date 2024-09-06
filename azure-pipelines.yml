@@ -416,25 +416,25 @@ jobs:
       matrix:
         Linux:
           imageName: 'ubuntu-latest'
-          type: 'linux'
           build_name: 'azcopy_linux_amd64'
           container_name: 'testcontainer1'
           GOOS: 'linux'
           GOARCH: 'amd64'
+          CGO_ENABLED: '0'
         Windows:
           imageName: 'windows-latest'
-          type: 'windows'
           build_name: 'azcopy_windows_amd64.exe'
           container_name: 'testcontainer2'
           GOOS: 'windows'
           GOARCH: 'amd64'
+          CGO_ENABLED: '0'
         MacOS:
           imageName: 'macos-latest'
-          type: 'macos'
           build_name: 'azcopy_darwin_amd64'
           container_name: 'testcontainer3'
           GOOS: 'darwin'
           GOARCH: 'amd64'
+          CGO_ENABLED: '1'
     pool:
       vmImage: $(imageName)
 
@@ -449,11 +449,6 @@ jobs:
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-
-      - bash: |
-          echo "##vso[task.setvariable variable=CGO_ENABLED]0"
-        displayName: 'Set CGO_ENABLED for Windows'
-        condition: eq(variables.type, 'windows')
 
       - bash: |
           npm install -g azurite
@@ -471,4 +466,6 @@ jobs:
           destination_container_name: $(DESTINATION_CONTAINER_NAME)
           GOOS: $(GOOS)
           GOARCH: $(GOARCH)
+          CGO_ENABLED: $(CGO_ENABLED)
           build_name: $(build_name)
+          
