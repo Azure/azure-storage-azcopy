@@ -672,7 +672,7 @@ func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other( /*common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(),*/ common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
+		eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.LocalFile(), common.EFromTo.BlobLocal(), common.EFromTo.FileLocal()), // no need to run every endpoint again
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,

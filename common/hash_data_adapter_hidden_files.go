@@ -74,18 +74,19 @@ func (a *HiddenFileDataAdapter) SetHashData(relativePath string, data *SyncHashD
 	}
 
 	// Attempt to get file information
+	var f *os.File
 	_, err := os.Stat(metaFile)
 	if os.IsNotExist(err) {
 		// File does not exist
-		lcm.Info(fmt.Sprintf("************************** File does not exist %s\n", metaFile))
+		f, err = os.OpenFile(metaFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to create hash meta file: %w", err)
+		}
 	} else {
-		lcm.Info(fmt.Sprintf("******************************* File exist %s\n", metaFile))
-	}
-
-	f, err := os.OpenFile(metaFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0777)
-	if err != nil {
-		fmt.Println("**************************Error here 73")
-		return fmt.Errorf("failed to create hash meta file: %w", err)
+		f, err = os.OpenFile(metaFile, os.O_TRUNC|os.O_RDWR, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to create hash meta file: %w", err)
+		}
 	}
 
 	buf, err := json.Marshal(data)
