@@ -716,11 +716,13 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			if shouldComplete {
 				// Inform StatusManager that all parts are done.
 
-				if !jm.jstm.isXferDoneClosed {
+				jm.jstm.flagMutex.Lock()
+				if !jm.jstm.isXferDoneClosed { //channel is open
 					close(jm.jstm.xferDone)
 					jm.jstm.isXferDoneClosed = true
 					fmt.Println("XFerDone channel closed")
 				}
+				jm.jstm.flagMutex.Unlock() // release write lock after closing channel
 
 				// Wait  for all XferDone messages to be processed by statusManager. Front end
 				// depends on JobStatus to determine if we've to quit job. Setting it here without
