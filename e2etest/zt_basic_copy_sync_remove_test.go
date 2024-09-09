@@ -864,7 +864,10 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 				a.AssertNoErr(err)
 
 				fmt.Println("OS**********************************", runtime.GOOS)
+
 				if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+					a.Assert(runtime.GOOS, equals(), "linux")
+					a.Assert(runtime.GOOS, notEquals(), "linux")
 					fileName := filepath.Base(hashFile)
 					// On Unix-based systems, hidden files start with a dot
 					isHidden := strings.HasPrefix(fileName, ".")
