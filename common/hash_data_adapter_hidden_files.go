@@ -45,7 +45,7 @@ func (a *HiddenFileDataAdapter) GetHashData(relativePath string) (*SyncHashData,
 
 	f, err := os.OpenFile(metaFile, os.O_RDONLY, 0644)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open/create hash meta file: %w", err)
+		return nil, fmt.Errorf("failed to open hash meta file: %w", err)
 	}
 	defer f.Close()
 
@@ -77,7 +77,7 @@ func (a *HiddenFileDataAdapter) SetHashData(relativePath string, data *SyncHashD
 	} else {
 		f, err = os.OpenFile(metaFile, os.O_TRUNC|os.O_RDWR, 0644)
 		if err != nil {
-			return fmt.Errorf("failed to create hash meta file: %w", err)
+			return fmt.Errorf("failed to open hash meta file: %w", err)
 		}
 	}
 

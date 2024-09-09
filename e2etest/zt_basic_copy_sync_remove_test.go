@@ -664,7 +664,6 @@ func TestBasic_HashBasedSync_S2S(t *testing.T) {
 }
 
 func TestBasic_HashBasedSync_UploadDownload(t *testing.T) {
-
 	RunScenarios(
 		t,
 		eOperation.Sync(),
