@@ -42,10 +42,9 @@ func (a *HiddenFileDataAdapter) getHashPath(relativePath string) string {
 
 func (a *HiddenFileDataAdapter) GetHashData(relativePath string) (*SyncHashData, error) {
 	metaFile := a.getHashPath(relativePath)
-	fmt.Println("Meta file--------------------", metaFile)
-	f, err := os.OpenFile(metaFile, os.O_RDWR, 0755)
+
+	f, err := os.OpenFile(metaFile, os.O_RDONLY, 0644)
 	if err != nil {
-		fmt.Println("**************************Error here 48")
 		return nil, fmt.Errorf("failed to open/create hash meta file: %w", err)
 	}
 	defer f.Close()
@@ -67,17 +66,10 @@ func (a *HiddenFileDataAdapter) SetHashData(relativePath string, data *SyncHashD
 	}
 
 	metaFile := a.getHashPath(relativePath)
-	// Ensure the directory exists
-	dir := filepath.Dir(metaFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
 
-	// Attempt to get file information
 	var f *os.File
 	_, err := os.Stat(metaFile)
 	if os.IsNotExist(err) {
-		// File does not exist
 		f, err = os.OpenFile(metaFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
 		if err != nil {
 			return fmt.Errorf("failed to create hash meta file: %w", err)
