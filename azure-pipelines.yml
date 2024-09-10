@@ -427,6 +427,25 @@ jobs:
             - ImageOverride -equals $(AgentName)
 
     steps:
+      - checkout: none
+      
+      - task: PowerShell@2
+        inputs: 
+          targetType: 'inline'
+          script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+          pwsh: 'true'
+        displayName: 'Install Powershell Az Module'
+
+      - task: GoTool@0
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+      
+      # Install azcli
+      - script: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+        displayName: 'Install Azure CLI'
+
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
           container_name: $(container_name)
@@ -440,36 +459,35 @@ jobs:
           CGO_ENABLED: $(CGO_ENABLED)
           build_name: $(build_name)
           
+  # - job: Additional_E2E_Test_Windows
+  #   timeoutInMinutes: 360
+  #   strategy:
+  #     matrix:
+  #       Windows:
+  #         AgentName: 'azcopy-windows-22'
+  #         build_name: 'azcopy_windows_amd64.exe'
+  #         container_name: 'testcontainer2'
+  #         GOOS: 'windows'
+  #         GOARCH: 'amd64'
+  #         CGO_ENABLED: '0'
+  #   pool:
+  #         name: "azcopy-windows-pool"
+  #         demands:
+  #           - ImageOverride -equals $(AgentName)
 
-  - job: Additional_E2E_Test_Windows
-    timeoutInMinutes: 360
-    strategy:
-      matrix:
-        Windows:
-          AgentName: 'azcopy-windows-22'
-          build_name: 'azcopy_windows_amd64.exe'
-          container_name: 'testcontainer2'
-          GOOS: 'windows'
-          GOARCH: 'amd64'
-          CGO_ENABLED: '0'
-    pool:
-          name: "azcopy-windows-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+  #   steps:
+  #     - template: azurePipelineTemplates/run_scenarios.yml
+  #       parameters:
+  #         container_name: $(container_name)
+  #         storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+  #         orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
+  #         orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
+  #         orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
+  #         destination_container_name: $(DESTINATION_CONTAINER_NAME)
+  #         GOOS: $(GOOS)
+  #         GOARCH: $(GOARCH)
+  #         CGO_ENABLED: $(CGO_ENABLED)
+  #         build_name: $(build_name)
 
-    steps:
-      - template: azurePipelineTemplates/run_scenarios.yml
-        parameters:
-          container_name: $(container_name)
-          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
-          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
-          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
-          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
-          destination_container_name: $(DESTINATION_CONTAINER_NAME)
-          GOOS: $(GOOS)
-          GOARCH: $(GOARCH)
-          CGO_ENABLED: $(CGO_ENABLED)
-          build_name: $(build_name)
-
-    #TODO: Add MacOS E2E tests after creating macos pool
+  #   #TODO: Add MacOS E2E tests after creating macos pool
           

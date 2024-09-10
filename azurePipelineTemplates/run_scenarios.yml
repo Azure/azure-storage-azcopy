@@ -21,29 +21,6 @@ parameters:
     type: string
 
 steps:
-  - task: PowerShell@2
-    inputs: 
-      targetType: 'inline'
-      script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
-      pwsh: 'true'
-    displayName: 'Install Powershell Az Module'
-
-  - task: GoTool@0
-    inputs:
-      version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-
-  # - bash: |
-  #     npm install -g azurite
-  #     mkdir azurite
-  #     azurite --silent --location azurite --debug azurite\debug.log &
-  #   displayName: 'Install and Run Azurite'
-
-   # Install azcli
-  - script: |
-      curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-      az --version
-    displayName: 'Install Azure CLI'
-
   # azcli login
   - script: |
       az login --identity --username $(AZCOPY_MSI_APP_ID)
