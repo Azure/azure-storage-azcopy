@@ -19,7 +19,7 @@ parameters:
     type: string
   - name: build_name
     type: string
-  - name: azcopy_msi_client_id
+  - name: azcopy_msi_app_id
     type: string
 
 steps:
