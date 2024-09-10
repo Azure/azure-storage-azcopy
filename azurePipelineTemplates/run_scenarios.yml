@@ -38,9 +38,11 @@ steps:
         $env:GOOS = '${{ parameters.goos }}'
         $env:GOARCH = '${{ parameters.goarch }}'
         $env:AZCOPY_AUTO_LOGIN_TYPE = "MSI"
+        $env:AZCOPY_MSI_CLIENT_ID = "1f1551d2-2db2-4d4d-a6f5-d7edbe75d98e"
+        $env:AZCOPY_MSI_OBJECT_ID = "e1d4800f-f3d5-45c7-907a-af55dc062c13"
         $env:CGO_ENABLED = '${{ parameters.cgo_enabled }}'
 
-        az login --identity --username $(AZCOPY_MSI_APP_ID)
+        #az login --identity --username $(AZCOPY_MSI_APP_ID)
 
         go build -cover -o $build_name
 
