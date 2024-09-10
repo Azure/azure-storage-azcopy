@@ -410,52 +410,23 @@ jobs:
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
 
-  - job: Additional_E2E_Test
+  - job: Additional_E2E_Test_Linux
     timeoutInMinutes: 360
     strategy:
       matrix:
         Linux:
-          imageName: 'ubuntu-latest'
+          imageName: 'ubuntu-20.04'
           build_name: 'azcopy_linux_amd64'
           container_name: 'testcontainer1'
           GOOS: 'linux'
           GOARCH: 'amd64'
           CGO_ENABLED: '0'
-        Windows:
-          imageName: 'windows-latest'
-          build_name: 'azcopy_windows_amd64.exe'
-          container_name: 'testcontainer2'
-          GOOS: 'windows'
-          GOARCH: 'amd64'
-          CGO_ENABLED: '0'
-        MacOS:
-          imageName: 'macos-latest'
-          build_name: 'azcopy_darwin_amd64'
-          container_name: 'testcontainer3'
-          GOOS: 'darwin'
-          GOARCH: 'amd64'
-          CGO_ENABLED: '1'
     pool:
-      vmImage: $(imageName)
+          name: "blobfuse-ubuntu-pool"
+          demands:
+            - ImageOverride -equals $(imageName)
 
     steps:
-      - task: PowerShell@2
-        inputs: 
-          targetType: 'inline'
-          script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
-          pwsh: 'true'
-        displayName: 'Install Powershell Az Module'
-
-      - task: GoTool@0
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-
-      - bash: |
-          npm install -g azurite
-          mkdir azurite
-          azurite --silent --location azurite --debug azurite\debug.log &
-        displayName: 'Install and Run Azurite'
-
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
           container_name: $(container_name)
@@ -468,4 +439,37 @@ jobs:
           GOARCH: $(GOARCH)
           CGO_ENABLED: $(CGO_ENABLED)
           build_name: $(build_name)
+          
+
+  - job: Additional_E2E_Test_Windows
+    timeoutInMinutes: 360
+    strategy:
+      matrix:
+        Windows:
+          imageName: 'azcopy-windows-22'
+          build_name: 'azcopy_windows_amd64.exe'
+          container_name: 'testcontainer2'
+          GOOS: 'windows'
+          GOARCH: 'amd64'
+          CGO_ENABLED: '0'
+    pool:
+          name: "azcopy-windows-pool"
+          demands:
+            - ImageOverride -equals $(imageName)
+
+    steps:
+      - template: azurePipelineTemplates/run_scenarios.yml
+        parameters:
+          container_name: $(container_name)
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
+          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
+          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
+          destination_container_name: $(DESTINATION_CONTAINER_NAME)
+          GOOS: $(GOOS)
+          GOARCH: $(GOARCH)
+          CGO_ENABLED: $(CGO_ENABLED)
+          build_name: $(build_name)
+
+    #TODO: Add MacOS E2E tests after creating macos pool
           
