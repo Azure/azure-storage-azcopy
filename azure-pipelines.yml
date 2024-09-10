@@ -427,8 +427,6 @@ jobs:
             - ImageOverride -equals $(AgentName)
 
     steps:
-      - checkout: none
-
       - script: |
           # Install Az.Accounts module using Bash script
           sudo apt-get update
