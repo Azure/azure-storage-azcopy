@@ -47,7 +47,7 @@ type jobStatusManager struct {
 	xferDoneDrained  chan struct{} // To signal that all xferDone have been processed
 	statusMgrDone    chan struct{} // To signal statusManager has closed
 	isXferDoneClosed bool          // True (xferDone channel is closed)
-	flagMutex        sync.RWMutex  // Read Write Mutex to prevent data race conditions
+	flagMutex        sync.RWMutex  // ReadWrite Mutex to sync access & prevent data race conditions
 }
 
 func (jm *jobMgr) waitToDrainXferDone() {
@@ -65,10 +65,18 @@ func (jm *jobMgr) statusMgrClosed() bool {
 
 /* These functions should not fail */
 func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
-	jm.jstm.partCreated <- msg
-	if msg.IsFinalPart {
-		// Inform statusManager that this is all parts we've
-		close(jm.jstm.partCreated)
+	if jm.jstm.partCreated != nil { // Sends not allowed if channel is closed
+		jm.jstm.flagMutex.RLock()
+		jm.jstm.partCreated <- msg
+		jm.jstm.flagMutex.RUnlock()
+
+		if msg.IsFinalPart {
+			jm.jstm.flagMutex.Lock()
+			// Inform statusManager that this is all parts we've
+			close(jm.jstm.partCreated)
+			jm.jstm.partCreated = nil
+			jm.jstm.flagMutex.Unlock()
+		}
 	}
 }
 
@@ -84,7 +92,7 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 	case jm.jstm.xferDone <- msg:
 		fmt.Println("Message sent successfully!")
 	default:
-		fmt.Println("Cannot send message on channel")
+		fmt.Println("Failed: Cannot send message on closed or full channel")
 	}
 	//function will return triggering the read unlock
 }
@@ -138,7 +146,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 
 				// close drainXferDone so that other components can know no further updates happen
 				allXferDoneHandled = true
+				jstm.flagMutex.RLock()
 				close(jstm.xferDoneDrained)
+				jstm.flagMutex.RUnlock()
 				continue
 			}
 
@@ -172,7 +182,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 		case <-jstm.listReq:
 			/* Display stats */
 			js.Timestamp = time.Now().UTC()
+			jstm.flagMutex.RLock() // Read-Lock
 			jstm.respChan <- *js
+			jstm.flagMutex.RUnlock()
 
 			// Reset the lists so that they don't keep accumulating and take up excessive memory
 			// There is no need to keep sending the same items over and over again
@@ -180,11 +192,13 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.SkippedTransfers = []common.TransferDetail{}
 
 			if allXferDoneHandled {
+				jstm.flagMutex.Lock() // Write Lock
 				close(jstm.statusMgrDone)
 				close(jstm.respChan)
 				close(jstm.listReq)
 				jstm.listReq = nil
 				jstm.respChan = nil
+				jstm.flagMutex.Unlock()
 				return
 			}
 		}
