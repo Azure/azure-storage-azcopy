@@ -415,7 +415,7 @@ jobs:
     strategy:
       matrix:
         Linux:
-          imageName: 'ubuntu-20.04'
+          AgentName: "blobfuse-ubuntu20"
           build_name: 'azcopy_linux_amd64'
           container_name: 'testcontainer1'
           GOOS: 'linux'
@@ -424,7 +424,7 @@ jobs:
     pool:
           name: "blobfuse-ubuntu-pool"
           demands:
-            - ImageOverride -equals $(imageName)
+            - ImageOverride -equals $(AgentName)
 
     steps:
       - template: azurePipelineTemplates/run_scenarios.yml
@@ -446,7 +446,7 @@ jobs:
     strategy:
       matrix:
         Windows:
-          imageName: 'azcopy-windows-22'
+          AgentName: 'azcopy-windows-22'
           build_name: 'azcopy_windows_amd64.exe'
           container_name: 'testcontainer2'
           GOOS: 'windows'
@@ -455,7 +455,7 @@ jobs:
     pool:
           name: "azcopy-windows-pool"
           demands:
-            - ImageOverride -equals $(imageName)
+            - ImageOverride -equals $(AgentName)
 
     steps:
       - template: azurePipelineTemplates/run_scenarios.yml
