@@ -21,10 +21,10 @@ parameters:
     type: string
 
 steps:
-  # azcli login
-  - script: |
-      az login --identity --username $(AZCOPY_MSI_APP_ID)
-    displayName: 'Azure CLI login'
+  # # azcli login
+  # - script: |
+  #     az login --identity --username $(AZCOPY_MSI_APP_ID)
+  #   displayName: 'Azure CLI login'
 
   - task: PowerShell@2
     inputs:
@@ -39,6 +39,8 @@ steps:
         $env:GOARCH = '${{ parameters.goarch }}'
         $env:AZCOPY_AUTO_LOGIN_TYPE = "MSI"
         $env:CGO_ENABLED = '${{ parameters.cgo_enabled }}'
+
+        az login --identity --username $(AZCOPY_MSI_APP_ID)
 
         go build -cover -o $build_name
 
