@@ -428,13 +428,20 @@ jobs:
 
     steps:
       - checkout: none
-      
-      - task: PowerShell@2
-        inputs: 
-          targetType: 'inline'
-          script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
-          pwsh: 'true'
-        displayName: 'Install Powershell Az Module'
+
+      - script: |
+          # Install Az.Accounts module using Bash script
+          sudo apt-get update
+          sudo apt-get install -y powershell
+          pwsh -Command "Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force"
+        displayName: 'Install PowerShell Az Module'
+
+      # - task: PowerShell@2
+      #   inputs: 
+      #     targetType: 'inline'
+      #     script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+      #     pwsh: 'true'
+      #   displayName: 'Install Powershell Az Module'
 
       - task: GoTool@0
         inputs:
