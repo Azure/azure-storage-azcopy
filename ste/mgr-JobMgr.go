@@ -720,7 +720,6 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				if !jm.jstm.isXferDoneClosed { //channel is open
 					close(jm.jstm.xferDone)
 					jm.jstm.isXferDoneClosed = true
-					fmt.Println("XFerDone channel closed")
 				}
 				jm.jstm.flagMutex.Unlock() // release write lock after closing channel
 
