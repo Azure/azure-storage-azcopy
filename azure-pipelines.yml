@@ -438,11 +438,11 @@ jobs:
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
       
-      # # Install azcli
-      # - script: |
-      #     curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-      #     az --version
-      #   displayName: 'Install Azure CLI'
+      # Install azcli
+      - script: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+        displayName: 'Install Azure CLI'
 
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
@@ -487,14 +487,14 @@ jobs:
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
 
-      # - task: PowerShell@2
-      #   inputs:
-      #     targetType: 'inline'
-      #     script: |
-      #       # Install Azure CLI using Chocolatey
-      #       choco install azure-cli -y
-      #       az --version
-      #     displayName: 'Install Azure CLI'
+      - task: PowerShell@2
+        inputs:
+          targetType: 'inline'
+          script: |
+            # Install Azure CLI using Chocolatey
+            choco install azure-cli -y
+            az --version
+          displayName: 'Install Azure CLI'
 
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
