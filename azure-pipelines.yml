@@ -422,9 +422,9 @@ jobs:
           GOARCH: 'amd64'
           CGO_ENABLED: '0'
     pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      name: "blobfuse-ubuntu-pool"
+      demands:
+        - ImageOverride -equals $(AgentName)
 
     steps:
       - script: |
@@ -470,9 +470,9 @@ jobs:
           GOARCH: 'amd64'
           CGO_ENABLED: '0'
     pool:
-          name: "azcopy-windows-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      name: "azcopy-windows-pool"
+      demands:
+        - ImageOverride -equals $(AgentName)
 
     steps:
       - task: PowerShell@2
@@ -488,14 +488,24 @@ jobs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
 
       - task: PowerShell@2
+        displayName: 'Install Azure CLI'
         inputs:
           targetType: 'inline'
           script: |
             # Install Azure CLI using Chocolatey
             choco install azure-cli -y
             az --version
-          displayName: 'Install Azure CLI'
-
+      
+      - task: PowerShell@2
+        displayName: "Run Azure CLI Commands"
+        inputs:
+          targetType: 'inline'
+          script: |
+            # Log in using User Assigned Managed Identity
+            az login --identity --client-id $(AZCOPY_MSI_APP_ID)
+        env:
+          AZCOPY_AUTO_LOGIN_TYPE: 'MSI'
+          
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
           container_name: $(container_name)
