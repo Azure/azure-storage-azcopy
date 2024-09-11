@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -84,15 +83,15 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 	jm.jstm.flagMutex.RLock()
 	defer jm.jstm.flagMutex.RUnlock()
 	if jm.jstm.isXferDoneClosed {
-		fmt.Println("Cannot send message on closed channel")
+		jm.Log(common.LogError, "Cannot send message on closed channel")
 		return
 	}
 	// channel is open, can send message
 	select {
 	case jm.jstm.xferDone <- msg:
-		fmt.Println("Message sent successfully!")
+		// Message sent success
 	default:
-		fmt.Println("Failed: Cannot send message on closed or full channel")
+		jm.Log(common.LogError, "Cannot send message on closed or full channel")
 	}
 	//function will return triggering the read unlock
 }
