@@ -1637,7 +1637,7 @@ stages:
             Debian-12_amd64:
               agentName: "blobfuse-debian-12"
         pool:
-            name: "blobfuse-debian-pool"
+            name: "azcopy-debian-pool"
             demands:
               - ImageOverride -equals $(AgentName)
               
