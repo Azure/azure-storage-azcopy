@@ -502,7 +502,7 @@ jobs:
           targetType: 'inline'
           script: |
             # Log in using User Assigned Managed Identity
-            az login --identity --client-id $(AZCOPY_MSI_APP_ID)
+            az login --identity --username $(AZCOPY_MSI_APP_ID)
         env:
           AZCOPY_AUTO_LOGIN_TYPE: 'MSI'
           
