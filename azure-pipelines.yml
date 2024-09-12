@@ -495,16 +495,6 @@ jobs:
             # Install Azure CLI using Chocolatey
             choco install azure-cli -y
             az --version
-      
-      - task: PowerShell@2
-        displayName: "Run Azure CLI Commands"
-        inputs:
-          targetType: 'inline'
-          script: |
-            # Log in using User Assigned Managed Identity
-            az login --identity --username $(AZCOPY_MSI_APP_ID)
-        env:
-          AZCOPY_AUTO_LOGIN_TYPE: 'MSI'
           
       - template: azurePipelineTemplates/run_scenarios.yml
         parameters:
