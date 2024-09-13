@@ -715,13 +715,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
 			if shouldComplete {
 				// Inform StatusManager that all parts are done.
-
-				jm.jstm.flagMutex.Lock()
-				if !jm.jstm.isXferDoneClosed { //channel is open
-					close(jm.jstm.xferDone)
-					jm.jstm.isXferDoneClosed = true
-				}
-				jm.jstm.flagMutex.Unlock() // release write lock after closing channel
+				close(jm.jstm.xferDone)
 
 				// Wait  for all XferDone messages to be processed by statusManager. Front end
 				// depends on JobStatus to determine if we've to quit job. Setting it here without

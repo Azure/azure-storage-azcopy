@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -38,15 +37,13 @@ type JobPartCreatedMsg struct {
 
 type xferDoneMsg = common.TransferDetail
 type jobStatusManager struct {
-	js               common.ListJobSummaryResponse
-	respChan         chan common.ListJobSummaryResponse
-	listReq          chan struct{}
-	partCreated      chan JobPartCreatedMsg
-	xferDone         chan xferDoneMsg
-	xferDoneDrained  chan struct{} // To signal that all xferDone have been processed
-	statusMgrDone    chan struct{} // To signal statusManager has closed
-	isXferDoneClosed bool          // True (xferDone channel is closed)
-	flagMutex        sync.RWMutex  // ReadWrite Mutex to sync access & prevent data race conditions
+	js              common.ListJobSummaryResponse
+	respChan        chan common.ListJobSummaryResponse
+	listReq         chan struct{}
+	partCreated     chan JobPartCreatedMsg
+	xferDone        chan xferDoneMsg
+	xferDoneDrained chan struct{} // To signal that all xferDone have been processed
+	statusMgrDone   chan struct{} // To signal statusManager has closed
 }
 
 func (jm *jobMgr) waitToDrainXferDone() {
@@ -64,36 +61,29 @@ func (jm *jobMgr) statusMgrClosed() bool {
 
 /* These functions should not fail */
 func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
+	defer func() {
+		if recErr := recover(); recErr != nil {
+			jm.Log(common.LogError, "Cannot send message on closed channel")
+		}
+	}()
 	if jm.jstm.partCreated != nil { // Sends not allowed if channel is closed
-		jm.jstm.flagMutex.RLock()
 		jm.jstm.partCreated <- msg
-		jm.jstm.flagMutex.RUnlock()
 
 		if msg.IsFinalPart {
-			jm.jstm.flagMutex.Lock()
 			// Inform statusManager that this is all parts we've
 			close(jm.jstm.partCreated)
 			jm.jstm.partCreated = nil
-			jm.jstm.flagMutex.Unlock()
 		}
 	}
 }
 
 func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
-	jm.jstm.flagMutex.RLock()
-	defer jm.jstm.flagMutex.RUnlock()
-	if jm.jstm.isXferDoneClosed {
-		jm.Log(common.LogError, "Cannot send message on closed channel")
-		return
-	}
-	// channel is open, can send message
-	select {
-	case jm.jstm.xferDone <- msg:
-		// Message sent success
-	default:
-		jm.Log(common.LogError, "Cannot send message on closed or full channel")
-	}
-	//function will return triggering the read unlock
+	defer func() {
+		if recErr := recover(); recErr != nil {
+			jm.Log(common.LogError, "Cannot send message on channel")
+		}
+	}()
+	jm.jstm.xferDone <- msg
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
@@ -145,9 +135,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 
 				// close drainXferDone so that other components can know no further updates happen
 				allXferDoneHandled = true
-				jstm.flagMutex.RLock()
 				close(jstm.xferDoneDrained)
-				jstm.flagMutex.RUnlock()
 				continue
 			}
 
@@ -181,9 +169,13 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 		case <-jstm.listReq:
 			/* Display stats */
 			js.Timestamp = time.Now().UTC()
-			jstm.flagMutex.RLock() // Read-Lock
-			jstm.respChan <- *js
-			jstm.flagMutex.RUnlock()
+			if jstm.respChan != nil {
+				select {
+				case jstm.respChan <- *js: // Send on the channel
+				default:
+					jm.Log(common.LogError, "Cannot send message on respChan")
+				}
+			}
 
 			// Reset the lists so that they don't keep accumulating and take up excessive memory
 			// There is no need to keep sending the same items over and over again
@@ -191,13 +183,12 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.SkippedTransfers = []common.TransferDetail{}
 
 			if allXferDoneHandled {
-				jstm.flagMutex.Lock() // Write Lock
 				close(jstm.statusMgrDone)
 				close(jstm.respChan)
 				close(jstm.listReq)
 				jstm.listReq = nil
 				jstm.respChan = nil
-				jstm.flagMutex.Unlock()
+				jstm.statusMgrDone = nil
 				return
 			}
 		}
