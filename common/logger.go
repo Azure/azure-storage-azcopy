@@ -88,7 +88,7 @@ func (jl *jobLogger) OpenLog() {
 	jl.file = file
 
 	flags := log.LstdFlags | log.LUTC
-	utcMessage := fmt.Sprint("Log times are in UTC. Local time is " + time.Now().Format("2 Jan 2006 15:04:05"))
+	utcMessage := fmt.Sprintf("Log times are in UTC. Local time is %s", time.Now().Format("2 Jan 2006 15:04:05"))
 
 	jl.logger = log.New(jl.file, "", flags)
 	// Log the Azcopy Version

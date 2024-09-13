@@ -85,7 +85,7 @@ func (p PerfAdjustmentResp) String() string {
 	if p.Status {
 		ret = fmt.Sprintf("Successfully adjust throughput to %d Mbps.", p.AdjustedThroughPut)
 	} else {
-		ret = fmt.Sprint("Failed to adjust throughput. " + p.Err)
+		ret = fmt.Sprintf("Failed to adjust throughput. %s", p.Err)
 	}
 
 	return ret

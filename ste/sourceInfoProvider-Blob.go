@@ -23,11 +23,12 @@ package ste
 import (
 	"context"
 	"crypto/md5"
+	"io"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"time"
 )
 
 // Source info provider for Azure blob

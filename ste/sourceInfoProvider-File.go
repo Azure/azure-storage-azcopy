@@ -24,12 +24,13 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"io"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 

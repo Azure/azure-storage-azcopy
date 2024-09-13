@@ -25,12 +25,13 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"io"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"io"
-	"time"
 
 	"golang.org/x/sync/semaphore"
 

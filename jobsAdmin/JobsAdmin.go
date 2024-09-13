@@ -616,7 +616,7 @@ func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
 			var perfAdjustmentReq common.PerfAdjustmentReq
 
 			if time.Since(lastPerfAdjustTime) < minIntervalBetweenPerfAdjustment {
-				err = errors.New("Performance Adjustment already in progress. Please try after " +
+				err = fmt.Errorf("Performance Adjustment already in progress. Please try after %s",
 					lastPerfAdjustTime.Add(minIntervalBetweenPerfAdjustment).Format(time.RFC3339))
 			}
 
