@@ -2,12 +2,17 @@ package e2etest
 
 import (
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
+	"reflect"
 	"strings"
+	"time"
 )
 
 func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
@@ -16,6 +21,16 @@ func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
 	}
 
 	a.Assert(name+" must match", Equal{Deep: true}, expected, real)
+}
+
+func ValidateTimePtr(a Asserter, name string, expected, real *time.Time) {
+	if expected == nil {
+		return
+	}
+	expectedTime := expected.UTC().Truncate(time.Second)
+	realTime := real.UTC().Truncate(time.Second)
+
+	a.Assert(name+" must match", Equal{Deep: true}, expectedTime, realTime)
 }
 
 func ValidateMetadata(a Asserter, expected, real common.Metadata) {
@@ -94,7 +109,7 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				a.Assert("bodies differ in hash", Equal{Deep: true}, hex.EncodeToString(objHash.Sum(nil)), hex.EncodeToString(valHash.Sum(nil)))
 			}
 
-			// Properties
+			// properties
 			ValidateMetadata(a, vProps.Metadata, oProps.Metadata)
 
 			// HTTP headers
@@ -120,6 +135,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Owner", vProps.BlobFSProperties.Owner, oProps.BlobFSProperties.Owner)
 				ValidatePropertyPtr(a, "Group", vProps.BlobFSProperties.Group, oProps.BlobFSProperties.Group)
 				ValidatePropertyPtr(a, "ACL", vProps.BlobFSProperties.ACL, oProps.BlobFSProperties.ACL)
+			case common.ELocation.Local():
+				ValidateTimePtr(a, "Last modified time", vProps.LastModifiedTime, oProps.LastModifiedTime)
 			}
 		},
 	})
@@ -190,4 +207,104 @@ func checkMultipleErrors(errorMsg []string, line string) bool {
 	}
 
 	return false
+}
+
+func ValidateListTextOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject, expectedSummary *cmd.AzCopyListSummary) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	for _, line := range stdout.RawStdout() {
+		if line != "" {
+			// checking summary lines first if they exist
+			if strings.Contains(line, "File count:") {
+				fileCount := strings.Split(line, ":")
+				if strings.TrimSpace(fileCount[1]) != expectedSummary.FileCount {
+					a.Error(fmt.Sprintf("File count does not match - raw:%s. expected:%s.", fileCount[1], expectedSummary.FileCount))
+				}
+			} else if strings.Contains(line, "Total file size:") {
+				totalFileSize := strings.Split(line, ":")
+				if strings.TrimSpace(totalFileSize[1]) != expectedSummary.TotalFileSize {
+					a.Error(fmt.Sprintf("Total file size does not match - raw:%s. expected:%s.", totalFileSize[1], expectedSummary.TotalFileSize))
+				}
+			} else {
+				// convert line into list object
+				lo := parseAzCopyListObject(a, line)
+				key := AzCopyOutputKey{
+					Path:      lo.Path,
+					VersionId: lo.VersionId,
+				}
+
+				// check if the object exists in map
+				expectedLo, ok := expectedObjects[key]
+				if !ok {
+					a.Error(fmt.Sprintf("%s does not exist in expected objects", key.Path))
+				}
+
+				// verify contents of the list object and make sure it matches with the expected object
+				eq := reflect.DeepEqual(lo, expectedLo)
+				if !eq {
+					a.Error(fmt.Sprintf("%#v does not match the expected object %#v.", lo, expectedLo))
+				}
+
+				// delete object from expected object after verifying list object exists and is correct
+				delete(expectedObjects, key)
+			}
+		}
+	}
+
+	// check if any expected objects were missed
+	if len(expectedObjects) != 0 {
+		a.Error(fmt.Sprintf("expected objects are not present in the list output %#v", expectedObjects))
+	}
+}
+
+func parseAzCopyListObject(a Asserter, line string) cmd.AzCopyListObject {
+	stdoutParts := strings.Split(line, ";")
+	properties := make(map[string]string)
+
+	for i, part := range stdoutParts {
+		if i == 0 {
+			properties["Path"] = part
+		} else {
+			val := strings.SplitN(part, ":", 2)
+			properties[strings.TrimSpace(val[0])] = strings.TrimSpace(val[1])
+		}
+	}
+
+	// do some error checking/verification that the elements that are nil don't break this
+	var lmt *time.Time
+	if properties[string(cmd.LastModifiedTime)] != "" {
+		lmtVal, err := time.Parse(cmd.LastModifiedTimeFormat, properties[string(cmd.LastModifiedTime)])
+		if err != nil {
+			a.Error("error parsing time from lmt string: " + err.Error())
+		}
+		lmt = &lmtVal
+	}
+
+	contentMD5 := []byte(nil)
+	md5 := properties[string(cmd.ContentMD5)]
+	if md5 != "" {
+		decodedContentMD5, err := base64.StdEncoding.DecodeString(md5)
+		if err != nil {
+			a.Error("error decoding content md5 string: " + err.Error())
+		}
+		contentMD5 = decodedContentMD5
+	}
+
+	return cmd.AzCopyListObject{
+		Path:             properties["Path"],
+		LastModifiedTime: lmt,
+		VersionId:        properties[string(cmd.VersionId)],
+		BlobType:         blob.BlobType(properties[string(cmd.BlobType)]),
+		BlobAccessTier:   blob.AccessTier(properties[string(cmd.BlobAccessTier)]),
+		ContentType:      properties[string(cmd.ContentType)],
+		ContentEncoding:  properties[string(cmd.ContentEncoding)],
+		ContentMD5:       contentMD5,
+		LeaseState:       lease.StateType(properties[string(cmd.LeaseState)]),
+		LeaseStatus:      lease.StatusType(properties[string(cmd.LeaseStatus)]),
+		LeaseDuration:    lease.DurationType(properties[string(cmd.LeaseDuration)]),
+		ArchiveStatus:    blob.ArchiveStatus(properties[string(cmd.ArchiveStatus)]),
+		ContentLength:    properties["Content Length"],
+	}
 }

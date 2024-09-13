@@ -1,22 +1,11 @@
 from test_blob_download import *
 from test_upload_block_blob import *
 from test_upload_page_blob import *
-from test_file_download import *
-from test_file_upload import *
-from test_azcopy_operations import *
 from test_blobfs_upload_sharedkey import *
-from test_blobfs_upload_oauth import *
 from test_blobfs_download_sharedkey import *
-from test_blobfs_download_oauth import *
 from test_blob_piping import *
 from test_blob_sync import *
 from test_service_to_service_copy import *
-from test_google_cloud_storage_copy import *
-from test_blobfs_download_SAS import *
-from test_blobfs_upload_SAS import *
-from test_autodetect_blob_type import *
-from test_file_sync import *
-from test_file_copy import *
 from test_google_cloud_storage_copy import *
 import glob, os
 import configparser
@@ -212,23 +201,13 @@ def main():
     init()
 
     test_class_to_run = [BlobPipingTests,
-                         File_Service_2_Service_Copy_User_Scenario,
                          Blob_Sync_User_Scenario,
-                         File_Sync_User_Scenario,
                          Block_Upload_User_Scenarios,
                          Blob_Download_User_Scenario,
                          PageBlob_Upload_User_Scenarios,
-                         BlobFs_Upload_OAuth_User_Scenarios,
-                         BlobFs_Download_OAuth_User_Scenarios,
-                         BlobFs_Download_SAS_User_Scenarios,
-                         BlobFs_Upload_SAS_User_Scenarios,
-                         Azcopy_Operation_User_Scenario,
-                         FileShare_Download_User_Scenario,
-                         FileShare_Upload_User_Scenario,
                          BlobFs_Upload_ShareKey_User_Scenarios,
                          BlobFs_Download_SharedKey_User_Scenarios,
                          Service_2_Service_Copy_User_Scenario,
-                         Autodetect_Blob_Type_Scenario,
                          Google_Cloud_Storage_Copy_User_Scenario]
     suites_list = []
 

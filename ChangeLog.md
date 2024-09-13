@@ -1,6 +1,42 @@
 
 # Change Log
 
+## Version 10.26.0
+
+### Security fixes
+
+1. Updated dependencies to address security vulnerabilities.
+
+### New Features
+
+1. AzCopy now supports distribution through package managers for Red Hat Enterprise Linux (RHEL), Ubuntu, Mariner, Debian, SUSE, Rocky and CentOS. ([#2728](https://github.com/Azure/azure-storage-azcopy/pull/2728))
+
+### Dependency updates
+
+1. Golang 1.22.4 -> 1.22.5
+2. azidentity 1.6.0 -> 1.7.0
+
+## Bug Fixes
+
+1. Fixed an issue where AzCopy would fail to unmarshal the `_token_refresh_source` property correctly when performing copy jobs from OAuth-attached containers. ([#2710](https://github.com/Azure/azure-storage-azcopy/pull/2710))
+2. Fixed a CI pipeline in Azure DevOps to automatically detect CVEs declared against our dependencies. ([#2705](https://github.com/Azure/azure-storage-azcopy/pull/2705))
+
+## Version 10.25.1
+
+### Security fixes
+
+1. Updated Golang to 1.22.4 to address security vulnerabilities
+
+### Dependency updates
+
+1. Golang 1.22.3 -> 1.22.4
+2. azidentity 1.5.1 -> 1.6.0
+
+### Bug Fixes
+
+1. Fixed a regression in `list` where `--output-type=text` would not output any information
+2. Adjusted parsing of `AZCOPY_OAUTH_TOKEN_INFO` to support both enum names as a string and integers (for users that took dependency upon the accidental changes in 10.25)
+
 ## Version 10.25.0
 
 ### Security fixes
