@@ -865,6 +865,10 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 
 				isHidden := osScenarioHelper{}.IsFileHidden(a, hashFile)
 				assert.True(t, isHidden, "The metadata file should be hidden")
+
+				originalFile := filepath.Join(dataPath, "asdf.txt")
+				isHidden = osScenarioHelper{}.IsFileHidden(a, originalFile)
+				assert.True(t, !isHidden, "The original file should not be hidden")
 			},
 		},
 		testFiles{
