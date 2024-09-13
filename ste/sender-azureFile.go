@@ -43,7 +43,6 @@ type FileClientStub interface {
 	URL() string
 }
 
-
 // azureFileSenderBase implements both IFolderSender and (most of) IFileSender.
 // Why implement both interfaces in the one type, even though they are largely unrelated? Because it
 // makes functions like newAzureFilesUploader easier to reason about, since they always return the same type.
@@ -112,7 +111,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 
 	sURL, _ := file.ParseURL(serviceClient.URL())
 	addFileRequestIntent := (sURL.SAS.Signature() == "") // We are using oAuth
-	
+
 	shareClient := serviceClient.NewShareClient(shareName)
 	if shareSnapshot != "" {
 		shareClient, err = shareClient.WithSnapshot(shareSnapshot)
@@ -210,7 +209,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	if fileerror.HasCode(err, fileerror.ParentNotFound) {
 		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
+		jptm.Log(common.LogError, fmt.Sprintf("%s: %s \n AzCopy is going to create parent directories of the Azure files", fileerror.ParentNotFound, err.Error()))
 		err = AzureFileParentDirCreator{}.CreateParentDirToRoot(u.ctx, u.getFileClient(), u.shareClient, u.jptm.GetFolderCreationTracker())
 		if err != nil {
 			u.jptm.FailActiveUpload("Creating parent directory", err)

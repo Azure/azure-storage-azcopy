@@ -56,6 +56,9 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 
 	accountARMDefinition := ARMStorageAccountCreateParams{
 		Location: "West US 2", // todo configurable
+		Properties: &ARMStorageAccountCreateProperties{
+			Tags: map[string]string{"Az.Sec.DisableAllowSharedKeyAccess::Skip": "Needed for AzCopy testing"},
+		},
 	}
 
 	switch accountType { // https://learn.microsoft.com/en-us/azure/storage/common/storage-account-create?tabs=azure-portal#storage-account-type-parameters
@@ -65,9 +68,7 @@ func CreateAccount(a Asserter, accountType AccountType, options *CreateAccountOp
 	case EAccountType.HierarchicalNamespaceEnabled():
 		accountARMDefinition.Kind = service.AccountKindStorageV2
 		accountARMDefinition.Sku = ARMStorageAccountSKUStandardLRS
-		accountARMDefinition.Properties = &ARMStorageAccountCreateProperties{
-			IsHnsEnabled: pointerTo(true),
-		}
+		accountARMDefinition.Properties.IsHnsEnabled = pointerTo(true)
 	case EAccountType.PremiumBlockBlobs():
 		accountARMDefinition.Kind = service.AccountKindBlockBlobStorage
 		accountARMDefinition.Sku = ARMStorageAccountSKUPremiumLRS
@@ -123,6 +124,7 @@ func DeleteAccount(a Asserter, arm AccountResourceManager) {
 const (
 	PrimaryStandardAcct string = "PrimaryStandard"
 	PrimaryHNSAcct      string = "PrimaryHNS"
+	PremiumPageBlobAcct string = "PremiumPageBlob"
 )
 
 func AccountRegistryInitHook(a Asserter) {
@@ -139,10 +141,16 @@ func AccountRegistryInitHook(a Asserter) {
 			accountKey:  acctInfo.HNS.AccountKey,
 			accountType: EAccountType.HierarchicalNamespaceEnabled(),
 		}
+		AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
+			accountName: acctInfo.PremiumPage.AccountName,
+			accountKey:  acctInfo.PremiumPage.AccountKey,
+			accountType: EAccountType.PremiumPageBlobs(),
+		}
 	} else {
 		// Create standard accounts
 		AccountRegistry[PrimaryStandardAcct] = CreateAccount(a, EAccountType.Standard(), nil)
 		AccountRegistry[PrimaryHNSAcct] = CreateAccount(a, EAccountType.HierarchicalNamespaceEnabled(), nil)
+		AccountRegistry[PremiumPageBlobAcct] = CreateAccount(a, EAccountType.PremiumPageBlobs(), nil)
 	}
 }
 

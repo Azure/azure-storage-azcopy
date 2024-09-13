@@ -4,15 +4,16 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/spf13/cobra"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/spf13/cobra"
 )
 
 // TestFileCommand represents the struct to get command
@@ -267,7 +268,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 		os.Exit(1)
 	}
 
-	if testFileCmd.CheckContentMD5 && (get.ContentMD5 == nil || len(get.ContentMD5) == 0) {
+	if testFileCmd.CheckContentMD5 && len(get.ContentMD5) == 0 {
 		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}
