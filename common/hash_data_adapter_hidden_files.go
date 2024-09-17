@@ -69,6 +69,8 @@ func (a *HiddenFileDataAdapter) SetHashData(relativePath string, data *SyncHashD
 
 	var f *os.File
 	_, err := os.Stat(metaFile)
+	// In windows os.OpenFile function uses the Windows API to manage files, and the combination of O_CREATE, O_TRUNC, and O_RDWR
+	// flags which results in a system call that might not handle hidden files opening operations as expected with this combination of flags.
 	if os.IsNotExist(err) {
 		f, err = os.OpenFile(metaFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
 		if err != nil {
