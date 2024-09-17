@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
@@ -294,12 +295,15 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyRawStdout{}
 		}
 	}
+
+	stderr := &bytes.Buffer{}
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
 		Args: args,
 		Env:  env,
 
 		Stdout: out, // todo
+		Stderr: stderr,
 	}
 	in, err := command.StdinPipe()
 	a.NoError("get stdin pipe", err)
@@ -323,6 +327,11 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
 		}
 	})
+
+	if a.Failed() {
+		a.Log(out.String())
+		a.Log(stderr.String())
+	}
 
 	return out, &AzCopyJobPlan{}
 }

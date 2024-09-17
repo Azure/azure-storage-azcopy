@@ -191,9 +191,10 @@ func (svm *ScenarioVariationManager) HelperMarker() HelperMarker {
 // =========== Variation Handling ==========
 
 var variationExcludedCallers = map[string]bool{
-	"GetVariation":         true,
-	"ResolveVariation":     true,
-	"GetVariationCallerID": true,
+	"GetVariation":          true,
+	"ResolveVariation":      true,
+	"GetVariationCallerID":  true,
+	"NamedResolveVariation": true,
 }
 
 func (svm *ScenarioVariationManager) VariationName() string {
@@ -339,4 +340,11 @@ func ResolveVariation[T any](svm *ScenarioVariationManager, options []T) T {
 // ResolveVariationByID is the same as ResolveVariation, but it's based upon the supplied ID rather than the call stack.
 func ResolveVariationByID[T any](svm *ScenarioVariationManager, ID string, options []any) T {
 	return GetTypeOrZero[T](svm.GetVariation(ID, ListOfAny(options)))
+}
+
+// NamedResolveVariation is similar to ResolveVariation, but instead resolves over the keys in options, and hands back T.
+func NamedResolveVariation[T any](svm *ScenarioVariationManager, options map[string]T) T {
+	variation := GetTypeOrZero[string](svm.GetVariation(svm.GetVariationCallerID(), AnyKeys(options)))
+
+	return options[variation]
 }

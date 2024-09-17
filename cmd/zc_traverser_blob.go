@@ -339,15 +339,27 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 					if t.includeDirectoryStubs {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
-						blobClient := containerClient.NewBlobClient(strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING))
+						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+						blobClient := containerClient.NewBlobClient(dName)
+					altNameCheck:
 						pResp, err := blobClient.GetProperties(t.ctx, nil)
-						pbPropAdapter := blobPropertiesResponseAdapter{&pResp}
-						folderRelativePath := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
-						folderRelativePath = strings.TrimPrefix(folderRelativePath, searchPrefix)
 						if err == nil {
+							if !t.doesBlobRepresentAFolder(pResp.Metadata) { // We've picked up on a file *named* the folder, not the folder itself. Does folder/ exist?
+								if !strings.HasSuffix(dName, "/") {
+									blobClient = containerClient.NewBlobClient(dName + common.AZCOPY_PATH_SEPARATOR_STRING) // Tack on the path separator, check.
+									dName += common.AZCOPY_PATH_SEPARATOR_STRING
+									goto altNameCheck // "foo" is a file, what about "foo/"?
+								}
+
+								goto skipDirAdd // We shouldn't add a blob that isn't a folder as a folder. You either have the folder metadata, or you don't.
+							}
+
+							pbPropAdapter := blobPropertiesResponseAdapter{&pResp}
+							folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
+
 							storedObject := newStoredObject(
 								preprocessor,
-								getObjectNameOnly(strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)),
+								getObjectNameOnly(dName),
 								folderRelativePath,
 								common.EEntityType.Folder(),
 								pbPropAdapter.LastModified(),
@@ -372,6 +384,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 							enqueueOutput(storedObject, err)
 						}
+					skipDirAdd:
 					}
 				}
 			}
@@ -487,7 +500,7 @@ func (t *blobTraverser) createStoredObjectForBlob(preprocessor objectMorpher, bl
 
 func (t *blobTraverser) doesBlobRepresentAFolder(metadata map[string]*string) bool {
 	util := copyHandlerUtil{}
-	return util.doesBlobRepresentAFolder(metadata) && !(t.includeDirectoryStubs && t.recursive)
+	return util.doesBlobRepresentAFolder(metadata) // We should ignore these, because we pick them up in other ways.
 }
 
 func (t *blobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,

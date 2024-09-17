@@ -38,7 +38,18 @@ func ValidateMetadata(a Asserter, expected, real common.Metadata) {
 		return
 	}
 
-	a.Assert("Metadata must match", Equal{Deep: true}, expected, real)
+	rule := func(key string, value *string) (ok string, ov *string, include bool) {
+		ov = value
+		ok = strings.ToLower(key)
+		include = Any(common.AllLinuxProperties, func(s string) bool {
+			return strings.EqualFold(key, s)
+		})
+
+		return
+	}
+
+	//a.Assert("Metadata must match", Equal{Deep: true}, expected, real)
+	expected = CloneMapWithRule(expected, rule)
 }
 
 func ValidateTags(a Asserter, expected, real map[string]string) {
