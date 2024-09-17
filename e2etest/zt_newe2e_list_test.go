@@ -5,6 +5,7 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 )
 
 func init() {
@@ -820,4 +821,87 @@ func (s *ListSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
 
 	// Validate that the stdout contains these error URLs
 	ValidateErrorOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
+}
+
+func (s *ListSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariationManager) {
+	targetAcct := pointerTo(NamedResolveVariation(svm, map[string]string{
+		"FNS": PrimaryStandardAcct,
+		"HNS": PrimaryHNSAcct,
+	}))
+
+	// This should also fix copy/sync because the changed codepath overlaps, *but*, we'll have a separate test for that too.
+	srcRoot := GetRootResource(svm, common.ELocation.Blob(), GetResourceOptions{
+		PreferredAccount: targetAcct,
+	})
+
+	resourceMapping := NamedResolveVariation(svm, map[string]ObjectResourceMappingFlat{
+		"DisallowOverlap": { // "foo" is  a folder, only a folder, there is no difference between "foo" and "foo/".
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+				Body: NewZeroObjectContentContainer(0),
+			},
+			"foo/bar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File inside
+			"baz":     ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File on the side
+		},
+		"AllowOverlap": { // "foo" (the file), and "foo/" (the directory) can exist, but "foo/" is still a directory with metadata.
+			"foo/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+				Body: NewZeroObjectContentContainer(0),
+			},
+			"foo/bar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File inside
+			"foo":     ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File on the side
+		},
+	})
+
+	// HNS will automatically correct blob calls to "foo/" to "foo", which is correct behavior
+	// But incompatible with the overlap scenario.
+	if _, ok := resourceMapping["foo/"]; *targetAcct == PrimaryHNSAcct && ok {
+		svm.InvalidateScenario()
+		return
+	}
+
+	res := CreateResource[ContainerResourceManager](svm, srcRoot, ResourceDefinitionContainer{
+		Objects: resourceMapping,
+	})
+
+	tgt := GetRootResource(svm, common.ELocation.BlobFS(), GetResourceOptions{
+		PreferredAccount: targetAcct,
+	}).(ServiceResourceManager).GetContainer(res.ContainerName())
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbList,
+			Targets: []ResourceManager{
+				tgt,
+			},
+			Flags: ListFlags{},
+		},
+	)
+
+	expectedObjects := make(map[AzCopyOutputKey]cmd.AzCopyListObject)
+	expectedObjects[AzCopyOutputKey{Path: "/"}] = cmd.AzCopyListObject{Path: "/", ContentLength: "0.00 B"}
+	for k, v := range resourceMapping {
+		// Correct for naming scheme if needed
+		if v.EntityType == common.EEntityType.Folder() && !strings.HasSuffix(k, "/") {
+			k += "/"
+		}
+
+		expectedObjects[AzCopyOutputKey{
+			Path: k,
+		}] = cmd.AzCopyListObject{
+			Path:          k,
+			ContentLength: SizeToString(v.Body.Size(), false),
+		}
+	}
+
+	if !svm.Dryrun() {
+		svm.Log(stdout.String())
+	}
+
+	ValidateListOutput(svm, stdout, expectedObjects, nil) // No expected summary
 }

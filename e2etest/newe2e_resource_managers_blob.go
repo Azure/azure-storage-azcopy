@@ -181,6 +181,10 @@ type BlobContainerResourceManager struct {
 	internalClient  *container.Client
 }
 
+func (b *BlobContainerResourceManager) GetDatalakeContainerManager(a Asserter) ContainerResourceManager {
+	return b.internalAccount.GetService(a, common.ELocation.BlobFS()).GetContainer(b.containerName)
+}
+
 func (b *BlobContainerResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
 	return (&BlobServiceResourceManager{}).ValidAuthTypes()
 }

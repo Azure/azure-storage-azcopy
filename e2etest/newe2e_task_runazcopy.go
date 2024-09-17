@@ -341,6 +341,11 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
 	})
 
+	if a.Failed() {
+		a.Log(out.String())
+		a.Log(stderr.String())
+	}
+
 	return out, &AzCopyJobPlan{}
 }
 
