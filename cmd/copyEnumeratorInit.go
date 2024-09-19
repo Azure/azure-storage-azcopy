@@ -559,9 +559,8 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 			}
 		}
 
-		// If uploading from Windows or downloading from files, decode unsafe chars if user enables decoding
-	} else if ((!source && fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && fromTo.From() == common.ELocation.File())) && !disableAutoDecoding {
-
+		// If downloading from files, decode unsafe chars if user enables decoding
+	} else if (!source && fromTo.From() == common.ELocation.File()) && !disableAutoDecoding {
 		for encoded, c := range reverseEncodedChars {
 			for k, p := range pathParts {
 				pathParts[k] = strings.ReplaceAll(p, encoded, string(c))
