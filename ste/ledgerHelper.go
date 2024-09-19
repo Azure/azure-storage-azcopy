@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -257,7 +257,7 @@ func downloadHash(comparison md5Comparer, tamperProofLocation string, storageSou
 	defer response.Body.Close()
 
 	// Read response body
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return HashResult{}
 	}
@@ -282,7 +282,7 @@ func downloadHash(comparison md5Comparer, tamperProofLocation string, storageSou
 		defer response.Body.Close()
 
 		// Read response body
-		body, err := ioutil.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
 		if err != nil {
 			return HashResult{}
 		}
@@ -314,10 +314,9 @@ func downloadHash(comparison md5Comparer, tamperProofLocation string, storageSou
 
 		// Compare the path value with your desired string
 		desiredString := storageSource
-		var aclHash = ""
 
 		if contents.Path == desiredString {
-			aclHash = contents.Hash
+			aclHash := contents.Hash
 			// Convert hashSumBytes to hexadecimal string
 			hashSumString := hex.EncodeToString(comparison.expected)
 
