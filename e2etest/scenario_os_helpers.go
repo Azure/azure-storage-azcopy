@@ -25,8 +25,11 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 type osScenarioHelper struct{}
@@ -58,12 +61,18 @@ func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata 
 	panic("should never be called")
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) Mknod(c asserter, path string, mode uint32, dev int) {
 	panic("should never be called")
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) GetUnixStatAdapterForFile(c asserter, filepath string) common.UnixStatAdapter {
 	panic("should never be called")
+}
+
+func (osScenarioHelper) IsFileHidden(c asserter, filePath string) bool {
+	fileName := filepath.Base(filePath)
+	isHidden := strings.HasPrefix(fileName, ".")
+	return isHidden
 }
