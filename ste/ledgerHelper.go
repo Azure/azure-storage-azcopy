@@ -2,6 +2,7 @@ package ste
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -63,6 +64,48 @@ func getLedgerAccessToken() string {
 	return accessToken
 }
 
+func getIdentityCertificate(ledgerUrl string) string {
+	// Extract ledger name directly from the URL
+	parts := strings.Split(ledgerUrl, ".")
+	if len(parts) < 2 {
+		fmt.Println("Invalid URL format")
+		return ""
+	}
+	ledgerName := strings.TrimPrefix(parts[0], "https://")
+
+	// Call the endpoint
+	identityURL := fmt.Sprintf("https://identity.confidential-ledger.core.azure.com/ledgerIdentity/%s", ledgerName)
+	response, err := http.Get(identityURL)
+	if err != nil {
+		fmt.Println("Error making GET request:", err)
+		return ""
+	}
+	defer response.Body.Close()
+
+	// Check response status
+	if response.StatusCode != http.StatusOK {
+		fmt.Printf("Received non-200 response: %s\n", response.Status)
+		return ""
+	}
+
+	// Parse the response
+	var result map[string]interface{}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		fmt.Println("Error decoding response:", err)
+		return ""
+	}
+
+	// Extract the TLS certificate
+	ledgerTlsCertificate, ok := result["ledgerTlsCertificate"].(string)
+	if !ok {
+		fmt.Println("Error: ledgerTlsCertificate not found in response")
+		return ""
+	}
+
+	// Return the TLS certificate
+	return ledgerTlsCertificate
+}
+
 func getStorageAccount(storageLocation string) string {
 	// Define regular expression pattern to extract storage account and container
 	re := regexp.MustCompile(`https://([^.]+)\.blob\.core\.windows\.net/([^/]+)`)
@@ -86,9 +129,25 @@ func getStorageAccount(storageLocation string) string {
 
 func uploadHash(md5Hasher hash.Hash, tamperProofLocation string, storageDestination string) {
 
-	// Create a custom Transport with InsecureSkipVerify set to true
+	var ledgerUrl = tamperProofLocation
+
+	// Your PEM certificate as a string
+	certPEM := getIdentityCertificate(ledgerUrl)
+
+	// Create a new certificate pool
+	certPool := x509.NewCertPool()
+
+	// Append the certificate to the pool
+	if ok := certPool.AppendCertsFromPEM([]byte(certPEM)); !ok {
+		fmt.Println("Error adding cert to pool")
+		return
+	}
+
+	// Configure the HTTP transport
 	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{
+			RootCAs: certPool, // Use the cert pool
+		},
 	}
 
 	// Create a custom HTTP client using the custom Transport
@@ -103,8 +162,6 @@ func uploadHash(md5Hasher hash.Hash, tamperProofLocation string, storageDestinat
 	}
 
 	hashSum := md5Hasher.Sum(nil)
-
-	var ledgerUrl = tamperProofLocation
 
 	url := fmt.Sprintf("%s/app/transactions?api-version=0.1-preview&subLedgerId=%s", ledgerUrl, getStorageAccount(storageDestination))
 
@@ -152,9 +209,25 @@ func uploadHash(md5Hasher hash.Hash, tamperProofLocation string, storageDestinat
 
 func downloadHash(comparison md5Comparer, tamperProofLocation string, storageSource string) HashResult {
 
-	// Create a custom Transport with InsecureSkipVerify set to true
+	var ledgerUrl = tamperProofLocation
+
+	// Your PEM certificate as a string
+	certPEM := getIdentityCertificate(ledgerUrl)
+
+	// Create a new certificate pool
+	certPool := x509.NewCertPool()
+
+	// Append the certificate to the pool
+	if ok := certPool.AppendCertsFromPEM([]byte(certPEM)); !ok {
+		fmt.Println("Error adding cert to pool")
+		return HashResult{}
+	}
+
+	// Configure the HTTP transport
 	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{
+			RootCAs: certPool, // Use the cert pool
+		},
 	}
 
 	// Create a custom HTTP client using the custom Transport
@@ -167,8 +240,6 @@ func downloadHash(comparison md5Comparer, tamperProofLocation string, storageSou
 		"Content-Type":           "application/json",
 		"x-ms-client-request-id": "123456789",
 	}
-
-	var ledgerUrl = tamperProofLocation
 
 	url := fmt.Sprintf("%s/app/transactions?api-version=0.1-preview&subLedgerId=%s", ledgerUrl, getStorageAccount(storageSource))
 
