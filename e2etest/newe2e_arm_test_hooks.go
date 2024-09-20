@@ -36,8 +36,8 @@ func SetupArmClient(a Asserter) {
 
 	_, err = CommonARMResourceGroup.CreateOrUpdate(ARMResourceGroupCreateParams{
 		Location: "West US", // todo configurable
-		Tags: []string{
-			fmt.Sprintf("creation=%d", time.Now().UTC().Unix()),
+		Tags: map[string]string{
+			"creation": fmt.Sprintf("%d", time.Now().UTC().Unix()),
 		},
 	})
 	a.NoError("create resource group", err)
