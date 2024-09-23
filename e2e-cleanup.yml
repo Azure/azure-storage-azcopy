@@ -1,0 +1,16 @@
+schedules:
+- cron: "0 0 * * *"
+  displayName: "E2E cleanup (Nightly)"
+  branches:
+    include: [ "main" ]
+  always: true
+
+steps:
+- task: AzurePowerShell@5
+  displayName: Clean up E2E runs
+  inputs:
+    azureSubscription: 'azcopytestworkloadidentity'
+    ScriptType: 'FilePath'
+    ScriptPath: 'e2e-cleanup.ps1'
+    FailOnStandardError: true
+    pwsh: true
