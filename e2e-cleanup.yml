@@ -9,8 +9,9 @@ steps:
 - task: AzurePowerShell@5
   displayName: Clean up E2E runs
   inputs:
-    azureSubscription: 'azcopytestworkloadidentity'
+    azureSubscription: 'e2ecleanup'
     ScriptType: 'FilePath'
     ScriptPath: 'e2e-cleanup.ps1'
     FailOnStandardError: true
     pwsh: true
+    azurePowershellVersion: 'LatestVersion'
