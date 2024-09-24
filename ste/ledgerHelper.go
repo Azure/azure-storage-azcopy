@@ -68,17 +68,28 @@ func getLedgerAccessToken() string {
 
 func getIdentityCertificate(ledgerUrl string, client *http.Client) string {
 	parts := strings.Split(ledgerUrl, ".")
+	if len(parts) < 2 {
+		fmt.Println("Invalid URL format")
+		return ""
+	}
 	ledgerName := strings.TrimPrefix(parts[0], "https://")
 
 	identityURL := fmt.Sprintf("https://identity.confidential-ledger.core.azure.com/ledgerIdentity/%s", ledgerName)
 	response, err := client.Get(identityURL)
 	if err != nil {
-		return "Error making GET request:", err
+		return ""
 	}
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
-		return "Received non-200 response: %s\n", response.Status
+	var result map[string]interface{}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return ""
+	}
+
+	ledgerTlsCertificate, ok := result["ledgerTlsCertificate"].(string)
+	if !ok {
+		fmt.Println("Error: ledgerTlsCertificate not found in response")
+		return ""
 	}
 
 	return ledgerTlsCertificate
