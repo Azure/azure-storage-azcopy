@@ -1,9 +1,11 @@
 package e2etest
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var CommonARMClient *ARMClient
@@ -34,6 +36,9 @@ func SetupArmClient(a Asserter) {
 
 	_, err = CommonARMResourceGroup.CreateOrUpdate(ARMResourceGroupCreateParams{
 		Location: "West US", // todo configurable
+		Tags: map[string]string{
+			"creation": fmt.Sprintf("%d", time.Now().UTC().Unix()),
+		},
 	})
 	a.NoError("create resource group", err)
 }
