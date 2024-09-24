@@ -1,3 +1,5 @@
+Set-PSDebug -Trace 1
+
 $rgs = Get-AzResourceGroup -Name azcopy-newe2e-*
 
 $rmTarget = @()
