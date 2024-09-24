@@ -25,14 +25,15 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"hash"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -491,7 +492,9 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 	}
 
 	// Upload MD5 Hash to tamper proof storage
-	uploadHash(md5Hasher, jptm.TamperProofLocation(), jptm.Info().Destination)
+	if len(jptm.TamperProofLocation()) > 0 {
+		uploadHash(md5Hasher, jptm.TamperProofLocation(), jptm.Info().Destination)
+	}
 
 }
 

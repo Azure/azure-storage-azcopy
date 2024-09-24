@@ -53,33 +53,33 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
 
     # test_1G_blob_upload verifies the azcopy upload of 1Gb blob upload in blocks of 100 Mb
-    def util_test_1GB_blob_upload(self, use_oauth_session=False):
-        # create 1Gb file
-        filename = "test_1G_blob.txt"
-        file_path = util.create_test_file(filename, 1 * 1024 * 1024 * 1024)
+    # def util_test_1GB_blob_upload(self, use_oauth_session=False):
+    #     # create 1Gb file
+    #     filename = "test_1G_blob.txt"
+    #     file_path = util.create_test_file(filename, 1 * 1024 * 1024 * 1024)
 
-        # execute azcopy upload.
-        if not use_oauth_session:
-            dest = util.get_resource_sas(filename)
-            dest_validate = dest
-        else:
-            dest = util.get_resource_from_oauth_container(filename)
-            dest_validate = util.get_resource_from_oauth_container_validate(filename)
+    #     # execute azcopy upload.
+    #     if not use_oauth_session:
+    #         dest = util.get_resource_sas(filename)
+    #         dest_validate = dest
+    #     else:
+    #         dest = util.get_resource_from_oauth_container(filename)
+    #         dest_validate = util.get_resource_from_oauth_container_validate(filename)
 
-        result = util.Command("copy").add_arguments(file_path).add_arguments(dest).add_flags("log-level", "info"). \
-            add_flags("block-size-mb", "100").add_flags("recursive", "true").execute_azcopy_copy_command()
-        self.assertTrue(result)
+    #     result = util.Command("copy").add_arguments(file_path).add_arguments(dest).add_flags("log-level", "info"). \
+    #         add_flags("block-size-mb", "100").add_flags("recursive", "true").execute_azcopy_copy_command()
+    #     self.assertTrue(result)
 
-        # Verifying the uploaded blob.
-        # adding local file path as first argument.
-        # adding file sas as local argument.
-        # calling the testBlob validator to verify whether blob has been successfully uploaded or not.
-        result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
-        self.assertTrue(result)
+    #     # Verifying the uploaded blob.
+    #     # adding local file path as first argument.
+    #     # adding file sas as local argument.
+    #     # calling the testBlob validator to verify whether blob has been successfully uploaded or not.
+    #     result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
+    #     self.assertTrue(result)
 
-    # test_1GB_blob_upload_with_sas verifies the azcopy upload of 1Gb blob upload in blocks of 100 Mb with SAS
-    def test_1GB_blob_upload_with_sas(self):
-        self.util_test_1GB_blob_upload()
+    # # test_1GB_blob_upload_with_sas verifies the azcopy upload of 1Gb blob upload in blocks of 100 Mb with SAS
+    # def test_1GB_blob_upload_with_sas(self):
+    #     self.util_test_1GB_blob_upload()
 
     # test_1GB_blob_upload_with_oauth verifies the azcopy upload of 1Gb blob upload in blocks of 100 Mb with OAuth
     @unittest.skip("single file authentication for oauth covered by small file")

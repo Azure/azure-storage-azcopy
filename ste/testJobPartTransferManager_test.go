@@ -125,6 +125,10 @@ func (t *testJobPartTransferManager) ShouldPutMd5() bool {
 	panic("implement me")
 }
 
+func (t *testJobPartTransferManager) TamperProofLocation() string {
+	panic("implement me")
+}
+
 func (t *testJobPartTransferManager) MD5ValidationOption() common.HashValidationOption {
 	panic("implement me")
 }
