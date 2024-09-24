@@ -110,3 +110,4 @@ class Hash_Download_User_Scenarios(unittest.TestCase):
         # expected to fail since file was modified
         self.assertEquals(x.TransfersCompleted, "0")
         self.assertEquals(x.TransfersFailed, "1")
+        
