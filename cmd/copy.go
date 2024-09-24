@@ -1546,7 +1546,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+			AllowTrailingDot: cca.trailingDot.IsEnabled(),
 		}
 	}
 
@@ -1569,7 +1569,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.To() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
 			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File(),
+			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
 		}
 	}
 
