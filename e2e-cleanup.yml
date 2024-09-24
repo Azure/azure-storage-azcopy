@@ -1,3 +1,6 @@
+trigger: none
+pr: none
+
 schedules:
 - cron: "0 0 * * *"
   displayName: "E2E cleanup (Nightly)"
