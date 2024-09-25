@@ -5,10 +5,6 @@ variables:
 trigger:
   branches:
     include: [ 'main' ]
-
-pr:
-  branches:
-    include: [ 'main' ]
      
 jobs:
   - job: Build
