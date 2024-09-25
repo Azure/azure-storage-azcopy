@@ -1,0 +1,106 @@
+parameters:
+  - name: storage_account_name
+    type: string
+  - name: container_name
+    type: string
+  - name: orp_source_account_name
+    type: string
+  - name: orp_destination_account_name
+    type: string
+  - name: orp_source_container_name
+    type: string
+  - name: destination_container_name
+    type: string
+  - name: goos
+    type: string
+  - name: goarch
+    type: string
+  - name: cgo_enabled
+    type: string
+  - name: build_name
+    type: string
+  - name: azcopy_msi_app_id
+    type: string
+
+steps:
+  - task: PowerShell@2
+    displayName: "Run Scenarios"
+    inputs:
+      targetType: 'inline'
+      script: |
+        # Print "Building executable"
+        echo "Building executable"
+        
+        # Set environment variables
+        $build_name = '${{ parameters.build_name }}'
+        $env:GOOS = '${{ parameters.goos }}'
+        $env:GOARCH = '${{ parameters.goarch }}'
+        $env:AZCOPY_AUTO_LOGIN_TYPE = "MSI"
+        $env:AZCOPY_MSI_CLIENT_ID = '${{ parameters.azcopy_msi_app_id }}'
+        $env:CGO_ENABLED = '${{ parameters.cgo_enabled }}'
+
+        go build -cover -o $build_name
+
+        # Check if the executable was created
+        if (-Not (Test-Path "./$build_name")) {
+            Write-Error "Executable not found: $build_name"
+            exit 1
+        }
+        Write-Output "Executable built successfully: $build_name"
+
+        ######################################################## Scenario 1 ########################################################
+
+        # Right now we dont have this fix available in the older version of AzCopy. So, we are using the latest version of AzCopy to run the scenarios.
+        # We will update this workaround once the fix is available in the older version of AzCopy.
+
+        echo "Scenario 1: Test successful copying from BlobToPipe"
+
+        echo "Creating container '${{ parameters.container_name }}' in storage account '${{ parameters.storage_account_name }}'"
+        & "./$build_name" "make" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+
+        echo "Copy a test file from local to the created container"
+        echo "Hello, Azure!" > myfile.txt
+        & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}"
+
+        & "./$build_name" "cp" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt" "--from-to=BlobPipe" "--check-md5" "FailIfDifferentOrMissing" > filename
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Output "Successfully executed the scenario."
+        } else {
+            Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
+        }
+
+        # Perform cleanup
+        echo "Perform cleanup"
+        echo "Remove the test file from the container"
+        & "./$build_name" "rm" "https://${{ parameters.storage_account_name }}.blob.core.windows.net/${{ parameters.container_name }}/myfile.txt"
+        echo "Remove the container from the storage account"
+        & az storage container delete --name ${{ parameters.container_name }} --account-name ${{ parameters.storage_account_name }}
+
+        ######################################################## Scenario 2 ########################################################
+
+        # Test copying from Object Replication Policy source container to destination container
+        # Assign an object replication policy to a storage account. 
+        # Perform azcopy copy operation to copy the blob to another container.
+
+        echo "Scenario 2: Test copying from Object Replication Policy source container to destination container"
+
+        echo "Creating a test file named 'myfile.txt' and copying it to the source container '${{ parameters.orp_source_container_name }}' within the storage account '${{ parameters.orp_source_account_name }}', which has the ORP policy applied."
+        echo "Hello, Azure!" > myfile.txt
+        & "./$build_name" "cp" "myfile.txt" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}"
+
+        echo "Copy the test file from the source container to the destination container '${{ parameters.destination_container_name }}' in storage account '${{ parameters.orp_destination_account_name }}'."
+        & "./$build_name" "cp" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{parameters.orp_source_container_name}}" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}" --recursive
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Output "Successfully executed the scenario."
+        } else {
+            Write-Error "AzCopy command failed with exit code $LASTEXITCODE."
+        }
+
+        # Perform cleanup
+        echo "Perform cleanup"
+        echo "Remove the test file from the source and destination container"
+        & "./$build_name" "rm" "https://${{ parameters.orp_destination_account_name }}.blob.core.windows.net/${{parameters.destination_container_name}}/myfile.txt"
+        & "./$build_name" "rm" "https://${{ parameters.orp_source_account_name }}.blob.core.windows.net/${{ parameters.orp_source_container_name }}/myfile.txt"
+      displayName: "Run Scenarios"
