@@ -3,16 +3,10 @@ variables:
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.23.1'
 
 trigger:
-  branches:
-    include:
-      - dev
-      - main
+- main
 
 pr:
-  branches:
-    include:
-      - dev
-      - main
+- main
      
 jobs:
   - job: Build
