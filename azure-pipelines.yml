@@ -7,6 +7,7 @@ trigger:
 
 pr:
 - main
+- adreed/*
      
 jobs:
   - job: Build
