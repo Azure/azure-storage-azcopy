@@ -3,11 +3,12 @@ variables:
   AZCOPY_GOLANG_VERSION_COVERAGE: '1.23.1'
 
 trigger:
-- main
+  branches:
+    include: [ 'main' ]
 
 pr:
-- main
-- adreed/*
+  branches:
+    include: [ 'main' ]
      
 jobs:
   - job: Build
