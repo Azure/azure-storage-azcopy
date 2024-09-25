@@ -50,10 +50,11 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy   AzCopyVerb = "copy"
-	AzCopyVerbSync   AzCopyVerb = "sync"
-	AzCopyVerbRemove AzCopyVerb = "remove"
-	AzCopyVerbList   AzCopyVerb = "list"
+	AzCopyVerbCopy     AzCopyVerb = "copy"
+	AzCopyVerbSync     AzCopyVerb = "sync"
+	AzCopyVerbRemove   AzCopyVerb = "remove"
+	AzCopyVerbList     AzCopyVerb = "list"
+	AzCopyVerbJobsList AzCopyVerb = "jobs"
 )
 
 type AzCopyTarget struct {
@@ -90,7 +91,8 @@ func CreateAzCopyTarget(rm ResourceManager, authType ExplicitCredentialTypes, a 
 }
 
 type AzCopyCommand struct {
-	Verb AzCopyVerb
+	Verb           AzCopyVerb
+	PositionalArgs []string
 	// Passing a ResourceManager assumes SAS (or GCP/S3) auth is intended.
 	// Passing an AzCopyTarget will allow you to specify an exact credential type.
 	// When OAuth, S3, GCP, AcctKey, etc. the appropriate env flags should auto-populate.
@@ -250,6 +252,10 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(commandSpec.Verb)}
+		
+		for _, v := range commandSpec.PositionalArgs {
+			out = append(out, v)
+		}
 
 		for _, v := range commandSpec.Targets {
 			out = append(out, commandSpec.applyTargetAuth(a, v))
@@ -291,6 +297,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyParsedCopySyncRemoveStdout{}
 		case commandSpec.Verb == AzCopyVerbList:
 			out = &AzCopyParsedListStdout{}
+		case commandSpec.Verb == AzCopyVerbJobsList:
+			out = &AzCopyParsedJobsListStdout{}
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}
 		}

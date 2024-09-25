@@ -23,43 +23,46 @@
 package e2etest
 
 import (
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"golang.org/x/sys/unix"
-	"time"
 )
 
 type osScenarioHelper struct{}
 
 // set file attributes to test file
-//nolint
+// nolint
 func (osScenarioHelper) setAttributesForLocalFile() error {
 	panic("should never be called")
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) setAttributesForLocalFiles(c asserter, dirPath string, fileList []string, attrList []string) {
 	panic("should never be called")
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) getFileDates(c asserter, filePath string) (createdTime, lastWriteTime time.Time) {
 	panic("should never be called")
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) getFileAttrs(c asserter, filepath string) *uint32 {
 	var ret uint32
 	return &ret
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) getFileSDDLString(c asserter, filepath string) *string {
 	ret := ""
 	return &ret
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata string) {
 	panic("should never be called")
 }
@@ -81,7 +84,7 @@ func (osScenarioHelper) GetUnixStatAdapterForFile(c asserter, filepath string) c
 			&stat)
 
 		if err != nil && err != unix.ENOSYS { // catch if statx is unsupported
-			c.AssertNoErr(err, "for file " + filepath)
+			c.AssertNoErr(err, "for file "+filepath)
 		} else if err == nil {
 			return ste.StatxTAdapter(stat)
 		}
@@ -92,4 +95,11 @@ func (osScenarioHelper) GetUnixStatAdapterForFile(c asserter, filepath string) c
 	c.AssertNoErr(err)
 
 	return ste.StatTAdapter(stat)
+}
+
+func (osScenarioHelper) IsFileHidden(c asserter, filePath string) bool {
+	fileName := filepath.Base(filePath)
+	// On Unix-based systems, hidden files start with a dot
+	isHidden := strings.HasPrefix(fileName, ".")
+	return isHidden
 }
