@@ -843,6 +843,7 @@ stages:
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)/azcopy.exe
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_se_arm64.exe $(windows_se_arm64)/azcopy.exe
               cp NOTICE.txt $(windows_amd64)
               cp NOTICE.txt $(windows_arm64)
               cp NOTICE.txt $(windows_386)
