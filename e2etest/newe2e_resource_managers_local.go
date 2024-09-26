@@ -309,7 +309,10 @@ func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties 
 	a.HelperMarker().Helper()
 	stats, err := os.Stat(l.getWorkingPath())
 	a.NoError("failed to get stat", err)
-	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
+	var lmt *time.Time
+	if stats != nil {
+		lmt = PtrOf(stats.ModTime())
+	}
 	out := ObjectProperties{
 		LastModifiedTime: lmt,
 	}
