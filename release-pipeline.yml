@@ -1633,6 +1633,10 @@ stages:
                     # Ensure the azcopy executable has the correct permissions
                     icacls $azcopyPath
 
+                    $env:GOARCH = "arm64"
+                    $env:GOOS = "windows"
+                    $env:CGO_ENABLED = "0"
+
                     # Run azcopy --version and capture output
                     try {
                         $versionOutput = & $azcopyPath --version 2>&1
