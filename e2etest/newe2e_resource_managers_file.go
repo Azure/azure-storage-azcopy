@@ -85,6 +85,7 @@ func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
 func (s *FileServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(s.internalClient.URL())
 	base = s.internalAccount.ApplySAS(base, s.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -182,6 +183,7 @@ func (s *FileShareResourceManager) Level() cmd.LocationLevel {
 func (s *FileShareResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(s.internalClient.URL())
 	base = s.internalAccount.ApplySAS(base, s.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -286,13 +288,15 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 				}
 
 				out[fullPath] = ObjectProperties{
-					EntityType: common.EEntityType.Folder(),
-					Metadata:   resp.Metadata,
+					EntityType:       common.EEntityType.Folder(),
+					Metadata:         resp.Metadata,
+					LastModifiedTime: v.Properties.LastModified,
 					FileProperties: FileProperties{
 						FileAttributes:    v.Attributes,
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
+						LastModifiedTime:  v.Properties.LastModified,
 					},
 				}
 			}
@@ -322,12 +326,14 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 						contentType:        resp.ContentType,
 						contentMD5:         resp.ContentMD5,
 					},
-					Metadata: resp.Metadata,
+					Metadata:         resp.Metadata,
+					LastModifiedTime: v.Properties.LastModified,
 					FileProperties: FileProperties{
 						FileAttributes:    v.Attributes,
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
+						LastModifiedTime:  v.Properties.LastModified,
 					},
 				}
 			}
@@ -402,6 +408,7 @@ func (f *FileObjectResourceManager) Level() cmd.LocationLevel {
 func (f *FileObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(f.getFileClient().URL()) // restype doesn't matter here, same URL under the hood
 	base = f.internalAccount.ApplySAS(base, f.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -547,13 +554,15 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 		}
 
 		out = ObjectProperties{
-			EntityType: f.entityType, // It should be OK to just return entity type, getproperties should fail with the wrong restype
-			Metadata:   resp.Metadata,
+			EntityType:       f.entityType, // It should be OK to just return entity type, getproperties should fail with the wrong restype
+			Metadata:         resp.Metadata,
+			LastModifiedTime: resp.LastModified,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
+				LastModifiedTime:  resp.LastModified,
 			},
 		}
 	case common.EEntityType.File():
@@ -578,12 +587,14 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				contentType:        resp.ContentType,
 				contentMD5:         resp.ContentMD5,
 			},
-			Metadata: resp.Metadata,
+			Metadata:         resp.Metadata,
+			LastModifiedTime: resp.LastModified,
 			FileProperties: FileProperties{
 				FileAttributes:    resp.FileAttributes,
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
+				LastModifiedTime:  resp.LastModified,
 			},
 		}
 	default:

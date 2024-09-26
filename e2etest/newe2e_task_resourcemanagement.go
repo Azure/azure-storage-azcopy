@@ -1,13 +1,7 @@
 package e2etest
 
 import (
-	"crypto/md5"
-	"encoding/hex"
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"io"
-	"strings"
 )
 
 // ResourceTracker tracks resources

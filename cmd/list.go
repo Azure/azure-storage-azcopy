@@ -54,19 +54,20 @@ type rawListCmdArgs struct {
 type validProperty string
 
 const (
-	lastModifiedTime validProperty = "LastModifiedTime"
-	versionId        validProperty = "VersionId"
-	blobType         validProperty = "BlobType"
-	blobAccessTier   validProperty = "BlobAccessTier"
-	contentType      validProperty = "ContentType"
-	contentEncoding  validProperty = "ContentEncoding"
-	contentMD5       validProperty = "ContentMD5"
-	leaseState       validProperty = "LeaseState"
-	leaseDuration    validProperty = "LeaseDuration"
-	leaseStatus      validProperty = "LeaseStatus"
-	archiveStatus    validProperty = "ArchiveStatus"
+	LastModifiedTime validProperty = "LastModifiedTime"
+	VersionId        validProperty = "VersionId"
+	BlobType         validProperty = "BlobType"
+	BlobAccessTier   validProperty = "BlobAccessTier"
+	ContentType      validProperty = "ContentType"
+	ContentEncoding  validProperty = "ContentEncoding"
+	ContentMD5       validProperty = "ContentMD5"
+	LeaseState       validProperty = "LeaseState"
+	LeaseDuration    validProperty = "LeaseDuration"
+	LeaseStatus      validProperty = "LeaseStatus"
+	ArchiveStatus    validProperty = "ArchiveStatus"
 
-	versionIdTimeFormat = "2006-01-02T15:04:05.9999999Z"
+	versionIdTimeFormat    = "2006-01-02T15:04:05.9999999Z"
+	LastModifiedTimeFormat = "2006-01-02 15:04:05 +0000 GMT"
 )
 
 // containsProperty checks if the property array contains a valid property
@@ -81,8 +82,8 @@ func containsProperty(properties []validProperty, prop validProperty) bool {
 
 // validProperties returns an array of possible values for the validProperty const type.
 func validProperties() []validProperty {
-	return []validProperty{lastModifiedTime, versionId, blobType, blobAccessTier,
-		contentType, contentEncoding, contentMD5, leaseState, leaseDuration, leaseStatus, archiveStatus}
+	return []validProperty{LastModifiedTime, VersionId, BlobType, BlobAccessTier,
+		ContentType, ContentEncoding, ContentMD5, LeaseState, LeaseDuration, LeaseStatus, ArchiveStatus}
 }
 
 // validPropertiesString returns an array of valid properties in string array.
@@ -112,6 +113,12 @@ func (raw rawListCmdArgs) parseProperties() []validProperty {
 }
 
 func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
+	// set up the front end scanning logger
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger.OpenLog()
+	glcm.RegisterCloseFunc(func() {
+		azcopyScanningLogger.CloseLog()
+	})
 	cooked = cookedListCmdArgs{}
 	// the expected argument in input is the container sas / or path of virtual directory in the container.
 	// verifying the location type
@@ -187,12 +194,12 @@ func init() {
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
-				glcm.Error(err.Error())
+				glcm.Error(err.Error() + getErrorCodeUrl(err))
 			}
 		},
 	}
 
-  listContainerCmd.PersistentFlags().StringVar(&raw.location, "location", "", "Optionally specifies the location. For Example: Blob, File, BlobFS")
+	listContainerCmd.PersistentFlags().StringVar(&raw.location, "location", "", "Optionally specifies the location. For Example: Blob, File, BlobFS")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MachineReadable, "machine-readable", false, "False by default. Lists file sizes in bytes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.RunningTally, "running-tally", false, "False by default. Counts the total number of files and their sizes.")
 	listContainerCmd.PersistentFlags().BoolVar(&raw.MegaUnits, "mega-units", false, "False by default. Displays units in orders of 1000, not 1024.")
@@ -241,7 +248,7 @@ func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
 	}
 
 	// check if user wants to get version id
-	getVersionId := containsProperty(cooked.properties, versionId)
+	getVersionId := containsProperty(cooked.properties, VersionId)
 
 	traverser, err := InitResourceTraverser(source, cooked.location, &ctx, &credentialInfo, common.ESymlinkHandlingType.Skip(), nil, true, true, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, nil, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), common.LogNone, common.CpkOptions{}, nil, false, cooked.trailingDot, nil, nil, getVersionId)
 	if err != nil {
@@ -368,37 +375,37 @@ func (cooked cookedListCmdArgs) newListObject(object StoredObject, level Locatio
 	for _, property := range cooked.properties {
 		propertyStr := string(property)
 		switch property {
-		case lastModifiedTime:
+		case LastModifiedTime:
 			lo.LastModifiedTime = to.Ptr(object.lastModifiedTime)
 			builder.WriteString(propertyStr + ": " + lo.LastModifiedTime.String() + "; ")
-		case versionId:
+		case VersionId:
 			lo.VersionId = object.blobVersionID
 			builder.WriteString(propertyStr + ": " + lo.VersionId + "; ")
-		case blobType:
+		case BlobType:
 			lo.BlobType = object.blobType
 			builder.WriteString(propertyStr + ": " + string(lo.BlobType) + "; ")
-		case blobAccessTier:
+		case BlobAccessTier:
 			lo.BlobAccessTier = object.blobAccessTier
 			builder.WriteString(propertyStr + ": " + string(lo.BlobAccessTier) + "; ")
-		case contentType:
+		case ContentType:
 			lo.ContentType = object.contentType
 			builder.WriteString(propertyStr + ": " + lo.ContentType + "; ")
-		case contentEncoding:
+		case ContentEncoding:
 			lo.ContentEncoding = object.contentEncoding
 			builder.WriteString(propertyStr + ": " + lo.ContentEncoding + "; ")
-		case contentMD5:
+		case ContentMD5:
 			lo.ContentMD5 = object.md5
 			builder.WriteString(propertyStr + ": " + base64.StdEncoding.EncodeToString(lo.ContentMD5) + "; ")
-		case leaseState:
+		case LeaseState:
 			lo.LeaseState = object.leaseState
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseState) + "; ")
-		case leaseStatus:
+		case LeaseStatus:
 			lo.LeaseStatus = object.leaseStatus
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseStatus) + "; ")
-		case leaseDuration:
+		case LeaseDuration:
 			lo.LeaseDuration = object.leaseDuration
 			builder.WriteString(propertyStr + ": " + string(lo.LeaseDuration) + "; ")
-		case archiveStatus:
+		case ArchiveStatus:
 			lo.ArchiveStatus = object.archiveStatus
 			builder.WriteString(propertyStr + ": " + string(lo.ArchiveStatus) + "; ")
 		}

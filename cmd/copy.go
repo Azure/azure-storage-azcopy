@@ -1319,7 +1319,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 		blobClient, err = blockblob.NewClientWithNoCredential(u.String(), options)
 	}
 	if err != nil {
-		return fmt.Errorf("fatal: Could not create client: " + err.Error())
+		return fmt.Errorf("fatal: Could not create client: %s", err.Error())
 	}
 
 	// step 3: start download
@@ -2027,7 +2027,7 @@ func init() {
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("failed to perform copy command due to error: " + err.Error())
+				glcm.Error("failed to perform copy command due to error: " + err.Error() + getErrorCodeUrl(err))
 			}
 
 			if cooked.dryrunMode {

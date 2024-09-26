@@ -28,15 +28,26 @@ func SetupOAuthCache(a Asserter) {
 	staticLoginInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
 	useStatic := GlobalConfig.StaticResources()
 
-	cred, err := azidentity.NewClientSecretCredential(
-		common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.TenantID),
-		common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.ApplicationID),
-		common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.ClientSecret),
-		nil, // Hopefully the defaults should be OK?
-	)
+	var cred azcore.TokenCredential
+	var err error
+	var tenantId string
+	if dynamicLoginInfo.Environment == AzurePipeline {
+		tenantId = dynamicLoginInfo.DynamicOAuth.Workload.TenantId
+		cred, err = azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+			TenantID: tenantId,
+		})
+	} else {
+		tenantId = common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicOAuth.SPNSecret.TenantID)
+		cred, err = azidentity.NewClientSecretCredential(
+			tenantId,
+			common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID),
+			common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret),
+			nil, // Hopefully the defaults should be OK?
+		)
+	}
 	a.NoError("create credentials", err)
 
-	PrimaryOAuthCache = NewOAuthCache(cred, GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.TenantID)
+	PrimaryOAuthCache = NewOAuthCache(cred, tenantId)
 }
 
 /*

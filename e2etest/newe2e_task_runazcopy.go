@@ -52,10 +52,11 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy   AzCopyVerb = "copy"
-	AzCopyVerbSync   AzCopyVerb = "sync"
-	AzCopyVerbRemove AzCopyVerb = "remove"
-	AzCopyVerbList   AzCopyVerb = "list"
+	AzCopyVerbCopy     AzCopyVerb = "copy"
+	AzCopyVerbSync     AzCopyVerb = "sync"
+	AzCopyVerbRemove   AzCopyVerb = "remove"
+	AzCopyVerbList     AzCopyVerb = "list"
+	AzCopyVerbJobsList AzCopyVerb = "jobs"
 )
 
 type AzCopyTarget struct {
@@ -71,6 +72,8 @@ type CreateAzCopyTargetOptions struct {
 	// SASTokenOptions expects a GenericSignatureValues, which can contain account signatures, or a service signature.
 	SASTokenOptions GenericSignatureValues
 	Scheme          string
+	// The wildcard string to append to the end of a resource URI.
+	Wildcard string
 }
 
 func CreateAzCopyTarget(rm ResourceManager, authType ExplicitCredentialTypes, a Asserter, opts ...CreateAzCopyTargetOptions) AzCopyTarget {
@@ -90,7 +93,8 @@ func CreateAzCopyTarget(rm ResourceManager, authType ExplicitCredentialTypes, a 
 }
 
 type AzCopyCommand struct {
-	Verb AzCopyVerb
+	Verb           AzCopyVerb
+	PositionalArgs []string
 	// Passing a ResourceManager assumes SAS (or GCP/S3) auth is intended.
 	// Passing an AzCopyTarget will allow you to specify an exact credential type.
 	// When OAuth, S3, GCP, AcctKey, etc. the appropriate env flags should auto-populate.
@@ -113,6 +117,10 @@ type AzCopyEnvironment struct {
 	AutoLoginTenantID            *string `env:"AZCOPY_TENANT_ID"`
 	ServicePrincipalAppID        *string `env:"AZCOPY_SPA_APPLICATION_ID"`
 	ServicePrincipalClientSecret *string `env:"AZCOPY_SPA_CLIENT_SECRET"`
+
+	AzureFederatedTokenFile *string `env:"AZURE_FEDERATED_TOKEN_FILE"`
+	AzureTenantId           *string `env:"AZURE_TENANT_ID"`
+	AzureClientId           *string `env:"AZURE_CLIENT_ID"`
 
 	InheritEnvironment bool
 }
@@ -160,6 +168,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 		opts.AzureOpts.SASValues = tgt.Opts.SASTokenOptions
 		opts.RemoteOpts.Scheme = tgt.Opts.Scheme
+		opts.Wildcard = tgt.Opts.Wildcard
 	} else if target.Location() == common.ELocation.S3() {
 		intendedAuthType = EExplicitCredentialType.S3()
 	} else if target.Location() == common.ELocation.GCP() {
@@ -168,7 +177,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 	switch intendedAuthType {
 	case EExplicitCredentialType.PublicAuth(), EExplicitCredentialType.None():
-		return target.URI() // no SAS, no nothing.
+		return target.URI(opts) // no SAS, no nothing.
 	case EExplicitCredentialType.SASToken():
 		opts.AzureOpts.WithSAS = true
 		return target.URI(opts)
@@ -177,9 +186,8 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 		// special testing may be occurring, and this may be indicated to just get a SAS-less URI.
 		// Alternatively, we may have already configured it here once before.
 		if c.Environment.AutoLoginMode == nil && c.Environment.ServicePrincipalAppID == nil && c.Environment.ServicePrincipalClientSecret == nil && c.Environment.AutoLoginTenantID == nil {
-			c.Environment.AutoLoginMode = pointerTo("SPN") // TODO! There are two other modes for this. These probably can't apply in automated scenarios, but it's worth having tests for that we run before every release! WI#26625161
-
 			if GlobalConfig.StaticResources() {
+				c.Environment.AutoLoginMode = pointerTo("SPN")
 				oAuthInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
 				a.AssertNow("At least NEW_E2E_STATIC_APPLICATION_ID and NEW_E2E_STATIC_CLIENT_SECRET must be specified to use OAuth.", Empty{true}, oAuthInfo.ApplicationID, oAuthInfo.ClientSecret)
 
@@ -189,16 +197,45 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 			} else {
 				// oauth should reliably work
 				oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-				c.Environment.ServicePrincipalAppID = &oAuthInfo.ApplicationID
-				c.Environment.ServicePrincipalClientSecret = &oAuthInfo.ClientSecret
-				c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
+				if oAuthInfo.Environment == AzurePipeline {
+					c.Environment.InheritEnvironment = true
+					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.Workload.TenantId != "", &oAuthInfo.DynamicOAuth.Workload.TenantId, nil)
+					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
+				} else {
+					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.SPN().String())
+					c.Environment.ServicePrincipalAppID = &oAuthInfo.DynamicOAuth.SPNSecret.ApplicationID
+					c.Environment.ServicePrincipalClientSecret = &oAuthInfo.DynamicOAuth.SPNSecret.ClientSecret
+					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.SPNSecret.TenantID != "", &oAuthInfo.DynamicOAuth.SPNSecret.TenantID, nil)
+				}
+			}
+		} else if c.Environment.AutoLoginMode != nil {
+			oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
+			if strings.ToLower(*c.Environment.AutoLoginMode) == common.EAutoLoginType.Workload().String() {
+				c.Environment.InheritEnvironment = true
+				// Get the value of the AZURE_FEDERATED_TOKEN environment variable
+				token := oAuthInfo.DynamicOAuth.Workload.FederatedToken
+				a.AssertNow("idToken must be specified to authenticate with workload identity", Empty{Invert: true}, token)
+				// Write the token to a temporary file
+				// Create a temporary file to store the token
+				file, err := os.CreateTemp("", "azure_federated_token.txt")
+				a.AssertNow("Error creating temporary file", IsNil{}, err)
+				defer file.Close()
+
+				// Write the token to the temporary file
+				_, err = file.WriteString(token)
+				a.AssertNow("Error writing to temporary file", IsNil{}, err)
+
+				// Set the AZURE_FEDERATED_TOKEN_FILE environment variable
+				c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
+				c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicOAuth.Workload.TenantId)
+				c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicOAuth.Workload.ClientId)
 			}
 		}
 
-		return target.URI() // Generate like public
+		return target.URI(opts) // Generate like public
 	default:
 		a.Error("unsupported credential type")
-		return target.URI()
+		return target.URI(opts)
 	}
 }
 
@@ -218,6 +255,10 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(commandSpec.Verb)}
+		
+		for _, v := range commandSpec.PositionalArgs {
+			out = append(out, v)
+		}
 
 		for _, v := range commandSpec.Targets {
 			out = append(out, commandSpec.applyTargetAuth(a, v))
@@ -263,6 +304,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			}
 		case commandSpec.Verb == AzCopyVerbList:
 			out = &AzCopyParsedListStdout{}
+		case commandSpec.Verb == AzCopyVerbJobsList:
+			out = &AzCopyParsedJobsListStdout{}
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}
 		}
