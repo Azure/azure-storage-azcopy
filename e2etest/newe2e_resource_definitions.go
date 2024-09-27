@@ -32,12 +32,14 @@ type ResourceDefinitionService struct {
 }
 
 func (r ResourceDefinitionService) GenerateAdoptiveParent(a Asserter) ResourceDefinition {
+	a.HelperMarker().Helper()
 	a.Error("Cannot generate account definition (yet)")
 
 	return nil
 }
 
 func (r ResourceDefinitionService) MatchAdoptiveChild(a Asserter, target ResourceManager) (ResourceManager, ResourceDefinition) {
+	a.HelperMarker().Helper()
 	targetSvc, ok := target.(ServiceResourceManager)
 	a.AssertNow("adoptive parent definitions must match the level of the target they're finding a child for", Equal{}, ok, true)
 	a.AssertNow("adoptive parent definitions can only have one container", Equal{}, len(r.Containers), 1)
@@ -50,6 +52,7 @@ func (r ResourceDefinitionService) MatchAdoptiveChild(a Asserter, target Resourc
 }
 
 func (r ResourceDefinitionService) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 	serviceManager := target.(ServiceResourceManager)
 
@@ -97,6 +100,7 @@ func (r ResourceDefinitionContainer) GenerateAdoptiveParent(a Asserter) Resource
 }
 
 func (r ResourceDefinitionContainer) MatchAdoptiveChild(a Asserter, target ResourceManager) (ResourceManager, ResourceDefinition) {
+	a.HelperMarker().Helper()
 	targetCont, ok := target.(ContainerResourceManager)
 
 	objs := r.Objects.Flatten()
@@ -111,6 +115,7 @@ func (r ResourceDefinitionContainer) MatchAdoptiveChild(a Asserter, target Resou
 }
 
 func (r ResourceDefinitionContainer) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 	containerManager := target.(ContainerResourceManager)
 
@@ -156,6 +161,56 @@ type ResourceDefinitionObject struct {
 	Size string
 }
 
+func (r ResourceDefinitionObject) Clone() ResourceDefinitionObject {
+	var md5 []byte
+	if r.HTTPHeaders.contentMD5 != nil {
+		md5 = make([]byte, len(r.HTTPHeaders.contentMD5))
+		copy(md5, r.HTTPHeaders.contentMD5)
+	}
+
+	var body ObjectContentContainer
+	if r.Body != nil {
+		body = r.Body.Clone()
+	}
+
+	return ResourceDefinitionObject{
+		ObjectName: ClonePointer(r.ObjectName),
+		ObjectProperties: ObjectProperties{
+			EntityType: r.EntityType,
+			HTTPHeaders: contentHeaders{
+				cacheControl:       ClonePointer(r.HTTPHeaders.cacheControl),
+				contentDisposition: ClonePointer(r.HTTPHeaders.contentDisposition),
+				contentEncoding:    ClonePointer(r.HTTPHeaders.contentEncoding),
+				contentLanguage:    ClonePointer(r.HTTPHeaders.contentLanguage),
+				contentType:        ClonePointer(r.HTTPHeaders.contentType),
+				contentMD5:         md5,
+			},
+			Metadata: r.Metadata.Clone(),
+			BlobProperties: BlobProperties{
+				Type:                ClonePointer(r.BlobProperties.Type),
+				Tags:                CloneMap(r.BlobProperties.Tags),
+				BlockBlobAccessTier: ClonePointer(r.BlobProperties.BlockBlobAccessTier),
+				PageBlobAccessTier:  ClonePointer(r.BlobProperties.PageBlobAccessTier),
+				VersionId:           ClonePointer(r.BlobProperties.VersionId),
+			},
+			BlobFSProperties: BlobFSProperties{
+				Permissions: ClonePointer(r.BlobFSProperties.Permissions),
+				Owner:       ClonePointer(r.BlobFSProperties.Owner),
+				Group:       ClonePointer(r.BlobFSProperties.Group),
+				ACL:         ClonePointer(r.BlobFSProperties.ACL),
+			},
+			FileProperties: FileProperties{
+				FileAttributes:    ClonePointer(r.FileProperties.FileAttributes),
+				FileCreationTime:  ClonePointer(r.FileProperties.FileCreationTime),
+				FileLastWriteTime: ClonePointer(r.FileProperties.FileLastWriteTime),
+				FilePermissions:   ClonePointer(r.FileProperties.FilePermissions),
+			},
+		},
+		Body:              body,
+		ObjectShouldExist: ClonePointer(r.ObjectShouldExist),
+	}
+}
+
 func (r ResourceDefinitionObject) GenerateAdoptiveParent(a Asserter) ResourceDefinition {
 	oName := DerefOrDefault(r.ObjectName, uuid.NewString())
 
@@ -167,11 +222,13 @@ func (r ResourceDefinitionObject) GenerateAdoptiveParent(a Asserter) ResourceDef
 }
 
 func (r ResourceDefinitionObject) MatchAdoptiveChild(a Asserter, target ResourceManager) (ResourceManager, ResourceDefinition) {
+	a.HelperMarker().Helper()
 	a.Error("objects have no semantic children")
 	panic("sanity check: error should catch this")
 }
 
 func (r ResourceDefinitionObject) ApplyDefinition(a Asserter, target ResourceManager, applicationFunctions map[cmd.LocationLevel]func(Asserter, ResourceManager, ResourceDefinition)) {
+	a.HelperMarker().Helper()
 	a.AssertNow("target must match level", Equal{}, target.Level(), r.DefinitionTarget())
 
 	// Run the application function for containers
