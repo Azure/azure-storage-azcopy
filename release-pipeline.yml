@@ -963,10 +963,10 @@ stages:
             continueOnError: true
 
           - task: ArchiveFiles@2
-            displayName: 'Archive Windows 32 bit Build'
+            displayName: 'Archive Windows 32 bit GRPC Build'
             inputs:
-              rootFolderOrFile: '$(windows_386)'
-              archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
+              rootFolderOrFile: '$(windows_grpc_386)'
+              archiveFile: '$(archives)/azcopy_windows_grpc_386_$(azcopy_version).zip'
             continueOnError: true
 
           - script: |
