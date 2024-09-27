@@ -11,6 +11,7 @@ var _ AzCopyStdout = &AzCopyParsedStdout{}
 var _ AzCopyStdout = &AzCopyParsedListStdout{}
 var _ AzCopyStdout = &AzCopyParsedCopySyncRemoveStdout{}
 var _ AzCopyStdout = &AzCopyParsedDryrunStdout{}
+var _ AzCopyStdout = &AzCopyParsedJobsListStdout{}
 
 // ManySubscriberChannel is intended to reproduce the effects of .NET's events.
 // This allows us to *partially* answer the question of how we want to handle testing of prompting in the New E2E framework.
@@ -151,6 +152,9 @@ type AzCopyParsedCopySyncRemoveStdout struct {
 	AzCopyParsedStdout
 	listenChan chan<- common.JsonOutputTemplate
 
+	JobPlanFolder string
+	LogFolder     string
+  
 	InitMsg     common.InitMsgJsonTemplate
 	FinalStatus common.ListJobSummaryResponse
 }
@@ -240,4 +244,27 @@ func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
 	}
 
 	return d.AzCopyRawStdout.Write(p)
+}
+
+type AzCopyParsedJobsListStdout struct {
+	AzCopyParsedStdout
+	listenChan chan<- common.JsonOutputTemplate
+	JobsCount  int
+}
+
+func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
+	if a.listenChan == nil {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
+			if line.MessageType == common.EOutputMessageType.EndOfJob().String() {
+				var tx common.ListJobsResponse
+				err = json.Unmarshal([]byte(line.MessageContent), &tx)
+				if err != nil {
+					return
+				}
+
+				a.JobsCount = len(tx.JobIDDetails)
+			}
+		})
+	}
+	return a.AzCopyParsedStdout.Write(p)
 }

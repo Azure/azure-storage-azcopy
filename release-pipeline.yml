@@ -1629,7 +1629,46 @@ stages:
                 }
             displayName: 'Extract Files and Run Version and Help Command on Windows'
        # TestArtifacts ends here
+      
+      - job: Set_10
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Debian-12_amd64:
+              agentName: "blobfuse-debian-12"
+        pool:
+            name: "azcopy-debian-pool"
+            demands:
+              - ImageOverride -equals $(AgentName)
+              
+        steps:
+          - checkout: none
 
+          - script: |
+              sudo apt update
+              sudo apt --fix-broken install
+              ldd --version
+            displayName: "GLIBC Version"
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-linux-signed'
+              downloadPath: '$(System.DefaultWorkingDirectory)'
+              itemPattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
+
+          - script: |
+              sudo dpkg --info azcopy-*x86_64.deb
+              sudo dpkg -i azcopy-*x86_64.deb
+              sudo apt-get install build-essential -y
+            displayName: 'Install deb Package'
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+
+          - script: | 
+              azcopy --version
+              azcopy --help
+            displayName: 'Check Version and Help'
+      
   - stage: ReleaseToContainer
     dependsOn: TestArtifacts
     condition: succeeded('TestArtifacts')

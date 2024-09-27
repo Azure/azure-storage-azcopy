@@ -2,9 +2,10 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -142,8 +143,12 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 
 // CommandString returns the command string given by user when job was created
 func (jpph *JobPartPlanHeader) CommandString() string {
-	data := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph)) // Address of Job Part Plan + Command String Length
-	return unsafe.String((*byte)(data), int(jpph.CommandStringLength))
+	// Calculate the start address of the command string
+	start := uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph)
+
+	// Create a slice from the calculated start address
+	commandSlice := unsafe.Slice((*byte)(unsafe.Pointer(start)), int(jpph.CommandStringLength))
+	return string(commandSlice)
 }
 
 func (jpph *JobPartPlanHeader) TransferSrcDstRelatives(transferIndex uint32) (relSource, relDest string) {

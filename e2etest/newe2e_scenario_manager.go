@@ -67,12 +67,16 @@ func (sm *ScenarioManager) RunScenario() {
 	for len(sm.varStack) > 0 {
 		svm := sm.varStack[len(sm.varStack)-1] // *pop*!
 		sm.varStack = sm.varStack[:len(sm.varStack)-1]
+		panicked := false
+		var panicError any
+		var panicStack []byte
 
 		func() {
 			defer func() {
 				if err := recover(); err != nil {
-					sm.testingT.Logf("Variation %s dryrun panicked: %v\n%s", svm.VariationName(), err, string(debug.Stack()))
-					svm.InvalidateScenario()
+					panicError = err
+					panicStack = debug.Stack()
+					panicked = true
 				}
 			}()
 
@@ -84,12 +88,21 @@ func (sm *ScenarioManager) RunScenario() {
 				svm.t = t
 				svm.callcounts = make(map[string]uint)
 
+				if panicked {
+					t.Logf("Variation %s dryrun panicked: %v;\n%v", svm.VariationName(), panicError, string(panicStack))
+					t.FailNow()
+				}
+
 				t.Parallel()
-				t.Cleanup(func() {
+				svm.Cleanup(func(a ScenarioAsserter) {
 					svm.DeleteCreatedResources() // clean up after ourselves!
 				})
 
 				sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
+
+				if svm.isInvalid {
+					t.Fail() // If FailNow hasn't already been called, we should fail.
+				}
 			})
 		}
 	}
