@@ -273,12 +273,6 @@ func (u *blobFSSenderBase) SetFolderProperties() error {
 
 func (u *blobFSSenderBase) DirUrlToString() string {
 	directoryURL := u.getDirectoryClient().DFSURL()
-	//rawURL, err := url.Parse(directoryURL)
-	//common.PanicIfErr(err)
-	//// To avoid encoding/decoding
-	//rawURL.RawPath = ""
-	//// To avoid SAS token
-	//rawURL.RawQuery = ""
 
 	parts, err := datalakesas.ParseURL(directoryURL)
 	common.PanicIfErr(err)
