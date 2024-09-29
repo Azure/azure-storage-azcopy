@@ -170,7 +170,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 			})
 
 		if err != nil {
-			c.jptm.FailActiveSend("Put Blob from URL", err)
+			c.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Committing block list (with tags)", "Committing block list"), err)
 			return
 		}
 
@@ -178,7 +178,7 @@ func (c *urlToBlockBlobCopier) generateStartPutBlobFromURL(id common.ChunkID, bl
 
 		if setTags {
 			if _, err := c.destBlockBlobClient.SetTags(c.jptm.Context(), c.blobTagsToApply, nil); err != nil {
-				c.jptm.Log(common.LogWarning, err.Error())
+				c.jptm.FailActiveSend("Set blob tags", err)
 			}
 		}
 	})
