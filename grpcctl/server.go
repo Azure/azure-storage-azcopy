@@ -108,7 +108,7 @@ func (s *Server) InjectToken(ctx context.Context, tok *internal.Token) (*interna
 		if JobLog != nil {
 			JobLog("Received a pre-expired OAuth token via GRPC")
 		}
-		return &internal.EmptyReply{}, fmt.Errorf("token has expired before it was received (now: %v live: %v exp: %v), ")
+		return &internal.EmptyReply{}, fmt.Errorf("token has expired before it was received (now: %v live: %v exp: %v)", time.Now(), ev.Live, ev.Expiry)
 	}
 
 	// Fire events
