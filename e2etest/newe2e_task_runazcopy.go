@@ -1,14 +1,17 @@
 package e2etest
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime/debug"
 	"strings"
 )
 
@@ -241,6 +244,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	if a.Dryrun() {
 		return nil, &AzCopyJobPlan{}
 	}
+	a.HelperMarker().Helper()
 	var flagMap map[string]string
 	var envMap map[string]string
 
@@ -293,7 +297,11 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		case strings.EqualFold(flagMap["dryrun"], "true"): //  Dryrun has its own special sort of output
 			out = &AzCopyParsedDryrunStdout{}
 		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
-			out = &AzCopyParsedCopySyncRemoveStdout{}
+
+			out = &AzCopyParsedCopySyncRemoveStdout{
+				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
+				LogFolder:     *commandSpec.Environment.LogLocation,
+			}
 		case commandSpec.Verb == AzCopyVerbList:
 			out = &AzCopyParsedListStdout{}
 		case commandSpec.Verb == AzCopyVerbJobsList:
@@ -302,12 +310,15 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyRawStdout{}
 		}
 	}
+
+	stderr := &bytes.Buffer{}
 	command := exec.Cmd{
 		Path: GlobalConfig.AzCopyExecutableConfig.ExecutablePath,
 		Args: args,
 		Env:  env,
 
 		Stdout: out, // todo
+		Stderr: stderr,
 	}
 	in, err := command.StdinPipe()
 	a.NoError("get stdin pipe", err)
@@ -326,18 +337,22 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		0, command.ProcessState.ExitCode())
 
 	a.Cleanup(func(a ScenarioAsserter) {
-		if stdout, ok := out.(*AzCopyParsedCopySyncRemoveStdout); ok {
-			UploadLogs(a, stdout, DerefOrZero(commandSpec.Environment.LogLocation))
-			_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
-		}
+		UploadLogs(a, out, stderr, DerefOrZero(commandSpec.Environment.LogLocation))
+		_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
 	})
 
 	return out, &AzCopyJobPlan{}
 }
 
-func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, logDir string) {
-	logPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
-	if logPath == "" || !a.Failed() {
+func UploadLogs(a ScenarioAsserter, stdout AzCopyStdout, stderr *bytes.Buffer, logDir string) {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("Log cleanup failed", err, "\n", string(debug.Stack()))
+		}
+	}()
+
+	logDropPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
+	if logDropPath == "" || !a.Failed() {
 		return
 	}
 
@@ -345,8 +360,11 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, lo
 	files, err := os.ReadDir(logDir)
 	a.NoError("Failed to read log dir", err)
 	jobId := ""
-	if stdout.InitMsg.JobID != "" {
-		jobId = stdout.InitMsg.JobID
+
+	if jobStdout, ok := stdout.(*AzCopyParsedCopySyncRemoveStdout); ok {
+		if jobStdout.InitMsg.JobID != "" {
+			jobId = jobStdout.InitMsg.JobID
+		}
 	} else {
 		for _, file := range files { // first, find the job ID
 			if strings.HasSuffix(file.Name(), ".log") {
@@ -356,8 +374,13 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, lo
 		}
 	}
 
+	if jobId == "" {
+		// If we still don't have a job ID, let's make one up. Maybe the job never started, or this isn't a copy/sync/remove job anyway.
+		jobId = uuid.NewString()
+	}
+
 	// Create the destination log directory
-	destLogDir := filepath.Join(logPath, jobId)
+	destLogDir := filepath.Join(logDropPath, jobId)
 	err = os.MkdirAll(destLogDir, os.ModePerm|os.ModeDir)
 	a.NoError("Failed to create log dir", err)
 
@@ -394,6 +417,24 @@ func UploadLogs(a ScenarioAsserter, stdout *AzCopyParsedCopySyncRemoveStdout, lo
 		return err
 	})
 	a.NoError("Failed to copy log files", err)
+
+	// Write stdout to the folder instead of the job log
+	f, err := os.OpenFile(filepath.Join(destLogDir, "stdout.txt"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
+	a.NoError("Failed to create stdout file", err)
+	_, err = f.WriteString(stdout.String())
+	a.NoError("Failed to write stdout file", err)
+	err = f.Close()
+	a.NoError("Failed to close stdout file", err)
+
+	// If stderr is non-zero, output that too!
+	if stderr != nil && stderr.Len() > 0 {
+		f, err := os.OpenFile(filepath.Join(destLogDir, "stderr.txt"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
+		a.NoError("Failed to create stdout file", err)
+		_, err = stderr.WriteTo(f)
+		a.NoError("Failed to write stdout file", err)
+		err = f.Close()
+		a.NoError("Failed to close stdout file", err)
+	}
 
 	a.Log("Uploaded failed run logs for job %s", jobId)
 }

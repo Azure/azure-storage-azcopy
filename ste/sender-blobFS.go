@@ -23,7 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
-	"net/url"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"strings"
 	"time"
 
@@ -273,13 +273,18 @@ func (u *blobFSSenderBase) SetFolderProperties() error {
 
 func (u *blobFSSenderBase) DirUrlToString() string {
 	directoryURL := u.getDirectoryClient().DFSURL()
-	rawURL, err := url.Parse(directoryURL)
+
+	parts, err := datalakesas.ParseURL(directoryURL)
 	common.PanicIfErr(err)
-	// To avoid encoding/decoding
-	rawURL.RawPath = ""
-	// To avoid SAS token
-	rawURL.RawQuery = ""
-	return rawURL.String()
+
+	parts.SAS = datalakesas.QueryParameters{}
+	parts.UnparsedParams = ""
+
+	if parts.PathName == "/" {
+		parts.PathName = ""
+	}
+
+	return parts.String()
 }
 
 func (u *blobFSSenderBase) SendSymlink(linkData string) error {

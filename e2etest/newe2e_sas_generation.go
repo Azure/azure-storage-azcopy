@@ -77,8 +77,9 @@ func (vals GenericServiceSignatureValues) withDefaults() GenericServiceSignature
 	out := vals
 
 	SetIfZero(&out.Protocol, blobsas.ProtocolHTTPS)
-	SetIfZero(&out.StartTime, time.Now().Add(-time.Minute))
-	SetIfZero(&out.ExpiryTime, out.StartTime.Add(time.Hour*24))
+	//time.Now().Add()
+	SetIfZero(&out.StartTime, time.Now().UTC().Add(-time.Minute*30))
+	SetIfZero(&out.ExpiryTime, time.Now().UTC().Add(time.Minute*30))
 	SetIfZero(&out.Permissions, (&blobsas.ContainerPermissions{
 		Read: true, Add: true, Create: true, Write: true, Delete: true, List: true,
 	}).String())
@@ -115,6 +116,8 @@ func (vals GenericServiceSignatureValues) AsBlob() BlobSignatureValues {
 
 func (vals GenericServiceSignatureValues) AsFile() FileSignatureValues {
 	s := vals.withDefaults()
+
+	s.Permissions = strings.ReplaceAll(s.Permissions, "a", "")
 
 	return &filesas.SignatureValues{
 		Version:            s.Version,
@@ -179,8 +182,8 @@ func (vals GenericAccountSignatureValues) withDefaults() GenericAccountSignature
 	out := vals
 
 	SetIfZero(&out.Protocol, blobsas.ProtocolHTTPS)
-	SetIfZero(&out.StartTime, time.Now())
-	SetIfZero(&out.ExpiryTime, out.StartTime.Add(time.Hour*24))
+	SetIfZero(&out.StartTime, time.Now().UTC().Add(-time.Minute*30))
+	SetIfZero(&out.ExpiryTime, time.Now().UTC().Add(time.Minute*30))
 	SetIfZero(&out.Permissions, (&blobsas.AccountPermissions{
 		Read: true, Add: true, Create: true, Write: true, Delete: true, List: true,
 	}).String())
