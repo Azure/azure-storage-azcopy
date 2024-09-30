@@ -1794,30 +1794,30 @@ stages:
 
   - ${{ if eq(parameters.build_and_push_docker_image, true) }}:
     - stage: CreateAndReleaseDockerImage
-        dependsOn: TestArtifacts
-        condition: succeeded('TestArtifacts')
-        jobs:
-          - job: BuildAndPushDockerImage
-            strategy:
-              matrix:
-                Ubuntu_amd64:
-                  agentName: "blobfuse-ubuntu22"
-                  vmImage: 'Ubuntu-22.04'
-                  container: 'test-cnt-ubn-22'
-            pool:
-              vmImage: $(vmImage)
+      dependsOn: TestArtifacts
+      condition: succeeded('TestArtifacts')
+      jobs:
+        - job: BuildAndPushDockerImage
+          strategy:
+            matrix:
+              Ubuntu_amd64:
+                agentName: "blobfuse-ubuntu22"
+                vmImage: 'Ubuntu-22.04'
+                container: 'test-cnt-ubn-22'
+          pool:
+            vmImage: $(vmImage)
 
-            steps:
-              - script: |
-                  sudo apt-get install $(tags) $(fuselib) -y
-                  chmod 777 *.sh
-                  ./dockerinstall.sh
-                  ./buildcontainer.sh Dockerfile x86_64
-                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) x86_64
-                  ./buildcontainer.sh DockerfileMariner mariner-x86_64
-                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
-                displayName: "Create docker image and push to the containers registry"
-                workingDirectory: $(work_dir)/docker
+          steps:
+            - script: |
+                sudo apt-get install $(tags) $(fuselib) -y
+                chmod 777 *.sh
+                ./dockerinstall.sh
+                ./buildcontainer.sh Dockerfile x86_64
+                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) x86_64
+                ./buildcontainer.sh DockerfileMariner mariner-x86_64
+                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
+              displayName: "Create docker image and push to the containers registry"
+              workingDirectory: $(work_dir)/docker
 
   - ${{ if eq(parameters.post_release, true) }}:
     - stage: ReleaseToGithub
