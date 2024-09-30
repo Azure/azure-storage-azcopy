@@ -1549,7 +1549,7 @@ stages:
         timeoutInMinutes: 120
         strategy:
           matrix:
-            Windows_Amd64:
+            Windows:
               imageName: 'windows-2019'
               type: 'windows'
         pool:
@@ -1652,7 +1652,7 @@ stages:
             displayName: 'Extract Files and Run Version and Help Command on Windows'
        # TestArtifacts ends here
      
-      - job: Set_11
+      - job: Set_10
         timeoutInMinutes: 120
         strategy:
           matrix:
