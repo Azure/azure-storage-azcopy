@@ -834,7 +834,7 @@ func init() {
 			g.GiveUp = false // We've stopped giving up, if we've received a fresh token.
 
 			if AzcopyCurrentJobLogger != nil {
-				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Broadcasting new OAuth token."))
+				AzcopyCurrentJobLogger.Log(LogInfo, "Broadcasting new OAuth token.")
 			}
 
 			// Drop the lock, let "clients" know there's a new token.
@@ -887,7 +887,7 @@ retry:
 			// For duration,
 			g.Mutex.Wait()
 			if AzcopyCurrentJobLogger != nil {
-				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Released."))
+				AzcopyCurrentJobLogger.Log(LogInfo, "Released.")
 			}
 
 			// send wait unblock
@@ -898,7 +898,7 @@ retry:
 		select {
 		case <-waitch:
 			if AzcopyCurrentJobLogger != nil {
-				AzcopyCurrentJobLogger.Log(LogInfo, fmt.Sprintf("Received signal from waitch"))
+				AzcopyCurrentJobLogger.Log(LogInfo, "Received signal from waitch")
 			}
 			close(waitch)
 		case <-time.After(totalDuration * 3):
