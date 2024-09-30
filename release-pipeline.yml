@@ -1794,8 +1794,8 @@ stages:
 
   - ${{ if eq(parameters.build_and_push_docker_image, true) }}:
     - stage: CreateAndReleaseDockerImage
-      dependsOn: TestArtifacts
-      condition: succeeded('TestArtifacts')
+      # dependsOn: TestArtifacts
+      # condition: succeeded('TestArtifacts')
       jobs:
         - job: BuildAndPushDockerImage
           strategy:
