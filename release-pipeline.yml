@@ -42,7 +42,7 @@ parameters:
     type: boolean
     default: false
 
-    - name: build_and_push_docker_image
+  - name: build_and_push_docker_image
     displayName: 'Build and Push Docker Image'
     type: boolean
     default: false
