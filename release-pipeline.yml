@@ -1807,8 +1807,13 @@ stages:
           pool:
             vmImage: $(vmImage)
 
+          variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(Build.SourcesDirectory)'
+
           steps:
-            - checkout: none
             - checkout: none
             - script: |
                 git clone https://github.com/Azure/azure-storage-azcopy
