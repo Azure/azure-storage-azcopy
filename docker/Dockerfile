@@ -1,0 +1,16 @@
+# Create container based on Ubuntu-22.04 Jammy Jellyfish image
+FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04 
+
+# Copy azcopy binary to executable path
+COPY ./azcopy /usr/local/bin/
+
+# Install dependencies
+RUN \
+	apt update && \
+	apt --fix-broken install
+
+ENTRYPOINT ["azcopy"]
+CMD ["--help"]
+
+
+

@@ -42,6 +42,11 @@ parameters:
     type: boolean
     default: false
 
+    - name: build_and_push_docker_image
+    displayName: 'Build and Push Docker Image'
+    type: boolean
+    default: false
+
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -1668,7 +1673,7 @@ stages:
               azcopy --version
               azcopy --help
             displayName: 'Check Version and Help'
-      
+
   - stage: ReleaseToContainer
     dependsOn: TestArtifacts
     condition: succeeded('TestArtifacts')
@@ -1786,6 +1791,33 @@ stages:
                   m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
                 fi
+
+  - ${{ if eq(parameters.build_and_push_docker_image, true) }}:
+    - stage: CreateAndReleaseDockerImage
+        dependsOn: TestArtifacts
+        condition: succeeded('TestArtifacts')
+        jobs:
+          - job: BuildAndPushDockerImage
+            strategy:
+              matrix:
+                Ubuntu_amd64:
+                  agentName: "blobfuse-ubuntu22"
+                  vmImage: 'Ubuntu-22.04'
+                  container: 'test-cnt-ubn-22'
+            pool:
+              vmImage: $(vmImage)
+
+            steps:
+              - script: |
+                  sudo apt-get install $(tags) $(fuselib) -y
+                  chmod 777 *.sh
+                  ./dockerinstall.sh
+                  ./buildcontainer.sh Dockerfile x86_64
+                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) x86_64
+                  ./buildcontainer.sh DockerfileMariner mariner-x86_64
+                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
+                displayName: "Create docker image and push to the containers registry"
+                workingDirectory: $(work_dir)/docker
 
   - ${{ if eq(parameters.post_release, true) }}:
     - stage: ReleaseToGithub
