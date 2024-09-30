@@ -1810,16 +1810,17 @@ stages:
           steps:
             - checkout: none
             - checkout: none
-          - script: |
-              git clone https://github.com/Azure/azure-storage-azcopy
-            displayName: 'Checkout Code'
-            workingDirectory: $(root_dir)
-          
-          # list commits from past 12hrs
-          - script: |
-              git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-              git --no-pager log --since="12 hours ago" --stat
-            displayName: 'List Commits'
+            - script: |
+                git clone https://github.com/Azure/azure-storage-azcopy
+              displayName: 'Checkout Code'
+              workingDirectory: $(root_dir)
+            
+            # list commits from past 12hrs
+            - script: |
+                git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+                git --no-pager log --since="12 hours ago" --stat
+              displayName: 'List Commits'
+
             workingDirectory: $(work_dir)
             - script: |
                 sudo apt-get install $(tags) $(fuselib) -y
