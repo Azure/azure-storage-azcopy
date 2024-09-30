@@ -144,7 +144,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		smbPropertiesToApply: file.SMBProperties{},
 		permissionsToApply:   file.Permissions{},
 		sip:                  sip,
-		metadataToApply:      props.SrcMetadata,
+		metadataToApply:      FixBustedMetadata(props.SrcMetadata),
 	}, nil
 }
 
@@ -484,7 +484,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 	if len(segments) == 0 {
 		// If we are trying to create root, perform GetProperties instead.
 		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
-		// some operations like SetMetadata or SetProperties will fail. 
+		// some operations like SetMetadata or SetProperties will fail.
 		// TODO: Remove this block once the bug is fixed.
 		_, err := directoryClient.GetProperties(ctx, nil)
 		return err

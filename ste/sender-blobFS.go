@@ -108,7 +108,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
-		metadataToSet:       props.SrcMetadata,
+		metadataToSet:       FixBustedMetadata(props.SrcMetadata),
 	}, nil
 }
 

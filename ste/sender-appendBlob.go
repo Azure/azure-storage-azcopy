@@ -92,7 +92,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 		numChunks:              numChunks,
 		pacer:                  pacer,
 		headersToApply:         props.SrcHTTPHeaders.ToBlobHTTPHeaders(),
-		metadataToApply:        props.SrcMetadata,
+		metadataToApply:        FixBustedMetadata(props.SrcMetadata),
 		blobTagsToApply:        props.SrcBlobTags,
 		sip:                    srcInfoProvider,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
