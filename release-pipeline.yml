@@ -1650,7 +1650,6 @@ stages:
                     }
                 }
             displayName: 'Extract Files and Run Version and Help Command on Windows'
-       # TestArtifacts ends here
      
       - job: Set_10
         timeoutInMinutes: 120
@@ -1690,6 +1689,7 @@ stages:
               azcopy --version
               azcopy --help
             displayName: 'Check Version and Help'
+    # TestArtifacts ends here
       
   - stage: ReleaseToContainer
     dependsOn: TestArtifacts
