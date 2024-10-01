@@ -7,7 +7,7 @@ COPY ./azcopy /usr/local/bin/
 # Install dependencies
 RUN \
 	apt update && \
-	apt --fix-broken install
+	apt-get install -y ca-certificates
 
 ENTRYPOINT ["azcopy"]
 CMD ["--help"]
