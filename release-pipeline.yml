@@ -1829,6 +1829,7 @@ stages:
             - script: |
                 chmod 777 *
                 ./dockerinstall.sh
+                ls -ltR
                 ./buildcontainer.sh Dockerfile x86_64
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) x86_64
                 ./buildcontainer.sh DockerfileMariner mariner-x86_64
