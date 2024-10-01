@@ -640,7 +640,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
 
         steps:
           - checkout: none
@@ -731,7 +731,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
           - name: work_dir
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
           - name: archives
@@ -895,7 +895,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
 
         steps:
           - checkout: none
@@ -1808,6 +1808,7 @@ stages:
             vmImage: $(vmImage)
 
           variables:
+          - group: AZCOPY_SECRET_VAULT
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
@@ -1826,8 +1827,7 @@ stages:
               workingDirectory: $(work_dir)
 
             - script: |
-                sudo apt-get install $(tags) $(fuselib) -y
-                chmod 777 *.sh
+                chmod 777 *
                 ./dockerinstall.sh
                 ./buildcontainer.sh Dockerfile x86_64
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) x86_64
@@ -1888,7 +1888,7 @@ stages:
           pool:
             vmImage: 'ubuntu-22.04'
           variables:
-            - group: AZCOPY_ESRP_SECRET
+            - group: AZCOPY_SECRET_VAULT
             - name: root_dir
               value: '$(System.DefaultWorkingDirectory)'
           
