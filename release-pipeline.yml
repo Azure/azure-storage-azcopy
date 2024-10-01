@@ -1876,6 +1876,10 @@ stages:
               workingDirectory: $(work_dir)
 
             - script: |
+             sudo apt update
+             sudo apt --fix-broken install
+
+            - script: |
                 chmod 777 *.sh
                 echo "Installing docker**************************"
                 ./dockerinstall.sh
