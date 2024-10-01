@@ -1876,8 +1876,8 @@ stages:
               workingDirectory: $(work_dir)
 
             - script: |
-             sudo apt update
-             sudo apt --fix-broken install
+                sudo apt update
+                sudo apt --fix-broken install
 
             - script: |
                 chmod 777 *.sh
