@@ -1839,7 +1839,7 @@ stages:
                 ./buildcontainer.sh DockerfileMariner mariner-x86_64
                 echo "Publish to container mariner**************************"
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
-                ./buildcontainer.sh DockerfileARM arm64
+                ./buildcontainer.sh DockerfileArm64 arm64
                 /publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) arm64
               displayName: "Create docker image and push to the containers registry"
               workingDirectory: $(work_dir)/docker
