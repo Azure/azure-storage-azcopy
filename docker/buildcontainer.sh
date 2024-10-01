@@ -14,6 +14,7 @@ sudo docker image rm $tag -f
 # Build new container image using current code
 echo "Build container for azcopy"
 cd -
+cp ../azcopy ./azcopy
 sudo docker build -t $tag -f $1 .
 
 # List all images to verify if new image is created
