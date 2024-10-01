@@ -1,13 +1,10 @@
 # Create container based on Ubuntu-22.04 Jammy Jellyfish image
 FROM mcr.microsoft.com/cbl-mariner/base/core:2.0
 
+RUN tdnf update 
+
 # Copy azcopy binary to executable path
 COPY ./azcopy /usr/local/bin/
-
-# Install dependencies
-RUN \
-	apt update && \
-	apt --fix-broken install
 
 ENTRYPOINT ["azcopy"]
 CMD ["--help"]
