@@ -1843,6 +1843,7 @@ stages:
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) arm64
               displayName: "Create docker image and push to the containers registry"
               workingDirectory: $(work_dir)/docker
+
         - job: Set_2_Ubuntu_ARM64
           timeoutInMinutes: 120
           strategy:
@@ -1874,6 +1875,12 @@ stages:
                 git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
               displayName: 'Checkout branch'
               workingDirectory: $(work_dir)
+
+            - task: ShellScript@2
+              inputs:
+                scriptPath: "$(work_dir)/go_installer.sh"
+                args: "$(root_dir)/"
+              displayName: "GoTool Custom Setup"
 
             - script: |
                 sudo apt update
