@@ -42,7 +42,7 @@ parameters:
     type: boolean
     default: false
 
-  - name: build_and_push_docker_image
+  - name: publish_docker_image
     displayName: 'Build and Push Docker Image'
     type: boolean
     default: false
@@ -1792,8 +1792,8 @@ stages:
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
                 fi
 
-  - ${{ if eq(parameters.build_and_push_docker_image, true) }}:
-    - stage: CreateAndReleaseDockerImage
+  - ${{ if eq(parameters.publish_docker_image, true) }}:
+    - stage: PublishDockerImage
       # dependsOn: TestArtifacts
       # condition: succeeded('TestArtifacts')
       jobs:
@@ -1828,11 +1828,16 @@ stages:
 
             - script: |
                 chmod 777 *
+                echo "Installing docker**************************"
                 ./dockerinstall.sh
                 ls -ltR
+                echo "Build container x86_64**************************"
                 ./buildcontainer.sh Dockerfile x86_64
+                echo "Publish to container x86_64**************************"
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) x86_64
+                echo "Build container mariner**************************"
                 ./buildcontainer.sh DockerfileMariner mariner-x86_64
+                echo "Publish to container mariner**************************"
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
               displayName: "Create docker image and push to the containers registry"
               workingDirectory: $(work_dir)/docker
