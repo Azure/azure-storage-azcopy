@@ -1876,11 +1876,12 @@ stages:
               displayName: 'Checkout branch'
               workingDirectory: $(work_dir)
 
-            - task: ShellScript@2
-              inputs:
-                scriptPath: "$(work_dir)/go_installer.sh"
-                args: "$(root_dir)/"
-              displayName: "GoTool Custom Setup"
+          # Custom script to install Go-lang
+          - task: ShellScript@2
+            inputs:
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+            displayName: "Installing Go tools"
 
             - script: |
                 sudo apt update
