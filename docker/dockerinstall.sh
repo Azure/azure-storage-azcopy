@@ -25,6 +25,9 @@ sudo apt-get update
 sudo groupadd docker
 sudo usermod -aG docker $USER
 sudo chown root:docker /var/run/docker.sock
+
+# Create the .docker directory if it doesn't exist
+mkdir -p $HOME/.docker
 sudo chown "$USER":"$USER" /home/"$USER"/.docker -R
 sudo chmod g+rwx "$HOME/.docker" -R
 
