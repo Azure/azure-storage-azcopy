@@ -137,12 +137,22 @@ func (osScenarioHelper) setFileSDDLString(c asserter, filepath string, sddldata 
 	c.AssertNoErr(err)
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) Mknod(c asserter, path string, mode uint32, dev int) {
 	panic("should never be called")
 }
 
-//nolint
+// nolint
 func (osScenarioHelper) GetUnixStatAdapterForFile(c asserter, filepath string) common.UnixStatAdapter {
 	panic("should never be called")
+}
+
+func (osScenarioHelper) IsFileHidden(c asserter, filepath string) bool {
+
+	attributes, err := windows.GetFileAttributes(windows.StringToUTF16Ptr(filepath))
+	c.AssertNoErr(err)
+
+	// Check if the given file is hidden
+	isHidden := attributes&windows.FILE_ATTRIBUTE_HIDDEN != 0
+	return isHidden
 }

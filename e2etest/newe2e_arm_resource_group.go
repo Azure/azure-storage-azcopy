@@ -23,7 +23,7 @@ type ARMResourceGroupCreateParams struct {
 	Location   string                `json:"location"` // required
 	ManagedBy  *string               `json:"managedBy,omitempty"`
 	Properties *ARMResourceGroupInfo `json:"properties,omitempty"`
-	Tags       []string              `json:"tags,omitempty"`
+	Tags       map[string]string     `json:"tags,omitempty"`
 }
 
 type ARMResourceGroupProvisioningStateOutput struct {
