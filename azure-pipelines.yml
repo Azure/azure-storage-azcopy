@@ -4,18 +4,13 @@ variables:
 
 trigger:
   branches:
-    include:
-      - dev
-      - main
+    include: [ 'main' ]
 
 pr:
   branches:
-    include:
-      - dev
-      - main
-
+    include: [ '*' ]
+     
 jobs:
-
   - job: Build
     timeoutInMinutes: 360
     strategy:
@@ -410,3 +405,106 @@ jobs:
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
+
+  - job: Additional_E2E_Test_Linux
+    timeoutInMinutes: 360
+    strategy:
+      matrix:
+        Linux:
+          AgentName: "blobfuse-ubuntu20"
+          build_name: 'azcopy_linux_amd64'
+          container_name: 'testcontainer1'
+          GOOS: 'linux'
+          GOARCH: 'amd64'
+          CGO_ENABLED: '0'
+    pool:
+      name: "blobfuse-ubuntu-pool"
+      demands:
+        - ImageOverride -equals $(AgentName)
+
+    steps:
+      - script: |
+          # Install Az.Accounts module using Bash script
+          sudo apt-get update
+          sudo apt-get install -y powershell
+          pwsh -Command "Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force"
+        displayName: 'Install PowerShell Az Module'
+
+      - task: GoTool@0
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+      
+      # Install azcli
+      - script: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+        displayName: 'Install Azure CLI'
+
+      - template: azurePipelineTemplates/run_scenarios.yml
+        parameters:
+          container_name: $(container_name)
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
+          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
+          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
+          destination_container_name: $(DESTINATION_CONTAINER_NAME)
+          GOOS: $(GOOS)
+          GOARCH: $(GOARCH)
+          CGO_ENABLED: $(CGO_ENABLED)
+          build_name: $(build_name)
+          azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
+          
+  - job: Additional_E2E_Test_Windows
+    timeoutInMinutes: 360
+    strategy:
+      matrix:
+        Windows:
+          AgentName: 'azcopy-windows-22'
+          build_name: 'azcopy_windows_amd64.exe'
+          container_name: 'testcontainer2'
+          GOOS: 'windows'
+          GOARCH: 'amd64'
+          CGO_ENABLED: '0'
+    pool:
+      name: "azcopy-windows-pool"
+      demands:
+        - ImageOverride -equals $(AgentName)
+
+    steps:
+      - task: PowerShell@2
+        inputs:
+          targetType: 'inline'
+          script: |
+            # Install Az.Accounts module using PowerShell
+            Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
+          displayName: 'Install PowerShell Az Module'
+
+      - task: GoTool@0
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+
+      - task: PowerShell@2
+        displayName: 'Install Azure CLI'
+        inputs:
+          targetType: 'inline'
+          script: |
+            # Install Azure CLI using Chocolatey
+            choco install azure-cli -y
+            az --version
+          
+      - template: azurePipelineTemplates/run_scenarios.yml
+        parameters:
+          container_name: $(container_name)
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
+          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
+          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
+          destination_container_name: $(DESTINATION_CONTAINER_NAME)
+          GOOS: $(GOOS)
+          GOARCH: $(GOARCH)
+          CGO_ENABLED: $(CGO_ENABLED)
+          build_name: $(build_name)
+          azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
+
+    #TODO: Add MacOS E2E tests after creating macos pool
+          
