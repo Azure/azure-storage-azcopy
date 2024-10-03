@@ -64,6 +64,8 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 }
 
 type DryrunTransfer struct {
+	EntityType  common.EntityType
+	BlobType    common.BlobType
 	FromTo      common.FromTo
 	Source      string
 	Destination string
@@ -71,6 +73,8 @@ type DryrunTransfer struct {
 
 func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
 	var surrogate struct {
+		EntityType  string
+		BlobType    string
 		FromTo      string
 		Source      string
 		Destination string
@@ -86,6 +90,16 @@ func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
 		return fmt.Errorf("failed to parse fromto: %w", err)
 	}
 
+	err = d.EntityType.Parse(surrogate.EntityType)
+	if err != nil {
+		return fmt.Errorf("failed to parse entity type: %w", err)
+	}
+
+	err = d.BlobType.Parse(surrogate.BlobType)
+	if err != nil {
+		return fmt.Errorf("failed to parse entity type: %w", err)
+	}
+
 	d.Source = surrogate.Source
 	d.Destination = surrogate.Destination
 
@@ -94,10 +108,14 @@ func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
 
 func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 	surrogate := struct {
+		EntityType  string
+		BlobType    string
 		FromTo      string
 		Source      string
 		Destination string
 	}{
+		d.EntityType.String(),
+		d.BlobType.String(),
 		d.FromTo.String(),
 		d.Source,
 		d.Destination,
@@ -161,8 +179,10 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 			if format == common.EOutputFormat.Json() {
 				tx := DryrunTransfer{
-					FromTo: s.copyJobTemplate.FromTo,
-					Source: common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
+					BlobType:   common.FromBlobType(storedObject.blobType),
+					EntityType: storedObject.entityType,
+					FromTo:     s.copyJobTemplate.FromTo,
+					Source:     common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
 				}
 
 				if fromTo.To() != common.ELocation.None() && fromTo.To() != common.ELocation.Unknown() {
@@ -173,7 +193,6 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
-
 				// if remove then To() will equal to common.ELocation.Unknown()
 				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { // remove
 					return fmt.Sprintf("DRYRUN: remove %v",

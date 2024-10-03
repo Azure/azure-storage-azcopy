@@ -154,7 +154,7 @@ type AzCopyParsedCopySyncRemoveStdout struct {
 
 	JobPlanFolder string
 	LogFolder     string
-  
+
 	InitMsg     common.InitMsgJsonTemplate
 	FinalStatus common.ListJobSummaryResponse
 }
@@ -182,51 +182,22 @@ type AzCopyParsedDryrunStdout struct {
 	listenChan chan<- cmd.DryrunTransfer
 
 	Transfers []cmd.DryrunTransfer
+	Raw       map[string]bool
 	JsonMode  bool
 }
 
 func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
 	lines := strings.Split(string(p), "\n")
 	for _, str := range lines {
-		if !d.JsonMode {
-			// DRYRUN: <TYPE> <RESOURCE> [to] <RESOURCE>
-			if !strings.HasPrefix(str, "DRYRUN: ") {
+		if !d.JsonMode && strings.HasPrefix(str, "DRYRUN: ") {
+			if strings.HasPrefix(str, "DRYRUN: warn") {
 				continue
 			}
 
-			str = strings.TrimPrefix(str, "DRYRUN: ")
-			resources := strings.Split(str, " ")
-
-			var tx cmd.DryrunTransfer
-
-			switch strings.ToLower(resources[0]) {
-			case "remove":
-				tx.FromTo = (common.FromTo(tx.FromTo.From()) << 8) | common.FromTo(common.ELocation.Unknown())
-			case "set-properties":
-				tx.FromTo = (common.FromTo(tx.FromTo.From()) << 8) | common.FromTo(common.ELocation.None())
-			case "copy":
-				tx.FromTo = d.fromTo
-			default:
-				continue
-			}
-
-			resources = resources[1:]
-			for _, v := range resources {
-				if strings.ToLower(v) == "to" {
-					continue
-				}
-
-				if tx.Source == "" {
-					tx.Source = v
-				} else if tx.Destination == "" {
-					tx.Destination = v
-				}
-			}
-
-			d.Transfers = append(d.Transfers, tx)
+			d.Raw[str] = true
 		} else {
 			var out common.JsonOutputTemplate
-			err = json.Unmarshal(p, &out)
+			err = json.Unmarshal([]byte(str), &out)
 			if err != nil {
 				continue
 			}

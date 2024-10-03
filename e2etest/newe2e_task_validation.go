@@ -318,18 +318,20 @@ const (
 	DryrunOpProperties
 )
 
+var dryrunOpStr = map[DryrunOp]string{
+	DryrunOpCopy:       "copy",
+	DryrunOpDelete:     "delete",
+	DryrunOpProperties: "set-properties",
+}
+
 // ValidateDryRunOutput validates output for items in the expected map; expected must equal output
 func ValidateDryRunOutput(a Asserter, output AzCopyStdout, rootSrc ResourceManager, rootDst ResourceManager, expected map[string]DryrunOp) {
 	if dryrun, ok := a.(DryrunAsserter); ok && dryrun.Dryrun() {
 		return
 	}
-
 	a.AssertNow("Output must not be nil", Not{IsNil{}}, output)
 	stdout, ok := output.(*AzCopyParsedDryrunStdout)
 	a.AssertNow("Output must be dryrun stdout", Equal{}, ok, true)
-
-	// validation must have nothing in it, and nothing should miss in output.
-	validation := CloneMap(expected)
 
 	uriPrefs := GetURIOptions{
 		LocalOpts: LocalURIOpts{
@@ -343,24 +345,62 @@ func ValidateDryRunOutput(a Asserter, output AzCopyStdout, rootSrc ResourceManag
 		dstBase = rootDst.URI(uriPrefs)
 	}
 
-	for _, v := range stdout.Transfers {
-		// Determine the op.
-		op := common.Iff(v.FromTo.IsDelete(), DryrunOpDelete, common.Iff(v.FromTo.IsSetProperties(), DryrunOpProperties, DryrunOpCopy))
+	if stdout.JsonMode {
+		// validation must have nothing in it, and nothing should miss in output.
+		validation := CloneMap(expected)
 
-		// Try to find the item in expected.
-		relPath := strings.TrimPrefix( // Ensure we start with the rel path, not a separator
-			strings.ReplaceAll( // Isolate path separators
-				strings.TrimPrefix(v.Source, srcBase), // Isolate the relpath
-				"\\", "/",
-			),
-			"/",
-		)
-		//a.Log("base %s source %s rel %s", srcBase, v.Source, relPath)
-		expectedOp, ok := validation[relPath]
-		a.Assert(fmt.Sprintf("Expected %s in map", relPath), Equal{}, ok, true)
-		a.Assert(fmt.Sprintf("Expected %s to match", relPath), Equal{}, op, expectedOp)
-		if rootDst != nil {
-			a.Assert(fmt.Sprintf("Expected %s dest url to match expected dest url", relPath), Equal{}, v.Destination, common.GenerateFullPath(dstBase, relPath))
+		for _, v := range stdout.Transfers {
+			// Determine the op.
+			op := common.Iff(v.FromTo.IsDelete(), DryrunOpDelete, common.Iff(v.FromTo.IsSetProperties(), DryrunOpProperties, DryrunOpCopy))
+
+			// Try to find the item in expected.
+			relPath := strings.TrimPrefix( // Ensure we start with the rel path, not a separator
+				strings.ReplaceAll( // Isolate path separators
+					strings.TrimPrefix(v.Source, srcBase), // Isolate the relpath
+					"\\", "/",
+				),
+				"/",
+			)
+			//a.Log("base %s source %s rel %s", srcBase, v.Source, relPath)
+			expectedOp, ok := validation[relPath]
+			a.Assert(fmt.Sprintf("Expected %s in map", relPath), Equal{}, ok, true)
+			a.Assert(fmt.Sprintf("Expected %s to match", relPath), Equal{}, op, expectedOp)
+			if rootDst != nil {
+				a.Assert(fmt.Sprintf("Expected %s dest url to match expected dest url", relPath), Equal{}, v.Destination, common.GenerateFullPath(dstBase, relPath))
+			}
+		}
+	} else {
+		// It is useless to try to parse details from a user friendly statement.
+		// Instead, we should attempt to generate the user friendly statement, and validate that it existed from there.
+		validation := make(map[string]bool)
+
+		for k, v := range expected {
+			from := common.GenerateFullPath(srcBase, k)
+			var to string
+			if rootDst != nil {
+				to = " to " + common.GenerateFullPath(dstBase, k)
+			}
+
+			valStr := fmt.Sprintf("DRYRUN: %s %s%s",
+				dryrunOpStr[v],
+				from,
+				to,
+			)
+
+			validation[valStr] = true
+		}
+
+		for k := range stdout.Raw {
+			_, ok := validation[k]
+			a.Assert(k+" wasn't present in validation", Equal{}, ok, true)
+
+			if ok {
+				delete(validation, k)
+			}
+		}
+
+		for k := range validation {
+			a.Assert(k+" wasn't present in output", Always{})
 		}
 	}
 }
