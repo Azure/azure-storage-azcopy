@@ -1828,19 +1828,14 @@ stages:
 
             - script: |
                 chmod 777 *.sh
-                echo "Installing docker**************************"
                 ./dockerinstall.sh
-                ls -ltR
-                echo "Build container x86_64**************************"
+
                 ./buildcontainer.sh Dockerfile x86_64
-                echo "Publish to container x86_64**************************"
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) x86_64
-                echo "Build container mariner**************************"
+
                 ./buildcontainer.sh DockerfileMariner mariner-x86_64
-                echo "Publish to container mariner**************************"
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
-                ./buildcontainer.sh DockerfileArm64 arm64
-                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) arm64
+
               displayName: "Create docker image and push to the containers registry"
               workingDirectory: $(work_dir)/docker
 
@@ -1889,7 +1884,6 @@ stages:
 
             - script: |
                 chmod 777 *.sh
-                echo "Installing docker**************************"
                 ./dockerinstall.sh
                 ls -ltR
                 ./buildcontainer.sh DockerfileArm64 arm64
