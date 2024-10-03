@@ -643,7 +643,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
 
         steps:
           - checkout: none
@@ -734,7 +734,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
           - name: work_dir
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
           - name: archives
@@ -1969,7 +1969,7 @@ stages:
           pool:
             vmImage: 'ubuntu-22.04'
           variables:
-            - group: AZCOPY_ESRP_SECRET
+            - group: AZCOPY_SECRET_VAULT
             - name: root_dir
               value: '$(System.DefaultWorkingDirectory)'
           
