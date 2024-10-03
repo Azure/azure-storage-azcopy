@@ -1,5 +1,3 @@
-
-
 ver=`../azcopy --version | cut -d " " -f 3`
 image="azure-azcopy-$3.$ver"
 

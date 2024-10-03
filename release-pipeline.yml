@@ -1794,8 +1794,8 @@ stages:
 
   - ${{ if eq(parameters.publish_docker_image, true) }}:
     - stage: BuildAndPublishDockerImage
-      # dependsOn: TestArtifacts
-      # condition: succeeded('TestArtifacts')
+      dependsOn: TestArtifacts
+      condition: succeeded('TestArtifacts')
       jobs:
         - job: Set_1_Ubuntu_Mariner_AMD64
           strategy:

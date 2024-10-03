@@ -11,6 +11,3 @@ RUN \
 
 ENTRYPOINT ["azcopy"]
 CMD ["--help"]
-
-
-

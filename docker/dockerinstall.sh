@@ -1,4 +1,3 @@
-
 # Cleanup old installation
 sudo apt remove docker-desktop
 rm -r $HOME/.docker/desktop

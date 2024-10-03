@@ -8,7 +8,7 @@ ls -l azcopy
 ver=`../azcopy --version | cut -d " " -f 3`
 tag="azure-azcopy.$ver"
 
-./buildcontainer.sh Dockerfile x86_64
+./docker/buildcontainer.sh Dockerfile x86_64
 
 # If build was successful then launch a container instance
 status=`docker images | grep $tag`
