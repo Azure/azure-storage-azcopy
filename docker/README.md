@@ -18,4 +18,4 @@ docker pull azcopycontainers.azurecr.io/<imagename>:<tag>
 
 5. Run the Image
 
-docker run azcopycontainers.azurecr.io/<imagename>:<tag>
+docker run azcopycontainers.azurecr.io/<imagename>:<tag> --exec azcopy copy <source> <destination>
