@@ -7,5 +7,4 @@ RUN tdnf install -y ca-certificates
 # Copy azcopy binary to executable path
 COPY ./azcopy /usr/local/bin/
 
-ENTRYPOINT ["azcopy"]
-CMD ["--help"]
+ENTRYPOINT ["bash"]

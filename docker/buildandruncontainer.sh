@@ -16,9 +16,6 @@ status=`docker images | grep $tag`
 if [ $? = 0 ]; then
 	echo " **** Build successful, running container now ******"
 	docker run -it --rm \
-		--cap-add=SYS_ADMIN \
-		--device=/dev/fuse \
-		--security-opt apparmor:unconfined \
 		-e AZURE_STORAGE_ACCOUNT \
 		-e AZURE_STORAGE_ACCESS_KEY \
 		$tag

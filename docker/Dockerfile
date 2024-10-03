@@ -9,5 +9,4 @@ RUN \
 	apt update && \
 	apt --fix-broken install
 
-ENTRYPOINT ["azcopy"]
-CMD ["--help"]
+ENTRYPOINT ["bash"]
