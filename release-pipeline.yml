@@ -912,7 +912,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
 
         steps:
           - checkout: none
