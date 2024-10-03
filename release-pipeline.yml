@@ -1830,7 +1830,7 @@ stages:
                 chmod 777 *.sh
                 ./dockerinstall.sh
 
-                ./buildcontainer.sh Dockerfile x86_64
+                ./buildcontainer.sh Dockerfile ubuntu-x86_64
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-x86_64
 
                 ./buildcontainer.sh DockerfileMariner mariner-x86_64
@@ -1885,8 +1885,7 @@ stages:
             - script: |
                 chmod 777 *.sh
                 ./dockerinstall.sh
-                ls -ltR
-                ./buildcontainer.sh DockerfileArm64 arm64
+                ./buildcontainer.sh DockerfileArm64 ubuntu-arm64
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-arm64
               displayName: "Create docker image for arm64 and push to the containers registry"
               workingDirectory: $(work_dir)/docker
