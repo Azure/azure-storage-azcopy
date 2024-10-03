@@ -1700,7 +1700,6 @@ stages:
       #       name: azcopy_windows_arm"
       #       demands:
       #         - ImageOverride -equals $(AgentName)
-
       #   variables:
       #     - name: root_dir
       #       value: '$(System.DefaultWorkingDirectory)'
