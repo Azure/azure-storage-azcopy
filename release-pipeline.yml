@@ -1877,7 +1877,7 @@ stages:
                 scriptPath: "$(work_dir)/go_installer.sh"
                 args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
               displayName: "Installing Go tools"
-DockerfileArm64
+
             - script: |
                 sudo apt update
                 sudo apt --fix-broken install
