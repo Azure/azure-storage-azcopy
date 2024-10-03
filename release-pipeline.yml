@@ -1831,7 +1831,7 @@ stages:
                 ./dockerinstall.sh
 
                 ./buildcontainer.sh Dockerfile x86_64
-                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) x86_64
+                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-x86_64
 
                 ./buildcontainer.sh DockerfileMariner mariner-x86_64
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
@@ -1877,7 +1877,7 @@ stages:
                 scriptPath: "$(work_dir)/go_installer.sh"
                 args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
               displayName: "Installing Go tools"
-
+DockerfileArm64
             - script: |
                 sudo apt update
                 sudo apt --fix-broken install
@@ -1887,7 +1887,7 @@ stages:
                 ./dockerinstall.sh
                 ls -ltR
                 ./buildcontainer.sh DockerfileArm64 arm64
-                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) arm64
+                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-arm64
               displayName: "Create docker image for arm64 and push to the containers registry"
               workingDirectory: $(work_dir)/docker
 
