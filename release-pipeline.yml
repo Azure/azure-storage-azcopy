@@ -1697,7 +1697,7 @@ stages:
             Windows-ARM64:
               agentName: "windows_arm64"
         pool:
-            name: azcopy_windows_arm"
+            name: blobfuse-ubn-arm64-pool"
             demands:
               - ImageOverride -equals $(AgentName)
         variables:
