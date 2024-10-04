@@ -11,4 +11,5 @@ RUN \
 	apt update && \
 	apt --fix-broken install
 
-ENTRYPOINT ["bash"]
+WORKDIR /WORKDIR
+CMD [ "azcopy" ]
