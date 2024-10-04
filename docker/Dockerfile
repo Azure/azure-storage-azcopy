@@ -1,15 +1,17 @@
-# Create container based on Ubuntu-22.04 Jammy Jellyfish image
-FROM mcr.microsoft.com/mirror/docker/library/ubuntu:22.04 
+# Create container based on Alpine image
+FROM alpine:latest
+
+# Install necessary dependencies
+RUN apk add --no-cache bash curl
 
 # Copy azcopy binary to executable path
 COPY ./azcopy /usr/local/bin/
+
 # Make azcopy executable
 RUN chmod +x /usr/local/bin/azcopy
 
-# Install dependencies
-RUN \
-	apt update && \
-	apt --fix-broken install
-
+# Set the working directory
 WORKDIR /WORKDIR
-CMD [ "azcopy" ]
+
+# Command to run azcopy
+CMD ["azcopy"]
