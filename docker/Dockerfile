@@ -12,4 +12,5 @@ RUN \
 	apt update && \
 	apt-get install -y ca-certificates
 
+WORKDIR /azcopy
 CMD [ "azcopy" ]
