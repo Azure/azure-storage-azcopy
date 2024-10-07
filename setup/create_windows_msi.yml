@@ -45,13 +45,13 @@ steps:
       # PowerShell Script to create MSI in an Azure Pipeline
 
       # Step 1: Set Variables
-      $buildDir = ${{ parameters.working_dir }}
+      $workDir = ${{ parameters.working_dir }}
       $wixToolsPath = (where.exe candle.exe)  # Path to WiX toolset binaries
-      $wxsFilePath = "$buildDir\azcopy.wxs"
-      $wixObjPath = "$buildDir\azcopy.wixobj"
+      $wxsFilePath = "$workDir\azcopy.wxs"
+      $wixObjPath = "$workDir\azcopy.wixobj"
       $outputMsi = "${{ parameters.build_dir }}\azcopy.msi"
 
-      cd $buildDir
+      cd $workDir
 
       # Step 2: Update the UpgradeCode in the .wxs file
       Write-Host "Updating Uuid in .wxs file..."

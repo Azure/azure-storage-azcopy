@@ -383,7 +383,7 @@ stages:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+            value: '$(System.DefaultWorkingDirectory)/msi'
           
         steps:
           - task: GoTool@0
@@ -440,12 +440,14 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
-              cp $(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe $(work_dir)/azcopy.exe
+              mkdir -p $(work_dir)
+              cp $(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe $(work_dir)/azcopy.exe
             displayName: 'Copy required files for packaging'  
 
           - template: setup/create_windows_msi.yml
             parameters:
-              folder_path: $(work_dir)        
+              work_dir: $(work_dir)
+              build_dir: $(Build.ArtifactStagingDirectory)    
 
           - task: PublishBuildArtifacts@1
             inputs:
