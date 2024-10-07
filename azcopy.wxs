@@ -9,7 +9,7 @@
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLDIR" Name="azcopy">
           <Component Id="azcopy.exe" Guid="abeee33a-0cca-4060-89d7-0687f7374f7a">
-            <File Id="azcopy.exe" Source="<azcopy_executable_path>" />
+            <File Id="azcopy.exe" Source="azcopy_executable_path" />
           </Component>
         </Directory>
       </Directory>
