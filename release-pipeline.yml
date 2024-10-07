@@ -790,7 +790,7 @@ stages:
             parameters:
               FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
               ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
-              Pattern: 'azcopy_windows*'
+              Pattern: 'azcopy_windows*, *.msi'
 
           - script: |
               rm -rf azCopy-windows-temp/*.md
