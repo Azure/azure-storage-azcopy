@@ -382,8 +382,10 @@ stages:
         variables:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
+          - name: msi_dir
             value: '$(System.DefaultWorkingDirectory)/msi'
+          - name: work_dir
+            value: '$(Build.SourcesDirectory)'
           
         steps:
           - task: GoTool@0
@@ -450,7 +452,8 @@ stages:
           - template: setup/create_windows_msi.yml
             parameters:
               working_dir: $(work_dir)
-              build_dir: $(Build.ArtifactStagingDirectory)    
+              build_dir: $(Build.ArtifactStagingDirectory)
+              msi_dir: $(msi_dir)
 
           - task: PublishBuildArtifacts@1
             inputs:
