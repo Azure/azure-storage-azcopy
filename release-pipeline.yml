@@ -443,7 +443,7 @@ stages:
 
           - powershell: |
               # Create the working directory if it doesn't exist
-              New-Item -ItemType Directory -Force -Path $(work_dir)
+              New-Item -ItemType Directory -Force -Path $(msi_dir)
               
               # Copy the azcopy executable to the working directory with a new name
               Copy-Item -Path "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe" -Destination "$(work_dir)\azcopy.exe" -Force
