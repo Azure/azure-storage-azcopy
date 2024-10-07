@@ -24,7 +24,7 @@ steps:
     # PowerShell Script to create MSI in an Azure Pipeline
 
     # Step 1: Set Variables
-    $workDir = "$(working_dir)"
+    $workDir = "${{ parameters.working_dir }}"
     $wixToolsPath = (where.exe candle.exe)  # Path to WiX toolset binaries
     $wxsFilePath = "$workDir\azcopy.wxs"
     $wixObjPath = "$workDir\azcopy.wixobj"
