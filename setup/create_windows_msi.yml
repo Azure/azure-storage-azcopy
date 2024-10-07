@@ -5,37 +5,37 @@ parameters:
 steps:
 - powershell: |
     # Check if running on WSL
-    if grep -q Microsoft /proc/version; then
-        echo "Running on WSL."
-    else
-        echo "This script is intended to be run in a WSL environment or a compatible Linux environment on Windows."
+    if (Get-Content /proc/version | Select-String -Pattern "Microsoft") {
+        Write-Host "Running on WSL."
+    } else {
+        Write-Host "This script is intended to be run in a WSL environment or a compatible Linux environment on Windows."
         exit 1
-    fi
+    }
 
     # Step 0: Install Chocolatey
-    echo "Checking if Chocolatey is installed..."
-    if ! command -v choco &> /dev/null; then
-        echo "Installing Chocolatey..."
+    Write-Host "Checking if Chocolatey is installed..."
+    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Host "Installing Chocolatey..."
         
         # Set Execution Policy and install Chocolatey
         powershell.exe -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
-    else
-        echo "Chocolatey is already installed."
-    fi
+    } else {
+        Write-Host "Chocolatey is already installed."
+    }
 
     # Step 1: Install WiX Toolset using Chocolatey
-    echo "Installing WiX Toolset..."
+    Write-Host "Installing WiX Toolset..."
     choco install wixtoolset --version 3.11.2 -y  # Ensure the correct WiX version is installed
 
     # Verify installation
-    if command -v candle &> /dev/null && command -v light &> /dev/null; then
-        echo "WiX Toolset installed successfully."
-    else
-        echo "WiX Toolset installation failed."
+    if ((Get-Command candle -ErrorAction SilentlyContinue) -and (Get-Command light -ErrorAction SilentlyContinue)) {
+        Write-Host "WiX Toolset installed successfully."
+    } else {
+        Write-Host "WiX Toolset installation failed."
         exit 1
-    fi
+    }
 
-    echo "Installation of Chocolatey and WiX Toolset completed successfully!"
+    Write-Host "Installation of Chocolatey and WiX Toolset completed successfully!"
   displayName: 'Install Chocolatey and WiX Toolset'
 
 - task: PowerShell@2
