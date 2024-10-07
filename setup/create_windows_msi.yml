@@ -56,4 +56,3 @@ steps:
 
     Write-Host "MSI creation process completed!"
   displayName: 'Create MSI using WiX Toolset'
-  workingDirectory: ${{ parameters.working_dir }}
