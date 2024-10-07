@@ -441,7 +441,7 @@ stages:
 
           - script: |
               mkdir -p $(work_dir)
-              cp $(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe $(work_dir)/azcopy.exe
+              cp $(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe $(work_dir)\azcopy.exe
             displayName: 'Copy required files for packaging'  
 
           - template: setup/create_windows_msi.yml
