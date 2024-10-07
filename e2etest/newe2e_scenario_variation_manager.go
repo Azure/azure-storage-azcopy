@@ -35,6 +35,7 @@ type ScenarioVariationManager struct {
 
 	// wetrun data
 	CreatedResources *PathTrie[createdResource]
+	CleanupFuncs     []func(a ScenarioAsserter)
 }
 
 type createdResource struct {
@@ -103,6 +104,8 @@ func (svm *ScenarioVariationManager) NoError(comment string, err error, failNow 
 
 		if failFast {
 			svm.t.FailNow()
+		} else {
+			svm.t.Fail()
 		}
 	}
 }

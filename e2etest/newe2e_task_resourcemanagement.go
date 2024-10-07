@@ -11,6 +11,8 @@ type ResourceTracker interface {
 }
 
 func TrackResourceCreation(a Asserter, rm any) {
+	a.HelperMarker().Helper()
+
 	if t, ok := a.(ResourceTracker); ok {
 		if arm, ok := rm.(AccountResourceManager); ok {
 			t.TrackCreatedAccount(arm)

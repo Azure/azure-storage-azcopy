@@ -150,3 +150,13 @@ func Any[I any](items []I, f func(I) bool) bool {
 
 	return false
 }
+
+func ClonePointer[T any](in *T) *T {
+	if in == nil {
+		return nil
+	}
+
+	out := *in
+
+	return &out
+}

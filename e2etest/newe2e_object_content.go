@@ -13,6 +13,8 @@ import (
 type ObjectContentContainer interface {
 	Size() int64
 	Reader() io.ReadSeeker
+
+	Clone() ObjectContentContainer
 	MD5() [md5.Size]byte
 	//CRC64() uint64
 }
@@ -101,6 +103,18 @@ func (o *ObjectContentContainerBuffer) Size() int64 {
 
 func (o *ObjectContentContainerBuffer) Reader() io.ReadSeeker {
 	return bytes.NewReader(o.Data)
+}
+
+func (o *ObjectContentContainerBuffer) Clone() ObjectContentContainer {
+	if o != nil {
+		return nil
+	}
+	buf := make([]byte, len(o.Data))
+	if o.Data != nil {
+		copy(buf, o.Data)
+	}
+
+	return &ObjectContentContainerBuffer{Data: o.Data}
 }
 
 func (o *ObjectContentContainerBuffer) MD5() [md5.Size]byte {
