@@ -3,7 +3,7 @@ parameters:
   build_dir: ''
 
 steps:
-- script: |
+- powershell: |
     # Check if running on WSL
     if grep -q Microsoft /proc/version; then
         echo "Running on WSL."
