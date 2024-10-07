@@ -20,40 +20,39 @@ steps:
     Write-Host "WiX Toolset installation completed."
   displayName: 'Install Chocolatey and WiX Toolset'
 
-- task: PowerShell@2
-  inputs:
-    targetType: 'inline'
-    script: |
-      # PowerShell Script to create MSI in an Azure Pipeline
+- powershell: |
+    # PowerShell Script to create MSI in an Azure Pipeline
 
-      # Step 1: Set Variables
-      $workDir = ${{ parameters.working_dir }}
-      $wixToolsPath = (where.exe candle.exe)  # Path to WiX toolset binaries
-      $wxsFilePath = "$workDir\azcopy.wxs"
-      $wixObjPath = "$workDir\azcopy.wixobj"
-      $outputMsi = "${{ parameters.build_dir }}\azcopy.msi"
+    # Step 1: Set Variables
+    $workDir = ${{ parameters.working_dir }}
+    $wixToolsPath = (where.exe candle.exe)  # Path to WiX toolset binaries
+    $wxsFilePath = "$workDir\azcopy.wxs"
+    $wixObjPath = "$workDir\azcopy.wixobj"
+    $outputMsi = "${{ parameters.build_dir }}\azcopy.msi"
 
-      cd $workDir
+    Write-Host "Work dir: $workDir  $wixToolsPath"
 
-      # Step 2: Update the UpgradeCode in the .wxs file
-      Write-Host "Updating Uuid in .wxs file..."
-      $uuid = [guid]::NewGuid().Guid
-      $fileContent = Get-Content $wxsFilePath
-      $updatedContent = $fileContent -replace 'UpgradeCode="[^"]+"', "UpgradeCode=`"$uuid`""
-      $updatedContent | Set-Content $wxsFilePath
-      Write-Host "New UpgradeCode: $uuid"
+    # Step 2: Update the UpgradeCode in the .wxs file
+    Write-Host "Updating Uuid in .wxs file..."
+    $uuid = [guid]::NewGuid().Guid
+    $fileContent = Get-Content $wxsFilePath
+    $updatedContent = $fileContent -replace 'UpgradeCode="[^"]+"', "UpgradeCode=`"$uuid`""
+    $updatedContent | Set-Content $wxsFilePath
+    Write-Host "New UpgradeCode: $uuid"
 
-      $fileContent = Get-Content $wxsFilePath
-      $updatedContent = $fileContent -replace 'Guid="[^"]+"', "Guid=`"$uuid`""
-      $updatedContent | Set-Content $wxsFilePath
-      Write-Host "New UpgradeCode: $uuid"
+    $fileContent = Get-Content $wxsFilePath
+    $updatedContent = $fileContent -replace 'Guid="[^"]+"', "Guid=`"$uuid`""
+    $updatedContent | Set-Content $wxsFilePath
+    Write-Host "New UpgradeCode: $uuid"
 
-      # Step 3: Compile the .wxs file using Candle
-      Write-Host "Compiling .wxs file..."
-      & "$wixToolsPath\candle.exe" -out $wixObjPath $wxsFilePath
+    # Step 3: Compile the .wxs file using Candle
+    Write-Host "Compiling .wxs file..."
+    & "$wixToolsPath\candle.exe" -out $wixObjPath $wxsFilePath
 
-      # Step 4: Link the .wixobj to create the MSI using Light
-      Write-Host "Linking to create MSI..."
-      & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath
+    # Step 4: Link the .wixobj to create the MSI using Light
+    Write-Host "Linking to create MSI..."
+    & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath
 
-      Write-Host "MSI creation process completed!"
+    Write-Host "MSI creation process completed!"
+  displayName: 'Create MSI using WiX Toolset'
+  work dir: ${{ parameters.working_dir }}
