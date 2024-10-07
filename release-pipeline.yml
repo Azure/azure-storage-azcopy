@@ -440,10 +440,12 @@ stages:
               CGO_ENABLED: 0
 
           - script: |
-              mkdir -p $(work_dir)
-              cp $(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe $(work_dir)\
-              mv $(work_dir)\azcopy_windows_amd64.exe $(work_dir)\azcopy.exe
-            displayName: 'Copy required files for packaging'  
+              # Create the working directory if it doesn't exist
+              New-Item -ItemType Directory -Force -Path $(work_dir)
+              
+              # Copy the azcopy executable to the working directory with a new name
+              Copy-Item -Path "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe" -Destination "$(work_dir)\azcopy.exe" -Force
+            displayName: 'Copy required files for packaging'
 
           - template: setup/create_windows_msi.yml
             parameters:
