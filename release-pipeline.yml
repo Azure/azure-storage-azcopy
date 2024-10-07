@@ -439,7 +439,7 @@ stages:
               GOOS: windows
               CGO_ENABLED: 0
 
-          - script: |
+          - powershell: |
               # Create the working directory if it doesn't exist
               New-Item -ItemType Directory -Force -Path $(work_dir)
               
