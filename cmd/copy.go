@@ -1348,7 +1348,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	// get the concurrency environment value
+	// Use the concurrency environment value
 	concurrencyEnvVar := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
 
 	pipingUploadParallelism := pipingUploadParallelism
@@ -1366,7 +1366,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %w", concurrencyEnvVar, err)
 		}
 
-		pipingUploadParallelism = int(concurrencyValue)
+		pipingUploadParallelism = int(concurrencyValue) // Cast to Integer
 	}
 
 	// if no block size is set, then use default value
