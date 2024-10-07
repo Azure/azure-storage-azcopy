@@ -6,8 +6,9 @@ COPY ./azcopy /usr/local/bin/
 # Make azcopy executable
 RUN chmod +x /usr/local/bin/azcopy
 # Install dependencies
+RUN apk add --no-cache ca-certificates
 RUN \
 	apt update && \
-	apt --fix-broken install
+	apt-get install -y ca-certificates
 
 CMD [ "azcopy" ]
