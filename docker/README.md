@@ -16,6 +16,6 @@ az acr repository list --name azcopycontainers --output table
 
 docker pull azcopycontainers.azurecr.io/<imagename>:<tag>
 
-5. Run the Image
+# 5. Run the Image
 
-docker run --rm -it -v /local/path/to/mount:/container/path azcopycontainers.azurecr.io/<imagename>:<tag> --exec azcopy copy <source> <destination>
+docker run --rm -it -v /local/path/to/mount:/azcopy azcopycontainers.azurecr.io/<imagename>:<tag> azcopy copy <source> <destination>
