@@ -35,18 +35,30 @@ steps:
     Write-Host "Work dir: $workDir  $wixToolsPath"
     cd $msiDir
 
-    # Step 2: Update the UpgradeCode in the .wxs file
+    # Step 2: Update the fields in the .wxs file
     Write-Host "Updating Uuid in .wxs file..."
     $uuid = [guid]::NewGuid().Guid
-    $fileContent = Get-Content $wxsFilePath
-    $updatedContent = $fileContent -replace 'UpgradeCode="[^"]+"', "UpgradeCode=`"$uuid`""
-    $updatedContent | Set-Content $wxsFilePath
-    Write-Host "New UpgradeCode: $uuid"
 
-    $fileContent = Get-Content $wxsFilePath
-    $updatedContent = $fileContent -replace 'Guid="[^"]+"', "Guid=`"$uuid`""
-    $updatedContent | Set-Content $wxsFilePath
-    Write-Host "New UpgradeCode: $uuid"
+    # Load the XML file
+    [xml]$wixXml = Get-Content $wixFilePath
+
+    # Update fields
+    $wixXml.Wix.Product.Name = "azcopy"
+    $wixXml.Wix.Product.Version = "10.26.0"  # Update version as needed
+    $wixXml.Wix.Product.Manufacturer = "Updated Manufacturer"
+    $wixXml.Wix.Product.UpgradeCode = $uuid
+
+    $component = $wixXml.Wix.Product.Directory.InstallDir.Component
+    $component.Guid = $uuid
+
+    # Update the file source path
+    $file = $component.File
+    $file.Source = "$workDir\azcopy.exe" 
+
+    # Save the updated XML back to the file
+    $wixXml.Save($wixFilePath)
+
+    Write-Host "WiX XML file updated successfully."
 
     # Step 3: Compile the .wxs file using Candle
     Write-Host "Compiling .wxs file..."
