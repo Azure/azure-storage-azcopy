@@ -449,7 +449,7 @@ stages:
 
           - template: setup/create_windows_msi.yml
             parameters:
-              work_dir: $(work_dir)
+              working_dir: $(work_dir)
               build_dir: $(Build.ArtifactStagingDirectory)    
 
           - task: PublishBuildArtifacts@1
