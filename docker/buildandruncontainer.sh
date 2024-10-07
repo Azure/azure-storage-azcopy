@@ -13,11 +13,14 @@ tag="azure-azcopy.$ver"
 # If build was successful then launch a container instance
 status=`docker images | grep $tag`
 
+curr_dir=`pwd`
+mkdir -p $curr_dir/azcopy
+echo "Hello World" > $curr_dir/azcopy/hello.txt
+
 if [ $? = 0 ]; then
 	echo " **** Build successful, running container now ******"
 	docker run -it --rm \
-		-e AZURE_STORAGE_ACCOUNT \
-		-e AZURE_STORAGE_ACCESS_KEY \
+		-v $curr_dir/azcopy:/azcopy \ 
 		$tag
 else
 	echo "Failed to build docker image"
