@@ -40,7 +40,7 @@ steps:
     $uuid = [guid]::NewGuid().Guid
 
     # Load the XML file
-    [xml]$wixXml = Get-Content $wixFilePath
+    [xml]$wixXml = Get-Content $wxsFilePath
 
     # Update fields
     $wixXml.Wix.Product.Name = "azcopy"
