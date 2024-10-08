@@ -429,6 +429,14 @@ stages:
               GOOS: windows
               CGO_ENABLED: 0
 
+          - script: |
+              go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_se_arm64.exe"
+            displayName: 'Generate Windows ARM'
+            env:
+              GOARCH: arm64
+              GOOS: windows
+              CGO_ENABLED: 0
+
           - task: PublishBuildArtifacts@1
             inputs:
               artifactName: 'azCopy-windows-temp'
@@ -635,7 +643,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
 
         steps:
           - checkout: none
@@ -726,7 +734,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
           - name: work_dir
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
           - name: archives
@@ -818,11 +826,15 @@ stages:
               windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
               echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
 
+              windows_se_arm64="$(work_dir)/azcopy_windows_se_arm64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=windows_se_arm64]$windows_se_arm64"
+
               windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
               echo "##vso[task.setvariable variable=windows_386]$windows_386"
 
               mkdir -p $windows_amd64
               mkdir -p $windows_arm64
+              mkdir -p $windows_se_arm64
               mkdir -p $windows_386
               mkdir -p $(archives)
             displayName: 'Create required directories'
@@ -831,12 +843,15 @@ stages:
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
               mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)/azcopy.exe
+              mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_se_arm64.exe $(windows_se_arm64)/azcopy.exe
               cp NOTICE.txt $(windows_amd64)
               cp NOTICE.txt $(windows_arm64)
               cp NOTICE.txt $(windows_386)
+              cp NOTICE.txt $(windows_se_arm64)
               zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
               zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
               zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
+              zip -r $(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip .
             displayName: 'Copy required files'
           
           - task: ArchiveFiles@2
@@ -858,6 +873,13 @@ stages:
             inputs:
               rootFolderOrFile: '$(windows_386)'
               archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
+            continueOnError: true
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Windows SE 64 bit ARM Build'
+            inputs:
+              rootFolderOrFile: '$(windows_se_arm64)'
+              archiveFile: '$(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip'
             continueOnError: true
 
           - script: |
@@ -890,7 +912,7 @@ stages:
             - ImageOverride -equals $(AgentName)
 
         variables:
-          - group: AZCOPY_ESRP_SECRET
+          - group: AZCOPY_SECRET_VAULT
 
         steps:
           - checkout: none
@@ -1300,6 +1322,8 @@ stages:
               itemPattern: 'azCopy-linux-signed/azcopy-*arm64.deb'
 
           - script: |
+              rm -rf /usr/bin/azcopy
+              rm -rf /usr/local/bin/azcopy
               sudo dpkg --info azcopy-*arm64.deb
               sudo dpkg -i azcopy-*arm64.deb
             displayName: 'Install Package'
@@ -1626,8 +1650,155 @@ stages:
                     }
                 }
             displayName: 'Extract Files and Run Version and Help Command on Windows'
-       # TestArtifacts ends here
+     
+      - job: Set_10
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Debian-12_amd64:
+              agentName: "blobfuse-debian-12"
+        pool:
+            name: "azcopy-debian-pool"
+            demands:
+              - ImageOverride -equals $(AgentName)
+              
+        steps:
+          - checkout: none
 
+          - script: |
+              sudo apt update
+              sudo apt --fix-broken install
+              ldd --version
+            displayName: "GLIBC Version"
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-linux-signed'
+              downloadPath: '$(System.DefaultWorkingDirectory)'
+              itemPattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
+
+          - script: |
+              sudo dpkg --info azcopy-*x86_64.deb
+              sudo dpkg -i azcopy-*x86_64.deb
+              sudo apt-get install build-essential -y
+            displayName: 'Install deb Package'
+            workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+
+          - script: | 
+              azcopy --version
+              azcopy --help
+            displayName: 'Check Version and Help'
+      
+      - job: Set_11
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Windows-ARM64:
+              agentName: "windows_arm64"
+        pool:
+          name: "azcopy_windows_arm"
+          demands:
+            - ImageOverride -equals $(AgentName)
+
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          
+        steps:
+          - task: GoTool@0
+            env:
+              GO111MODULE: 'on'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION)
+
+          - script: |
+              echo 'Running GO Vet'
+              go vet 
+            displayName: 'Golang Vet - Windows'
+            workingDirectory: $(root_dir)
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: 'azCopy-windows-signed'
+              downloadPath: $(Build.ArtifactStagingDirectory)
+              itemPattern: azCopy-windows-signed/azcopy_windows_se_arm64*.zip
+          
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                $artifactDir = "$(Build.ArtifactStagingDirectory)\azCopy-windows-signed"
+                $extractDir = "$(Build.ArtifactStagingDirectory)\extracted"
+                
+                # Find the zip file matching the pattern
+                $zipFile = Get-ChildItem -Path $artifactDir -Filter "azcopy*se_arm64*.zip" | Select-Object -First 1
+
+                if ($null -eq $zipFile) {
+                  Write-Error "No zip file found matching pattern 'azcopy*se_arm64*.zip' in directory: $artifactDir"
+                  exit 1
+                }
+
+                $zipFilePath = $zipFile.FullName
+
+                # Create extraction directory
+                New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+
+                # Extract the zip file
+                try {
+                  Add-Type -AssemblyName System.IO.Compression.FileSystem
+                  [System.IO.Compression.ZipFile]::ExtractToDirectory($zipFilePath, $extractDir)
+                } catch {
+                  Write-Error "Failed to extract zip file: $_"
+                  exit 1
+                }
+
+                # Change to the directory containing azcopy
+                Set-Location -Path $extractDir
+
+                # Find directories matching the pattern
+                $matchingDirs = Get-ChildItem -Directory -Path .\azcopy_windows_se_arm64* | Select-Object -First 1
+
+                # Check if there is exactly one matching directory
+                if ($matchingDirs.Count -eq 0) {
+                    Write-Error "No directories found matching the pattern: .\azcopy_windows_se_arm64*"
+                    exit 1
+                } elseif ($matchingDirs.Count -gt 1) {
+                    Write-Error "Multiple directories found matching the pattern: .\azcopy_windows_se_arm64*"
+                    exit 1
+                }
+
+                # Check if the azcopy executable exists in the matching directory
+                $azcopyPath = Join-Path -Path $matchingDirs.FullName -ChildPath "azcopy.exe"
+                if (-Not (Test-Path -Path $azcopyPath)) {
+                    Write-Error "azcopy not found in extraction directory: $($matchingDirs.FullName)"
+                    exit 1
+                } else {
+                    Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
+                    # Ensure the azcopy executable has the correct permissions
+                    icacls $azcopyPath
+
+                    # Run azcopy --version and capture output
+                    try {
+                        $versionOutput = & $azcopyPath --version 2>&1
+                        Write-Output "azcopy version output: $versionOutput"
+                    } catch {
+                        Write-Error "Failed to run azcopy --version: $_"
+                    }
+
+                    # Run azcopy --help and capture output
+                    try {
+                        $helpOutput = & $azcopyPath --help 2>&1
+                        Write-Output "azcopy help output: $helpOutput"
+                    } catch {
+                        Write-Error "Failed to run azcopy --help: $_"
+                    }
+                }
+            displayName: 'Extract Files and Run Version and Help Command on Windows Arm64'
+     
+    # TestArtifacts ends here
+      
   - stage: ReleaseToContainer
     dependsOn: TestArtifacts
     condition: succeeded('TestArtifacts')
@@ -1798,7 +1969,7 @@ stages:
           pool:
             vmImage: 'ubuntu-22.04'
           variables:
-            - group: AZCOPY_ESRP_SECRET
+            - group: AZCOPY_SECRET_VAULT
             - name: root_dir
               value: '$(System.DefaultWorkingDirectory)'
           
@@ -1908,7 +2079,7 @@ stages:
                 while IFS=, read -r distro archetype repoName releaseName; do
 
                   # If the package is preview, publish to mariner preview package
-                  if [[ $distro == *"Mariner-2.0"* ]]; then
+                  if [[ $distro == *"Mariner-"* ]]; then
                     if [ $is_preview = "true" ]; then
                       repoName=$(echo $repoName | sed 's/prod/preview/')
                     fi
@@ -1926,7 +2097,7 @@ stages:
                     if [[ $archetype == *"Arm"* ]]; then
                       echo "Skipping for ARM type on $distro"
                     else
-                      if [[ $distro == *"Mariner-2.0"* ]]; then
+                      if [[ $distro == *"Mariner-"* ]]; then
                         if [ "$(is_preview)" = "true" ]; then
                           repoName=$(echo $repoName | sed 's/prod/preview/')
                         fi
@@ -1967,6 +2138,8 @@ stages:
             
             # install azcopy
             - script: |
+                rm -rf /usr/local/bin/azcopy
+                rm -rf /usr/bin/azcopy
                 cd $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
                 ls azcopy*.arm64.deb
                 sudo dpkg --info azcopy-*arm64.deb
