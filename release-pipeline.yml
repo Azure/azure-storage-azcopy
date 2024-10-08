@@ -1935,47 +1935,47 @@ stages:
           #         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
           #       fi
 
-  - ${{ if eq(parameters.post_release, true) }}:
-    - stage: ReleaseToGithub
-      dependsOn: TestArtifacts
-      condition: succeeded('TestArtifacts')
-      jobs:  
-        - job: ReleaseToGithub
-          timeoutInMinutes: 120
-          strategy:
-            matrix:
-              Ubuntu-22:
-                vmImage: 'Ubuntu-20.04'
-                AgentName: "blobfuse-ubuntu20"
-          pool:
-            name: "blobfuse-ubuntu-pool"
-            demands:
-              - ImageOverride -equals $(AgentName)
+  # - ${{ if eq(parameters.post_release, true) }}:
+  #   - stage: ReleaseToGithub
+  #     dependsOn: TestArtifacts
+  #     condition: succeeded('TestArtifacts')
+  #     jobs:  
+  #       - job: ReleaseToGithub
+  #         timeoutInMinutes: 120
+  #         strategy:
+  #           matrix:
+  #             Ubuntu-22:
+  #               vmImage: 'Ubuntu-20.04'
+  #               AgentName: "blobfuse-ubuntu20"
+  #         pool:
+  #           name: "blobfuse-ubuntu-pool"
+  #           demands:
+  #             - ImageOverride -equals $(AgentName)
 
-          steps:
-            - checkout: none
+  #         steps:
+  #           - checkout: none
 
-            - script: |
-                echo ${{ parameters.tag }}
-              displayName: 'Tag Name'
+  #           - script: |
+  #               echo ${{ parameters.tag }}
+  #             displayName: 'Tag Name'
               
-            - task: GithubRelease@1
-              inputs:
-                githubConnection: 'azcopy-github-connection'
-                repositoryName: 'Azure/azure-storage-azcopy'
-                action: 'edit'
+  #           - task: GithubRelease@1
+  #             inputs:
+  #               githubConnection: 'azcopy-github-connection'
+  #               repositoryName: 'Azure/azure-storage-azcopy'
+  #               action: 'edit'
 
-                target: '$(Build.SourceVersion)'
-                tagSource: 'userSpecifiedTag'
+  #               target: '$(Build.SourceVersion)'
+  #               tagSource: 'userSpecifiedTag'
 
-                title: ${{ parameters.tag }}
-                tag: ${{ parameters.tag }}
+  #               title: ${{ parameters.tag }}
+  #               tag: ${{ parameters.tag }}
                 
-                changeLogCompareToRelease: 'lastFullRelease'
-                changeLogType: 'commitBased'
-                isDraft: ${{ parameters.draft }}
-                isPreRelease: ${{ parameters.prerelease }}
-                assetUploadMode: replace
+  #               changeLogCompareToRelease: 'lastFullRelease'
+  #               changeLogType: 'commitBased'
+  #               isDraft: ${{ parameters.draft }}
+  #               isPreRelease: ${{ parameters.prerelease }}
+  #               assetUploadMode: replace
 
   - ${{ if eq(parameters.publish_artifacts, true) }}:
     - stage: PublishArtifacts
