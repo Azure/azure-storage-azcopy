@@ -37,7 +37,7 @@ steps:
 
     # Step 2: Update the fields in the .wxs file
     Write-Host "Updating Uuid in .wxs file..."
-    $uuid = [guid]::NewGuid().Guid
+    $uuid = [guid]::NewGuid().Guid.ToString()
 
     # Load the XML file
     [xml]$wixXml = Get-Content $wxsFilePath
