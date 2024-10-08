@@ -1902,38 +1902,38 @@ stages:
               script: |
                 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-          - task: AzureCLI@2
-            displayName: 'Azure CLI'
-            inputs:
-              azureSubscription: 'ESRP KeyVault identity'
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                # Find the current version
-                raw_version_output=$(azcopy --version)
-                azcopy_version=$(echo $raw_version_output | awk '{print $3}')
+          # - task: AzureCLI@2
+          #   displayName: 'Azure CLI'
+          #   inputs:
+          #     azureSubscription: 'ESRP KeyVault identity'
+          #     scriptType: bash
+          #     scriptLocation: inlineScript
+          #     inlineScript: |
+          #       # Find the current version
+          #       raw_version_output=$(azcopy --version)
+          #       azcopy_version=$(echo $raw_version_output | awk '{print $3}')
 
-                today=$(date +"%Y%m%d")
+          #       today=$(date +"%Y%m%d")
                 
-                if [ $(Publish_To_Container) = "True" ]; then
-                  container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-                else
-                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
-                fi
-                echo "Artifacts will be uploaded to: $container_url"
+          #       if [ $(Publish_To_Container) = "True" ]; then
+          #         container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+          #       else
+          #         container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+          #       fi
+          #       echo "Artifacts will be uploaded to: $container_url"
                 
-                executable_name=azcopy
+          #       executable_name=azcopy
                 
-                # Upload the archived builds
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
+          #       # Upload the archived builds
+          #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
+          #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
+          #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
+          #       AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
-                if [ $(Publish_To_M1_Container) = "True" ]; then
-                  m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
-                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
-                fi
+          #       if [ $(Publish_To_M1_Container) = "True" ]; then
+          #         m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
+          #         AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
+          #       fi
 
   - ${{ if eq(parameters.post_release, true) }}:
     - stage: ReleaseToGithub
