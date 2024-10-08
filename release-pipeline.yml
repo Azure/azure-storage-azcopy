@@ -648,96 +648,96 @@ stages:
     dependsOn: BuildArtifacts
     condition: succeeded('BuildArtifacts')
     jobs:
-      - job: Set_1
-        timeoutInMinutes: 120
-        strategy:
-          matrix:
-            Linux-Signing:
-              vmImage: 'Ubuntu-20.04'
-              AgentName: "blobfuse-ubuntu20"
-        pool:
-          name: "blobfuse-ubuntu-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+      # - job: Set_1
+      #   timeoutInMinutes: 120
+      #   strategy:
+      #     matrix:
+      #       Linux-Signing:
+      #         vmImage: 'Ubuntu-20.04'
+      #         AgentName: "blobfuse-ubuntu20"
+      #   pool:
+      #     name: "blobfuse-ubuntu-pool"
+      #     demands:
+      #       - ImageOverride -equals $(AgentName)
 
-        variables:
-          - group: AZCOPY_SECRET_VAULT
+      #   variables:
+      #     - group: AZCOPY_SECRET_VAULT
 
-        steps:
-          - checkout: none
+      #   steps:
+      #     - checkout: none
           
-          - script: |
-              echo ${{ parameters.tag }}
-            displayName: 'Tag Name'
+      #     - script: |
+      #         echo ${{ parameters.tag }}
+      #       displayName: 'Tag Name'
 
-          - task: DownloadBuildArtifacts@0
-            displayName: 'Download Build Artifacts'
-            inputs:
-              artifactName: 'azCopy-linux-temp'
-              downloadPath: $(Build.ArtifactStagingDirectory)
+      #     - task: DownloadBuildArtifacts@0
+      #       displayName: 'Download Build Artifacts'
+      #       inputs:
+      #         artifactName: 'azCopy-linux-temp'
+      #         downloadPath: $(Build.ArtifactStagingDirectory)
           
-          - script: |
-              rm -rf azcopy_linux*
-              sudo ls -lRt azCopy-linux-temp
-              md5sum azCopy-linux-temp/*
-            displayName: 'List Artifacts'
-            workingDirectory: '$(Build.ArtifactStagingDirectory)'
+      #     - script: |
+      #         rm -rf azcopy_linux*
+      #         sudo ls -lRt azCopy-linux-temp
+      #         md5sum azCopy-linux-temp/*
+      #       displayName: 'List Artifacts'
+      #       workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
-          - script: |
-              mkdir mariner && chmod 755 mariner
-              cp azCopy-linux-temp/*arm64.rpm mariner
-              cp azCopy-linux-temp/*x86_64.rpm mariner
-              sudo ls -lRt mariner
-              md5sum mariner/*
-            displayName: 'Copy artifacts for Mariner'
-            workingDirectory: $(Build.ArtifactStagingDirectory)
+      #     - script: |
+      #         mkdir mariner && chmod 755 mariner
+      #         cp azCopy-linux-temp/*arm64.rpm mariner
+      #         cp azCopy-linux-temp/*x86_64.rpm mariner
+      #         sudo ls -lRt mariner
+      #         md5sum mariner/*
+      #       displayName: 'Copy artifacts for Mariner'
+      #       workingDirectory: $(Build.ArtifactStagingDirectory)
           
-          - script: |
-              sudo apt-get clean
-              sudo apt-get update
-              sudo apt-get upgrade -y
-              sudo apt-get install -f --fix-missing
-              wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
-              sudo dpkg -i packages-microsoft-prod.deb 
-              sudo apt install apt-transport-https -y
-              sudo apt install dotnet-sdk-3.1 -y
-            displayName: "Update dependencies"
+      #     - script: |
+      #         sudo apt-get clean
+      #         sudo apt-get update
+      #         sudo apt-get upgrade -y
+      #         sudo apt-get install -f --fix-missing
+      #         wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+      #         sudo dpkg -i packages-microsoft-prod.deb 
+      #         sudo apt install apt-transport-https -y
+      #         sudo apt install dotnet-sdk-3.1 -y
+      #       displayName: "Update dependencies"
 
-          - template: setup/esrp_sign_linux.yml
-            parameters:
-              FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
-              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-              Pattern: '*.rpm, *.deb'
-              DisplayName: 'ESRP CodeSigning azCopy linux'
+      #     - template: setup/esrp_sign_linux.yml
+      #       parameters:
+      #         FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
+      #         ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
+      #         Pattern: '*.rpm, *.deb'
+      #         DisplayName: 'ESRP CodeSigning azCopy linux'
           
-          - template: setup/esrp_sign_linux.yml
-            parameters:
-              FolderPath: $(Build.ArtifactStagingDirectory)/mariner
-              ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
-              Pattern: '*.rpm, *.deb'
-              DisplayName: 'ESRP CodeSigning azCopy mariner'
+      #     - template: setup/esrp_sign_linux.yml
+      #       parameters:
+      #         FolderPath: $(Build.ArtifactStagingDirectory)/mariner
+      #         ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
+      #         Pattern: '*.rpm, *.deb'
+      #         DisplayName: 'ESRP CodeSigning azCopy mariner'
 
-          # Validate signed images have md5sum changed
-          - script: |
-              chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
-              chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*.md
-              rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
-              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/* $(Build.ArtifactStagingDirectory)/
-              rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
-            displayName: 'Make Artifacts executable'
+      #     # Validate signed images have md5sum changed
+      #     - script: |
+      #         chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*
+      #         chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/*.md
+      #         rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
+      #         mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp/* $(Build.ArtifactStagingDirectory)/
+      #         rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp
+      #       displayName: 'Make Artifacts executable'
 
-          - script: |
-              sudo ls -lRt $(Build.ArtifactStagingDirectory)
-              md5sum $(Build.ArtifactStagingDirectory)/*
-              md5sum $(Build.ArtifactStagingDirectory)/mariner/*
-            displayName: 'List Signed Artifacts'
+      #     - script: |
+      #         sudo ls -lRt $(Build.ArtifactStagingDirectory)
+      #         md5sum $(Build.ArtifactStagingDirectory)/*
+      #         md5sum $(Build.ArtifactStagingDirectory)/mariner/*
+      #       displayName: 'List Signed Artifacts'
           
-          # Push signed images to artifact directory
-          - task: PublishBuildArtifacts@1
-            inputs:
-              artifactName: 'azCopy-linux-signed'
-            displayName: 'Publish Signed Artifacts'
+      #     # Push signed images to artifact directory
+      #     - task: PublishBuildArtifacts@1
+      #       inputs:
+      #         artifactName: 'azCopy-linux-signed'
+      #       displayName: 'Publish Signed Artifacts'
 
       # - job: Set_2
       #   timeoutInMinutes: 120
