@@ -85,6 +85,7 @@ func (s *FileServiceResourceManager) Level() cmd.LocationLevel {
 func (s *FileServiceResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(s.internalClient.URL())
 	base = s.internalAccount.ApplySAS(base, s.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -94,6 +95,7 @@ func (s *FileServiceResourceManager) ResourceClient() any {
 }
 
 func (s *FileServiceResourceManager) ListContainers(a Asserter) []string {
+	a.HelperMarker().Helper()
 	pager := s.internalClient.NewListSharesPager(nil)
 	out := make([]string, 0)
 
@@ -181,6 +183,7 @@ func (s *FileShareResourceManager) Level() cmd.LocationLevel {
 func (s *FileShareResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(s.internalClient.URL())
 	base = s.internalAccount.ApplySAS(base, s.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -190,6 +193,7 @@ func (s *FileShareResourceManager) ContainerName() string {
 }
 
 func (s *FileShareResourceManager) GetProperties(a Asserter) ContainerProperties {
+	a.HelperMarker().Helper()
 	resp, err := s.internalClient.GetProperties(ctx, nil)
 	a.NoError("get share properties", err)
 
@@ -205,6 +209,7 @@ func (s *FileShareResourceManager) GetProperties(a Asserter) ContainerProperties
 }
 
 func (s *FileShareResourceManager) Create(a Asserter, props ContainerProperties) {
+	a.HelperMarker().Helper()
 	s.CreateWithOptions(a, &FileShareCreateOptions{
 		AccessTier:       props.FileContainerProperties.AccessTier,
 		EnabledProtocols: props.FileContainerProperties.EnabledProtocols,
@@ -217,6 +222,7 @@ func (s *FileShareResourceManager) Create(a Asserter, props ContainerProperties)
 type FileShareCreateOptions = share.CreateOptions
 
 func (s *FileShareResourceManager) CreateWithOptions(a Asserter, options *FileShareCreateOptions) {
+	a.HelperMarker().Helper()
 	_, err := s.internalClient.Create(ctx, options)
 
 	created := true
@@ -238,11 +244,13 @@ func (s *FileShareResourceManager) Delete(a Asserter) {
 type FileShareDeleteOptions = share.DeleteOptions
 
 func (s *FileShareResourceManager) DeleteWithOptions(a Asserter, options *FileShareDeleteOptions) {
+	a.HelperMarker().Helper()
 	_, err := s.internalClient.Delete(ctx, options)
 	a.NoError("delete share", err)
 }
 
 func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, recursive bool) map[string]ObjectProperties {
+	a.HelperMarker().Helper()
 	queue := []string{targetDir}
 	out := make(map[string]ObjectProperties)
 
@@ -288,6 +296,7 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
+						LastModifiedTime:  v.Properties.LastModified,
 					},
 				}
 			}
@@ -324,6 +333,7 @@ func (s *FileShareResourceManager) ListObjects(a Asserter, targetDir string, rec
 						FileCreationTime:  v.Properties.CreationTime,
 						FileLastWriteTime: v.Properties.LastWriteTime,
 						FilePermissions:   permissions,
+						LastModifiedTime:  v.Properties.LastModified,
 					},
 				}
 			}
@@ -398,6 +408,7 @@ func (f *FileObjectResourceManager) Level() cmd.LocationLevel {
 func (f *FileObjectResourceManager) URI(opts ...GetURIOptions) string {
 	base := fileStripSAS(f.getFileClient().URL()) // restype doesn't matter here, same URL under the hood
 	base = f.internalAccount.ApplySAS(base, f.Location(), opts...)
+	base = addWildCard(base, opts...)
 
 	return base
 }
@@ -415,6 +426,7 @@ func (f *FileObjectResourceManager) ObjectName() string {
 }
 
 func (f *FileObjectResourceManager) PreparePermissions(a Asserter, p *string) *file.Permissions {
+	a.HelperMarker().Helper()
 	if p == nil {
 		return nil
 	}
@@ -451,6 +463,7 @@ func (f *FileObjectResourceManager) CreateParents(a Asserter) {
 }
 
 func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContainer, props ObjectProperties) {
+	a.HelperMarker().Helper()
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
 		var err error
@@ -500,6 +513,7 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 }
 
 func (f *FileObjectResourceManager) Delete(a Asserter) {
+	a.HelperMarker().Helper()
 	var err error
 	switch f.entityType {
 	case common.EEntityType.File():
@@ -518,12 +532,14 @@ func (f *FileObjectResourceManager) Delete(a Asserter) {
 }
 
 func (f *FileObjectResourceManager) ListChildren(a Asserter, recursive bool) map[string]ObjectProperties {
+	a.HelperMarker().Helper()
 	a.AssertNow("must be folder to list children", Equal{}, f.entityType, common.EEntityType.Folder())
 
 	return f.Share.ListObjects(a, f.path, recursive)
 }
 
 func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectProperties) {
+	a.HelperMarker().Helper()
 	switch f.entityType {
 	case common.EEntityType.Folder():
 		resp, err := f.getDirClient().GetProperties(ctx, &directory.GetPropertiesOptions{})
@@ -546,6 +562,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
+				LastModifiedTime:  resp.LastModified,
 			},
 		}
 	case common.EEntityType.File():
@@ -577,6 +594,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FileCreationTime:  resp.FileCreationTime,
 				FileLastWriteTime: resp.FileLastWriteTime,
 				FilePermissions:   permissions,
+				LastModifiedTime:  resp.LastModified,
 			},
 		}
 	default:
@@ -587,6 +605,7 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 }
 
 func (f *FileObjectResourceManager) SetHTTPHeaders(a Asserter, h contentHeaders) {
+	a.HelperMarker().Helper()
 	a.AssertNow("HTTP headers are only available on files", Equal{}, f.entityType, common.EEntityType.File())
 	client := f.getFileClient()
 
@@ -604,6 +623,7 @@ func (f *FileObjectResourceManager) SetHTTPHeaders(a Asserter, h contentHeaders)
 }
 
 func (f *FileObjectResourceManager) SetMetadata(a Asserter, metadata common.Metadata) {
+	a.HelperMarker().Helper()
 	switch f.entityType {
 	case common.EEntityType.File():
 		_, err := f.getFileClient().SetMetadata(ctx, &file.SetMetadataOptions{Metadata: metadata})
@@ -617,6 +637,7 @@ func (f *FileObjectResourceManager) SetMetadata(a Asserter, metadata common.Meta
 }
 
 func (f *FileObjectResourceManager) SetObjectProperties(a Asserter, props ObjectProperties) {
+	a.HelperMarker().Helper()
 	var attr *file.NTFSFileAttributes
 	if DerefOrZero(props.FileProperties.FileAttributes) != "" {
 		var err error
@@ -668,6 +689,7 @@ func (f *FileObjectResourceManager) getDirClient() *directory.Client {
 }
 
 func (f *FileObjectResourceManager) Download(a Asserter) io.ReadSeeker {
+	a.HelperMarker().Helper()
 	a.Assert("Entity type must be file", Equal{}, f.entityType, common.EEntityType.File())
 
 	resp, err := f.getFileClient().DownloadStream(ctx, nil)
