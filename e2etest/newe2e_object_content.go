@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"strconv"
+	"time"
 )
 
 type ObjectContentContainer interface {
@@ -64,10 +65,9 @@ func SizeToString(size int64, megaUnits bool) string {
 	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
 }
 
-func NewRandomObjectContentContainer(a Asserter, size int64) ObjectContentContainer {
+func NewRandomObjectContentContainer(size int64) ObjectContentContainer {
 	buf := make([]byte, size)
-	_, err := rand.Read(buf)
-	a.NoError("Generate random data", err)
+	_, _ = rand.New(rand.NewSource(time.Now().Unix())).Read(buf)
 	return &ObjectContentContainerBuffer{buf}
 }
 

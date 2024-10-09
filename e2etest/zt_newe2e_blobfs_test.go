@@ -14,7 +14,7 @@ type BlobFSTestSuite struct{}
 func (s *BlobFSTestSuite) Scenario_UploadFile(svm *ScenarioVariationManager) {
 	fileName := "test.txt"
 	size := ResolveVariation(svm, []int64{common.KiloByte, 64 * common.MegaByte})
-	body := NewRandomObjectContentContainer(svm, size)
+	body := NewRandomObjectContentContainer(size)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -41,7 +41,7 @@ func (s *BlobFSTestSuite) Scenario_UploadFile(svm *ScenarioVariationManager) {
 
 func (s *BlobFSTestSuite) Scenario_UploadFileMultiflushOAuth(svm *ScenarioVariationManager) {
 	fileName := "test_multiflush_64MB_file.txt"
-	body := NewRandomObjectContentContainer(svm, 64*common.MegaByte)
+	body := NewRandomObjectContentContainer(64 * common.MegaByte)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -82,7 +82,7 @@ func (s *BlobFSTestSuite) Scenario_Upload100Files(svm *ScenarioVariationManager)
 	srcObjs := make(ObjectResourceMappingFlat)
 	for i := range 100 {
 		name := "dir_100_files/test" + strconv.Itoa(i) + ".txt"
-		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 		srcObjs[name] = obj
 	}
@@ -105,7 +105,7 @@ func (s *BlobFSTestSuite) Scenario_Upload100Files(svm *ScenarioVariationManager)
 func (s *BlobFSTestSuite) Scenario_DownloadFile(svm *ScenarioVariationManager) {
 	fileName := "test.txt"
 	size := ResolveVariation(svm, []int64{common.KiloByte, 64 * common.MegaByte})
-	body := NewRandomObjectContentContainer(svm, size)
+	body := NewRandomObjectContentContainer(size)
 
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -142,7 +142,7 @@ func (s *BlobFSTestSuite) Scenario_Download100Files(svm *ScenarioVariationManage
 	srcObjs := make(ObjectResourceMappingFlat)
 	for i := range 100 {
 		name := "dir_100_files/test" + strconv.Itoa(i) + ".txt"
-		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 		srcObjs[name] = obj
 	}
@@ -237,9 +237,9 @@ func (s *BlobFSTestSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariati
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(true),
+					Recursive:             pointerTo(true),
+					IncludeDirectoryStubs: pointerTo(true),
 				},
-				IncludeDirectoryStubs: pointerTo(true),
 			},
 		},
 	)
