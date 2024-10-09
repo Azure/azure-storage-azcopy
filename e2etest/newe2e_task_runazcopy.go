@@ -255,7 +255,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(commandSpec.Verb)}
-		
+
 		for _, v := range commandSpec.PositionalArgs {
 			out = append(out, v)
 		}
@@ -340,11 +340,6 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		UploadLogs(a, out, stderr, DerefOrZero(commandSpec.Environment.LogLocation))
 		_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
 	})
-
-	if a.Failed() {
-		a.Log(out.String())
-		a.Log(stderr.String())
-	}
 
 	return out, &AzCopyJobPlan{}
 }
