@@ -1,14 +1,15 @@
 package ste
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"hash"
 	"io"
+	"log"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -43,66 +44,77 @@ type HashResult struct {
 	Message string
 }
 
-func getLedgerAccessToken() string {
+const (
+	apiVersion     = "0.1-preview"
+	identityURLFmt = "https://identity.confidential-ledger.core.azure.com/ledgerIdentity/%s"
+	ledgerURLFmt   = "%s/app/transactions?api-version=%s&subLedgerId=%s"
+)
 
+// Global regex for extracting storage account information
+var storageRegex = regexp.MustCompile(`https://([^.]+)\.blob\.core\.windows\.net/([^/]+)(?:/([^/]+))?`)
+
+// Create a reusable HTTP client
+var httpClient = &http.Client{}
+
+// Utility function to get the ledger access token
+func getLedgerAccessToken() (string, error) {
 	cmd := "az"
 	args := []string{"account", "get-access-token", "--resource", "https://confidential-ledger.azure.com"}
 	out, err := exec.Command(cmd, args...).Output()
 	if err != nil {
-		return "error"
+		log.Printf("Failed to execute az account get-access-token: %v", err)
+		return "", err
 	}
 
 	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(out), &data); err != nil {
-		return "error"
+	if err := json.Unmarshal(out, &data); err != nil {
+		log.Printf("Failed to unmarshal access token: %v", err)
+		return "", err
 	}
 
-	// Extract the access token
 	accessToken, ok := data["accessToken"].(string)
 	if !ok {
-		return "error"
+		return "", fmt.Errorf("accessToken not found in the response")
 	}
 
-	return accessToken
+	return accessToken, nil
 }
 
-func getIdentityCertificate(ledgerUrl string, client *http.Client) string {
+// Fetch the ledger identity certificate
+func getIdentityCertificate(ledgerUrl string, client *http.Client) (string, error) {
 	parts := strings.Split(ledgerUrl, ".")
 	if len(parts) < 2 {
-		fmt.Println("Invalid URL format")
-		return ""
+		return "", fmt.Errorf("invalid URL format")
 	}
 	ledgerName := strings.TrimPrefix(parts[0], "https://")
 
-	identityURL := fmt.Sprintf("https://identity.confidential-ledger.core.azure.com/ledgerIdentity/%s", ledgerName)
+	identityURL := fmt.Sprintf(identityURLFmt, ledgerName)
 	response, err := client.Get(identityURL)
 	if err != nil {
-		return ""
+		log.Printf("Failed to fetch identity certificate: %v", err)
+		return "", err
 	}
 	defer response.Body.Close()
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		return ""
+		log.Printf("Failed to decode identity certificate response: %v", err)
+		return "", err
 	}
 
 	ledgerTlsCertificate, ok := result["ledgerTlsCertificate"].(string)
 	if !ok {
-		fmt.Println("Error: ledgerTlsCertificate not found in response")
-		return ""
+		return "", fmt.Errorf("ledgerTlsCertificate not found in response")
 	}
 
-	return ledgerTlsCertificate
+	return ledgerTlsCertificate, nil
 }
 
-func getStorageAccount(storageLocation string) string {
-
-	re := regexp.MustCompile(`https://([^.]+)\.blob\.core\.windows\.net/([^/]+)(?:/([^/]+))?`)
-
-	matches := re.FindStringSubmatch(storageLocation)
-
+// Extract the storage account and subdirectory from the storage location
+func getStorageAccount(storageLocation string) (string, error) {
+	matches := storageRegex.FindStringSubmatch(storageLocation)
 	if len(matches) < 3 {
-		return "invalid-format"
+		return "", fmt.Errorf("invalid storage location format")
 	}
 
 	storageAccount := matches[1]
@@ -112,53 +124,62 @@ func getStorageAccount(storageLocation string) string {
 
 	if len(matches) >= 4 && matches[3] != "" {
 		subdirectory := matches[3]
-
 		if !strings.Contains(subdirectory, ".") {
 			newString = fmt.Sprintf("%s-%s", newString, subdirectory)
 		}
 	}
 
-	return newString
+	return newString, nil
 }
 
-func uploadHash(md5Hasher hash.Hash, tamperProofLocation string, storageDestination string) {
-
-	var ledgerUrl = tamperProofLocation
-
-	certPEM := getIdentityCertificate(ledgerUrl, &http.Client{})
+// Create an HTTP client with the provided identity certificate
+func createHttpClient(certPEM string) (*http.Client, error) {
 	certPool := x509.NewCertPool()
-	if ok := certPool.AppendCertsFromPEM([]byte(certPEM)); !ok {
-		return
+	if !certPool.AppendCertsFromPEM([]byte(certPEM)) {
+		return nil, fmt.Errorf("failed to append certs from PEM")
 	}
 
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			RootCAs: certPool,
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: certPool,
+			},
 		},
-	}
+	}, nil
+}
 
-	client := &http.Client{
-		Transport: transport,
-	}
-
-	headers := map[string]string{
-		"Authorization":          "Bearer " + getLedgerAccessToken(),
-		"Content-Type":           "application/json",
-		"x-ms-client-request-id": uuid.New().String(),
-	}
-
-	hashSum := md5Hasher.Sum(nil)
-
-	url := fmt.Sprintf("%s/app/transactions?api-version=0.1-preview&subLedgerId=%s", ledgerUrl, getStorageAccount(storageDestination))
-
-	hashSumString := hex.EncodeToString(hashSum)
-
-	hashSumBytes, err := hex.DecodeString(hashSumString)
+// Set common request headers
+func setRequestHeaders(req *http.Request) error {
+	accessToken, err := getLedgerAccessToken()
 	if err != nil {
-		return
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-ms-client-request-id", uuid.New().String())
+	return nil
+}
+
+// Upload a hash to the ledger
+func uploadHash(md5Hasher hash.Hash, tamperProofLocation string, storageDestination string) error {
+	certPEM, err := getIdentityCertificate(tamperProofLocation, httpClient)
+	if err != nil {
+		return err
 	}
 
-	hashSumBase64 := base64.StdEncoding.EncodeToString(hashSumBytes)
+	client, err := createHttpClient(certPEM)
+	if err != nil {
+		return err
+	}
+
+	storageAccount, err := getStorageAccount(storageDestination)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf(ledgerURLFmt, tamperProofLocation, apiVersion, storageAccount)
+	hashSum := md5Hasher.Sum(nil)
+	hashSumBase64 := base64.StdEncoding.EncodeToString(hashSum)
 
 	var contentString = "{'path': '" + storageDestination + "', 'hash': '" + hashSumBase64 + "'}"
 
@@ -168,137 +189,121 @@ func uploadHash(md5Hasher hash.Hash, tamperProofLocation string, storageDestinat
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return err
 	}
 
 	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonData)))
 	if err != nil {
-		return
-	}
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		return
+		return err
 	}
 
+	if err := setRequestHeaders(req); err != nil {
+		return err
+	}
+
+	response, err := client.Do(req)
+	if err != nil {
+		return err
+	}
 	defer response.Body.Close()
 
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return fmt.Errorf("upload failed: %s", string(body))
+	}
+
+	return nil
 }
 
-func downloadHash(comparison md5Comparer, tamperProofLocation string, storageSource string) HashResult {
-
-	var ledgerUrl = tamperProofLocation
-
-	certPEM := getIdentityCertificate(ledgerUrl, &http.Client{})
-
-	certPool := x509.NewCertPool()
-
-	if ok := certPool.AppendCertsFromPEM([]byte(certPEM)); !ok {
-		return HashResult{}
-	}
-
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			RootCAs: certPool,
-		},
-	}
-
-	client := &http.Client{
-		Transport: transport,
-	}
-
-	headers := map[string]string{
-		"Authorization":          "Bearer " + getLedgerAccessToken(),
-		"Content-Type":           "application/json",
-		"x-ms-client-request-id": uuid.New().String(),
-	}
-
-	url := fmt.Sprintf("%s/app/transactions?api-version=0.1-preview&subLedgerId=%s", ledgerUrl, getStorageAccount(storageSource))
-
-	req, err := http.NewRequest("GET", url, nil)
+// Download and compare hash from the ledger
+func downloadHash(comparison md5Comparer, tamperProofLocation string, storageSource string) (HashResult, error) {
+	certPEM, err := getIdentityCertificate(tamperProofLocation, httpClient)
 	if err != nil {
-		return HashResult{}
+		return HashResult{}, err
 	}
-	for key, value := range headers {
-		req.Header.Set(key, value)
+
+	client, err := createHttpClient(certPEM)
+	if err != nil {
+		return HashResult{}, err
 	}
+
+	storageAccount, err := getStorageAccount(storageSource)
+	if err != nil {
+		return HashResult{}, err
+	}
+
+	url := fmt.Sprintf(ledgerURLFmt, tamperProofLocation, apiVersion, storageAccount)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return HashResult{}, err
+	}
+
+	if err := setRequestHeaders(req); err != nil {
+		return HashResult{}, err
+	}
+
 	response, err := client.Do(req)
 	if err != nil {
-		return HashResult{}
+		return HashResult{}, err
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return HashResult{}
+		return HashResult{}, err
 	}
 
-	var responsee Response
-	err = json.Unmarshal([]byte(body), &responsee)
-	if err != nil {
-		return HashResult{}
+	var ledgerResponse Response
+	if err := json.Unmarshal(body, &ledgerResponse); err != nil {
+		return HashResult{}, err
 	}
 
-	var state = responsee.State
-	var entries = responsee.Entries
-
-	for state == "Loading" {
+	// Handle long polling for state "Loading"
+	for ledgerResponse.State == "Loading" {
 		time.Sleep(5 * time.Second)
 
 		response, err := client.Do(req)
 		if err != nil {
-			return HashResult{}
+			return HashResult{}, err
 		}
 		defer response.Body.Close()
 
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			return HashResult{}
+			return HashResult{}, err
 		}
 
-		var responsee Response
-		err = json.Unmarshal([]byte(body), &responsee)
-		if err != nil {
-			return HashResult{}
+		if err := json.Unmarshal(body, &ledgerResponse); err != nil {
+			return HashResult{}, err
 		}
-
-		state = responsee.State
-		entries = responsee.Entries
 	}
 
-	for _, entry := range entries {
-
+	for i := len(ledgerResponse.Entries) - 1; i >= 0; i-- {
+		entry := ledgerResponse.Entries[i]
 		contentsJSON := strings.ReplaceAll(entry.Contents, "'", `"`)
-
 		var contents Contents
-		err := json.Unmarshal([]byte(contentsJSON), &contents)
-		if err != nil {
+		if err := json.Unmarshal([]byte(contentsJSON), &contents); err != nil {
 			continue
 		}
 
-		desiredString := storageSource
-		if contents.Path == desiredString {
-
-			aclHash := contents.Hash
-			hashSumString := hex.EncodeToString(comparison.expected)
-			hashSumBytes, err := hex.DecodeString(hashSumString)
-			if err != nil {
-				return HashResult{}
-			}
-
-			hashSumBase64 := base64.StdEncoding.EncodeToString(hashSumBytes)
-
-			if aclHash != hashSumBase64 {
-				var log = "ACL Hash: " + aclHash + " " + "Does Not Match Re-Calculated Hash: " + hashSumBase64
-				return HashResult{false, log}
+		if contents.Path == storageSource {
+			hashSumBase64 := base64.StdEncoding.EncodeToString(comparison.expected)
+			logMessage := fmt.Sprintf("\n\nComparing hash for '%s' in tamper-proof storage.\n", storageSource)
+			if contents.Hash != hashSumBase64 {
+				logMessage := logMessage + fmt.Sprintf("ACL Hash: %s does not match recalculated Hash: %s", contents.Hash, hashSumBase64)
+				fmt.Println(logMessage)
+				return HashResult{false, logMessage}, nil
 			} else {
-				var log = "Re-Calculated Hash: " + hashSumBase64 + " " + "Matches Hash Stored in ACL: " + aclHash
-				return HashResult{true, log}
+				logMessage := logMessage + fmt.Sprintf("Recalculated Hash: %s matches Hash stored in ACL: %s\n", hashSumBase64, contents.Hash)
+				fmt.Println(logMessage)
+				return HashResult{true, logMessage}, nil
 			}
 		}
 	}
 
-	return HashResult{}
+	return HashResult{}, nil
 }

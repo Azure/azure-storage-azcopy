@@ -409,13 +409,18 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 				jptm.FailActiveDownload("Checking MD5 hash", err)
 			}
 
-			// Download MD5 hash from tamper proof storage and check with new MD5 hash
+			// Download MD5 hash from tamper-proof storage and check with new MD5 hash
 			if len(jptm.TamperProofLocation()) > 0 {
-				hashResult := downloadHash(comparison, jptm.TamperProofLocation(), jptm.Info().Source)
+				hashResult, err := downloadHash(comparison, jptm.TamperProofLocation(), jptm.Info().Source)
 
-				if hashResult.Success {
+				if err != nil {
+					// Handle unexpected errors during the download process
+					jptm.FailActiveDownload("Downloading ACL MD5 hash", err)
+				} else if hashResult.Success {
+					// Log successful hash comparison
 					jptm.LogAtLevelForCurrentTransfer(common.LogInfo, hashResult.Message)
-				} else if !hashResult.Success {
+				} else {
+					// Handle expected hash mismatch scenario
 					err := errors.New(hashResult.Message)
 					jptm.FailActiveDownload("Checking ACL MD5 hash", err)
 				}
