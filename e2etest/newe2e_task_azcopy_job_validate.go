@@ -386,7 +386,9 @@ func ValidatePlanFiles(sm *ScenarioVariationManager, stdOut AzCopyStdout, expect
 		mmf.Unmap()
 	}
 
-	for path, _ := range expected.Objects {
-		sm.Assert("object src: "+path.SrcPath+", dst: "+path.DstPath+"; was missing from the plan file.", Always{})
+	for path, obj := range expected.Objects {
+		if DerefOrDefault(obj.ShouldBePresent, true) {
+			sm.Assert("object src: "+path.SrcPath+", dst: "+path.DstPath+"; was missing from the plan file.", Always{})
+		}
 	}
 }
