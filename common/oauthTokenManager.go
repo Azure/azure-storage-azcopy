@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"net"
 	"net/http"
 	"net/url"
@@ -40,8 +41,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/go-autorest/autorest/date"
-
-	"github.com/Azure/go-autorest/autorest/adal"
 
 	// importing the cache module registers the cache implementation for the current platform
 	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
@@ -372,7 +371,7 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 // OAuthTokenInfo contains info necessary for refresh OAuth credentials.
 type OAuthTokenInfo struct {
 	azcore.TokenCredential `json:"-"`
-	adal.Token
+	Token
 	Tenant                  string        `json:"_tenant"`
 	ActiveDirectoryEndpoint string        `json:"_ad_endpoint"`
 	LoginType               AutoLoginType `json:"_token_refresh_source"`
@@ -387,6 +386,42 @@ type OAuthTokenInfo struct {
 	ClientID       string                           `json:"_client_id"`
 	DeviceCodeInfo *azidentity.AuthenticationRecord `json:"_authentication_record,omitempty"`
 	Persist        bool                             `json:"_persist"`
+}
+
+// Token encapsulates the access token used to authorize Azure requests.
+// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-oauth2-client-creds-grant-flow#service-to-service-access-token-response
+type Token struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+
+	ExpiresIn json.Number `json:"expires_in"`
+	ExpiresOn json.Number `json:"expires_on"`
+	NotBefore json.Number `json:"not_before"`
+
+	Resource string `json:"resource"`
+	Type     string `json:"token_type"`
+}
+
+// IsZero returns true if the token object is zero-initialized.
+func (t Token) IsZero() bool {
+	return t == Token{}
+}
+
+// Expires returns the time.Time when the Token expires.
+func (t Token) Expires() time.Time {
+	s, err := t.ExpiresOn.Float64()
+	if err != nil {
+		s = -3600
+	}
+
+	expiration := date.NewUnixTimeFromSeconds(s)
+
+	return time.Time(expiration).UTC()
+}
+
+// IsExpired returns true if the Token is expired, false otherwise.
+func (t Token) IsExpired() bool {
+	return !t.Expires().After(time.Now().Add(0))
 }
 
 // IdentityInfo contains info for MSI.
@@ -424,7 +459,7 @@ func (identityInfo *IdentityInfo) Validate() error {
 }
 
 // Refresh gets new token with token info.
-func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error) {
+func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*Token, error) {
 	// TODO: I think this method is only necessary until datalake is migrated.
 	// Returns cached TokenCredential or creates a new one if it hasn't been created yet.
 	tc, err := credInfo.GetTokenCredential()
@@ -436,7 +471,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 	if err != nil {
 		return nil, err
 	}
-	return &adal.Token{
+	return &Token{
 		AccessToken: t.Token,
 		ExpiresOn:   json.Number(strconv.FormatInt(int64(t.ExpiresOn.Sub(date.UnixEpoch())/time.Second), 10)),
 	}, nil
@@ -646,19 +681,22 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 	if err != nil {
 		return nil, err
 	}
-	var persistenceOptions *azidentity.TokenCachePersistenceOptions
+	var persistentCache azidentity.Cache
 	if credInfo.Persist {
-		persistenceOptions = &azidentity.TokenCachePersistenceOptions{
+		persistentCache, err = cache.New(&cache.Options{
 			Name: TokenCache,
+		})
+		if err != nil {
+			return nil, err
 		}
 	}
-	// Read the record=
+	// Read the record
 	record := IffNotNil(credInfo.DeviceCodeInfo, azidentity.AuthenticationRecord{})
 	tc, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
 		TenantID:                       credInfo.Tenant,
 		ClientID:                       ApplicationID,
 		DisableAutomaticAuthentication: true,
-		TokenCachePersistenceOptions:   persistenceOptions,
+		Cache:                          persistentCache,
 		AuthenticationRecord:           record,
 		ClientOptions: azcore.ClientOptions{
 			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},

@@ -20,7 +20,7 @@ import (
 // - "defaultfunc:SpecialDefault" Calls a `func Default*(a ScenarioAsserter) string` named SpecialDefault on the struct. Asserts if not found.
 // - "serializer:SerializerFunc" Calls a `func Serialize*(value any, a ScenarioAsserter) string` named SerializerFunc on the struct. Asserts if not found.
 // If special characters , or : are for some reason used, \ can be used as an escape.
-func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[string]string {
+func MapFromTags(val reflect.Value, tagName string, a Asserter) map[string]string {
 	queue := []reflect.Value{val}
 	out := make(map[string]string)
 
