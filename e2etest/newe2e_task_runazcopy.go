@@ -255,7 +255,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(commandSpec.Verb)}
-		
+
 		for _, v := range commandSpec.PositionalArgs {
 			out = append(out, v)
 		}

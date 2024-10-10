@@ -144,6 +144,8 @@ func GenerateFullPath(rootPath, childPath string) string {
 	// if the childPath is empty, it means the rootPath already points to the desired entity
 	if childPath == "" {
 		return rootPath
+	} else if childPath == "\x00" { // The enumerator has asked us to target with a / at the end of our root path. This is a massive hack. When the footgun happens later, ping Adele!
+		return rootPath + rootSeparator
 	}
 
 	// otherwise, make sure a path separator is inserted between the rootPath if necessary
@@ -167,6 +169,7 @@ func GenerateFullPathWithQuery(rootPath, childPath, extraQuery string) string {
 // Block Names of blobs are of format noted below.
 // <5B empty placeholder> <16B GUID of AzCopy re-interpreted as string><5B PartNum><5B Index in the jobPart><5B blockNum>
 const AZCOPY_BLOCKNAME_LENGTH = 48
+
 func GenerateBlockBlobBlockID(blockNamePrefix string, index int32) string {
 	blockID := []byte(fmt.Sprintf("%s%05d", blockNamePrefix, index))
 	return base64.StdEncoding.EncodeToString(blockID)
