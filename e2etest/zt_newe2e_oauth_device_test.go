@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var runDeviceCodeTest = flag.Bool("device-code", true, "Whether or not to run device code tests. These must be run manually due to interactive nature.")
+var runDeviceCodeTest = flag.Bool("device-code", false, "Whether or not to run device code tests. These must be run manually due to interactive nature.")
 
 var manualEnv AzCopyEnvironment
 
