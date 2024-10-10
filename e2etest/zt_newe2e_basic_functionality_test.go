@@ -1,7 +1,9 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -332,4 +334,72 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+}
+
+// Test of Copy and Sync commands to UnsafeDestinations (Windows Local and Blob dest)
+func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm,
+		[]AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
+
+	// Use a different file name for Windows Trailing dots are not supported in Windows
+	var fileName string
+	if runtime.GOOS == "windows" {
+		fileName = "file_with_dot"
+	} else {
+		fileName = "file."
+	}
+
+	dstObj := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm,
+			ResolveVariation(svm, []common.Location{common.ELocation.File(),
+				common.ELocation.Local(),
+				common.ELocation.Blob()})),
+		ResourceDefinitionContainer{}).GetObject(svm, fileName, common.EEntityType.File()) //TODO transfer to container w/o GetObject
+
+	// Create new obj because it must exist already if we're syncing.
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
+		if !svm.Dryrun() {
+			time.Sleep(time.Second * 10)
+		}
+	}
+
+	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()), // Only source is File - Local & Blob doesn't support T.D
+		ResourceDefinitionObject{
+			ObjectName: pointerTo(fileName),
+			Body:       body,
+		})
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:   pointerTo(true),
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to Blob destination
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj,
+		ResourceDefinitionObject{
+			Body: body,
+		}, false)
 }

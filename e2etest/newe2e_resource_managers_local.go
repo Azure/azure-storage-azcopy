@@ -300,7 +300,10 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
 	stats, err := os.Stat(l.getWorkingPath())
-	a.NoError("failed to get stat", err)
+	if err != nil { // Prevent nil dereferences
+		a.NoError("failed to get stat", err)
+		return ObjectProperties{}
+	}
 	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
 	out := ObjectProperties{
 		LastModifiedTime: lmt,
