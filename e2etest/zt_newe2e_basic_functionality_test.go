@@ -341,7 +341,7 @@ func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVaria
 	azCopyVerb := ResolveVariation(svm,
 		[]AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
 
-	// Use a different file name for Windows Trailing dots are not supported in Windows
+	// Use a different file name for Windows; Trailing dots are not supported
 	var fileName string
 	if runtime.GOOS == "windows" {
 		fileName = "file_with_dot"
@@ -393,7 +393,7 @@ func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVaria
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:   pointerTo(true),
-					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to Blob destination
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to unsafe Blob / Local destination
 				},
 			},
 		})
