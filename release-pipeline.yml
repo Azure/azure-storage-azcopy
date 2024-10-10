@@ -42,6 +42,11 @@ parameters:
     type: boolean
     default: false
 
+  - name: publish_docker_image
+    displayName: 'Build and Push Docker Image'
+    type: boolean
+    default: false
+
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -1916,6 +1921,104 @@ stages:
                   m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
                 fi
+
+  - ${{ if eq(parameters.publish_docker_image, true) }}:
+    - stage: BuildAndPublishDockerImage
+      dependsOn: TestArtifacts
+      condition: succeeded('TestArtifacts')
+      jobs:
+        - job: Set_1_Ubuntu_Mariner_AMD64
+          strategy:
+            matrix:
+              Ubuntu_amd64:
+                agentName: "blobfuse-ubuntu22"
+                vmImage: 'Ubuntu-22.04'
+                container: 'test-cnt-ubn-22'
+          pool:
+            vmImage: $(vmImage)
+
+          variables:
+          - group: AZCOPY_SECRET_VAULT
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+
+          steps:
+            - checkout: none
+            - script: |
+                git clone https://github.com/Azure/azure-storage-azcopy
+              displayName: 'Checkout Code'
+              workingDirectory: $(root_dir)
+
+            - script: |
+                git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+              displayName: 'Checkout branch'
+              workingDirectory: $(work_dir)
+
+            - script: |
+                chmod 777 *.sh
+                ./dockerinstall.sh
+
+                ./buildcontainer.sh Dockerfile ubuntu-x86_64
+                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-x86_64
+
+                ./buildcontainer.sh DockerfileMariner mariner-x86_64
+                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
+
+              displayName: "Create docker image and push to the containers registry"
+              workingDirectory: $(work_dir)/docker
+
+        - job: Set_2_Ubuntu_ARM64
+          timeoutInMinutes: 120
+          strategy:
+            matrix:
+              Ubuntu-22-ARM64:
+                vmImage: 'Ubuntu-22.04'
+                container: 'test-cnt-ubn-22-arm64'
+                AgentName: "blobfuse-ubn22-arm64"
+          pool:
+            name: "blobfuse-ubn-arm64-pool"
+            demands:
+              - ImageOverride -equals $(AgentName)
+
+          variables:
+          - group: AZCOPY_SECRET_VAULT
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+
+          steps:
+            - checkout: none
+            - script: |
+                git clone https://github.com/Azure/azure-storage-azcopy
+              displayName: 'Checkout Code'
+              workingDirectory: $(root_dir)
+
+            - script: |
+                git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+              displayName: 'Checkout branch'
+              workingDirectory: $(work_dir)
+
+            - task: ShellScript@2
+              inputs:
+                scriptPath: "$(work_dir)/go_installer.sh"
+                args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+              displayName: "Installing Go tools"
+
+            - script: |
+                sudo apt update
+                sudo apt --fix-broken install
+              displayName: "Install dependencies"
+
+            - script: |
+                chmod 777 *.sh
+                ./dockerinstall.sh
+                ./buildcontainer.sh DockerfileArm64 ubuntu-arm64
+                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-arm64
+              displayName: "Create docker image for arm64 and push to the containers registry"
+              workingDirectory: $(work_dir)/docker
 
   - ${{ if eq(parameters.post_release, true) }}:
     - stage: ReleaseToGithub
