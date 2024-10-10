@@ -61,14 +61,28 @@ func (jm *jobMgr) statusMgrClosed() bool {
 
 /* These functions should not fail */
 func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
-	jm.jstm.partCreated <- msg
-	if msg.IsFinalPart {
-		// Inform statusManager that this is all parts we've
-		close(jm.jstm.partCreated)
+	defer func() {
+		if recErr := recover(); recErr != nil {
+			jm.Log(common.LogError, "Cannot send message on closed channel")
+		}
+	}()
+	if jm.jstm.partCreated != nil { // Sends not allowed if channel is closed
+		jm.jstm.partCreated <- msg
+
+		if msg.IsFinalPart {
+			// Inform statusManager that this is all parts we've
+			close(jm.jstm.partCreated)
+			jm.jstm.partCreated = nil
+		}
 	}
 }
 
 func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
+	defer func() {
+		if recErr := recover(); recErr != nil {
+			jm.Log(common.LogError, "Cannot send message on channel")
+		}
+	}()
 	jm.jstm.xferDone <- msg
 }
 
@@ -155,8 +169,14 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 		case <-jstm.listReq:
 			/* Display stats */
 			js.Timestamp = time.Now().UTC()
-			jstm.respChan <- *js
-
+			if jstm.respChan != nil {
+				jstm.respChan <- *js // Send on the channel
+				defer func() {       // Exit gracefully if panic
+					if recErr := recover(); recErr != nil {
+						jm.Log(common.LogError, "Cannot send message on respChan")
+					}
+				}()
+			}
 			// Reset the lists so that they don't keep accumulating and take up excessive memory
 			// There is no need to keep sending the same items over and over again
 			js.FailedTransfers = []common.TransferDetail{}
@@ -168,6 +188,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				close(jstm.listReq)
 				jstm.listReq = nil
 				jstm.respChan = nil
+				jstm.statusMgrDone = nil
 				return
 			}
 		}
