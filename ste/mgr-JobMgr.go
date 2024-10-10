@@ -424,8 +424,8 @@ type AddJobPartArgs struct {
 
 	// These clients are valid if this fits the FromTo. i.e if
 	// we're uploading
-	SrcClient *common.ServiceClient
-	DstClient *common.ServiceClient
+	SrcClient  *common.ServiceClient
+	DstClient  *common.ServiceClient
 	SrcIsOAuth bool // true if source is authenticated via token
 
 	ScheduleTransfers bool
@@ -446,7 +446,7 @@ func (jm *jobMgr) AddJobPart2(args *AddJobPartArgs) IJobPartMgr {
 		cacheLimiter:      jm.cacheLimiter,
 		fileCountLimiter:  jm.fileCountLimiter,
 		closeOnCompletion: args.CompletionChan,
-		srcIsOAuth:    	   args.SrcIsOAuth,
+		srcIsOAuth:        args.SrcIsOAuth,
 	}
 	// If an existing plan MMF was supplied, re use it. Otherwise, init a new one.
 	if args.ExistingPlanMMF == nil {
@@ -580,7 +580,7 @@ func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
 		if partNum == 0 {
 			// We can't complain because, when resuming a job, there are actually TWO calls made the ResurrectJob.
 			// The effect is that all the parts are ordered... then all the parts are ordered _again_ (with new JobPartManagers replacing those from the first time)
-			// (The first resurrect is from GetJobFromTo and the second is from ResumeJobOrder)
+			// (The first resurrect is from GetJobDetails and the second is from ResumeJobOrder)
 			// So we don't object if the _first_ part clears the flag. The assumption we make, by allowing this special case here, is that
 			// the first part will be scheduled before any higher-numbered part.  As long as that assumption is true, this is safe.
 			// TODO: do we really need to to Resurrect the job twice?
@@ -716,6 +716,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 			if shouldComplete {
 				// Inform StatusManager that all parts are done.
 				close(jm.jstm.xferDone)
+
 				// Wait  for all XferDone messages to be processed by statusManager. Front end
 				// depends on JobStatus to determine if we've to quit job. Setting it here without
 				// draining XferDone will make it report incorrect statistics.

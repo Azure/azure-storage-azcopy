@@ -153,8 +153,14 @@ var ETrailingDotOption = TrailingDotOption(0)
 
 type TrailingDotOption uint8
 
-func (TrailingDotOption) Enable() TrailingDotOption  { return TrailingDotOption(0) }
-func (TrailingDotOption) Disable() TrailingDotOption { return TrailingDotOption(1) }
+func (TrailingDotOption) Enable() TrailingDotOption                   { return TrailingDotOption(0) }
+func (TrailingDotOption) Disable() TrailingDotOption                  { return TrailingDotOption(1) }
+func (TrailingDotOption) AllowToUnsafeDestination() TrailingDotOption { return TrailingDotOption(2) }
+
+func (d TrailingDotOption) IsEnabled() bool {
+	return d == d.Enable() ||
+		d == d.AllowToUnsafeDestination()
+}
 
 func (d TrailingDotOption) String() string {
 	return enum.StringInt(d, reflect.TypeOf(d))

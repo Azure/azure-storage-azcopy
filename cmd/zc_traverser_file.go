@@ -48,8 +48,8 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	trailingDot common.TrailingDotOption
-	destination *common.Location
+	trailingDot                 common.TrailingDotOption
+	destination                 *common.Location
 }
 
 func createShareClientFromServiceClient(fileURLParts file.URLParts, client *service.Client) (*share.Client, error) {
@@ -123,6 +123,10 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	invalidBlobOrWindowsName := func(path string) bool {
 		if t.destination != nil {
+			if t.trailingDot == common.ETrailingDotOption.AllowToUnsafeDestination() {
+				return false // Please let me shoot myself in the foot!
+			}
+
 			if (t.destination.IsLocal() && runtime.GOOS == "windows") || *t.destination == common.ELocation.Blob() || *t.destination == common.ELocation.BlobFS() {
 				/* Blob or Windows object name is invalid if it ends with period or
 				   one of (virtual) directories in path ends with period.
@@ -307,7 +311,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				}
 				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, *dirInfo.Name), nil)
 				if t.recursive {
-						// If recursive is turned on, add sub directories to be processed
+					// If recursive is turned on, add sub directories to be processed
 					enqueueDir(currentDirectoryClient.NewSubdirectoryClient(*dirInfo.Name))
 				}
 
@@ -381,14 +385,14 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 func newFileTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileTraverser) {
 	t = &fileTraverser{
-		rawURL: rawURL,
-		serviceClient: serviceClient,
-		ctx: ctx,
-		recursive: recursive,
-		getProperties: getProperties,
+		rawURL:                      rawURL,
+		serviceClient:               serviceClient,
+		ctx:                         ctx,
+		recursive:                   recursive,
+		getProperties:               getProperties,
 		incrementEnumerationCounter: incrementEnumerationCounter,
-		trailingDot: trailingDot,
-		destination: destination,
+		trailingDot:                 trailingDot,
+		destination:                 destination,
 	}
 	return
 }
