@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1346,6 +1347,27 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
+	// Use the concurrency environment value
+	concurrencyEnvVar := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
+
+	pipingUploadParallelism := pipingUploadParallelism
+	if concurrencyEnvVar != "" {
+		// handle when the concurrency value is AUTO
+		if concurrencyEnvVar == "AUTO" {
+			return errors.New("concurrency auto-tuning is not possible when using redirection transfers (AZCOPY_CONCURRENCY_VALUE = AUTO)")
+		}
+
+		// convert the concurrency value to int
+		concurrencyValue, err := strconv.ParseInt(concurrencyEnvVar, 10, 32)
+
+		//handle the error if the conversion fails
+		if err != nil {
+			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %w", concurrencyEnvVar, err)
+		}
+
+		pipingUploadParallelism = int(concurrencyValue) // Cast to Integer
+	}
 
 	// if no block size is set, then use default value
 	if blockSize == 0 {
