@@ -14,7 +14,8 @@ func init() {
 type ListSuite struct{}
 
 func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
-	srcService := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	srcService := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(),
+		common.ELocation.File()}))
 
 	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
@@ -38,12 +39,15 @@ func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 		AzCopyCommand{
 			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
-				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: GenericServiceSignatureValues{
-						ContainerName: srcObj.ContainerName(),
-						Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
-					},
-				}),
+				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
+					[]ExplicitCredentialTypes{EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.SASToken()}), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: GenericServiceSignatureValues{
+							ContainerName: srcObj.ContainerName(),
+							Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
+						},
+					}),
 			},
 			Flags: ListFlags{},
 		})
@@ -351,7 +355,6 @@ func (s *ListSuite) Scenario_ListBasic_TextOutput(svm *ScenarioVariationManager)
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
 
-	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
@@ -390,7 +393,6 @@ func (s *ListSuite) Scenario_ListRunningTally(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
 
-	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
@@ -511,8 +513,6 @@ func (s *ListSuite) Scenario_ListRunningTallyMachineReadable(svm *ScenarioVariat
 func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
-
-	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
 
 	// Create expected objects
@@ -597,6 +597,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions_TextOutput(svm *S
 func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
+
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
 
 	// Create expected objects
