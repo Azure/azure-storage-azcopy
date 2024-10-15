@@ -646,6 +646,7 @@ type BlobObjectGetPropertiesOptions struct {
 
 func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options *BlobObjectGetPropertiesOptions) ObjectProperties {
 	a.HelperMarker().Helper()
+
 	resp, err := b.internalClient.GetProperties(ctx, &blob.GetPropertiesOptions{
 		CPKInfo: nil,
 	})
