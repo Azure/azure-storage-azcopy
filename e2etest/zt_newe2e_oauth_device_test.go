@@ -11,15 +11,13 @@ import (
 
 var runDeviceCodeTest = flag.Bool("device-code", false, "Whether or not to run device code tests. These must be run manually due to interactive nature.")
 
-var manualEnv AzCopyEnvironment
-
 func init() {
 	if runDeviceCodeTest != nil && *runDeviceCodeTest {
 		suiteManager.RegisterSuite(&DeviceLoginManualSuite{})
 	}
 }
 
-func Scenario_CopySync(svm *ScenarioVariationManager, env *AzCopyEnvironment) {
+func Scenario_CopySync(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
@@ -71,22 +69,12 @@ func Scenario_CopySync(svm *ScenarioVariationManager, env *AzCopyEnvironment) {
 		Body: body,
 	}, true)
 
-	ValidateAADAuth(svm, stdout, srcObj.Location(), dstObj.Location())
-}
-
-func ValidateAADAuth(a Asserter, stdout AzCopyStdout, src, dst common.Location) {
-	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
-		return
+	if srcObj.Location().IsRemote() {
+		ValidateMessageOutput(svm, stdout, "Authenticating to source using Azure AD")
 	}
-	// Check for successful login
-	loggedInDst := false
-	loggedInSrc := false
-	for _, p := range stdout.RawStdout() {
-		loggedInDst = loggedInDst || strings.Contains(p, "Authenticating to destination using Azure AD")
-		loggedInSrc = loggedInSrc || strings.Contains(p, "Authenticating to source using Azure AD")
+	if dstObj.Location().IsRemote() {
+		ValidateMessageOutput(svm, stdout, "Authenticating to destination using Azure AD")
 	}
-	a.AssertNow("source login should be successful", Equal{}, loggedInSrc, src.IsRemote())
-	a.AssertNow("dest login should be successful", Equal{}, loggedInDst, dst.IsRemote())
 }
 
 type DeviceLoginManualSuite struct {
@@ -114,5 +102,5 @@ func (s *DeviceLoginManualSuite) TeardownSuite(a Asserter) {
 }
 
 func (s *DeviceLoginManualSuite) Scenario_CopySync(svm *ScenarioVariationManager) {
-	Scenario_CopySync(svm, nil)
+	Scenario_CopySync(svm)
 }
