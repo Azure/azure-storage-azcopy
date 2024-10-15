@@ -7,18 +7,16 @@ import (
 )
 
 type SuiteManager struct {
-	testingT         *testing.T
-	Suites           map[string]any
-	ScenarioManagers map[string]any
+	testingT *testing.T
+	Suites   map[string]any
 }
 
-var suiteManager = &SuiteManager{Suites: make(map[string]any), ScenarioManagers: make(map[string]any)}
+var suiteManager = &SuiteManager{Suites: make(map[string]any)}
 
 func (sm *SuiteManager) RegisterSuite(Suite any) {
 	suiteName := reflect.ValueOf(Suite).Elem().Type().Name()
 
 	sm.Suites[suiteName] = Suite
-	sm.ScenarioManagers[suiteName] = nil // todo SuiteManager
 }
 
 func (sm *SuiteManager) RunSuites(t *testing.T) {
