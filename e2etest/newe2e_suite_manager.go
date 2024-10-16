@@ -96,7 +96,9 @@ runAllSuites:
 
 						t.Parallel()
 
-						NewScenarioManager(t, sVal.Method(scenarioIdx)).RunScenario()
+						sm := NewScenarioManager(t, sVal.Method(scenarioIdx))
+						sm.runNow = early
+						sm.RunScenario()
 
 						_ = scenarioIdx
 					})
