@@ -71,7 +71,7 @@ runAllSuites:
 		}
 
 		t.Run(sName, func(t *testing.T) {
-			if early { // Early runners must run now.
+			if !early { // Early runners must run now.
 				t.Parallel() // todo: env var
 			}
 
@@ -94,7 +94,9 @@ runAllSuites:
 							NewFrameworkAsserter(t).AssertNow("Scenario runner panicked (recovered)", NoError{stackTrace: true}, recover())
 						}()
 
-						t.Parallel()
+						if !early {
+							t.Parallel()
+						}
 
 						sm := NewScenarioManager(t, sVal.Method(scenarioIdx))
 						sm.runNow = early
