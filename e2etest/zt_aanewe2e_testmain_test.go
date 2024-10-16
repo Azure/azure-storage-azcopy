@@ -15,7 +15,6 @@ import (
 //}
 
 var FrameworkHooks = []TestFrameworkHook{
-	{HookName: "Workload Identity Setup", SetupHook: WorkloadIdentitySetup},
 	{HookName: "Config", SetupHook: LoadConfigHook},
 	{HookName: "OAuth Cache", SetupHook: SetupOAuthCache},
 	{HookName: "ARM Client", SetupHook: SetupArmClient, TeardownHook: TeardownArmClient},
