@@ -350,6 +350,11 @@ jobs:
               New-Item -Path "./coverage" -ItemType Directory
             }
             
+            # Create log directory
+            if (-Not (Test-Path -Path "${env:AZCOPY_E2E_LOG_OUTPUT}")) {
+              New-Item -Path "${env:AZCOPY_E2E_LOG_OUTPUT}" -ItemType Directory
+            }
+            
             # Print "Building executable"
             Write-Output "Building executable"
             
