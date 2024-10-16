@@ -1,3 +1,5 @@
+//go:build !olde2etest
+
 package e2etest
 
 import (
