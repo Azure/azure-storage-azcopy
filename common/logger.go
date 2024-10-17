@@ -116,8 +116,7 @@ func (jl *jobLogger) CloseLog() {
 	}
 
 	jl.logger.Println("Closing Log")
-	err := jl.file.Close()
-	PanicIfErr(err)
+	_ = jl.file.Close() // If it was already closed, that's alright. We wanted to close it, anyway.
 }
 
 func (jl jobLogger) Log(loglevel LogLevel, msg string) {
