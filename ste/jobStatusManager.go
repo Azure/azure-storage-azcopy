@@ -67,7 +67,10 @@ func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
 		}
 	}()
 	if jm.jstm.partCreated != nil { // Sends not allowed if channel is closed
-		jm.jstm.partCreated <- msg
+		select {
+		case jm.jstm.partCreated <- msg:
+		case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
+		}
 
 		if msg.IsFinalPart {
 			// Inform statusManager that this is all parts we've
@@ -83,7 +86,10 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 			jm.Log(common.LogError, "Cannot send message on channel")
 		}
 	}()
-	jm.jstm.xferDone <- msg
+	select {
+	case jm.jstm.xferDone <- msg:
+	case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
+	}
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
@@ -170,8 +176,13 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			/* Display stats */
 			js.Timestamp = time.Now().UTC()
 			if jstm.respChan != nil {
-				jstm.respChan <- *js // Send on the channel
-				defer func() {       // Exit gracefully if panic
+				select {
+				case jstm.respChan <- *js:
+					// Send on the channel
+				case <-jstm.statusMgrDone:
+					// If we time out, no biggie. This isn't world-ending, nor is it essential info. The other side stopped listening by now.
+				}
+				defer func() { // Exit gracefully if panic
 					if recErr := recover(); recErr != nil {
 						jm.Log(common.LogError, "Cannot send message on respChan")
 					}
@@ -188,7 +199,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				close(jstm.listReq)
 				jstm.listReq = nil
 				jstm.respChan = nil
-				jstm.statusMgrDone = nil
 				return
 			}
 		}
