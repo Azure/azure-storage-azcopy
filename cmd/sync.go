@@ -621,7 +621,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	if jobDone {
 		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 {
+		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
 			exitCode = common.EExitCode.Error()
 		}
 

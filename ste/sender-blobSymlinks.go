@@ -68,16 +68,33 @@ func (s *blobSymlinkSender) SendSymlink(linkData string) error {
 	}
 	s.metadataToApply["is_symlink"] = to.Ptr("true")
 
+	blobTags := s.blobTagsToApply
+	setTags := separateSetTagsRequired(blobTags)
+	if setTags || len(blobTags) == 0 {
+		blobTags = nil
+	}
+
 	_, err = s.destinationClient.Upload(s.jptm.Context(), streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{
 			HTTPHeaders:  &s.headersToApply,
 			Metadata:     s.metadataToApply,
 			Tier:         s.destBlobTier,
-			Tags:         s.blobTagsToApply,
+			Tags:         blobTags,
 			CPKInfo:      s.jptm.CpkInfo(),
 			CPKScopeInfo: s.jptm.CpkScopeInfo(),
 		})
-	return err
+	if err != nil {
+		s.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Upload symlink (with tags)", "Upload symlink"), err)
+		return nil
+	}
+
+	if setTags {
+		if _, err := s.destinationClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil); err != nil {
+			s.jptm.FailActiveSend("Set tags", err)
+			return nil
+		}
+	}
+	return nil
 }
 
 // ===== Implement sender so that it can be returned in newBlobUploader. =====
