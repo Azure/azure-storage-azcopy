@@ -26,7 +26,7 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 		}
 	}
 
-	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
@@ -83,9 +83,9 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 	// Scale up from service to object
 	srcDef := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, SizeFromString("10K"))},
-			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, SizeFromString("10K"))},
-			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, SizeFromString("10K"))},
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
 		},
 	}
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
@@ -108,7 +108,7 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 		svm,
 		AzCopyCommand{
 			// Sync is not included at this moment, because sync requires
-      Verb: azCopyVerb,
+			Verb: azCopyVerb,
 			Targets: []ResourceManager{
 				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
@@ -161,7 +161,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *Sce
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -222,7 +222,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -276,7 +276,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}

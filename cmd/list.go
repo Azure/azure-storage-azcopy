@@ -481,7 +481,7 @@ func getPath(containerName, relativePath string, level LocationLevel, entityType
 		builder.WriteString(containerName + "/")
 	}
 	builder.WriteString(relativePath)
-	if entityType == common.EEntityType.Folder() {
+	if entityType == common.EEntityType.Folder() && !strings.HasSuffix(relativePath, "/") {
 		builder.WriteString("/")
 	}
 	return builder.String()

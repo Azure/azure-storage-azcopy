@@ -21,7 +21,7 @@ func (s *BlobTestSuite) Scenario_UploadBlockBlobs(svm *ScenarioVariationManager)
 	srcObjs := make(ObjectResourceMappingFlat)
 	for i := range 10 {
 		name := "dir_10_files/test" + strconv.Itoa(i) + ".txt"
-		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 		srcObjs[name] = obj
 	}
@@ -43,7 +43,7 @@ func (s *BlobTestSuite) Scenario_UploadBlockBlobs(svm *ScenarioVariationManager)
 
 func (s *BlobTestSuite) Scenario_UploadPageBlob(svm *ScenarioVariationManager) {
 	fileName := "test_page_blob_1mb.vHd"
-	body := NewRandomObjectContentContainer(svm, common.MegaByte)
+	body := NewRandomObjectContentContainer(common.MegaByte)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -77,7 +77,7 @@ func (s *BlobTestSuite) Scenario_UploadPageBlob(svm *ScenarioVariationManager) {
 
 func (s *BlobTestSuite) Scenario_SetPageBlobTier(svm *ScenarioVariationManager) {
 	fileName := "test_page_blob.vHd"
-	body := NewRandomObjectContentContainer(svm, common.KiloByte)
+	body := NewRandomObjectContentContainer(common.KiloByte)
 	tier := ResolveVariation(svm, []common.PageBlobTier{common.EPageBlobTier.P10(), common.EPageBlobTier.P20(), common.EPageBlobTier.P30(), common.EPageBlobTier.P4(), common.EPageBlobTier.P40(), common.EPageBlobTier.P50()})
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
@@ -114,7 +114,7 @@ func (s *BlobTestSuite) Scenario_SetPageBlobTier(svm *ScenarioVariationManager) 
 func (s *BlobTestSuite) Scenario_UploadBlob(svm *ScenarioVariationManager) {
 	// Scale up from service to object
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
-	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
@@ -144,7 +144,7 @@ func (s *BlobTestSuite) Scenario_UploadBlob(svm *ScenarioVariationManager) {
 func (s *BlobTestSuite) Scenario_DownloadBlob(svm *ScenarioVariationManager) {
 	// Scale up from service to object
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
-	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
@@ -180,7 +180,7 @@ func (s *BlobTestSuite) Scenario_DownloadBlobRecursive(svm *ScenarioVariationMan
 	srcObjs := make(ObjectResourceMappingFlat)
 	for i := range 5 {
 		name := "dir_5_files/test" + strconv.Itoa(i) + ".txt"
-		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 		srcObjs[name] = obj
 	}
