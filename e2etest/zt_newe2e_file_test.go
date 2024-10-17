@@ -591,5 +591,3 @@ func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioV
 		Body: body,
 	}, false)
 }
-
-// No need to test for sync commands
