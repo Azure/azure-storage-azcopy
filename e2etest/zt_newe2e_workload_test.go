@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	suiteManager.RegisterSuite(&WorkloadIdentitySuite{})
+	suiteManager.RegisterEarlyRunSuite(&WorkloadIdentitySuite{})
 }
 
 type WorkloadIdentitySuite struct{}
