@@ -32,5 +32,5 @@ func (s *FileOAuthTestSuite) Scenario_SyncFromLocalToFSWarningMsg(svm *ScenarioV
 			ShouldFail: false,
 		})
 
-	ValidateErrorOutput(svm, stdout, cmd.LocalToFileShareWarnMsg)
+	ValidateMessageOutput(svm, stdout, cmd.LocalToFileShareWarnMsg)
 }
