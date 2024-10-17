@@ -24,8 +24,13 @@ func GetRootResource(a Asserter, location common.Location, varOpts ...GetResourc
 
 		return NewLocalContainer(a)
 	case common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File():
-		// acct handles the dryrun case for us
-		acct := GetAccount(a, DerefOrDefault(opts.PreferredAccount, PrimaryStandardAcct))
+		// do we have a hns acct attached, if so, and we're requesting blobfs, let's use it
+		defaultacct := PrimaryStandardAcct
+		if _, ok := AccountRegistry[PrimaryHNSAcct]; ok {
+			defaultacct = PrimaryHNSAcct
+		}
+
+		acct := GetAccount(a, DerefOrDefault(opts.PreferredAccount, defaultacct))
 		return acct.GetService(a, location)
 	default:
 		a.Error(fmt.Sprintf("TODO: Location %s is not yet supported", location))
