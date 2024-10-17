@@ -1568,7 +1568,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	if cca.FromTo.To() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
+			AllowTrailingDot:       cca.trailingDot.IsEnabled(),
 			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
 		}
 	}

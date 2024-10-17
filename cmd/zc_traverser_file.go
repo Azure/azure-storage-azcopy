@@ -149,7 +149,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, targetURLParts.DirectoryOrFilePath))
 			return common.EAzError.InvalidBlobOrWindowsName()
 		}
-		if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
+		if !t.trailingDot.IsEnabled() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") {
 			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
 		// check if the url points to a single file
@@ -292,7 +292,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *fileInfo.Name))
 					continue
 				} else {
-					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(*fileInfo.Name, ".") {
+					if !t.trailingDot.IsEnabled() && strings.HasSuffix(*fileInfo.Name, ".") {
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
 					}
 				}
@@ -305,7 +305,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, *dirInfo.Name))
 					continue
 				} else {
-					if t.trailingDot != common.ETrailingDotOption.Enable() && strings.HasSuffix(*dirInfo.Name, ".") {
+					if !t.trailingDot.IsEnabled() && strings.HasSuffix(*dirInfo.Name, ".") {
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *dirInfo.Name))
 					}
 				}

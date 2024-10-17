@@ -557,28 +557,39 @@ func (s *FileTestSuite) Scenario_FileDownloadTrailingDotDisable(svm *ScenarioVar
 	}, false)
 }
 
-// Test downloading to unsafe Blob Destination
-func (s *FileTestSuite) Scenario_DownloadUnsafeBlobDestination(svm *ScenarioVariationManager) {
-	body := NewRandomObjectContentContainer(svm, common.MegaByte)
-	// TODO: use a variation on Copy and Sync? azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
+// Test copy with AllowToUnsafeDestination option
+func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(svm, 0)
+
 	name := "test."
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
-	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+		ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File()})),
+		ResourceDefinitionObject{ObjectName: pointerTo("test"), Body: body})
+
+	if srcObj.Location() == dstObj.Location() {
+		svm.InvalidateScenario()
+		return
+	}
 
 	RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:    AzCopyVerbCopy,
-			Targets: []ResourceManager{srcObj, dstObj},
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{})},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					BlockSizeMB: pointerTo(4.0),
-					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to Blob destination
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()),
 				},
+				ListOfFiles: []string{"lof"},
 			},
 		})
 
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
 		Body: body,
-	}, true)
+	}, false)
 }
+
+// No need to test for sync commands

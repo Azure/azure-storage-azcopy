@@ -157,6 +157,7 @@ func (TrailingDotOption) Enable() TrailingDotOption                   { return T
 func (TrailingDotOption) Disable() TrailingDotOption                  { return TrailingDotOption(1) }
 func (TrailingDotOption) AllowToUnsafeDestination() TrailingDotOption { return TrailingDotOption(2) }
 
+// Trailing dots are supported in the Enable and AllowToUnsafeDestination options
 func (d TrailingDotOption) IsEnabled() bool {
 	return d == d.Enable() ||
 		d == d.AllowToUnsafeDestination()
@@ -184,6 +185,7 @@ func ValidTrailingDotOptions() []string {
 	return []string{
 		ETrailingDotOption.Enable().String(),
 		ETrailingDotOption.Disable().String(),
+		ETrailingDotOption.AllowToUnsafeDestination().String(),
 	}
 }
 
