@@ -3,9 +3,10 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strconv"
 	"math"
+	"strconv"
 )
 
 func init() {
@@ -509,4 +510,84 @@ func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariat
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, srcContainer.ContainerName()+"/"+fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
 	}, true)
+}
+
+// 0 transfers of trailing dot files should occur
+func (s *FileTestSuite) Scenario_FileDownloadTrailingDotDisable(svm *ScenarioVariationManager) {
+	size := common.KiloByte
+	// File names to test
+	fileNameWithDot := "file."
+	fileNameWithoutDot := "test"
+
+	// Create the content for the files
+	bodyWithDot := NewRandomObjectContentContainer(svm, int64(size))
+	bodyWithoutDot := NewRandomObjectContentContainer(svm, int64(size))
+
+	// Create the source container and objects
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
+	srcObjWithDot := srcContainer.GetObject(svm, fileNameWithDot, common.EEntityType.File())
+	srcObjWithoutDot := srcContainer.GetObject(svm, fileNameWithoutDot, common.EEntityType.File())
+	srcObjWithDot.Create(svm, bodyWithDot, ObjectProperties{})
+	srcObjWithoutDot.Create(svm, bodyWithoutDot, ObjectProperties{})
+
+	// Create the destination container
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+
+	// Run AzCopy Copy cmd to download the files
+	RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm), dstContainer},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				BlockSizeMB: pointerTo(4.0),
+				TrailingDot: to.Ptr(common.ETrailingDotOption.Disable()), // Only include files without trailing dot
+				Recursive:   pointerTo(true),
+			},
+		},
+	})
+
+	// Validate that only the file without the trailing dot is downloaded
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileNameWithoutDot, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: bodyWithoutDot,
+	}, false)
+
+	// Validate that the file with the trailing dot is not downloaded
+	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, fileNameWithDot, common.EEntityType.File()), ResourceDefinitionObject{
+		Body: nil,
+	}, false)
+}
+
+// Test copy with AllowToUnsafeDestination option
+func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(svm, 0)
+
+	name := "test."
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+		ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File()})),
+		ResourceDefinitionObject{ObjectName: pointerTo("test"), Body: body})
+
+	if srcObj.Location() == dstObj.Location() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{})},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: pointerTo(4.0),
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()),
+				},
+				ListOfFiles: []string{"lof"},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, false)
 }
