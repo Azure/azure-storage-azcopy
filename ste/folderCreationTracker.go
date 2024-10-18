@@ -9,6 +9,78 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+type TrieNode struct {
+	children map[rune]*TrieNode
+	value    *uint32
+	isEnd    bool
+}
+
+type Trie struct {
+	root *TrieNode
+}
+
+func NewTrie() *Trie {
+	return &Trie{
+		root: &TrieNode{children: make(map[rune]*TrieNode)},
+	}
+}
+
+func (t *Trie) Insert(key string, value uint32) {
+	node := t.root
+	for _, char := range key {
+		if _, exists := node.children[char]; !exists {
+			node.children[char] = &TrieNode{children: make(map[rune]*TrieNode)}
+		}
+		node = node.children[char]
+	}
+	node.value = &value
+	node.isEnd = true
+}
+
+func (t *Trie) Get(key string) (*uint32, bool) {
+	node := t.root
+	for _, char := range key {
+		if _, exists := node.children[char]; !exists {
+			return nil, false
+		}
+		node = node.children[char]
+	}
+	if node.isEnd {
+		return node.value, true
+	}
+	return nil, false
+}
+
+func (t *Trie) Delete(key string) bool {
+	return t.deleteHelper(t.root, key, 0)
+}
+
+func (t *Trie) deleteHelper(node *TrieNode, key string, depth int) bool {
+	if node == nil {
+		return false
+	}
+
+	// If we have reached the end of the key
+	if depth == len(key) {
+		if !node.isEnd {
+			return false // Key does not exist
+		}
+		node.isEnd = false
+		node.value = nil
+
+		// If the node has no children, it can be deleted
+		return len(node.children) == 0
+	}
+
+	char := rune(key[depth])
+	if t.deleteHelper(node.children[char], key, depth+1) {
+		delete(node.children, char)
+		return !node.isEnd && len(node.children) == 0
+	}
+
+	return false
+}
+
 type FolderCreationTracker common.FolderCreationTracker
 
 type JPPTCompatibleFolderCreationTracker interface {
@@ -23,7 +95,7 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			plan:                   plan,
 			mu:                     &sync.Mutex{},
-			contents:               make(map[string]uint32),
+			contents:               NewTrie(),
 			unregisteredButCreated: make(map[string]struct{}),
 		}
 	case common.EFolderPropertiesOption.NoFolders():
@@ -55,7 +127,7 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
 	mu                     *sync.Mutex
-	contents               map[string]uint32
+	contents               *Trie
 	unregisteredButCreated map[string]struct{}
 }
 
@@ -63,11 +135,13 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	print("Registering folder: " + folder + "\n")
+
 	if folder == common.Dev_Null {
 		return // Never persist to dev-null
 	}
 
-	f.contents[folder] = transferIndex
+	f.contents.Insert(folder, transferIndex)
 
 	// We created it before it was enumerated-- Let's register that now.
 	if _, ok := f.unregisteredButCreated[folder]; ok {
@@ -85,8 +159,8 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return nil // Never persist to dev-null
 	}
 
-	if idx, ok := f.contents[folder]; ok {
-		status := f.plan.Transfer(idx).TransferStatus()
+	if idx, ok := f.contents.Get(folder); ok {
+		status := f.plan.Transfer(*idx).TransferStatus()
 		if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
 			return nil
 		}
@@ -101,9 +175,9 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return err
 	}
 
-	if idx, ok := f.contents[folder]; ok {
+	if idx, ok := f.contents.Get(folder); ok {
 		// overwrite it's transfer status
-		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		f.plan.Transfer(*idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
 		// A folder hasn't been hit in traversal yet.
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
@@ -129,8 +203,8 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		defer f.mu.Unlock()
 
 		var created bool
-		if idx, ok := f.contents[folder]; ok {
-			created = f.plan.Transfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
+		if idx, ok := f.contents.Get(folder); ok {
+			created = f.plan.Transfer(*idx).TransferStatus() == common.ETransferStatus.FolderCreated()
 		} else {
 			// This should not happen, ever.
 			// Folder property jobs register with the tracker before they start getting processed.
@@ -169,17 +243,22 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 		return // Not possible to track this
 	}
 
+	//add a log mentioning we are in stotracking and folder is being deleted
+	fmt.Println("In StopTracking, deleting folder: " + folder)
+
 	// no-op, because tracking is now handled by jppt, anyway.
-	if _, ok := f.contents[folder]; ok {
-		delete(f.contents, folder)
-	} else {
-		currentContents := ""
+	if f.contents != nil {
+		if _, ok := f.contents.Get(folder); ok {
+			f.contents.Delete(folder)
+		} else {
+			currentContents := ""
 
-		for k, v := range f.contents {
-			currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
+			for k, v := range f.contents.root.children {
+				currentContents += fmt.Sprintf("K: %c V: %v\n", k, v.value)
+			}
+
+			// double should never be hit, but *just in case*.
+			panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 		}
-
-		// double should never be hit, but *just in case*.
-		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 	}
 }
