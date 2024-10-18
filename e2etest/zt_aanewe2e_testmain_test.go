@@ -1,3 +1,5 @@
+//go:build !olde2etest
+
 package e2etest
 
 import (
@@ -16,6 +18,7 @@ import (
 
 var FrameworkHooks = []TestFrameworkHook{
 	{HookName: "Config", SetupHook: LoadConfigHook},
+	{HookName: "Workload Identity Setup", SetupHook: WorkloadIdentitySetup},
 	{HookName: "OAuth Cache", SetupHook: SetupOAuthCache},
 	{HookName: "ARM Client", SetupHook: SetupArmClient, TeardownHook: TeardownArmClient},
 	{HookName: "Default accts", SetupHook: AccountRegistryInitHook, TeardownHook: AccountRegistryCleanupHook},

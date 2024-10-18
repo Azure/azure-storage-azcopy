@@ -14,7 +14,8 @@ func init() {
 type ListSuite struct{}
 
 func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
-	srcService := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	srcService := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(),
+		common.ELocation.File()}))
 
 	svm.InsertVariationSeparator(":")
 	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
@@ -38,12 +39,15 @@ func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 		AzCopyCommand{
 			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
-				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: GenericServiceSignatureValues{
-						ContainerName: srcObj.ContainerName(),
-						Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
-					},
-				}),
+				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
+					[]ExplicitCredentialTypes{EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.SASToken()}), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: GenericServiceSignatureValues{
+							ContainerName: srcObj.ContainerName(),
+							Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
+						},
+					}),
 			},
 			Flags: ListFlags{},
 		})
