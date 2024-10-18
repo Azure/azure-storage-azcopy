@@ -75,7 +75,6 @@ func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
 		if msg.IsFinalPart {
 			// Inform statusManager that this is all parts we've
 			close(jm.jstm.partCreated)
-			jm.jstm.partCreated = nil
 		}
 	}
 }
