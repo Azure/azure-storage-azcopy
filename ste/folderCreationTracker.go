@@ -86,7 +86,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 	}
 
 	if idx, ok := f.contents.Get(folder); ok {
-		status := f.plan.Transfer(*idx).TransferStatus()
+		status := f.plan.Transfer(idx).TransferStatus()
 		if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
 			return nil
 		}
@@ -103,7 +103,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 
 	if idx, ok := f.contents.Get(folder); ok {
 		// overwrite it's transfer status
-		f.plan.Transfer(*idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
 		// A folder hasn't been hit in traversal yet.
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
@@ -130,7 +130,10 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 
 		var created bool
 		if idx, ok := f.contents.Get(folder); ok {
-			created = f.plan.Transfer(*idx).TransferStatus() == common.ETransferStatus.FolderCreated()
+			status := f.plan.Transfer(idx).TransferStatus()
+			if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
+				created = true
+			}
 		} else {
 			// This should not happen, ever.
 			// Folder property jobs register with the tracker before they start getting processed.

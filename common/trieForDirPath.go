@@ -6,7 +6,7 @@ import (
 
 type TrieNode struct {
 	Children map[string]*TrieNode
-	Value    *uint32
+	Value    uint32
 	isEnd    bool
 }
 
@@ -31,24 +31,24 @@ func (t *Trie) Insert(key string, value uint32) {
 		}
 		node = child
 	}
-	node.Value = &value
+	node.Value = value
 	node.isEnd = true
 }
 
-func (t *Trie) Get(key string) (*uint32, bool) {
+func (t *Trie) Get(key string) (uint32, bool) {
 	node := t.Root
 	segments := strings.Split(key, "/")
 	for _, segment := range segments {
 		child, exists := node.Children[segment]
 		if !exists {
-			return nil, false
+			return 0, false
 		}
 		node = child
 	}
 	if node.isEnd {
 		return node.Value, true
 	}
-	return nil, false
+	return 0, false
 }
 
 func (t *Trie) Delete(key string) bool {
@@ -67,7 +67,7 @@ func (t *Trie) deleteHelper(node *TrieNode, segments []string, depth int) bool {
 			return false // Key does not exist
 		}
 		node.isEnd = false // Unmark the end of the key
-		node.Value = nil
+		node.Value = 0
 
 		// If the node has no Children, it can be deleted
 		return len(node.Children) == 0
