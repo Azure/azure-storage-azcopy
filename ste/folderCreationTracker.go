@@ -23,7 +23,7 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			plan:                   plan,
 			mu:                     &sync.Mutex{},
-			contents:               make(map[string]uint32),
+			contents:               common.NewTrie(),
 			unregisteredButCreated: make(map[string]struct{}),
 		}
 	case common.EFolderPropertiesOption.NoFolders():
@@ -55,7 +55,7 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
 	mu                     *sync.Mutex
-	contents               map[string]uint32
+	contents               *common.Trie
 	unregisteredButCreated map[string]struct{}
 }
 
@@ -67,7 +67,7 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 		return // Never persist to dev-null
 	}
 
-	f.contents[folder] = transferIndex
+	f.contents.Insert(folder, transferIndex)
 
 	// We created it before it was enumerated-- Let's register that now.
 	if _, ok := f.unregisteredButCreated[folder]; ok {
@@ -85,9 +85,11 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return nil // Never persist to dev-null
 	}
 
-	if idx, ok := f.contents[folder]; ok &&
-		f.plan.Transfer(idx).TransferStatus() == (common.ETransferStatus.FolderCreated()) {
-		return nil
+	if idx, ok := f.contents.Get(folder); ok {
+		status := f.plan.Transfer(idx).TransferStatus()
+		if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
+			return nil
+		}
 	}
 
 	if _, ok := f.unregisteredButCreated[folder]; ok {
@@ -99,7 +101,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return err
 	}
 
-	if idx, ok := f.contents[folder]; ok {
+	if idx, ok := f.contents.Get(folder); ok {
 		// overwrite it's transfer status
 		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
@@ -127,8 +129,11 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		defer f.mu.Unlock()
 
 		var created bool
-		if idx, ok := f.contents[folder]; ok {
-			created = f.plan.Transfer(idx).TransferStatus() == common.ETransferStatus.FolderCreated()
+		if idx, ok := f.contents.Get(folder); ok {
+			status := f.plan.Transfer(idx).TransferStatus()
+			if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
+				created = true
+			}
 		} else {
 			// This should not happen, ever.
 			// Folder property jobs register with the tracker before they start getting processed.
@@ -168,16 +173,18 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 	}
 
 	// no-op, because tracking is now handled by jppt, anyway.
-	if _, ok := f.contents[folder]; ok {
-		delete(f.contents, folder)
-	} else {
-		currentContents := ""
+	if f.contents != nil {
+		if _, ok := f.contents.Get(folder); ok {
+			f.contents.Delete(folder)
+		} else {
+			currentContents := ""
 
-		for k, v := range f.contents {
-			currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
+			for k, v := range f.contents.Root.Children {
+				currentContents += fmt.Sprintf("K: %s V: %v\n", k, v.Value)
+			}
+
+			// double should never be hit, but *just in case*.
+			panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 		}
-
-		// double should never be hit, but *just in case*.
-		panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
 	}
 }
