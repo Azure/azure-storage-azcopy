@@ -12,6 +12,9 @@ type ScenarioVariationManager struct {
 	// t is intentionally nil during dryruns.
 	t *testing.T
 
+	// runNow disables parallelism in testing, instead running all tests immediately, intended for run-first suites.
+	runNow bool
+
 	// isInvalid is synonymous with Failed. It serves two purposes:
 	// 1. Invalidating dry-runs that would under no deterministic circumstances succeed.
 	// 2. Failing wet-runs that encountered an error or unexpected results.

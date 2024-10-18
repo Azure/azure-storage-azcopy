@@ -12,6 +12,9 @@ type ScenarioManager struct {
 	testingT *testing.T
 	Func     reflect.Value
 
+	// Skip the line, don't run parallel.
+	runNow bool
+
 	suite    string
 	scenario string
 
@@ -84,6 +87,7 @@ func (sm *ScenarioManager) RunScenario() {
 		}()
 
 		if !svm.isInvalid { // If we made a real test
+			svm.runNow = sm.runNow
 			sm.testingT.Run(svm.VariationName(), func(t *testing.T) {
 				svm.t = t
 				svm.callcounts = make(map[string]uint)
@@ -93,7 +97,10 @@ func (sm *ScenarioManager) RunScenario() {
 					t.FailNow()
 				}
 
-				t.Parallel()
+				if !svm.runNow {
+					t.Parallel()
+				}
+
 				svm.Cleanup(func(a ScenarioAsserter) {
 					svm.DeleteCreatedResources() // clean up after ourselves!
 				})
