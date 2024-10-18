@@ -85,9 +85,11 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 			jm.Log(common.LogError, "Cannot send message on channel")
 		}
 	}()
-	select {
-	case jm.jstm.xferDone <- msg:
-	case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
+	if jm.jstm.xferDone != nil {
+		select {
+		case jm.jstm.xferDone <- msg:
+		case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
+		}
 	}
 }
 
