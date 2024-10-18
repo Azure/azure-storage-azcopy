@@ -74,7 +74,7 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	fct := &jpptFolderTracker{
 		plan:                   plan,
 		mu:                     &sync.Mutex{},
-		contents:               NewTrie(),
+		contents:               common.NewTrie(),
 		unregisteredButCreated: make(map[string]struct{}),
 	}
 

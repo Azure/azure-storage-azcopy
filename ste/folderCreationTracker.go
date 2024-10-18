@@ -9,78 +9,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-type TrieNode struct {
-	children map[rune]*TrieNode
-	value    *uint32
-	isEnd    bool
-}
-
-type Trie struct {
-	root *TrieNode
-}
-
-func NewTrie() *Trie {
-	return &Trie{
-		root: &TrieNode{children: make(map[rune]*TrieNode)},
-	}
-}
-
-func (t *Trie) Insert(key string, value uint32) {
-	node := t.root
-	for _, char := range key {
-		if _, exists := node.children[char]; !exists {
-			node.children[char] = &TrieNode{children: make(map[rune]*TrieNode)}
-		}
-		node = node.children[char]
-	}
-	node.value = &value
-	node.isEnd = true
-}
-
-func (t *Trie) Get(key string) (*uint32, bool) {
-	node := t.root
-	for _, char := range key {
-		if _, exists := node.children[char]; !exists {
-			return nil, false
-		}
-		node = node.children[char]
-	}
-	if node.isEnd {
-		return node.value, true
-	}
-	return nil, false
-}
-
-func (t *Trie) Delete(key string) bool {
-	return t.deleteHelper(t.root, key, 0)
-}
-
-func (t *Trie) deleteHelper(node *TrieNode, key string, depth int) bool {
-	if node == nil {
-		return false
-	}
-
-	// If we have reached the end of the key
-	if depth == len(key) {
-		if !node.isEnd {
-			return false // Key does not exist
-		}
-		node.isEnd = false
-		node.value = nil
-
-		// If the node has no children, it can be deleted
-		return len(node.children) == 0
-	}
-
-	char := rune(key[depth])
-	if t.deleteHelper(node.children[char], key, depth+1) {
-		delete(node.children, char)
-		return !node.isEnd && len(node.children) == 0
-	}
-
-	return false
-}
-
 type FolderCreationTracker common.FolderCreationTracker
 
 type JPPTCompatibleFolderCreationTracker interface {
@@ -95,7 +23,7 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
 			plan:                   plan,
 			mu:                     &sync.Mutex{},
-			contents:               NewTrie(),
+			contents:               common.NewTrie(),
 			unregisteredButCreated: make(map[string]struct{}),
 		}
 	case common.EFolderPropertiesOption.NoFolders():
@@ -127,15 +55,13 @@ func (f *nullFolderTracker) StopTracking(folder string) {
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
 	mu                     *sync.Mutex
-	contents               *Trie
+	contents               *common.Trie
 	unregisteredButCreated map[string]struct{}
 }
 
 func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
-	print("Registering folder: " + folder + "\n")
 
 	if folder == common.Dev_Null {
 		return // Never persist to dev-null
@@ -243,9 +169,6 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 		return // Not possible to track this
 	}
 
-	//add a log mentioning we are in stotracking and folder is being deleted
-	fmt.Println("In StopTracking, deleting folder: " + folder)
-
 	// no-op, because tracking is now handled by jppt, anyway.
 	if f.contents != nil {
 		if _, ok := f.contents.Get(folder); ok {
@@ -253,8 +176,8 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 		} else {
 			currentContents := ""
 
-			for k, v := range f.contents.root.children {
-				currentContents += fmt.Sprintf("K: %c V: %v\n", k, v.value)
+			for k, v := range f.contents.Root.Children {
+				currentContents += fmt.Sprintf("K: %s V: %v\n", k, v.Value)
 			}
 
 			// double should never be hit, but *just in case*.
