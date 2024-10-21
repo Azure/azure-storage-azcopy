@@ -17,7 +17,31 @@ func init() {
 	}
 }
 
-func Scenario_CopySync(svm *ScenarioVariationManager) {
+type DeviceLoginManualSuite struct {
+}
+
+func (s *DeviceLoginManualSuite) SetupSuite(a Asserter) {
+	stdout := RunAzCopyLoginLogout(a, AzCopyVerbLogin)
+	ValidateSuccessfulLogin(a, stdout)
+}
+
+func ValidateSuccessfulLogin(a Asserter, stdout AzCopyStdout) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	// Check for successful login
+	loggedIn := false
+	for _, p := range stdout.RawStdout() {
+		loggedIn = loggedIn || strings.Contains(p, "Login succeeded")
+	}
+	a.AssertNow("login should be successful", Equal{}, loggedIn, true)
+}
+
+func (s *DeviceLoginManualSuite) TeardownSuite(a Asserter) {
+	RunAzCopyLoginLogout(a, AzCopyVerbLogout)
+}
+
+func (s *DeviceLoginManualSuite) Scenario_CopySync(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
@@ -75,32 +99,4 @@ func Scenario_CopySync(svm *ScenarioVariationManager) {
 	if dstObj.Location().IsRemote() {
 		ValidateMessageOutput(svm, stdout, "Authenticating to destination using Azure AD")
 	}
-}
-
-type DeviceLoginManualSuite struct {
-}
-
-func (s *DeviceLoginManualSuite) SetupSuite(a Asserter) {
-	stdout := RunAzCopyLoginLogout(a, AzCopyVerbLogin)
-	ValidateSuccessfulLogin(a, stdout)
-}
-
-func ValidateSuccessfulLogin(a Asserter, stdout AzCopyStdout) {
-	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
-		return
-	}
-	// Check for successful login
-	loggedIn := false
-	for _, p := range stdout.RawStdout() {
-		loggedIn = loggedIn || strings.Contains(p, "Login succeeded")
-	}
-	a.AssertNow("login should be successful", Equal{}, loggedIn, true)
-}
-
-func (s *DeviceLoginManualSuite) TeardownSuite(a Asserter) {
-	RunAzCopyLoginLogout(a, AzCopyVerbLogout)
-}
-
-func (s *DeviceLoginManualSuite) Scenario_CopySync(svm *ScenarioVariationManager) {
-	Scenario_CopySync(svm)
 }
