@@ -1,6 +1,8 @@
 package e2etest
 
-import "path"
+import (
+	"path"
+)
 
 // this should maybe be in newe2e_resource_definitions but it felt relevant to have on it's own
 
