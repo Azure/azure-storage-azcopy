@@ -268,6 +268,7 @@ type CopySyncCommonFlags struct {
 	CPKByName               *string                      `flag:"cpk-by-name"`
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
 	IncludePattern          *string                      `flag:"include-pattern"`
+	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
@@ -305,7 +306,6 @@ type CopyFlags struct {
 	S2SDetectSourceChanged    *bool           `flag:"s2s-detect-source-changed"`
 	ListOfVersions            []string        `flag:"list-of-versions,serializer:SerializeListingFile"`
 	BlobTags                  common.Metadata `flag:"blob-tags,serializer:SerializeTags"`
-	IncludeDirectoryStubs     *bool           `flag:"include-directory-stubs"`
 	DisableAutoDecoding       *bool           `flag:"disable-auto-decoding"`
 	S2SGetPropertiesInBackend *bool           `flag:"s2s-get-properties-in-backend"`
 	ADLSFlushThreshold        *uint32         `flag:"flush-threshold"`
