@@ -495,7 +495,7 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
 		fileOptions := &common.FileClientOptions{
-			AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
+			AllowTrailingDot: trailingDot.IsEnabled(),
 		}
 
 		res, err := SplitResourceString(fileURLParts.String(), common.ELocation.File())
