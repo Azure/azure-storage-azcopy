@@ -215,7 +215,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 				CPKScopeInfo: b.jptm.CpkScopeInfo(),
 			})
 		if err != nil {
-			b.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Upload symlink (with tags)", "Upload symlink"), err)
+			b.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Upload folder (with tags)", "Upload folder"), err)
 		}
 
 		if setTags {
