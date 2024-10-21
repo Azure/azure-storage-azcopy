@@ -128,14 +128,20 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
-	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
-	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
-	if srcRelativePath != "" {
-		srcRelativePath = "/" + srcRelativePath
+	var srcRelativePath, dstRelativePath string
+	if storedObject.relativePath == "\x00" { // Short circuit when we're talking about root/, because the STE is funky about this.
+		srcRelativePath, dstRelativePath = storedObject.relativePath, storedObject.relativePath
+	} else {
+		srcRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
+		dstRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
+		if srcRelativePath != "" {
+			srcRelativePath = "/" + srcRelativePath
+		}
+		if dstRelativePath != "" {
+			dstRelativePath = "/" + dstRelativePath
+		}
 	}
-	if dstRelativePath != "" {
-		dstRelativePath = "/" + dstRelativePath
-	}
+
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {

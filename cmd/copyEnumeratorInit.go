@@ -570,6 +570,10 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 		return "" // ignore path encode rules
 	}
 
+	if object.relativePath == "\x00" { // Short circuit, our relative path is requesting root/
+		return "\x00"
+	}
+
 	// source is a EXACT path to the file
 	if object.isSingleSourceFile() {
 		// If we're finding an object from the source, it returns "" if it's already got it.
