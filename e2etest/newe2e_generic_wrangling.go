@@ -88,10 +88,43 @@ func ListOfAny[T any](in []T) []any {
 	return out
 }
 
+func Keys[K comparable, V any](in map[K]V) []K {
+	out := make([]K, 0, len(in))
+	for k, _ := range in {
+		out = append(out, k)
+	}
+	return out
+}
+
+func AnyKeys[K comparable, V any](in map[K]V) []any {
+	out := make([]any, 0, len(in))
+	for k, _ := range in {
+		out = append(out, k)
+	}
+	return out
+}
+
 func CloneMap[K comparable, V any](in map[K]V) map[K]V {
 	out := make(map[K]V)
 
 	for k, v := range in {
+		out[k] = v
+	}
+
+	return out
+}
+
+func CloneMapWithRule[K comparable, V any](in map[K]V, rule func(K, V) (key K, value V, include bool)) map[K]V {
+	out := make(map[K]V)
+
+	for k, v := range in {
+		var include bool
+		k, v, include = rule(k, v)
+
+		if !include {
+			continue
+		}
+
 		out[k] = v
 	}
 
@@ -106,4 +139,24 @@ func ListContains[I comparable](item I, in []I) bool {
 	}
 
 	return false
+}
+
+func Any[I any](items []I, f func(I) bool) bool {
+	for _, v := range items {
+		if f(v) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ClonePointer[T any](in *T) *T {
+	if in == nil {
+		return nil
+	}
+
+	out := *in
+
+	return &out
 }

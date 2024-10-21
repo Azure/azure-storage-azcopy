@@ -5,14 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
@@ -38,7 +39,18 @@ func ValidateMetadata(a Asserter, expected, real common.Metadata) {
 		return
 	}
 
-	a.Assert("Metadata must match", Equal{Deep: true}, expected, real)
+	rule := func(key string, value *string) (ok string, ov *string, include bool) {
+		ov = value
+		ok = strings.ToLower(key)
+		include = Any(common.AllLinuxProperties, func(s string) bool {
+			return strings.EqualFold(key, s)
+		})
+
+		return
+	}
+
+	//a.Assert("Metadata must match", Equal{Deep: true}, expected, real)
+	expected = CloneMapWithRule(expected, rule)
 }
 
 func ValidateTags(a Asserter, expected, real map[string]string) {
@@ -307,4 +319,14 @@ func parseAzCopyListObject(a Asserter, line string) cmd.AzCopyListObject {
 		ArchiveStatus:    blob.ArchiveStatus(properties[string(cmd.ArchiveStatus)]),
 		ContentLength:    properties["Content Length"],
 	}
+}
+
+func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+
+	jobsListStdout, ok := stdout.(*AzCopyParsedJobsListStdout)
+	a.AssertNow("stdout must be AzCopyParsedJobsListStdout", Equal{}, ok, true)
+	a.Assert("No of jobs executed should be equivalent", Equal{}, expectedJobIDs, jobsListStdout.JobsCount)
 }

@@ -16,7 +16,7 @@ type BasicFunctionalitySuite struct{}
 func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
 	// The object must exist already if we're syncing.
 	if azCopyVerb == AzCopyVerbSync {
 		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
@@ -27,9 +27,9 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 		}
 	}
 
-	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionObject{
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
 		Body:       body,
 	})
@@ -42,7 +42,7 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 
 	sasOpts := GenericAccountSignatureValues{}
 
-	stdout, _ := RunAzCopy(
+	stdOut, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
 			Verb: azCopyVerb,
@@ -65,8 +65,85 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 		Body: body,
 	}, true)
 
-	// Validate that the network stats were updated
-	ValidateStatsReturned(svm, stdout)
+	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
+		Objects: map[PlanFilePath]PlanFileObject{
+			PlanFilePath{SrcPath: "", DstPath: ""}: {
+				Properties: ObjectProperties{},
+			},
+		},
+	})
+}
+
+func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Resolve variation early so name makes sense
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	// Scale up from service to object
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+
+	// Scale up from service to object
+	srcDef := ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+		},
+	}
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
+
+	// no s2s, no local->local
+	if srcContainer.Location().IsRemote() == dstContainer.Location().IsRemote() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	var asSubdir bool
+	if azCopyVerb == AzCopyVerbCopy {
+		svm.InsertVariationSeparator("-Subdir:")
+		asSubdir = ResolveVariation(svm, []bool{true, false})
+	}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+
+				AsSubdir: common.Iff(azCopyVerb == AzCopyVerbCopy, &asSubdir, nil), // defaults true
+			},
+		})
+
+	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
+
+	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
+		// todo: service level resource to object mapping
+		Objects: GeneratePlanFileObjectsFromMapping(ObjectResourceMappingOverlay{
+			Base: srcDef.Objects,
+			Overlay: common.Iff(fromTo.AreBothFolderAware() && azCopyVerb == AzCopyVerbCopy, // If we're running copy and in a folder aware , we need to include the root
+				ObjectResourceMappingFlat{"": {ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}},
+				nil),
+		}, GeneratePlanFileObjectsOptions{
+			DestPathProcessor: common.Iff(asSubdir, ParentDirDestPathProcessor(srcContainer.ContainerName()), nil),
+		}),
+	})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: common.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
+	}, true)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *ScenarioVariationManager) {
@@ -85,7 +162,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *Sce
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -146,7 +223,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -200,7 +277,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}

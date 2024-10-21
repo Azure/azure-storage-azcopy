@@ -7,18 +7,24 @@ import (
 )
 
 type SuiteManager struct {
-	testingT         *testing.T
-	Suites           map[string]any
-	ScenarioManagers map[string]any
+	testingT       *testing.T
+	Suites         map[string]any
+	EarlyRunSuites map[string]any
 }
 
-var suiteManager = &SuiteManager{Suites: make(map[string]any), ScenarioManagers: make(map[string]any)}
+var suiteManager = &SuiteManager{Suites: make(map[string]any), EarlyRunSuites: make(map[string]any)}
 
 func (sm *SuiteManager) RegisterSuite(Suite any) {
 	suiteName := reflect.ValueOf(Suite).Elem().Type().Name()
 
 	sm.Suites[suiteName] = Suite
-	sm.ScenarioManagers[suiteName] = nil // todo SuiteManager
+}
+
+// Early runs do not run in parallel, and run before anything else.
+func (sm *SuiteManager) RegisterEarlyRunSuite(Suite any) {
+	suiteName := reflect.ValueOf(Suite).Elem().Type().Name()
+
+	sm.EarlyRunSuites[suiteName] = Suite
 }
 
 func (sm *SuiteManager) RunSuites(t *testing.T) {
@@ -28,7 +34,11 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 
 	sm.testingT = t
 
-	for sName, v := range sm.Suites {
+	tgt := sm.EarlyRunSuites
+	early := true
+runAllSuites:
+
+	for sName, v := range tgt {
 		sVal := reflect.ValueOf(v)
 		sTyp := reflect.TypeOf(v)
 		mCount := sVal.NumMethod()
@@ -61,8 +71,9 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 		}
 
 		t.Run(sName, func(t *testing.T) {
-
-			t.Parallel() // todo: env var
+			if !early { // Early runners must run now.
+				t.Parallel() // todo: env var
+			}
 
 			if setupIdx != -1 {
 				// todo: call setup with suite manager
@@ -83,9 +94,13 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 							NewFrameworkAsserter(t).AssertNow("Scenario runner panicked (recovered)", NoError{stackTrace: true}, recover())
 						}()
 
-						t.Parallel()
+						if !early {
+							t.Parallel()
+						}
 
-						NewScenarioManager(t, sVal.Method(scenarioIdx)).RunScenario()
+						sm := NewScenarioManager(t, sVal.Method(scenarioIdx))
+						sm.runNow = early
+						sm.RunScenario()
 
 						_ = scenarioIdx
 					})
@@ -104,5 +119,11 @@ func (sm *SuiteManager) RunSuites(t *testing.T) {
 				})
 			}
 		})
+	}
+
+	if early { // Jump back and run the remaining suites.
+		early = false
+		tgt = sm.Suites
+		goto runAllSuites
 	}
 }

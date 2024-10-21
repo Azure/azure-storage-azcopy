@@ -42,11 +42,11 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 	// A local source is required to use any hash storage mode.
 	source := NewLocalContainer(a)
 	dupeBodyPath := "underfolder/donottransfer" // A directory is used to validate that the hidden files cache creates *all* subdirectories.
-	dupeBody := NewRandomObjectContentContainer(a, 512)
+	dupeBody := NewRandomObjectContentContainer(512)
 	resourceSpec := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"newobject":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(a, 512)},
-			"shouldtransfer": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(a, 512)},
+			"newobject":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
+			"shouldtransfer": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
 			dupeBodyPath:     ResourceDefinitionObject{Body: dupeBody}, // note: at this moment, this is *not* a great test, because we lack plan file validation. todo WI#26418256
 		},
 	}
@@ -59,7 +59,7 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 		ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
 				// Object to overwrite
-				"shouldtransfer": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(a, 512)},
+				"shouldtransfer": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
 				// Object to avoid overwriting
 				dupeBodyPath: ResourceDefinitionObject{Body: dupeBody, ObjectProperties: ObjectProperties{HTTPHeaders: contentHeaders{contentMD5: md5[:]}}},
 			},
@@ -147,8 +147,8 @@ func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariatio
 		PreferredAccount: common.Iff(dstLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
 	}), ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"deleteme.txt":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, 512)},
-			"also/deleteme.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, 512)},
+			"deleteme.txt":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
+			"also/deleteme.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
 		},
 	})
 

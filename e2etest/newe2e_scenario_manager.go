@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +11,9 @@ import (
 type ScenarioManager struct {
 	testingT *testing.T
 	Func     reflect.Value
+
+	// Skip the line, don't run parallel.
+	runNow bool
 
 	suite    string
 	scenario string
@@ -66,12 +70,16 @@ func (sm *ScenarioManager) RunScenario() {
 	for len(sm.varStack) > 0 {
 		svm := sm.varStack[len(sm.varStack)-1] // *pop*!
 		sm.varStack = sm.varStack[:len(sm.varStack)-1]
+		panicked := false
+		var panicError any
+		var panicStack []byte
 
 		func() {
 			defer func() {
 				if err := recover(); err != nil {
-					sm.testingT.Logf("Variation %s dryrun panicked: %v", svm.VariationName(), err)
-					svm.InvalidateScenario()
+					panicError = err
+					panicStack = debug.Stack()
+					panicked = true
 				}
 			}()
 
@@ -79,16 +87,29 @@ func (sm *ScenarioManager) RunScenario() {
 		}()
 
 		if !svm.isInvalid { // If we made a real test
+			svm.runNow = sm.runNow
 			sm.testingT.Run(svm.VariationName(), func(t *testing.T) {
 				svm.t = t
 				svm.callcounts = make(map[string]uint)
 
-				t.Parallel()
-				t.Cleanup(func() {
+				if panicked {
+					t.Logf("Variation %s dryrun panicked: %v;\n%v", svm.VariationName(), panicError, string(panicStack))
+					t.FailNow()
+				}
+
+				if !svm.runNow {
+					t.Parallel()
+				}
+
+				svm.Cleanup(func(a ScenarioAsserter) {
 					svm.DeleteCreatedResources() // clean up after ourselves!
 				})
 
 				sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
+
+				if svm.isInvalid {
+					t.Fail() // If FailNow hasn't already been called, we should fail.
+				}
 			})
 		}
 	}
