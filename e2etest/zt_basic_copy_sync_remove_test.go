@@ -22,6 +22,7 @@ package e2etest
 
 import (
 	"crypto/md5"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -1128,20 +1129,8 @@ func TestCopySync_DeleteDestinationFileFlag(t *testing.T) {
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
 				blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient("filea")
-				// initial stage block
-				id := []string{BlockIDIntToBase64(1)}
-				_, err := blobClient.StageBlock(ctx, id[0], streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
-				if err != nil {
-					t.Errorf("error staging block %s", err)
-				}
-
-				_, err = blobClient.CommitBlockList(ctx, id, nil)
-				if err != nil {
-					t.Errorf("error committing block %s", err)
-				}
-
-				// second stage block
-				_, err = blobClient.StageBlock(ctx, id[0], streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+				// initial stage block, with block id incompatible with us
+				_, err := blobClient.StageBlock(ctx, base64.StdEncoding.EncodeToString([]byte("foobar")), streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
 				if err != nil {
 					t.Errorf("error staging block %s", err)
 				}
