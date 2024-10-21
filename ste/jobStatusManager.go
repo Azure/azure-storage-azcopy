@@ -176,17 +176,18 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 		case <-jstm.listReq:
 			/* Display stats */
 			js.Timestamp = time.Now().UTC()
+			defer func() { // Exit gracefully if panic
+				if recErr := recover(); recErr != nil {
+					jm.Log(common.LogError, "Cannot send message on respChan")
+				}
+			}()
 			select {
 			case jstm.respChan <- *js:
 				// Send on the channel
 			case <-jstm.statusMgrDone:
 				// If we time out, no biggie. This isn't world-ending, nor is it essential info. The other side stopped listening by now.
 			}
-			defer func() { // Exit gracefully if panic
-				if recErr := recover(); recErr != nil {
-					jm.Log(common.LogError, "Cannot send message on respChan")
-				}
-			}()
+
 			// Reset the lists so that they don't keep accumulating and take up excessive memory
 			// There is no need to keep sending the same items over and over again
 			js.FailedTransfers = []common.TransferDetail{}
