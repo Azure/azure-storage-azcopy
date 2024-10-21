@@ -213,7 +213,7 @@ func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *Scena
 		time.Sleep(time.Second * 10)
 	}
 
-	srcData := NewRandomObjectContentContainer(svm, 1024)
+	srcData := NewRandomObjectContentContainer(1024)
 	srcRes := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
 			overwriteName: ResourceDefinitionObject{Body: srcData},
@@ -221,7 +221,7 @@ func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *Scena
 		},
 	})
 
-	dstData := NewRandomObjectContentContainer(svm, 1024)
+	dstData := NewRandomObjectContentContainer(1024)
 	if !svm.Dryrun() {
 		time.Sleep(time.Second * 10) // Make sure this file is newer
 
