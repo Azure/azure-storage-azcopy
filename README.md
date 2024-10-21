@@ -66,7 +66,7 @@ The general format of the AzCopy commands is: `azcopy [command] [arguments] --[f
     - Local File System <-> Azure Blob (SAS or OAuth authentication)
     - Local File System <-> Azure Files (Share/directory SAS authentication)
     - Local File System <-> Azure Data Lake Storage (ADLS Gen2) (SAS, OAuth, or SharedKey authentication)
-    - Azure Blob (SAS or public) -> Azure Blob (SAS or OAuth authentication)
+    - Azure Blob (SAS , public or OAuth authentication) -> Azure Blob (SAS or OAuth authentication)
     - Azure Blob (SAS or public) -> Azure Files (SAS)
     - Azure Files (SAS) -> Azure Files (SAS)
     - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
