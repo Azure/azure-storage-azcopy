@@ -413,20 +413,35 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 }
 
 func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
+	objectType := ResolveVariation(svm, []common.EntityType{common.EEntityType.File(), common.EEntityType.Folder(), common.EEntityType.Symlink()})
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})
 
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionObject{
-		Body: NewZeroObjectContentContainer(1024 * 1024 * 5),
+	// Local resource manager doesn't have symlink abilities yet, and the same codepath is hit.
+	if objectType == common.EEntityType.Symlink() && srcLoc == common.ELocation.Local() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, srcLoc), ResourceDefinitionObject{
+		Body: common.Iff(objectType == common.EEntityType.File(), NewZeroObjectContentContainer(1024*1024*5), nil),
+		ObjectProperties: ObjectProperties{
+			EntityType: objectType,
+		},
 	})
 	dstCt := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
 
-	svm.InsertVariationSeparator("Blob-")
+	svm.InsertVariationSeparator("Blob")
 
-	blobType := ResolveVariation(svm, []common.BlobType{common.EBlobType.BlockBlob(), common.EBlobType.PageBlob(), common.EBlobType.AppendBlob()})
-
-	multiBlock := "single"
-	if blobType == common.EBlobType.BlockBlob() {
+	multiBlock := "single-block"
+	var blobType common.BlobType
+	if objectType == common.EEntityType.File() {
 		svm.InsertVariationSeparator("-")
-		multiBlock = ResolveVariation(svm, []string{"single-block", "multi-block"})
+		blobType = ResolveVariation(svm, []common.BlobType{common.EBlobType.BlockBlob(), common.EBlobType.PageBlob(), common.EBlobType.AppendBlob()})
+
+		if blobType == common.EBlobType.BlockBlob() {
+			svm.InsertVariationSeparator("-")
+			multiBlock = ResolveVariation(svm, []string{"single-block", "multi-block"})
+		}
 	}
 
 	stdOut, _ := RunAzCopy(
@@ -454,11 +469,14 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 					"alpha": PtrOf("beta"),
 				},
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					BlockSizeMB: common.Iff(multiBlock != "single-block",
+					BlockSizeMB: common.Iff(objectType == common.EEntityType.File() && multiBlock != "single-block",
 						PtrOf(0.5),
 						nil),
+					Recursive:             pointerTo(true),
+					IncludeDirectoryStubs: pointerTo(true),
 				},
-				BlobType: &blobType,
+				BlobType:         &blobType,
+				PreserveSymlinks: pointerTo(true),
 			},
 			ShouldFail: true,
 		},
