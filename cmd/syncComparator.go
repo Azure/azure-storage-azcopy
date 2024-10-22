@@ -65,13 +65,12 @@ type syncDestinationComparator struct {
 
 	comparisonHashType common.SyncHashType
 
-	preferSMBTime             bool
-	disableComparison         bool
-	deleteDestinationFileSync bool
+	preferSMBTime     bool
+	disableComparison bool
 }
 
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, deleteDestinationFile bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType, deleteDestinationFileSync: deleteDestinationFile}
+func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncDestinationComparator {
+	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -89,11 +88,6 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 	// if the destinationObject is present at source and stale, we transfer the up-to-date version from source
 	if present {
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
-
-		if f.deleteDestinationFileSync { // when  delete-destination-file flag is turned on via sync command, we want to overwrite the file at destination
-			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonDeleteDestinationFile, false)
-			return f.copyTransferScheduler(sourceObjectInMap)
-		}
 
 		if f.disableComparison {
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
@@ -148,13 +142,12 @@ type syncSourceComparator struct {
 
 	comparisonHashType common.SyncHashType
 
-	preferSMBTime             bool
-	disableComparison         bool
-	deleteDestinationFileSync bool
+	preferSMBTime     bool
+	disableComparison bool
 }
 
-func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool, deleteDestNew bool) *syncSourceComparator {
-	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType, deleteDestinationFileSync: deleteDestNew}
+func newSyncSourceComparator(i *objectIndexer, copyScheduler objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncSourceComparator {
+	return &syncSourceComparator{destinationIndex: i, copyTransferScheduler: copyScheduler, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
 }
 
 // it will only transfer source items that are:
@@ -174,10 +167,6 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 	if present {
 		defer delete(f.destinationIndex.indexMap, relPath)
 
-		if f.deleteDestinationFileSync { // when  delete-destination-file flag is turned on via sync command, we want to overwrite the file at destination
-			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonDeleteDestinationFile, false)
-			return f.copyTransferScheduler(sourceObject)
-		}
 		// if destination is stale, schedule source for transfer
 		if f.disableComparison {
 			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerHash, false)
