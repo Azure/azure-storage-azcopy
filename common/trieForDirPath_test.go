@@ -25,7 +25,7 @@ func TestTrie_InsertAndGet(t *testing.T) {
 
 	value, exists := trie.Get(folderName)
 	a.True(exists)
-	a.Equal(1, value)
+	a.Equal(uint32(1), value)
 }
 
 func TestTrie_GetNonExistent(t *testing.T) {
