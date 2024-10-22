@@ -61,15 +61,36 @@ func (jm *jobMgr) statusMgrClosed() bool {
 
 /* These functions should not fail */
 func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
-	jm.jstm.partCreated <- msg
-	if msg.IsFinalPart {
-		// Inform statusManager that this is all parts we've
-		close(jm.jstm.partCreated)
+	defer func() {
+		if recErr := recover(); recErr != nil {
+			jm.Log(common.LogError, "Cannot send message on closed channel")
+		}
+	}()
+	if jm.jstm.partCreated != nil { // Sends not allowed if channel is closed
+		select {
+		case jm.jstm.partCreated <- msg:
+		case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
+		}
+
+		if msg.IsFinalPart {
+			// Inform statusManager that this is all parts we've
+			close(jm.jstm.partCreated)
+		}
 	}
 }
 
 func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
-	jm.jstm.xferDone <- msg
+	defer func() {
+		if recErr := recover(); recErr != nil {
+			jm.Log(common.LogError, "Cannot send message on channel")
+		}
+	}()
+	if jm.jstm.xferDone != nil {
+		select {
+		case jm.jstm.xferDone <- msg:
+		case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
+		}
+	}
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
@@ -155,7 +176,17 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 		case <-jstm.listReq:
 			/* Display stats */
 			js.Timestamp = time.Now().UTC()
-			jstm.respChan <- *js
+			defer func() { // Exit gracefully if panic
+				if recErr := recover(); recErr != nil {
+					jm.Log(common.LogError, "Cannot send message on respChan")
+				}
+			}()
+			select {
+			case jstm.respChan <- *js:
+				// Send on the channel
+			case <-jstm.statusMgrDone:
+				// If we time out, no biggie. This isn't world-ending, nor is it essential info. The other side stopped listening by now.
+			}
 
 			// Reset the lists so that they don't keep accumulating and take up excessive memory
 			// There is no need to keep sending the same items over and over again
@@ -166,8 +197,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				close(jstm.statusMgrDone)
 				close(jstm.respChan)
 				close(jstm.listReq)
-				jstm.listReq = nil
-				jstm.respChan = nil
 				return
 			}
 		}
