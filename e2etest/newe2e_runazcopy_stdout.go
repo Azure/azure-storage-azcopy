@@ -154,7 +154,7 @@ type AzCopyParsedCopySyncRemoveStdout struct {
 
 	JobPlanFolder string
 	LogFolder     string
-  
+
 	InitMsg     common.InitMsgJsonTemplate
 	FinalStatus common.ListJobSummaryResponse
 }
@@ -175,28 +175,46 @@ func (a *AzCopyParsedCopySyncRemoveStdout) Write(p []byte) (n int, err error) {
 }
 
 type AzCopyParsedDryrunStdout struct {
-	AzCopyParsedStdout
-	listenChan chan<- common.JsonOutputTemplate
+	AzCopyRawStdout
 
-	ScheduledTransfers map[string]common.CopyTransfer
+	fromTo common.FromTo // fallback for text output
+
+	listenChan chan<- cmd.DryrunTransfer
+
+	Transfers []cmd.DryrunTransfer
+	Raw       map[string]bool
+	JsonMode  bool
 }
 
-func (a *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
-	if a.listenChan == nil {
-		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
-			if line.MessageType == common.EOutputMessageType.Dryrun().String() {
-				var tx common.CopyTransfer
-				err = json.Unmarshal([]byte(line.MessageContent), &tx)
-				if err != nil {
-					return
-				}
-
-				a.ScheduledTransfers[tx.Source] = tx
+func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
+	lines := strings.Split(string(p), "\n")
+	for _, str := range lines {
+		if !d.JsonMode && strings.HasPrefix(str, "DRYRUN: ") {
+			if strings.HasPrefix(str, "DRYRUN: warn") {
+				continue
 			}
-		})
+
+			d.Raw[str] = true
+		} else {
+			var out common.JsonOutputTemplate
+			err = json.Unmarshal([]byte(str), &out)
+			if err != nil {
+				continue
+			}
+
+			if out.MessageType != common.EOutputMessageType.Dryrun().String() {
+				continue
+			}
+
+			var tx cmd.DryrunTransfer
+			err = json.Unmarshal([]byte(out.MessageContent), &tx)
+			if err != nil {
+				continue
+			}
+		}
 	}
 
-	return a.AzCopyParsedStdout.Write(p)
+	return d.AzCopyRawStdout.Write(p)
 }
 
 type AzCopyParsedJobsListStdout struct {

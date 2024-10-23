@@ -899,9 +899,5 @@ func (s *ListSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariationMana
 		}
 	}
 
-	if !svm.Dryrun() {
-		svm.Log(stdout.String())
-	}
-
 	ValidateListOutput(svm, stdout, expectedObjects, nil) // No expected summary
 }

@@ -164,7 +164,17 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
 		}
 		if raw.dryrun {
-			glcm.Dryrun(func(_ common.OutputFormat) string {
+			glcm.Dryrun(func(of common.OutputFormat) string {
+				if of == common.EOutputFormat.Json() {
+					var out struct {
+						Warn string `json:"warn"`
+					}
+
+					out.Warn = LocalToFileShareWarnMsg
+					buf, _ := json.Marshal(out)
+					return string(buf)
+				}
+
 				return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
 			})
 		}
