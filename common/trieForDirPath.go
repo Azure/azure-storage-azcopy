@@ -5,10 +5,9 @@ import (
 )
 
 type TrieNode struct {
-	dirPathSeg             map[string]*TrieNode
-	status                 uint32
-	unregisteredButCreated bool
-	isEnd                  bool
+	children               map[string]*TrieNode
+	TransferIndex          uint32
+	UnregisteredButCreated bool
 }
 
 type Trie struct {
@@ -17,56 +16,39 @@ type Trie struct {
 
 func NewTrie() *Trie {
 	return &Trie{
-		Root: &TrieNode{dirPathSeg: make(map[string]*TrieNode)},
+		Root: &TrieNode{children: make(map[string]*TrieNode)},
 	}
 }
 
-// @brief InsertStatus inserts the status of the directory path in the trie
-func (t *Trie) InsertStatus(dirPath string, dirCreationStatus uint32) {
-	node := t.Root
-	segments := strings.Split(dirPath, "/")
-	for _, segment := range segments {
-		child, exists := node.dirPathSeg[segment]
-		if !exists {
-			child = &TrieNode{dirPathSeg: make(map[string]*TrieNode)}
-			node.dirPathSeg[segment] = child
-		}
-		node = child
-	}
-	node.status = dirCreationStatus
-	node.isEnd = true
+// InsertDirNode inserts the dirPath into the Trie and returns the corresponding node and if it had to be created
+func (t *Trie) InsertDirNode(dirPath string) (*TrieNode, bool) {
+	node, _, created := t.getDirNodeHelper(dirPath, true)
+	return node, created
 }
 
-// @brief InsertUnregisteredStatus inserts the unregistered status of the directory path in the trie
-func (t *Trie) SetUnregisteredStatus(dirPath string, unregisteredButCreated bool) {
-	node := t.Root
-	segments := strings.Split(dirPath, "/")
-	for _, segment := range segments {
-		child, exists := node.dirPathSeg[segment]
-		if !exists {
-			child = &TrieNode{dirPathSeg: make(map[string]*TrieNode)}
-			node.dirPathSeg[segment] = child
-		}
-		node = child
-	}
-
-	node.unregisteredButCreated = unregisteredButCreated
-	node.isEnd = true
+// GetDirNode returns the directory node if it exists
+func (t *Trie) GetDirNode(dirPath string) (*TrieNode, bool) {
+	node, exists, _ := t.getDirNodeHelper(dirPath, false)
+	return node, exists
 }
 
-// @brief GetDirDetails returns all the details of the directory path in the trie
-func (t *Trie) GetDirDetails(dirPath string) (uint32, bool, bool) {
+// getDirNodeHelper returns the node, if the node exists and if the node had to be created
+func (t *Trie) getDirNodeHelper(dirPath string, createIfNotExists bool) (*TrieNode, bool, bool) {
 	node := t.Root
 	segments := strings.Split(dirPath, "/")
+	created := false
 	for _, segment := range segments {
-		child, exists := node.dirPathSeg[segment]
+		child, exists := node.children[segment]
 		if !exists {
-			return 0, false, false
+			if createIfNotExists {
+				child = &TrieNode{children: make(map[string]*TrieNode)}
+				node.children[segment] = child
+				created = true
+			} else {
+				return nil, false, false
+			}
 		}
 		node = child
 	}
-	if node.isEnd {
-		return node.status, node.unregisteredButCreated, true
-	}
-	return 0, false, false
+	return node, true, created
 }

@@ -60,14 +60,14 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 		return // Never persist to dev-null
 	}
 
-	f.contents.InsertStatus(folder, transferIndex)
+	fNode, _ := f.contents.InsertDirNode(folder)
+	fNode.TransferIndex = transferIndex
 
 	// We created it before it was enumerated-- Let's register that now.
-	if _, isUnregisteredButCreated, ok := f.contents.GetDirDetails(folder); ok {
-		if isUnregisteredButCreated {
-			f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-			f.contents.SetUnregisteredStatus(folder, false)
-		}
+	if fNode.UnregisteredButCreated {
+		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		fNode.UnregisteredButCreated = false
+
 	}
 }
 
@@ -80,18 +80,15 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 	}
 
 	// If the folder has already been created, then we don't need to create it again
-	var idx uint32
-	var isUnregisteredButCreated bool
-	idx, isUnregisteredButCreated, ok := f.contents.GetDirDetails(folder)
-	if ok {
-		status := f.plan.Transfer(idx).TransferStatus()
-		if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
-			return nil
-		}
+	fNode, addedToTrie := f.contents.InsertDirNode(folder)
 
-		if isUnregisteredButCreated {
-			return nil
-		}
+	if !addedToTrie && (f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.FolderCreated() ||
+		f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.Success()) {
+		return nil
+	}
+
+	if fNode.UnregisteredButCreated {
+		return nil
 	}
 
 	err := doCreation()
@@ -99,14 +96,14 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return err
 	}
 
-	if ok && idx != 0 {
+	if !addedToTrie {
 		// overwrite it's transfer status
-		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+		f.plan.Transfer(fNode.TransferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
 		// A folder hasn't been hit in traversal yet.
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
 		// We set the value to 0 as we just want to record it in memory
-		f.contents.SetUnregisteredStatus(folder, true)
+		fNode.UnregisteredButCreated = true
 	}
 
 	return nil
@@ -128,11 +125,9 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		defer f.mu.Unlock()
 
 		var created bool
-		if idx, _, ok := f.contents.GetDirDetails(folder); ok {
-			status := f.plan.Transfer(idx).TransferStatus()
-			if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
-				created = true
-			}
+		if fNode, ok := f.contents.GetDirNode(folder); ok {
+			created = f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.FolderCreated() ||
+				f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.Success()
 		} else {
 			// This should not happen, ever.
 			// Folder property jobs register with the tracker before they start getting processed.
