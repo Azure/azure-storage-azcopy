@@ -38,7 +38,7 @@ func (t *Trie) InsertStatus(dirPath string, dirCreationStatus uint32) {
 }
 
 // @brief InsertUnregisteredStatus inserts the unregistered status of the directory path in the trie
-func (t *Trie) InsertUnregisteredStatus(dirPath string, unregisteredButCreated bool) {
+func (t *Trie) SetUnregisteredStatus(dirPath string, unregisteredButCreated bool) {
 	node := t.Root
 	segments := strings.Split(dirPath, "/")
 	for _, segment := range segments {

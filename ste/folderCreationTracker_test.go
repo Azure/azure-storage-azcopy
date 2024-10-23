@@ -72,10 +72,9 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 	}
 
 	fct := &jpptFolderTracker{
-		plan:                   plan,
-		mu:                     &sync.Mutex{},
-		contents:               common.NewTrie(),
-		unregisteredButCreated: common.NewTrie(),
+		plan:     plan,
+		mu:       &sync.Mutex{},
+		contents: common.NewTrie(),
 	}
 
 	// 1. Register folder1

@@ -20,10 +20,9 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 	case common.EFolderPropertiesOption.AllFolders(),
 		common.EFolderPropertiesOption.AllFoldersExceptRoot():
 		return &jpptFolderTracker{ // This prevents a dependency cycle. Reviewers: Are we OK with this? Can you think of a better way to do it?
-			plan:                   plan,
-			mu:                     &sync.Mutex{},
-			contents:               common.NewTrie(),
-			unregisteredButCreated: common.NewTrie(),
+			plan:     plan,
+			mu:       &sync.Mutex{},
+			contents: common.NewTrie(),
 		}
 	case common.EFolderPropertiesOption.NoFolders():
 		// can't use simpleFolderTracker here, because when no folders are processed,
@@ -48,10 +47,9 @@ func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.
 }
 
 type jpptFolderTracker struct {
-	plan                   IJobPartPlanHeader
-	mu                     *sync.Mutex
-	contents               *common.Trie
-	unregisteredButCreated *common.Trie
+	plan     IJobPartPlanHeader
+	mu       *sync.Mutex
+	contents *common.Trie
 }
 
 func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
@@ -65,8 +63,11 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	f.contents.InsertStatus(folder, transferIndex)
 
 	// We created it before it was enumerated-- Let's register that now.
-	if _, ok := f.unregisteredButCreated.CheckIfUnregisteredButCreated(folder); ok {
-		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+	if isUnregisteredButCreated, ok := f.contents.CheckIfUnregisteredButCreated(folder); ok {
+		if isUnregisteredButCreated {
+			f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
+			f.contents.SetUnregisteredStatus(folder, false)
+		}
 	}
 }
 
@@ -85,7 +86,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		}
 	}
 
-	if isUnregisteredButCreated, ok := f.unregisteredButCreated.CheckIfUnregisteredButCreated(folder); ok {
+	if isUnregisteredButCreated, ok := f.contents.CheckIfUnregisteredButCreated(folder); ok {
 		if isUnregisteredButCreated {
 			return nil
 		}
@@ -103,7 +104,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		// A folder hasn't been hit in traversal yet.
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
 		// We set the value to 0 as we just want to record it in memory
-		f.unregisteredButCreated.InsertUnregisteredStatus(folder, true)
+		f.contents.SetUnregisteredStatus(folder, true)
 	}
 
 	return nil
