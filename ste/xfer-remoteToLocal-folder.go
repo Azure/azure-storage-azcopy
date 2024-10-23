@@ -25,7 +25,7 @@ import (
 )
 
 // general-purpose "any remote persistence location" to local, for folders
-func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFactory) {
+func remoteToLocal_folder(jptm IJobPartTransferMgr, df downloaderFactory) {
 
 	info := jptm.Info()
 
@@ -56,7 +56,6 @@ func remoteToLocal_folder(jptm IJobPartTransferMgr, pacer pacer, df downloaderFa
 
 	// no chunks to schedule. Just run the folder handling operations
 	t := jptm.GetFolderCreationTracker()
-	defer t.StopTracking(info.Destination) // don't need it after this routine
 
 	err = common.CreateDirectoryIfNotExist(info.Destination, t) // we may create it here, or possible there's already a file transfer for the folder that has created it, or maybe it already existed before this job
 	if err != nil {
