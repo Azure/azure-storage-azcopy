@@ -63,7 +63,7 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	f.contents.InsertStatus(folder, transferIndex)
 
 	// We created it before it was enumerated-- Let's register that now.
-	if isUnregisteredButCreated, ok := f.contents.CheckIfUnregisteredButCreated(folder); ok {
+	if _, isUnregisteredButCreated, ok := f.contents.GetDirDetails(folder); ok {
 		if isUnregisteredButCreated {
 			f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 			f.contents.SetUnregisteredStatus(folder, false)
@@ -128,7 +128,7 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		defer f.mu.Unlock()
 
 		var created bool
-		if idx, ok := f.contents.GetStatus(folder); ok {
+		if idx, _, ok := f.contents.GetDirDetails(folder); ok {
 			status := f.plan.Transfer(idx).TransferStatus()
 			if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
 				created = true

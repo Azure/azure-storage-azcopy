@@ -19,31 +19,15 @@ func setupTest(t *testing.T) (*Trie, *assert.Assertions, string) {
 	return trie, a, folderName
 }
 
-func TestTrie_InsertAndGet(t *testing.T) {
+func TestTrie_GetDirDetails(t *testing.T) {
 	trie, a, folderName := setupTest(t)
+
+	trie.SetUnregisteredStatus(folderName, true)
 	trie.InsertStatus(folderName, 1)
 
-	value, exists := trie.GetStatus(folderName)
-	a.True(exists)
-	a.Equal(uint32(1), value)
-}
+	status, isUnregisteredButCreated, exists := trie.GetDirDetails(folderName)
 
-func TestTrie_GetNonExistent(t *testing.T) {
-	trie, a, folderName := setupTest(t)
-
-	_, exists := trie.GetStatus(folderName)
-	a.False(exists)
-}
-
-func TestTrie_InsertAndCheck_UnregisteredButCreatedStatus(t *testing.T) {
-	trie, a, folderName := setupTest(t)
-
-	isUnregisteredButCreated, exists := trie.CheckIfUnregisteredButCreated(folderName)
-	a.False(exists)
-
-	trie.InsertUnregisteredStatus(folderName, true)
-
-	isUnregisteredButCreated, exists = trie.CheckIfUnregisteredButCreated(folderName)
 	a.True(exists)
 	a.Equal(true, isUnregisteredButCreated)
+	a.Equal(uint32(1), status)
 }

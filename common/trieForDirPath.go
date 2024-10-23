@@ -54,40 +54,6 @@ func (t *Trie) SetUnregisteredStatus(dirPath string, unregisteredButCreated bool
 	node.isEnd = true
 }
 
-// @brief GetStatus returns the status of the directory path in the trie
-func (t *Trie) GetStatus(dirPath string) (uint32, bool) {
-	node := t.Root
-	segments := strings.Split(dirPath, "/")
-	for _, segment := range segments {
-		child, exists := node.dirPathSeg[segment]
-		if !exists {
-			return 0, false
-		}
-		node = child
-	}
-	if node.isEnd {
-		return node.status, true
-	}
-	return 0, false
-}
-
-// @brief CheckIfUnregisteredButCreated checks if the directory path is unregistered but created in the trie
-func (t *Trie) CheckIfUnregisteredButCreated(dirPath string) (bool, bool) {
-	node := t.Root
-	segments := strings.Split(dirPath, "/")
-	for _, segment := range segments {
-		child, exists := node.dirPathSeg[segment]
-		if !exists {
-			return false, false
-		}
-		node = child
-	}
-	if node.isEnd {
-		return node.unregisteredButCreated, true
-	}
-	return false, false
-}
-
 // @brief GetDirDetails returns all the details of the directory path in the trie
 func (t *Trie) GetDirDetails(dirPath string) (uint32, bool, bool) {
 	node := t.Root
