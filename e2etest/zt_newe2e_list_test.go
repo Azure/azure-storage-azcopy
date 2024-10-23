@@ -820,7 +820,7 @@ func (s *ListSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
 		})
 
 	// Validate that the stdout contains these error URLs
-	ValidateErrorOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
+	ValidateMessageOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
 }
 
 func (s *ListSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariationManager) {
