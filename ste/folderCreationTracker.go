@@ -1,7 +1,6 @@
 package ste
 
 import (
-	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -24,7 +23,7 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 			plan:                   plan,
 			mu:                     &sync.Mutex{},
 			contents:               common.NewTrie(),
-			unregisteredButCreated: make(map[string]struct{}),
+			unregisteredButCreated: common.NewTrie(),
 		}
 	case common.EFolderPropertiesOption.NoFolders():
 		// can't use simpleFolderTracker here, because when no folders are processed,
@@ -48,15 +47,11 @@ func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.
 	panic("wrong type of folder tracker has been instantiated. This type does not do any tracking")
 }
 
-func (f *nullFolderTracker) StopTracking(folder string) {
-	// noop (because we don't track anything)
-}
-
 type jpptFolderTracker struct {
 	plan                   IJobPartPlanHeader
 	mu                     *sync.Mutex
 	contents               *common.Trie
-	unregisteredButCreated map[string]struct{}
+	unregisteredButCreated *common.Trie
 }
 
 func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIndex uint32) {
@@ -70,10 +65,9 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 	f.contents.Insert(folder, transferIndex)
 
 	// We created it before it was enumerated-- Let's register that now.
-	if _, ok := f.unregisteredButCreated[folder]; ok {
+	if _, ok := f.unregisteredButCreated.Get(folder); ok {
 		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-
-		delete(f.unregisteredButCreated, folder)
+		f.unregisteredButCreated.Delete(folder)
 	}
 }
 
@@ -92,7 +86,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		}
 	}
 
-	if _, ok := f.unregisteredButCreated[folder]; ok {
+	if _, ok := f.unregisteredButCreated.Get(folder); ok {
 		return nil
 	}
 
@@ -107,7 +101,8 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 	} else {
 		// A folder hasn't been hit in traversal yet.
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
-		f.unregisteredButCreated[folder] = struct{}{}
+		// We set the value to 0 as we just want to record it in memory
+		f.unregisteredButCreated.Insert(folder, 0)
 	}
 
 	return nil
@@ -161,30 +156,5 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		return created
 	default:
 		panic("unknown overwrite option")
-	}
-}
-
-func (f *jpptFolderTracker) StopTracking(folder string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if folder == common.Dev_Null {
-		return // Not possible to track this
-	}
-
-	// no-op, because tracking is now handled by jppt, anyway.
-	if f.contents != nil {
-		if _, ok := f.contents.Get(folder); ok {
-			f.contents.Delete(folder)
-		} else {
-			currentContents := ""
-
-			for k, v := range f.contents.Root.Children {
-				currentContents += fmt.Sprintf("K: %s V: %v\n", k, v.Value)
-			}
-
-			// double should never be hit, but *just in case*.
-			panic(common.NewAzCopyLogSanitizer().SanitizeLogMessage("Folder " + folder + " shouldn't finish tracking until it's been recorded\nCurrent Contents:\n" + currentContents))
-		}
 	}
 }

@@ -75,7 +75,7 @@ func TestFolderCreationTracker_directoryCreate(t *testing.T) {
 		plan:                   plan,
 		mu:                     &sync.Mutex{},
 		contents:               common.NewTrie(),
-		unregisteredButCreated: make(map[string]struct{}),
+		unregisteredButCreated: common.NewTrie(),
 	}
 
 	// 1. Register folder1
