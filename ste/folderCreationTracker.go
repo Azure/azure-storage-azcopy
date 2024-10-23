@@ -62,12 +62,11 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 		return // Never persist to dev-null
 	}
 
-	f.contents.Insert(folder, transferIndex)
+	f.contents.InsertStatus(folder, transferIndex)
 
 	// We created it before it was enumerated-- Let's register that now.
-	if _, ok := f.unregisteredButCreated.Get(folder); ok {
+	if _, ok := f.unregisteredButCreated.CheckIfUnregisteredButCreated(folder); ok {
 		f.plan.Transfer(transferIndex).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
-		f.unregisteredButCreated.Delete(folder)
 	}
 }
 
@@ -79,15 +78,17 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return nil // Never persist to dev-null
 	}
 
-	if idx, ok := f.contents.Get(folder); ok {
+	if idx, ok := f.contents.GetStatus(folder); ok {
 		status := f.plan.Transfer(idx).TransferStatus()
 		if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
 			return nil
 		}
 	}
 
-	if _, ok := f.unregisteredButCreated.Get(folder); ok {
-		return nil
+	if isUnregisteredButCreated, ok := f.unregisteredButCreated.CheckIfUnregisteredButCreated(folder); ok {
+		if isUnregisteredButCreated {
+			return nil
+		}
 	}
 
 	err := doCreation()
@@ -95,14 +96,14 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return err
 	}
 
-	if idx, ok := f.contents.Get(folder); ok {
+	if idx, ok := f.contents.GetStatus(folder); ok {
 		// overwrite it's transfer status
 		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
 		// A folder hasn't been hit in traversal yet.
 		// Recording it in memory is OK, because we *cannot* resume a job that hasn't finished traversal.
 		// We set the value to 0 as we just want to record it in memory
-		f.unregisteredButCreated.Insert(folder, 0)
+		f.unregisteredButCreated.InsertUnregisteredStatus(folder, true)
 	}
 
 	return nil
@@ -124,7 +125,7 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 		defer f.mu.Unlock()
 
 		var created bool
-		if idx, ok := f.contents.Get(folder); ok {
+		if idx, ok := f.contents.GetStatus(folder); ok {
 			status := f.plan.Transfer(idx).TransferStatus()
 			if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
 				created = true

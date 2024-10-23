@@ -21,9 +21,9 @@ func setupTest(t *testing.T) (*Trie, *assert.Assertions, string) {
 
 func TestTrie_InsertAndGet(t *testing.T) {
 	trie, a, folderName := setupTest(t)
-	trie.Insert(folderName, 1)
+	trie.InsertStatus(folderName, 1)
 
-	value, exists := trie.Get(folderName)
+	value, exists := trie.GetStatus(folderName)
 	a.True(exists)
 	a.Equal(uint32(1), value)
 }
@@ -31,23 +31,19 @@ func TestTrie_InsertAndGet(t *testing.T) {
 func TestTrie_GetNonExistent(t *testing.T) {
 	trie, a, folderName := setupTest(t)
 
-	_, exists := trie.Get(folderName)
+	_, exists := trie.GetStatus(folderName)
 	a.False(exists)
 }
 
-func TestTrie_Delete(t *testing.T) {
+func TestTrie_InsertAndCheck_UnregisteredButCreatedStatus(t *testing.T) {
 	trie, a, folderName := setupTest(t)
 
-	trie.Insert(folderName, 1)
-	trie.Delete(folderName)
-
-	_, exists := trie.Get(folderName)
+	isUnregisteredButCreated, exists := trie.CheckIfUnregisteredButCreated(folderName)
 	a.False(exists)
-}
 
-func TestTrie_DeletePartialPath(t *testing.T) {
-	trie, a, folderName := setupTest(t)
-	trie.Insert(folderName, 1)
-	deleted := trie.Delete("folder")
-	a.False(deleted)
+	trie.InsertUnregisteredStatus(folderName, true)
+
+	isUnregisteredButCreated, exists = trie.CheckIfUnregisteredButCreated(folderName)
+	a.True(exists)
+	a.Equal(true, isUnregisteredButCreated)
 }
