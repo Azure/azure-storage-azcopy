@@ -79,14 +79,16 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return nil // Never persist to dev-null
 	}
 
-	if idx, ok := f.contents.GetStatus(folder); ok {
+	// If the folder has already been created, then we don't need to create it again
+	var idx uint32
+	var isUnregisteredButCreated bool
+	idx, isUnregisteredButCreated, ok := f.contents.GetDirDetails(folder)
+	if ok {
 		status := f.plan.Transfer(idx).TransferStatus()
 		if status == (common.ETransferStatus.FolderCreated()) || status == (common.ETransferStatus.Success()) {
 			return nil
 		}
-	}
 
-	if isUnregisteredButCreated, ok := f.contents.CheckIfUnregisteredButCreated(folder); ok {
 		if isUnregisteredButCreated {
 			return nil
 		}
@@ -97,7 +99,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return err
 	}
 
-	if idx, ok := f.contents.GetStatus(folder); ok {
+	if ok && idx != 0 {
 		// overwrite it's transfer status
 		f.plan.Transfer(idx).SetTransferStatus(common.ETransferStatus.FolderCreated(), false)
 	} else {
