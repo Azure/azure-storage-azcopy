@@ -21,7 +21,7 @@
 2. Fixed an issue where sync with --hash-meta-dir would cause original files to be hidden. ([#2758](https://github.com/Azure/azure-storage-azcopy/issues/2758)) 
 3. Fixed an issue where jobs list would result in a segmentation violation. ([#2714](https://github.com/Azure/azure-storage-azcopy/issues/2714))
 4. Fixed an issue where list for File would not allow OAuth. ([#2821](https://github.com/Azure/azure-storage-azcopy/pull/2821))
-5. Fixed an issue where folders would be handled improperly on datalake accounts. ([#2809](https://github.com/Azure/azure-storage-azcopy/pull/2809))
+5. Fixed an issue where folders would be handled improperly on FNS accounts. ([#2809](https://github.com/Azure/azure-storage-azcopy/pull/2809))
 6. Fixed an issue where --dry-run would sometimes panic due to closing a log file that was already closed. ([#2832](https://github.com/Azure/azure-storage-azcopy/pull/2832))
 7. Fixed an issue where sync --delete-destination-files was overwriting all destination files. ([#2818](https://github.com/Azure/azure-storage-azcopy/pull/2818))
 8. Fixed an issue where AzCopy would panic due to sending on an already closed channel. ([#2703](https://github.com/Azure/azure-storage-azcopy/issues/2703))
