@@ -10,11 +10,8 @@
 
 ### Dependency updates
 1. Golang 1.22.5 -> 1.23.1
-2. azblob 1.4.0 -> 1.4.1
-3. azfile 1.3.0 -> 1.3.1
-4. azdatalake 1.2.0 -> 1.2.1
-5. azidentity 1.7.0 -> 1.8.0
-6. azcore 1.13.0 -> 1.16.0
+2. azidentity 1.7.0 -> 1.8.0
+3. azcore 1.13.0 -> 1.16.0
 
 ### Bug Fixes
 1. Fixed an issue where piped downloads in Linux would append AzCopy version information if on an older version. ([#2774](https://github.com/Azure/azure-storage-azcopy/pull/2774))
@@ -25,7 +22,6 @@
 6. Fixed an issue where --dry-run would sometimes panic due to closing a log file that was already closed. ([#2832](https://github.com/Azure/azure-storage-azcopy/pull/2832))
 7. Fixed an issue where sync --delete-destination-files was overwriting all destination files. ([#2818](https://github.com/Azure/azure-storage-azcopy/pull/2818))
 8. Fixed an issue where AzCopy would panic due to sending on an already closed channel. ([#2703](https://github.com/Azure/azure-storage-azcopy/issues/2703))
-
 
 ### Documentation
 1. Updated in line text help message to say that source and destinations cannot be modified during transfers. ([#2826](https://github.com/Azure/azure-storage-azcopy/pull/2826)) 
