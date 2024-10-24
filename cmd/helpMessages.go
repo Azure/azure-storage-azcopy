@@ -21,15 +21,14 @@ const copyCmdShortDescription = "Copies source data to a destination location"
 const copyCmdLongDescription = `
 Copies source data to a destination location. The supported directions are:
   - local <-> Azure Blob (SAS or OAuth authentication)
-  - local <-> Azure Files (Share/directory SAS authentication)
+  - local <-> Azure Files (Share/directory SAS or OAuth authentication)
   - local <-> ADLS Gen 2 (SAS, OAuth, or SharedKey authentication)
-  - Azure Blob (SAS or public) -> Azure Blob (SAS or OAuth authentication)
-  - ADLS Gen 2 (SAS or public) -> ADLS Gen 2 (SAS or OAuth authentication)
+  - Azure Blob (SAS, OAuth or public authentication) -> Azure Blob (SAS or OAuth authentication)
   - ADLS Gen2 (SAS or OAuth authentication) <-> ADLS Gen2 (SAS or OAuth authentication)
   - ADLS Gen2 (SAS or OAuth authentication) <-> Azure Blob (SAS or OAuth authentication)
-  - Azure Blob (SAS or public) -> Azure Files (SAS)
-  - Azure Files (SAS) -> Azure Files (SAS)
-  - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
+  - Azure Blob (SAS, OAuth or public) -> Azure Files (SAS or OAuth authentication)
+  - Azure Files (SAS or OAuth authentication) -> Azure Files (SAS or OAuth authentication)
+  - Azure Files (SAS or OAuth authentication) -> Azure Blob (SAS or OAuth authentication)
   - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
   - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication)
 
