@@ -60,6 +60,7 @@ type rawSyncCmdArgs struct {
 	compareHash           string
 	localHashStorageMode  string
 
+	includeDirectoryStubs   bool // Includes hdi_isfolder objects in the sync even w/o preservePermissions.
 	preservePermissions     bool
 	preserveSMBPermissions  bool // deprecated and synonymous with preservePermissions
 	preserveOwner           bool
@@ -163,7 +164,17 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 			jobsAdmin.JobsAdmin.LogToJobLog(LocalToFileShareWarnMsg, common.LogWarning)
 		}
 		if raw.dryrun {
-			glcm.Dryrun(func(_ common.OutputFormat) string {
+			glcm.Dryrun(func(of common.OutputFormat) string {
+				if of == common.EOutputFormat.Json() {
+					var out struct {
+						Warn string `json:"warn"`
+					}
+
+					out.Warn = LocalToFileShareWarnMsg
+					buf, _ := json.Marshal(out)
+					return string(buf)
+				}
+
 				return fmt.Sprintf("DRYRUN: warn %s", LocalToFileShareWarnMsg)
 			})
 		}
@@ -368,6 +379,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.deleteDestinationFileIfNecessary = raw.deleteDestinationFileIfNecessary
 
+	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
+
 	return cooked, nil
 }
 
@@ -417,6 +430,7 @@ type cookedSyncCmdArgs struct {
 	putBlobSize             int64
 	forceIfReadOnly         bool
 	backupMode              bool
+	includeDirectoryStubs   bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -621,7 +635,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	if jobDone {
 		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 {
+		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
 			exitCode = common.EExitCode.Error()
 		}
 
@@ -789,6 +803,7 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "True by default, look into sub-directories recursively when syncing between directories. (default true).")
 	syncCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "Optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalFile, FileLocal, BlobFile, FileBlob, etc.")
+	syncCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default, includes blobs with the hdi_isfolder metadata in the transfer.")
 
 	// TODO: enable for copy with IfSourceNewer
 	// smb info/permissions can be persisted in the scenario of File -> File

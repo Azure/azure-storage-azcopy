@@ -5,6 +5,7 @@ import (
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"strings"
 )
 
 func init() {
@@ -14,10 +15,11 @@ func init() {
 type ListSuite struct{}
 
 func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
-	srcService := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()}))
+	srcService := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(),
+		common.ELocation.File()}))
 
 	svm.InsertVariationSeparator(":")
-	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	var expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject
 	if srcService.Location() == common.ELocation.Blob() {
 		expectedObjects = map[AzCopyOutputKey]cmd.AzCopyListObject{}
@@ -38,12 +40,15 @@ func (s *ListSuite) Scenario_ListBasic(svm *ScenarioVariationManager) {
 		AzCopyCommand{
 			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
-				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: GenericServiceSignatureValues{
-						ContainerName: srcObj.ContainerName(),
-						Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
-					},
-				}),
+				srcObj.Parent().(RemoteResourceManager).WithSpecificAuthType(ResolveVariation(svm,
+					[]ExplicitCredentialTypes{EExplicitCredentialType.OAuth(),
+						EExplicitCredentialType.SASToken()}), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: GenericServiceSignatureValues{
+							ContainerName: srcObj.ContainerName(),
+							Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
+						},
+					}),
 			},
 			Flags: ListFlags{},
 		})
@@ -75,9 +80,9 @@ func (s *ListSuite) Scenario_ListHierarchy(svm *ScenarioVariationManager) {
 		}
 	}
 	objects := []ResourceDefinitionObject{
-		{ObjectName: pointerTo("file_in_root.txt"), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"},
+		{ObjectName: pointerTo("file_in_root.txt"), Body: NewRandomObjectContentContainer(SizeFromString("1K")), Size: "1.00 KiB"},
 		{ObjectName: pointerTo("dir_in_root"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
-		{ObjectName: pointerTo("dir_in_root/file.txt"), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root/file.txt"), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
 		{ObjectName: pointerTo("dir_in_root/subdir"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 	}
 	// Scale up from service to object
@@ -124,7 +129,7 @@ func (s *ListSuite) Scenario_ListProperties(svm *ScenarioVariationManager) {
 	for _, blobName := range blobNames {
 		obj := CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
 		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
@@ -178,7 +183,7 @@ func (s *ListSuite) Scenario_ListProperties_TextOutput(svm *ScenarioVariationMan
 	for _, blobName := range blobNames {
 		obj := CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
 		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
@@ -235,7 +240,7 @@ func (s *ListSuite) Scenario_ListPropertiesInvalid(svm *ScenarioVariationManager
 	for _, blobName := range blobNames {
 		obj := CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
 		expectedObjects[AzCopyOutputKey{Path: blobName}] = cmd.AzCopyListObject{
@@ -278,7 +283,7 @@ func (s *ListSuite) Scenario_ListMachineReadable(svm *ScenarioVariationManager) 
 	for _, blobName := range blobNames {
 		CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		expectedObjects[AzCopyOutputKey{Path: blobName}] = cmd.AzCopyListObject{
 			Path:          blobName,
@@ -319,7 +324,7 @@ func (s *ListSuite) Scenario_ListMegaUnits(svm *ScenarioVariationManager) {
 	for _, blobName := range blobNames {
 		CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		expectedObjects[AzCopyOutputKey{Path: blobName}] = cmd.AzCopyListObject{
 			Path:          blobName,
@@ -351,7 +356,7 @@ func (s *ListSuite) Scenario_ListBasic_TextOutput(svm *ScenarioVariationManager)
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
 
-	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
@@ -389,7 +394,7 @@ func (s *ListSuite) Scenario_ListRunningTally(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
 	srcService := acct.GetService(svm, common.ELocation.Blob())
 
-	body := NewRandomObjectContentContainer(svm, SizeFromString("1K"))
+	body := NewRandomObjectContentContainer(SizeFromString("1K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, srcService, ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
@@ -433,7 +438,7 @@ func (s *ListSuite) Scenario_ListRunningTallyMegaUnits(svm *ScenarioVariationMan
 	for _, blobName := range blobNames {
 		CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		expectedObjects[AzCopyOutputKey{Path: blobName}] = cmd.AzCopyListObject{
 			Path:          blobName,
@@ -476,7 +481,7 @@ func (s *ListSuite) Scenario_ListRunningTallyMachineReadable(svm *ScenarioVariat
 	for _, blobName := range blobNames {
 		CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		expectedObjects[AzCopyOutputKey{Path: blobName}] = cmd.AzCopyListObject{
 			Path:          blobName,
@@ -517,7 +522,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions(svm *ScenarioVari
 	for _, blobName := range blobNames {
 		obj := CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
 		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
@@ -558,7 +563,7 @@ func (s *ListSuite) Scenario_ListVersionIdNoAdditionalVersions_TextOutput(svm *S
 	for _, blobName := range blobNames {
 		obj := CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
 		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
@@ -602,7 +607,7 @@ func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationMan
 	for i, blobName := range blobNames {
 		obj := CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 		props := obj.GetProperties(svm)
 		versionId := common.IffNotNil(props.BlobProperties.VersionId, "")
@@ -610,7 +615,7 @@ func (s *ListSuite) Scenario_ListVersionIdWithVersions(svm *ScenarioVariationMan
 
 		// Create a new version of the blob for the first two blobs
 		if i < 2 {
-			obj.Create(svm, NewRandomObjectContentContainer(svm, SizeFromString("2K")), ObjectProperties{})
+			obj.Create(svm, NewRandomObjectContentContainer(SizeFromString("2K")), ObjectProperties{})
 			props = obj.GetProperties(svm)
 			versionId = common.IffNotNil(props.BlobProperties.VersionId, "")
 			expectedObjects[AzCopyOutputKey{Path: blobName, VersionId: versionId}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "2.00 KiB", VersionId: versionId}
@@ -650,12 +655,12 @@ func (s *ListSuite) Scenario_ListWithVersions(svm *ScenarioVariationManager) {
 	for i, blobName := range blobNames {
 		obj := CreateResource[ObjectResourceManager](svm, srcContainer, ResourceDefinitionObject{
 			ObjectName: pointerTo(blobName),
-			Body:       NewRandomObjectContentContainer(svm, SizeFromString("1K")),
+			Body:       NewRandomObjectContentContainer(SizeFromString("1K")),
 		})
 
 		// Create a new version of the blob for the first two blobs
 		if i < 2 {
-			obj.Create(svm, NewRandomObjectContentContainer(svm, SizeFromString("2K")), ObjectProperties{})
+			obj.Create(svm, NewRandomObjectContentContainer(SizeFromString("2K")), ObjectProperties{})
 			expectedObjects[AzCopyOutputKey{Path: blobName}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "2.00 KiB"}
 		} else {
 			expectedObjects[AzCopyOutputKey{Path: blobName}] = cmd.AzCopyListObject{Path: blobName, ContentLength: "1.00 KiB"}
@@ -698,16 +703,16 @@ func (s *ListSuite) Scenario_ListHierarchyTrailingDot(svm *ScenarioVariationMana
 		}
 	}
 	objects := []ResourceDefinitionObject{
-		{ObjectName: pointerTo("file_in_root"), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"},
-		{ObjectName: pointerTo("file_in_root."), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"},
+		{ObjectName: pointerTo("file_in_root"), Body: NewRandomObjectContentContainer(SizeFromString("1K")), Size: "1.00 KiB"},
+		{ObjectName: pointerTo("file_in_root."), Body: NewRandomObjectContentContainer(SizeFromString("1K")), Size: "1.00 KiB"},
 		{ObjectName: pointerTo("dir_in_root."), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
-		{ObjectName: pointerTo("dir_in_root./file"), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
-		{ObjectName: pointerTo("dir_in_root./file."), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root./file"), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root./file."), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
 		{ObjectName: pointerTo("dir_in_root./subdir"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 		{ObjectName: pointerTo("dir_in_root./subdir."), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 		{ObjectName: pointerTo("dir_in_root"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
-		{ObjectName: pointerTo("dir_in_root/file"), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
-		{ObjectName: pointerTo("dir_in_root/file."), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root/file"), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root/file."), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
 		{ObjectName: pointerTo("dir_in_root/subdir"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 		{ObjectName: pointerTo("dir_in_root/subdir."), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 	}
@@ -756,16 +761,16 @@ func (s *ListSuite) Scenario_ListHierarchyTrailingDotDisable(svm *ScenarioVariat
 		}
 	}
 	objects := []ResourceDefinitionObject{
-		{ObjectName: pointerTo("file_in_root"), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"},
-		{ObjectName: pointerTo("file_in_root."), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"},
+		{ObjectName: pointerTo("file_in_root"), Body: NewRandomObjectContentContainer(SizeFromString("1K")), Size: "1.00 KiB"},
+		{ObjectName: pointerTo("file_in_root."), Body: NewRandomObjectContentContainer(SizeFromString("1K")), Size: "1.00 KiB"},
 		{ObjectName: pointerTo("dir_in_root."), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
-		{ObjectName: pointerTo("dir_in_root./file"), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
-		{ObjectName: pointerTo("dir_in_root./file."), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root./file"), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root./file."), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
 		{ObjectName: pointerTo("dir_in_root./subdir"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 		{ObjectName: pointerTo("dir_in_root./subdir."), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 		{ObjectName: pointerTo("dir_in_root"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
-		{ObjectName: pointerTo("dir_in_root/file"), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
-		{ObjectName: pointerTo("dir_in_root/file."), Body: NewRandomObjectContentContainer(svm, SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root/file"), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
+		{ObjectName: pointerTo("dir_in_root/file."), Body: NewRandomObjectContentContainer(SizeFromString("2K")), Size: "2.00 KiB"},
 		{ObjectName: pointerTo("dir_in_root/subdir"), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 		{ObjectName: pointerTo("dir_in_root/subdir."), ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}, Size: "0.00 B"},
 	}
@@ -816,4 +821,83 @@ func (s *ListSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
 
 	// Validate that the stdout contains these error URLs
 	ValidateErrorOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
+}
+
+func (s *ListSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariationManager) {
+	targetAcct := pointerTo(NamedResolveVariation(svm, map[string]string{
+		"FNS": PrimaryStandardAcct,
+		"HNS": PrimaryHNSAcct,
+	}))
+
+	// This should also fix copy/sync because the changed codepath overlaps, *but*, we'll have a separate test for that too.
+	srcRoot := GetRootResource(svm, common.ELocation.Blob(), GetResourceOptions{
+		PreferredAccount: targetAcct,
+	})
+
+	resourceMapping := NamedResolveVariation(svm, map[string]ObjectResourceMappingFlat{
+		"DisallowOverlap": { // "foo" is  a folder, only a folder, there is no difference between "foo" and "foo/".
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+				Body: NewZeroObjectContentContainer(0),
+			},
+			"foo/bar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File inside
+			"baz":     ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File on the side
+		},
+		"AllowOverlap": { // "foo" (the file), and "foo/" (the directory) can exist, but "foo/" is still a directory with metadata.
+			"foo/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+				Body: NewZeroObjectContentContainer(0),
+			},
+			"foo/bar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File inside
+			"foo":     ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File on the side
+		},
+	})
+
+	// HNS will automatically correct blob calls to "foo/" to "foo", which is correct behavior
+	// But incompatible with the overlap scenario.
+	if _, ok := resourceMapping["foo/"]; *targetAcct == PrimaryHNSAcct && ok {
+		svm.InvalidateScenario()
+		return
+	}
+
+	res := CreateResource[ContainerResourceManager](svm, srcRoot, ResourceDefinitionContainer{
+		Objects: resourceMapping,
+	})
+
+	tgt := GetRootResource(svm, common.ELocation.BlobFS(), GetResourceOptions{
+		PreferredAccount: targetAcct,
+	}).(ServiceResourceManager).GetContainer(res.ContainerName())
+
+	stdout, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbList,
+			Targets: []ResourceManager{
+				tgt,
+			},
+			Flags: ListFlags{},
+		},
+	)
+
+	expectedObjects := make(map[AzCopyOutputKey]cmd.AzCopyListObject)
+	expectedObjects[AzCopyOutputKey{Path: "/"}] = cmd.AzCopyListObject{Path: "/", ContentLength: "0.00 B"}
+	for k, v := range resourceMapping {
+		// Correct for naming scheme if needed
+		if v.EntityType == common.EEntityType.Folder() && !strings.HasSuffix(k, "/") {
+			k += "/"
+		}
+
+		expectedObjects[AzCopyOutputKey{
+			Path: k,
+		}] = cmd.AzCopyListObject{
+			Path:          k,
+			ContentLength: SizeToString(v.Body.Size(), false),
+		}
+	}
+
+	ValidateListOutput(svm, stdout, expectedObjects, nil) // No expected summary
 }

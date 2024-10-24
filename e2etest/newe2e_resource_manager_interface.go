@@ -14,6 +14,7 @@ import (
 
 type GetURIOptions struct {
 	RemoteOpts RemoteURIOpts
+	LocalOpts  LocalURIOpts
 	AzureOpts  AzureURIOpts
 	// The wildcard string to append to the end of a resource URI.
 	Wildcard string
@@ -29,6 +30,10 @@ type AzureURIOpts struct {
 	WithSAS bool
 	// Defaults to a resource-level specific minimally permissioned SAS token.
 	SASValues GenericSignatureValues
+}
+
+type LocalURIOpts struct {
+	PreferUNCPath bool
 }
 
 type ResourceManager interface {

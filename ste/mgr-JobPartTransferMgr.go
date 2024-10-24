@@ -858,7 +858,12 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 			!jptm.jobPartMgr.(*jobPartMgr).jobMgr.IsDaemon() {
 			// quit right away, since without proper authentication no work can be done
 			// display a clear message
-			common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
+			if strings.Contains(descriptionOfWhereErrorOccurred, "tags") {
+				common.GetLifecycleMgr().Info(fmt.Sprintf("Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission %s", err.Error()))
+			} else {
+				common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
+			}
+
 			// and use the normal cancelling mechanism so that we can exit in a clean and controlled way
 			jptm.jobPartMgr.(*jobPartMgr).jobMgr.CancelPauseJobOrder(common.EJobStatus.Cancelling())
 			// TODO: this results in the final job output line being: Final Job Status: Cancelled

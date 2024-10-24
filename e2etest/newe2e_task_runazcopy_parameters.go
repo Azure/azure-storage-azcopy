@@ -174,6 +174,8 @@ func parseFlagTag(tag string) flagTag {
 	return out
 }
 
+type RawFlags map[string]string
+
 // The below structs are intended to be mixed and matched as much as possible,
 // such that a variety of verbs can be used with a single struct (e.g. copy and sync)
 // in a test, without rewriting all the flags for every use case.
@@ -268,6 +270,7 @@ type CopySyncCommonFlags struct {
 	CPKByName               *string                      `flag:"cpk-by-name"`
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
 	IncludePattern          *string                      `flag:"include-pattern"`
+	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
@@ -305,7 +308,6 @@ type CopyFlags struct {
 	S2SDetectSourceChanged    *bool           `flag:"s2s-detect-source-changed"`
 	ListOfVersions            []string        `flag:"list-of-versions,serializer:SerializeListingFile"`
 	BlobTags                  common.Metadata `flag:"blob-tags,serializer:SerializeTags"`
-	IncludeDirectoryStubs     *bool           `flag:"include-directory-stubs"`
 	DisableAutoDecoding       *bool           `flag:"disable-auto-decoding"`
 	S2SGetPropertiesInBackend *bool           `flag:"s2s-get-properties-in-backend"`
 	ADLSFlushThreshold        *uint32         `flag:"flush-threshold"`
@@ -379,6 +381,8 @@ type SyncFlags struct {
 	CompareHash          *common.SyncHashType    `flag:"compare-hash"`
 	LocalHashDir         *string                 `flag:"hash-meta-dir"`
 	LocalHashStorageMode *common.HashStorageMode `flag:"local-hash-storage-mode"`
+	// The real flag name is not all that great due to `delete-destination`, but, it works.
+	DeleteIfNecessary *bool `flag:"delete-destination-file"`
 }
 
 // RemoveFlags is not tiered like CopySyncCommonFlags is, because it is dissimilar in functionality, and would be hard to test in the same scenario.

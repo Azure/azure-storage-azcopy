@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1347,6 +1348,27 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.ResourceString, blockSize int64) error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
+	// Use the concurrency environment value
+	concurrencyEnvVar := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
+
+	pipingUploadParallelism := pipingUploadParallelism
+	if concurrencyEnvVar != "" {
+		// handle when the concurrency value is AUTO
+		if concurrencyEnvVar == "AUTO" {
+			return errors.New("concurrency auto-tuning is not possible when using redirection transfers (AZCOPY_CONCURRENCY_VALUE = AUTO)")
+		}
+
+		// convert the concurrency value to int
+		concurrencyValue, err := strconv.ParseInt(concurrencyEnvVar, 10, 32)
+
+		//handle the error if the conversion fails
+		if err != nil {
+			return fmt.Errorf("AZCOPY_CONCURRENCY_VALUE is not set to a valid value, an integer is expected (current value: %s): %w", concurrencyEnvVar, err)
+		}
+
+		pipingUploadParallelism = int(concurrencyValue) // Cast to Integer
+	}
+
 	// if no block size is set, then use default value
 	if blockSize == 0 {
 		blockSize = pipingDefaultBlockSize
@@ -1809,7 +1831,7 @@ func (cca *CookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	if jobDone {
 		exitCode := cca.getSuccessExitCode()
-		if summary.TransfersFailed > 0 {
+		if summary.TransfersFailed > 0 || summary.JobStatus == common.EJobStatus.Cancelled() || summary.JobStatus == common.EJobStatus.Cancelling() {
 			exitCode = common.EExitCode.Error()
 		}
 
@@ -2098,7 +2120,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "False by default. Detect if the source file/blob changes while it is being read. This parameter only applies to service to service copies, because the corresponding check is permanently enabled for uploads and downloads.")
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "Specifies how invalid metadata keys are handled. Available options: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid (default 'ExcludeIfInvalid').")
 	cpCmd.PersistentFlags().StringVar(&raw.listOfVersionIDs, "list-of-versions", "", "Specifies a path to a text file where each version id is listed on a separate line. Ensure that the source must point to a single blob and all the version ids specified in the file using this flag must belong to the source blob only. AzCopy will download the specified versions in the destination folder provided.")
-	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account. Multiple blob tags should be separated by ';', i.e. 'foo=bar;some=thing'.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobTags, "blob-tags", "", "Set tags on blobs to categorize data in your storage account. Multiple blob tags should be separated by '&', i.e. 'foo=bar&some=thing'.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveBlobTags, "s2s-preserve-blob-tags", false, "False by default. Preserve blob tags during service to service transfer from one blob storage to another.")
 	cpCmd.PersistentFlags().BoolVar(&raw.includeDirectoryStubs, "include-directory-stub", false, "False by default to ignore directory stubs. Directory stubs are blobs with metadata 'hdi_isfolder:true'. Setting value to true will preserve directory stubs during transfers. Including this flag with no value defaults to true (e.g, azcopy copy --include-directory-stub is the same as azcopy copy --include-directory-stub=true).")
 	cpCmd.PersistentFlags().BoolVar(&raw.disableAutoDecoding, "disable-auto-decoding", false, "False by default to enable automatic decoding of illegal chars on Windows. Can be set to true to disable automatic decoding.")

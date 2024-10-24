@@ -36,6 +36,7 @@ Copies source data to a destination location. The supported directions are:
 Please refer to the examples for more information.
 
 Advanced:
+AzCopy does not support modifications to the source or destination during a transfer. 
 
 AzCopy automatically detects the content type of the files when uploading from the local disk, based on the file extension or content (if no extension is specified).
 
@@ -427,6 +428,7 @@ The sync command differs from the copy command in several ways:
   3. If the 'deleteDestination' flag is set to true or prompt, then sync will delete files and blobs at the destination that are not present at the source.
 
 Advanced:
+AzCopy does not support modifications to the source or destination during a transfer. 
 
 Please note that if you don't specify a file extension, AzCopy automatically detects the content type of the files when uploading from the local disk, based on the file extension or content.
 

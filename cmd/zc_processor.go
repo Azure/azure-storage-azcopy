@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
-	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -64,18 +63,85 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 	}
 }
 
+type DryrunTransfer struct {
+	EntityType  common.EntityType
+	BlobType    common.BlobType
+	FromTo      common.FromTo
+	Source      string
+	Destination string
+}
+
+func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
+	var surrogate struct {
+		EntityType  string
+		BlobType    string
+		FromTo      string
+		Source      string
+		Destination string
+	}
+
+	err := json.Unmarshal(bytes, &surrogate)
+	if err != nil {
+		return fmt.Errorf("failed to parse dryrun transfer: %w", err)
+	}
+
+	err = d.FromTo.Parse(surrogate.FromTo)
+	if err != nil {
+		return fmt.Errorf("failed to parse fromto: %w", err)
+	}
+
+	err = d.EntityType.Parse(surrogate.EntityType)
+	if err != nil {
+		return fmt.Errorf("failed to parse entity type: %w", err)
+	}
+
+	err = d.BlobType.Parse(surrogate.BlobType)
+	if err != nil {
+		return fmt.Errorf("failed to parse entity type: %w", err)
+	}
+
+	d.Source = surrogate.Source
+	d.Destination = surrogate.Destination
+
+	return nil
+}
+
+func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
+	surrogate := struct {
+		EntityType  string
+		BlobType    string
+		FromTo      string
+		Source      string
+		Destination string
+	}{
+		d.EntityType.String(),
+		d.BlobType.String(),
+		d.FromTo.String(),
+		d.Source,
+		d.Destination,
+	}
+
+	return json.Marshal(surrogate)
+}
+
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
 
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
-	srcRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
-	dstRelativePath := pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
-	if srcRelativePath != "" {
-		srcRelativePath = "/" + srcRelativePath
+	var srcRelativePath, dstRelativePath string
+	if storedObject.relativePath == "\x00" { // Short circuit when we're talking about root/, because the STE is funky about this.
+		srcRelativePath, dstRelativePath = storedObject.relativePath, storedObject.relativePath
+	} else {
+		srcRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, true)
+		dstRelativePath = pathEncodeRules(storedObject.relativePath, s.copyJobTemplate.FromTo, false, false)
+		if srcRelativePath != "" {
+			srcRelativePath = "/" + srcRelativePath
+		}
+		if dstRelativePath != "" {
+			dstRelativePath = "/" + dstRelativePath
+		}
 	}
-	if dstRelativePath != "" {
-		dstRelativePath = "/" + dstRelativePath
-	}
+
 	copyTransfer, shouldSendToSte := storedObject.ToNewCopyTransfer(false, srcRelativePath, dstRelativePath, s.preserveAccessTier, s.folderPropertiesOption, s.symlinkHandlingType)
 
 	if s.copyJobTemplate.FromTo.To() == common.ELocation.None() {
@@ -100,55 +166,51 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 	if s.dryrunMode {
 		glcm.Dryrun(func(format common.OutputFormat) string {
+			prettySrcRelativePath, prettyDstRelativePath := srcRelativePath, dstRelativePath
+
+			fromTo := s.copyJobTemplate.FromTo
+			if fromTo.From().IsRemote() {
+				prettySrcRelativePath, err = url.PathUnescape(prettySrcRelativePath)
+				if err != nil {
+					prettySrcRelativePath = srcRelativePath // Fall back, because it's better than failing.
+				}
+			}
+
+			if fromTo.To().IsRemote() {
+				prettyDstRelativePath, err = url.PathUnescape(prettyDstRelativePath)
+				if err != nil {
+					prettyDstRelativePath = dstRelativePath // Fall back, because it's better than failing.
+				}
+			}
+
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(copyTransfer)
+				tx := DryrunTransfer{
+					BlobType:   common.FromBlobType(storedObject.blobType),
+					EntityType: storedObject.entityType,
+					FromTo:     s.copyJobTemplate.FromTo,
+					Source:     common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
+				}
+
+				if fromTo.To() != common.ELocation.None() && fromTo.To() != common.ELocation.Unknown() {
+					tx.Destination = common.GenerateFullPath(s.copyJobTemplate.DestinationRoot.Value, prettyDstRelativePath)
+				}
+
+				jsonOutput, err := json.Marshal(tx)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
-				prettySrcRelativePath, err := url.QueryUnescape(srcRelativePath)
-				common.PanicIfErr(err)
-				prettyDstRelativePath, err := url.QueryUnescape(dstRelativePath)
-				common.PanicIfErr(err)
-
 				// if remove then To() will equal to common.ELocation.Unknown()
 				if s.copyJobTemplate.FromTo.To() == common.ELocation.Unknown() { // remove
-					return fmt.Sprintf("DRYRUN: remove %v/%v",
-						s.copyJobTemplate.SourceRoot.Value,
-						prettySrcRelativePath)
+					return fmt.Sprintf("DRYRUN: remove %v",
+						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath))
 				}
 				if s.copyJobTemplate.FromTo.To() == common.ELocation.None() { // set-properties
-					return fmt.Sprintf("DRYRUN: set-properties %v/%v",
-						s.copyJobTemplate.SourceRoot.Value,
-						prettySrcRelativePath)
+					return fmt.Sprintf("DRYRUN: set-properties %v",
+						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath))
 				} else { // copy for sync
-					if s.copyJobTemplate.FromTo.From() == common.ELocation.Local() {
-						// formatting from local source
-						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(s.copyJobTemplate.SourceRoot.Value))
-						if runtime.GOOS == "windows" {
-							dryrunValue += "\\" + strings.ReplaceAll(prettySrcRelativePath, "/", "\\")
-						} else { // linux and mac
-							dryrunValue += "/" + prettySrcRelativePath
-						}
-						dryrunValue += fmt.Sprintf(" to %v/%v", strings.Trim(s.copyJobTemplate.DestinationRoot.Value, "/"), prettyDstRelativePath)
-						return dryrunValue
-					} else if s.copyJobTemplate.FromTo.To() == common.ELocation.Local() {
-						// formatting to local source
-						dryrunValue := fmt.Sprintf("DRYRUN: copy %v/%v to %v",
-							strings.Trim(s.copyJobTemplate.SourceRoot.Value, "/"), prettySrcRelativePath,
-							common.ToShortPath(s.copyJobTemplate.DestinationRoot.Value))
-						if runtime.GOOS == "windows" {
-							dryrunValue += "\\" + strings.ReplaceAll(prettyDstRelativePath, "/", "\\")
-						} else { // linux and mac
-							dryrunValue += "/" + prettyDstRelativePath
-						}
-						return dryrunValue
-					} else {
-						return fmt.Sprintf("DRYRUN: copy %v/%v to %v/%v",
-							s.copyJobTemplate.SourceRoot.Value,
-							prettySrcRelativePath,
-							s.copyJobTemplate.DestinationRoot.Value,
-							prettyDstRelativePath)
-					}
+					return fmt.Sprintf("DRYRUN: copy %v to %v",
+						common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
+						common.GenerateFullPath(s.copyJobTemplate.DestinationRoot.Value, prettyDstRelativePath))
 				}
 			}
 		})
