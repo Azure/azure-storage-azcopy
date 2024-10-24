@@ -310,7 +310,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		glcm.Error(getJobDetailsResponse.ErrorMsg)
 	}
 
-	var fileSrcClientOptions common.FileClientOptions
+	var fileSrcClientOptions any
 	if fromTo.From() == common.ELocation.File() {
 		fileSrcClientOptions = common.FileClientOptions{
 			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
