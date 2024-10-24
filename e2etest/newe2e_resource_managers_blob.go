@@ -682,9 +682,10 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 			Type:      resp.BlobType,
 			Tags: func() map[string]string {
 				out := make(map[string]string)
-				if b.internalAccount.AccountType() == EAccountType.PremiumPageBlobs() {
+				if b.internalAccount.AccountType() == EAccountType.PremiumPageBlobs() || b.internalAccount.AccountType() == EAccountType.HierarchicalNamespaceEnabled() {
 					return out
 				}
+
 				resp, err := b.internalClient.GetTags(ctx, nil)
 				a.NoError("Get tags", err)
 				for _, tag := range resp.BlobTagSet {

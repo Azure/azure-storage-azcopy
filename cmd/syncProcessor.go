@@ -27,7 +27,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -75,24 +74,6 @@ type interactiveDeleteProcessor struct {
 	dryrunMode bool
 }
 
-func newDeleteTransfer(object StoredObject) (newDeleteTransfer common.CopyTransfer) {
-	return common.CopyTransfer{
-		Source:             object.relativePath,
-		EntityType:         object.entityType,
-		LastModifiedTime:   object.lastModifiedTime,
-		SourceSize:         object.size,
-		ContentType:        object.contentType,
-		ContentEncoding:    object.contentEncoding,
-		ContentDisposition: object.contentDisposition,
-		ContentLanguage:    object.contentLanguage,
-		CacheControl:       object.cacheControl,
-		Metadata:           object.Metadata,
-		BlobType:           object.blobType,
-		BlobVersionID:      object.blobVersionID,
-		BlobTags:           object.blobTags,
-	}
-}
-
 func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err error) {
 	if d.shouldPromptUser {
 		d.shouldDelete, d.shouldPromptUser = d.promptForConfirmation(object) // note down the user's decision
@@ -105,22 +86,24 @@ func (d *interactiveDeleteProcessor) removeImmediately(object StoredObject) (err
 	if d.dryrunMode {
 		glcm.Dryrun(func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
-				jsonOutput, err := json.Marshal(newDeleteTransfer(object))
+				deleteTarget := common.ELocation.Local()
+				if d.objectTypeToDisplay != LocalFileObjectType {
+					_ = deleteTarget.Parse(d.objectTypeToDisplay)
+				}
+
+				tx := DryrunTransfer{
+					Source:     common.GenerateFullPath(d.objectLocationToDisplay, object.relativePath),
+					BlobType:   common.FromBlobType(object.blobType),
+					EntityType: object.entityType,
+					FromTo:     common.FromToValue(deleteTarget, common.ELocation.Unknown()),
+				}
+
+				jsonOutput, err := json.Marshal(tx)
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else { // remove for sync
-				if d.objectTypeToDisplay == "local file" { // removing from local src
-					dryrunValue := fmt.Sprintf("DRYRUN: remove %v", common.ToShortPath(d.objectLocationToDisplay))
-					if runtime.GOOS == "windows" {
-						dryrunValue += "\\" + strings.ReplaceAll(object.relativePath, "/", "\\")
-					} else { // linux and mac
-						dryrunValue += "/" + object.relativePath
-					}
-					return dryrunValue
-				}
-				return fmt.Sprintf("DRYRUN: remove %v/%v",
-					d.objectLocationToDisplay,
-					object.relativePath)
+				return fmt.Sprintf("DRYRUN: remove %v",
+					common.GenerateFullPath(d.objectLocationToDisplay, object.relativePath))
 			}
 		})
 		return nil
@@ -189,9 +172,11 @@ func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination co
 	}
 }
 
+const LocalFileObjectType = "local file"
+
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption) *interactiveDeleteProcessor {
 	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, azcopyScanningLogger)}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local file", cca.destination, cca.incrementDeletionCount, cca.dryrunMode)
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.destination, cca.incrementDeletionCount, cca.dryrunMode)
 }
 
 type localFileDeleter struct {
