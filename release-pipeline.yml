@@ -1065,7 +1065,6 @@ stages:
 
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-binaries/azcopy_linux*amd64'
@@ -1118,7 +1117,6 @@ stages:
 
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy_linux_*amd64*.tar.gz'
@@ -1211,7 +1209,6 @@ stages:
   
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy_linux_*arm64*.tar.gz'
@@ -1307,7 +1304,6 @@ stages:
 
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-binaries/azcopy_linux*arm64'
@@ -1356,11 +1352,6 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo yum update -y
-              sudo yum install git -y
-            displayName: 'Install Git'
-
           # get glibc version with which build is done
           - script: |
              ldd --version
@@ -1368,7 +1359,6 @@ stages:
 
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy-*arm64.rpm'
@@ -1403,14 +1393,8 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo yum update -y
-              sudo yum install git -y
-            displayName: 'Install Git'
-
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.rpm'
@@ -1450,15 +1434,9 @@ stages:
 
         steps:
           - checkout: none
-          
-          - script: |
-              sudo tdnf update -y
-              sudo tdnf install git -y
-            displayName: 'Install dependencies'
       
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/mariner/azcopy-*x86_64.rpm'
