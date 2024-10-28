@@ -14,7 +14,7 @@ type BlobFSTestSuite struct{}
 func (s *BlobFSTestSuite) Scenario_UploadFile(svm *ScenarioVariationManager) {
 	fileName := "test.txt"
 	size := ResolveVariation(svm, []int64{common.KiloByte, 64 * common.MegaByte})
-	body := NewRandomObjectContentContainer(svm, size)
+	body := NewRandomObjectContentContainer(size)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -41,7 +41,7 @@ func (s *BlobFSTestSuite) Scenario_UploadFile(svm *ScenarioVariationManager) {
 
 func (s *BlobFSTestSuite) Scenario_UploadFileMultiflushOAuth(svm *ScenarioVariationManager) {
 	fileName := "test_multiflush_64MB_file.txt"
-	body := NewRandomObjectContentContainer(svm, 64*common.MegaByte)
+	body := NewRandomObjectContentContainer(64 * common.MegaByte)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -82,7 +82,7 @@ func (s *BlobFSTestSuite) Scenario_Upload100Files(svm *ScenarioVariationManager)
 	srcObjs := make(ObjectResourceMappingFlat)
 	for i := range 100 {
 		name := "dir_100_files/test" + strconv.Itoa(i) + ".txt"
-		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 		srcObjs[name] = obj
 	}
@@ -105,7 +105,7 @@ func (s *BlobFSTestSuite) Scenario_Upload100Files(svm *ScenarioVariationManager)
 func (s *BlobFSTestSuite) Scenario_DownloadFile(svm *ScenarioVariationManager) {
 	fileName := "test.txt"
 	size := ResolveVariation(svm, []int64{common.KiloByte, 64 * common.MegaByte})
-	body := NewRandomObjectContentContainer(svm, size)
+	body := NewRandomObjectContentContainer(size)
 
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -142,7 +142,7 @@ func (s *BlobFSTestSuite) Scenario_Download100Files(svm *ScenarioVariationManage
 	srcObjs := make(ObjectResourceMappingFlat)
 	for i := range 100 {
 		name := "dir_100_files/test" + strconv.Itoa(i) + ".txt"
-		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+		obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
 		srcObjs[name] = obj
 	}
@@ -160,4 +160,91 @@ func (s *BlobFSTestSuite) Scenario_Download100Files(svm *ScenarioVariationManage
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
+}
+
+func (s *BlobFSTestSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariationManager) {
+	targetAcct := pointerTo(NamedResolveVariation(svm, map[string]string{
+		"FNS": PrimaryStandardAcct,
+		"HNS": PrimaryHNSAcct,
+	}))
+
+	// This should also fix copy/sync because the changed codepath overlaps, *but*, we'll have a separate test for that too.
+	srcRoot := GetRootResource(svm, common.ELocation.Blob(), GetResourceOptions{
+		PreferredAccount: targetAcct,
+	})
+
+	svm.InsertVariationSeparator("_")
+	resourceMapping := NamedResolveVariation(svm, map[string]ObjectResourceMappingFlat{
+		"DisallowOverlap": { // "foo" is  a folder, only a folder, there is no difference between "foo" and "foo/".
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+					Metadata: common.Metadata{
+						"foo": pointerTo("bar"),
+					},
+				},
+				Body: NewZeroObjectContentContainer(0),
+			},
+			"foo/bar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File inside
+			"baz":     ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File on the side
+		},
+		"AllowOverlap": { // "foo" (the file), and "foo/" (the directory) can exist, but "foo/" is still a directory with metadata.
+			"foo/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+					Metadata: common.Metadata{
+						"foo": pointerTo("bar"),
+					},
+				},
+				Body: NewZeroObjectContentContainer(0),
+			},
+			"foo/bar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File inside
+			"foo":     ResourceDefinitionObject{Body: NewZeroObjectContentContainer(1024)}, // File on the side
+		},
+	})
+
+	// HNS will automatically correct blob calls to "foo/" to "foo", which is correct behavior
+	// But incompatible with the overlap scenario.
+	if _, ok := resourceMapping["foo/"]; *targetAcct == PrimaryHNSAcct && ok {
+		svm.InvalidateScenario()
+		return
+	}
+
+	srcRes := CreateResource[ContainerResourceManager](svm, srcRoot, ResourceDefinitionContainer{
+		Objects: resourceMapping,
+	})
+
+	svm.InsertVariationSeparator("_")
+	tgt := GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS()}), GetResourceOptions{
+		PreferredAccount: targetAcct,
+	}).(ServiceResourceManager).GetContainer(srcRes.ContainerName())
+
+	svm.InsertVariationSeparator("->") // Formatting: "FNS_AllowOverlap_Blob->Blob"
+	dstRes := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, ResolveVariation(svm, []common.Location{
+			common.ELocation.Blob(),
+			common.ELocation.BlobFS(),
+		}), GetResourceOptions{PreferredAccount: targetAcct}),
+		ResourceDefinitionContainer{})
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				CreateAzCopyTarget(tgt, EExplicitCredentialType.OAuth(), svm),
+				CreateAzCopyTarget(dstRes, EExplicitCredentialType.OAuth(), svm),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:             pointerTo(true),
+					IncludeDirectoryStubs: pointerTo(true),
+				},
+			},
+		},
+	)
+
+	ValidateResource(svm, dstRes, ResourceDefinitionContainer{
+		Objects: resourceMapping,
+	}, false)
 }

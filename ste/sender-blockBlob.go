@@ -275,13 +275,13 @@ func (s *blockBlobSenderBase) Epilogue() {
 				CPKScopeInfo: s.jptm.CpkScopeInfo(),
 			})
 		if err != nil {
-			jptm.FailActiveSend("Committing block list", err)
+			jptm.FailActiveSend(common.Iff(blobTags != nil, "Committing block list (with tags)", "Committing block list"), err)
 			return
 		}
 
 		if setTags {
 			if _, err := s.destBlockBlobClient.SetTags(jptm.Context(), s.blobTagsToApply, nil); err != nil {
-				s.jptm.Log(common.LogWarning, err.Error())
+				jptm.FailActiveSend("Setting tags", err)
 			}
 		}
 	}
