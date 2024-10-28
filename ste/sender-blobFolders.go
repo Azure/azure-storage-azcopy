@@ -199,17 +199,33 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 	}
 
 	err = t.CreateFolder(b.DirUrlToString(), func() error {
+		blobTags := b.blobTagsToApply
+		setTags := separateSetTagsRequired(blobTags)
+		if setTags || len(blobTags) == 0 {
+			blobTags = nil
+		}
+
 		// It doesn't make sense to use a special access tier for a blob folder, the blob will be 0 bytes.
 		_, err := b.destinationClient.Upload(b.jptm.Context(), streaming.NopCloser(bytes.NewReader(nil)),
 			&blockblob.UploadOptions{
 				HTTPHeaders:  &b.headersToApply,
 				Metadata:     b.metadataToApply,
-				Tags:         b.blobTagsToApply,
+				Tags:         blobTags,
 				CPKInfo:      b.jptm.CpkInfo(),
 				CPKScopeInfo: b.jptm.CpkScopeInfo(),
 			})
+		if err != nil {
+			b.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Upload folder (with tags)", "Upload folder"), err)
+		}
 
-		return err
+		if setTags {
+			if _, err := b.destinationClient.SetTags(b.jptm.Context(), b.blobTagsToApply, nil); err != nil {
+				b.jptm.FailActiveSend("Set tags", err)
+				return nil
+			}
+		}
+
+		return nil
 	})
 
 	if err != nil {

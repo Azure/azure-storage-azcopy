@@ -178,7 +178,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 
 		// if the put blob is a failure, update the transfer status to failed
 		if err != nil {
-			jptm.FailActiveUpload("Uploading blob", err)
+			jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Committing block list (with tags)", "Committing block list"), err)
 			return
 		}
 
@@ -186,7 +186,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, reader commo
 
 		if setTags {
 			if _, err := u.destBlockBlobClient.SetTags(jptm.Context(), u.blobTagsToApply, nil); err != nil {
-				u.jptm.Log(common.LogWarning, err.Error())
+				jptm.FailActiveSend("Set blob tags", err)
 			}
 		}
 	})

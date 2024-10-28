@@ -164,7 +164,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		CPKScopeInfo: s.jptm.CpkScopeInfo(),
 	})
 	if err != nil {
-		s.jptm.FailActiveSend("Creating blob", err)
+		s.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Creating blob (with tags)", "Creating blob"), err)
 		return
 	}
 	destinationModified = true
@@ -172,7 +172,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if setTags {
 		_, err = s.destAppendBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil)
 		if err != nil {
-			s.jptm.Log(common.LogWarning, err.Error())
+			s.jptm.FailActiveSend("Set blob tags", err)
 		}
 	}
 	return

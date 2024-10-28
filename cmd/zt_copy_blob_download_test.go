@@ -857,14 +857,17 @@ func TestDryrunCopyBlobToBlobJson(t *testing.T) {
 		a.Zero(len(mockedRPC.transfers))
 
 		msg := <-mockedLcm.dryrunLog
-		copyMessage := common.CopyTransfer{}
+		copyMessage := DryrunTransfer{}
 		errMarshal := json.Unmarshal([]byte(msg), &copyMessage)
 		a.Nil(errMarshal)
+
 		// comparing some values of copyMessage
-		a.Zero(strings.Compare(strings.Trim(copyMessage.Source, "/"), blobsToInclude[0]))
-		a.Zero(strings.Compare(strings.Trim(copyMessage.Destination, "/"), blobsToInclude[0]))
-		a.Zero(strings.Compare(copyMessage.EntityType.String(), common.EEntityType.File().String()))
-		a.Zero(strings.Compare(string(copyMessage.BlobType), "BlockBlob"))
+		srcRel := strings.TrimPrefix(copyMessage.Source, srcContainerClient.URL())
+		dstRel := strings.TrimPrefix(copyMessage.Destination, dstContainerClient.URL())
+		a.Equal(blobsToInclude[0], strings.Trim(srcRel, "/"))
+		a.Equal(blobsToInclude[0], strings.Trim(dstRel, "/"))
+		a.Equal(common.EEntityType.File(), copyMessage.EntityType)
+		a.Equal(common.EBlobType.BlockBlob(), copyMessage.BlobType)
 	})
 }
 

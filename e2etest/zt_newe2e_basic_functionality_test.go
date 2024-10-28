@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
 	"time"
@@ -26,7 +27,7 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile(svm *ScenarioVariationMana
 		}
 	}
 
-	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
@@ -83,9 +84,9 @@ func (s *BasicFunctionalitySuite) Scenario_MultiFileUploadDownload(svm *Scenario
 	// Scale up from service to object
 	srcDef := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, SizeFromString("10K"))},
-			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, SizeFromString("10K"))},
-			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, SizeFromString("10K"))},
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
 		},
 	}
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
@@ -161,7 +162,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_S2SContainer(svm *Sce
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -222,7 +223,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_UploadContainer(svm *
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -276,7 +277,7 @@ func (s *BasicFunctionalitySuite) Scenario_EntireDirectory_DownloadContainer(svm
 		}
 		for i := range 10 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -409,4 +410,77 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+}
+
+func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
+	objectType := ResolveVariation(svm, []common.EntityType{common.EEntityType.File(), common.EEntityType.Folder(), common.EEntityType.Symlink()})
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})
+
+	// Local resource manager doesn't have symlink abilities yet, and the same codepath is hit.
+	if objectType == common.EEntityType.Symlink() && srcLoc == common.ELocation.Local() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, srcLoc), ResourceDefinitionObject{
+		Body: common.Iff(objectType == common.EEntityType.File(), NewZeroObjectContentContainer(1024*1024*5), nil),
+		ObjectProperties: ObjectProperties{
+			EntityType: objectType,
+		},
+	})
+	dstCt := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{})
+
+	svm.InsertVariationSeparator("Blob")
+
+	multiBlock := "single-block"
+	var blobType common.BlobType
+	if objectType == common.EEntityType.File() {
+		svm.InsertVariationSeparator("-")
+		blobType = ResolveVariation(svm, []common.BlobType{common.EBlobType.BlockBlob(), common.EBlobType.PageBlob(), common.EBlobType.AppendBlob()})
+
+		if blobType == common.EBlobType.BlockBlob() {
+			svm.InsertVariationSeparator("-")
+			multiBlock = ResolveVariation(svm, []string{"single-block", "multi-block"})
+		}
+	}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{
+				srcObj,
+				AzCopyTarget{dstCt, EExplicitCredentialType.SASToken(), CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericServiceSignatureValues{
+						ContainerName: dstCt.ContainerName(),
+						Permissions: PtrOf(blobsas.ContainerPermissions{
+							Read:   true,
+							Add:    true,
+							Create: true,
+							Write:  true,
+							Tag:    false,
+						}).String(),
+					},
+				}},
+			},
+			Flags: CopyFlags{
+				BlobTags: common.Metadata{
+					"foo":   PtrOf("bar"),
+					"alpha": PtrOf("beta"),
+				},
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: common.Iff(objectType == common.EEntityType.File() && multiBlock != "single-block",
+						PtrOf(0.5),
+						nil),
+					Recursive:             pointerTo(true),
+					IncludeDirectoryStubs: pointerTo(true),
+				},
+				BlobType:         &blobType,
+				PreserveSymlinks: pointerTo(true),
+			},
+			ShouldFail: true,
+		},
+	)
+
+	ValidateErrorOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission")
 }

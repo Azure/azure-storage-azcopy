@@ -1,7 +1,9 @@
 package e2etest
 
 import (
+	"bytes"
 	"encoding/base64"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io/fs"
 	"os"
@@ -42,11 +44,11 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 	// A local source is required to use any hash storage mode.
 	source := NewLocalContainer(a)
 	dupeBodyPath := "underfolder/donottransfer" // A directory is used to validate that the hidden files cache creates *all* subdirectories.
-	dupeBody := NewRandomObjectContentContainer(a, 512)
+	dupeBody := NewRandomObjectContentContainer(512)
 	resourceSpec := ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"newobject":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(a, 512)},
-			"shouldtransfer": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(a, 512)},
+			"newobject":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
+			"shouldtransfer": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
 			dupeBodyPath:     ResourceDefinitionObject{Body: dupeBody}, // note: at this moment, this is *not* a great test, because we lack plan file validation. todo WI#26418256
 		},
 	}
@@ -59,7 +61,7 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 		ResourceDefinitionContainer{
 			Objects: ObjectResourceMappingFlat{
 				// Object to overwrite
-				"shouldtransfer": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(a, 512)},
+				"shouldtransfer": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
 				// Object to avoid overwriting
 				dupeBodyPath: ResourceDefinitionObject{Body: dupeBody, ObjectProperties: ObjectProperties{HTTPHeaders: contentHeaders{contentMD5: md5[:]}}},
 			},
@@ -147,8 +149,8 @@ func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariatio
 		PreferredAccount: common.Iff(dstLoc == common.ELocation.BlobFS(), pointerTo(PrimaryHNSAcct), nil),
 	}), ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"deleteme.txt":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, 512)},
-			"also/deleteme.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(svm, 512)},
+			"deleteme.txt":      ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
+			"also/deleteme.txt": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512)},
 		},
 	})
 
@@ -169,4 +171,93 @@ func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariatio
 			"also/deleteme.txt": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)},
 		},
 	}, false)
+}
+
+// Scenario_TestSyncDeleteDestinationIfNecessary tests that sync is
+// - capable of deleting blobs of the wrong type
+func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *ScenarioVariationManager) {
+	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.BlobFS()})
+	dstRes := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, dstLoc, GetResourceOptions{
+			PreferredAccount: common.Iff(dstLoc == common.ELocation.Blob(),
+				pointerTo(PrimaryStandardAcct), //
+				pointerTo(PrimaryHNSAcct),
+			),
+		}),
+		ResourceDefinitionContainer{})
+
+	overwriteName := "copyme.txt"
+	ignoreName := "ignore.txt"
+
+	if !svm.Dryrun() { // We're working directly with raw clients, so, we need to be careful.
+		buf := streaming.NopCloser(bytes.NewReader([]byte("foo")))
+
+		switch dstRes.Location() {
+		case common.ELocation.Blob(): // In this case, we want to submit a block ID with a different length.
+			ctClient := dstRes.(*BlobContainerResourceManager).internalClient
+			blobClient := ctClient.NewBlockBlobClient(overwriteName)
+
+			_, err := blobClient.StageBlock(ctx, base64.StdEncoding.EncodeToString([]byte("foobar")), buf, nil)
+			svm.Assert("stage block error", IsNil{}, err)
+		case common.ELocation.BlobFS(): // In this case, we want to upload a blob via DFS.
+			ctClient := dstRes.(*BlobFSFileSystemResourceManager).internalClient
+			pathClient := ctClient.NewFileClient(overwriteName)
+
+			_, err := pathClient.Create(ctx, nil)
+			svm.Assert("Create error", IsNil{}, err)
+			err = pathClient.UploadStream(ctx, buf, nil)
+			svm.Assert("Upload stream error", IsNil{}, err)
+		}
+
+		// Sleep so it's in the past.
+		time.Sleep(time.Second * 10)
+	}
+
+	srcData := NewRandomObjectContentContainer(1024)
+	srcRes := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Blob()), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			overwriteName: ResourceDefinitionObject{Body: srcData},
+			ignoreName:    ResourceDefinitionObject{Body: srcData},
+		},
+	})
+
+	dstData := NewRandomObjectContentContainer(1024)
+	if !svm.Dryrun() {
+		time.Sleep(time.Second * 10) // Make sure this file is newer
+
+		CreateResource[ObjectResourceManager](svm, dstRes, ResourceDefinitionObject{
+			ObjectName: &ignoreName,
+			Body:       dstData,
+		})
+	}
+
+	stdout, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbSync,
+		Targets: []ResourceManager{srcRes, dstRes},
+		Flags: SyncFlags{
+			DeleteIfNecessary: pointerTo(true),
+		},
+	})
+
+	ValidatePlanFiles(svm, stdout, ExpectedPlanFile{
+		Objects: map[PlanFilePath]PlanFileObject{
+			PlanFilePath{"/" + overwriteName, "/" + overwriteName}: {
+				ShouldBePresent: pointerTo(true),
+			},
+			PlanFilePath{"/" + ignoreName, "/" + ignoreName}: {
+				ShouldBePresent: pointerTo(false),
+			},
+		},
+	})
+
+	ValidateResource(svm, dstRes, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			overwriteName: ResourceDefinitionObject{
+				Body: srcData, // Validate we overwrote this one
+			},
+			ignoreName: ResourceDefinitionObject{
+				Body: dstData, // Validate we did not overwrite this one
+			},
+		},
+	}, true)
 }
