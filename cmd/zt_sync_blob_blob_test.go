@@ -926,12 +926,12 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := <-mockedLcm.dryrunLog
-		syncMessage := common.CopyTransfer{}
+		syncMessage := DryrunTransfer{}
 		errMarshal := json.Unmarshal([]byte(msg), &syncMessage)
 		a.Nil(errMarshal)
 		a.True(strings.Contains(syncMessage.Source, blobsToDelete[0]))
-		a.Equal("File", syncMessage.EntityType.String())
-		a.Equal("BlockBlob", string(syncMessage.BlobType))
+		a.Equal(common.EEntityType.File(), syncMessage.EntityType)
+		a.Equal(common.EBlobType.BlockBlob(), syncMessage.BlobType)
 
 	})
 }
