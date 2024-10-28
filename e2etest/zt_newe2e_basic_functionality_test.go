@@ -482,5 +482,5 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 		},
 	)
 
-	ValidateErrorOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission")
+	ValidateMessageOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission")
 }
