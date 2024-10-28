@@ -279,6 +279,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		azcopyScanningLogger.CloseLog()
 	})
 
+	// if no logging, set this empty so that we don't display the log location
+	if azcopyLogVerbosity == common.LogNone {
+		azcopyLogPathFolder = ""
+	}
+
 	fromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
 		return cooked, err
@@ -1689,11 +1694,13 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	// if on dry run mode do not want to print message since no  job is being done
 	if !cca.dryrunMode {
+		// Output the log location if log-level is set to other then NONE
+		var logPathFolder string
+		if azcopyLogPathFolder != "" {
+			logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+		}
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
-			fmt.Sprintf("%s%s%s.log",
-				azcopyLogPathFolder,
-				common.OS_PATH_SEPARATOR,
-				cca.jobID),
+			logPathFolder,
 			cca.isCleanupJob,
 			cca.cleanupJobMessage))
 	}
