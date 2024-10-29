@@ -15,15 +15,16 @@ func init() {
 }
 
 func (*FNSSuite) Scenario_CopyToOverlappableDirectoryMarker(a *ScenarioVariationManager) {
+	DirMeta := ResolveVariation(a, []string{"", common.POSIXFolderMeta})
 	tgtVerb := ResolveVariation(a, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
 
 	// Target a fns account
 	destRm := ObjectResourceMappingFlat{
 		"foobar/": ResourceDefinitionObject{
 			ObjectProperties: ObjectProperties{
-				Metadata: common.Metadata{
+				Metadata: common.Iff(DirMeta != "", common.Metadata{
 					common.POSIXFolderMeta: pointerTo("true"),
-				},
+				}, nil),
 			},
 			Body: NewZeroObjectContentContainer(0),
 		},
@@ -71,9 +72,9 @@ func (*FNSSuite) Scenario_CopyToOverlappableDirectoryMarker(a *ScenarioVariation
 			},
 			"foobar/": ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
-					Metadata: common.Metadata{
+					Metadata: common.Iff(DirMeta != "", common.Metadata{
 						common.POSIXFolderMeta: pointerTo("true"),
-					},
+					}, nil),
 				},
 				ObjectShouldExist: pointerTo(true),
 			},
@@ -83,15 +84,22 @@ func (*FNSSuite) Scenario_CopyToOverlappableDirectoryMarker(a *ScenarioVariation
 
 // Scenario_IncludeRootDirectoryStub tests that the root directory (and sub directories) appropriately get their files picked up.
 func (*FNSSuite) Scenario_IncludeRootDirectoryStub(a *ScenarioVariationManager) {
+	DirMeta := ResolveVariation(a, []string{"", common.POSIXFolderMeta})
+
 	dst := CreateResource[ContainerResourceManager](a, GetRootResource(a, common.ELocation.Blob()), ResourceDefinitionContainer{})
 	src := CreateResource[ContainerResourceManager](a, GetRootResource(a, common.ELocation.Blob()), ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"foobar":               ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512), ObjectProperties: ObjectProperties{Metadata: common.Metadata{"dontcopyme": pointerTo("")}}}, // Object w/ same name as root dir
-			"foobar/":              ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder(), Metadata: common.Metadata{"asdf": pointerTo("qwerty")}}},    // Folder w/ same name as object, add special prop to ensure
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(512), ObjectProperties: ObjectProperties{Metadata: common.Metadata{"dontcopyme": pointerTo("")}}}, // Object w/ same name as root dir
+			"foobar/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File()),
+					Metadata:   common.Metadata{"asdf": pointerTo("qwerty")},
+				},
+			}, // Folder w/ same name as object, add special prop to ensure
 			"foobar/foo":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 			"foobar/bar":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 			"foobar/baz":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
-			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}},
+			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File())}},
 			"foobar/folder/foobar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 		},
 	})
@@ -116,12 +124,18 @@ func (*FNSSuite) Scenario_IncludeRootDirectoryStub(a *ScenarioVariationManager) 
 
 	ValidateResource(a, dst, ResourceDefinitionContainer{
 		Objects: ObjectResourceMappingFlat{
-			"foobar":               ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)}, // We shouldn't have captured foobar, but foobar/ should exist as a directory.
-			"foobar/":              ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder(), Metadata: common.Metadata{common.POSIXFolderMeta: pointerTo("true"), "asdf": pointerTo("qwerty")}}},
+			"foobar": ResourceDefinitionObject{ObjectShouldExist: pointerTo(false)}, // We shouldn't have captured foobar, but foobar/ should exist as a directory.
+			"foobar/": ResourceDefinitionObject{ObjectProperties: ObjectProperties{
+				EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File()),
+				Metadata: common.Metadata{
+					"asdf": pointerTo("qwerty"),
+				},
+			},
+			},
 			"foobar/foo":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 			"foobar/bar":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 			"foobar/baz":           ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
-			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}},
+			"foobar/folder/":       ResourceDefinitionObject{ObjectProperties: ObjectProperties{EntityType: common.Iff(DirMeta != "", common.EEntityType.Folder(), common.EEntityType.File())}},
 			"foobar/folder/foobar": ResourceDefinitionObject{Body: NewZeroObjectContentContainer(0)},
 		},
 	}, false)
