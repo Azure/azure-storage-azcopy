@@ -278,10 +278,13 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		b.clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, b.clientOptions.PerCallPolicies...)
 	}
 	*/
-	if object.relativePath == "\x00" {
-		return nil // Do nothing, we don't want to accidentally delete the root.
-	}
 	objectPath := path.Join(b.rootPath, object.relativePath)
+	if object.relativePath == "\x00" && b.targetLocation != common.ELocation.Blob() {
+		return nil // Do nothing, we don't want to accidentally delete the root.
+	} else if object.relativePath == "\x00" { // this is acceptable on blob, though. Dir stubs are a thing, and they aren't necessary for normal function.
+		objectPath = b.rootPath
+	}
+
 	if strings.HasSuffix(object.relativePath, "/") && !strings.HasSuffix(objectPath, "/") && b.targetLocation == common.ELocation.Blob() {
 		// If we were targeting a directory, we still need to be. path.join breaks that.
 		// We also want to defensively code around this, and make sure we are not putting folder// or trying to put a weird URI in to an endpoint that can't do this.

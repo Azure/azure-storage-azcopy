@@ -140,3 +140,65 @@ func (*FNSSuite) Scenario_IncludeRootDirectoryStub(a *ScenarioVariationManager) 
 		},
 	}, false)
 }
+
+/*
+Scenario_SyncTrailingSlashDeletion tests against a potential accidental deletion bug that could occur when `folder/` exists at the destination, but not the source
+and `folder/` happens to have an overlapping file at `folder`.
+*/
+func (*FNSSuite) Scenario_SyncTrailingSlashDeletion(a *ScenarioVariationManager) {
+	folderStyle := ResolveVariation(a, []common.EntityType{common.EEntityType.File(), common.EEntityType.Folder()})
+
+	dest := CreateResource[ContainerResourceManager](a, GetRootResource(a, common.ELocation.Blob()), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foobar": ResourceDefinitionObject{
+				Body: NewRandomObjectContentContainer(1024),
+			},
+			"foobar/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: folderStyle,
+				},
+			},
+			"foobar/bar/": ResourceDefinitionObject{
+				Body: NewRandomObjectContentContainer(1024),
+			},
+		},
+	})
+
+	src := CreateResource[ContainerResourceManager](a, GetRootResource(a, common.ELocation.Blob()), ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foobar": ResourceDefinitionObject{
+				Body: NewRandomObjectContentContainer(1024),
+			}, // We don't care about anything other than the overlap. We merely want to trigger a delete op against dest's folder/.
+		},
+	})
+
+	RunAzCopy(a, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			src.GetObject(a, "foobar/", common.EEntityType.Folder()),
+			dest.GetObject(a, "foobar/", common.EEntityType.Folder()),
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+				GlobalFlags: GlobalFlags{
+					OutputType: pointerTo(common.EOutputFormat.Text()),
+				},
+				IncludeDirectoryStubs: pointerTo(true),
+			},
+			DeleteDestination: pointerTo(true),
+		},
+	})
+
+	ValidateResource(a, dest, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"foobar": ResourceDefinitionObject{}, // We just care this guy exists
+			"foobar/": ResourceDefinitionObject{ // and this guy doesn't.
+				ObjectShouldExist: pointerTo(false),
+			},
+			"foobar/bar/": ResourceDefinitionObject{
+				ObjectShouldExist: pointerTo(false),
+			},
+		},
+	}, false)
+}
