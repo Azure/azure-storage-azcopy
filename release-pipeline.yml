@@ -1277,6 +1277,13 @@ stages:
         steps:
           - checkout: none
 
+          - script: |
+              sudo apt update
+              sudo apt-get install libsecret-1-dev -y
+              sudo apt --fix-broken install
+              ldd --version
+            displayName: "GLIBC Version"
+
           - template: setup/test_artifacts.yml
             parameters:
               artifact_name: 'azCopy-binaries'
