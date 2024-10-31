@@ -1188,6 +1188,13 @@ stages:
             - ImageOverride -equals $(AgentName)
         steps:
           - checkout: none
+
+          - script: |
+              sudo apt update
+              sudo apt-get install libsecret-1-dev -y
+              sudo apt --fix-broken install
+              ldd --version
+            displayName: "Libsecret Install"
   
           - template: setup/test_artifacts.yml
             parameters:
@@ -1276,6 +1283,13 @@ stages:
 
         steps:
           - checkout: none
+
+          - script: |
+              sudo apt update
+              sudo apt-get install libsecret-1-dev -y
+              sudo apt --fix-broken install
+              ldd --version
+            displayName: "Libsecret Install"
 
           - template: setup/test_artifacts.yml
             parameters:
