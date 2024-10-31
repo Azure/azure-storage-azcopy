@@ -224,7 +224,7 @@ func (s *BlobFSTestSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariati
 		GetRootResource(svm, ResolveVariation(svm, []common.Location{
 			common.ELocation.Blob(),
 			common.ELocation.BlobFS(),
-		})),
+		}), GetResourceOptions{PreferredAccount: targetAcct}),
 		ResourceDefinitionContainer{})
 
 	RunAzCopy(

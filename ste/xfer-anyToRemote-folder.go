@@ -82,7 +82,6 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 	} else {
 
 		t := jptm.GetFolderCreationTracker()
-		defer t.StopTracking(s.DirUrlToString()) // don't need it after this routine
 		shouldSetProps := t.ShouldSetProperties(s.DirUrlToString(), jptm.GetOverwriteOption(), jptm.GetOverwritePrompter())
 		if !shouldSetProps {
 			jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")

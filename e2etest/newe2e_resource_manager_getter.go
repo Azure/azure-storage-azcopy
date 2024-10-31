@@ -15,6 +15,7 @@ type GetResourceOptions struct {
 // on *Local*, this inherently creates a container. But that's fine, because it's likely to be used.
 func GetRootResource(a Asserter, location common.Location, varOpts ...GetResourceOptions) ResourceManager {
 	opts := FirstOrZero(varOpts)
+	defaultacct := PrimaryStandardAcct
 
 	switch location {
 	case common.ELocation.Local():
@@ -23,9 +24,15 @@ func GetRootResource(a Asserter, location common.Location, varOpts ...GetResourc
 		}
 
 		return NewLocalContainer(a)
-	case common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.File():
-		// acct handles the dryrun case for us
-		acct := GetAccount(a, DerefOrDefault(opts.PreferredAccount, PrimaryStandardAcct))
+	case common.ELocation.BlobFS():
+		// do we have a hns acct attached, if so, and we're requesting blobfs, let's use it
+		if _, ok := AccountRegistry[PrimaryHNSAcct]; ok {
+			defaultacct = PrimaryHNSAcct
+		}
+
+		fallthrough // Continue to grab the account
+	case common.ELocation.Blob(), common.ELocation.File():
+		acct := GetAccount(a, DerefOrDefault(opts.PreferredAccount, defaultacct))
 		return acct.GetService(a, location)
 	default:
 		a.Error(fmt.Sprintf("TODO: Location %s is not yet supported", location))
