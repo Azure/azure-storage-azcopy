@@ -48,11 +48,19 @@ steps:
     $wixXml.Wix.Product.Manufacturer = "Updated Manufacturer"
     $wixXml.Wix.Product.UpgradeCode = $uuid
 
-    # Check if Component element exists and has a Guid attribute
-    if ($component -and $component.HasAttribute("Guid")) {
-        $component.SetAttribute("Guid", $uuid)
+    $component = $wixXml.Wix.Product.Directory.InstallDir.Component
+
+    # Check if Component element exists
+    if ($component) {
+        # Check if Guid attribute exists and set it, or add it if missing
+        if ($component.Attributes["Guid"]) {
+            $component.Attributes["Guid"].Value = $uuid
+        } else {
+            $component.SetAttribute("Guid", $uuid)
+        }
+        Write-Host "Guid attribute updated successfully."
     } else {
-        Write-Host "Component element or Guid attribute not found in XML structure."
+        Write-Host "Component element not found in XML structure."
     }
 
     # Update the file source path
