@@ -419,6 +419,11 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(*blobInfo.Name, searchPrefix), containerName)
 
+				// edge case, blob name happens to be the same as root and ends in /
+				if storedObject.relativePath == "" && strings.HasSuffix(storedObject.name, "/") {
+					storedObject.relativePath = "\x00" // Short circuit, letting the backend know we *really* meant root/.
+				}
+
 				if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
 					blobTagsMap := common.BlobTags{}
 					for _, blobTag := range blobInfo.BlobTags.BlobTagSet {
@@ -553,6 +558,11 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 			}
 
 			storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, relativePath, containerName)
+
+			// edge case, blob name happens to be the same as root and ends in /
+			if storedObject.relativePath == "" && strings.HasSuffix(storedObject.name, "/") {
+				storedObject.relativePath = "\x00" // Short circuit, letting the backend know we *really* meant root/.
+			}
 
 			// Setting blob tags
 			if t.s2sPreserveSourceTags && blobInfo.BlobTags != nil {
