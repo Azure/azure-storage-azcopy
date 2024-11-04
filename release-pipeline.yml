@@ -1,54 +1,54 @@
-# variables:
-#   AZCOPY_GOLANG_VERSION: '1.21.8'
+variables:
+  AZCOPY_GOLANG_VERSION: '1.21.8'
 
-# parameters:
-#   - name: tag
-#     displayName: 'New Release Tag'
-#     type: string
-#     default: 'azcopy-'
+parameters:
+  - name: tag
+    displayName: 'New Release Tag'
+    type: string
+    default: 'azcopy-'
 
-#   - name: publish_to_container
-#     displayName: 'Publish To Container'
-#     type: boolean
-#     default: false
+  - name: publish_to_container
+    displayName: 'Publish To Container'
+    type: boolean
+    default: false
 
-#   - name: publish_to_m1_container
-#     displayName: 'Publish To M1 Container'
-#     type: boolean
-#     default: false      
+  - name: publish_to_m1_container
+    displayName: 'Publish To M1 Container'
+    type: boolean
+    default: false      
 
-#   - name: post_release
-#     displayName: 'Post Release on Github'
-#     type: boolean
-#     default: false
+  - name: post_release
+    displayName: 'Post Release on Github'
+    type: boolean
+    default: false
 
-#   - name: publish_artifacts
-#     displayName: 'Publish Artifacts to Linux Repos'
-#     type: boolean
-#     default: false
+  - name: publish_artifacts
+    displayName: 'Publish Artifacts to Linux Repos'
+    type: boolean
+    default: false
 
-#   - name: draft
-#     displayName: 'Post as Draft Release'
-#     type: boolean
-#     default: false
+  - name: draft
+    displayName: 'Post as Draft Release'
+    type: boolean
+    default: false
 
-#   - name: prerelease
-#     displayName: 'Post as PreRelease'
-#     type: boolean
-#     default: false
+  - name: prerelease
+    displayName: 'Post as PreRelease'
+    type: boolean
+    default: false
 
-#   - name: update_version
-#     displayName: 'Update Version'
-#     type: boolean
-#     default: false
+  - name: update_version
+    displayName: 'Update Version'
+    type: boolean
+    default: false
 
-# # Do not trigger this pipeline automatically
-# trigger: none
-# pr: none
+# Do not trigger this pipeline automatically
+trigger: none
+pr: none
 
-# stages:
-#   - stage: BuildArtifacts
-#     jobs:
+stages:
+  - stage: BuildArtifacts
+    jobs:
 #       - job: Set_1
 #         timeoutInMinutes: 120
 #         strategy:
@@ -369,103 +369,103 @@
 #               verbosity: 'Verbose'
 #               alertWarningLevel: 'High'
       
-#       - job: Set_3
-#         timeoutInMinutes: 120
-#         strategy:
-#           matrix:
-#             Windows:
-#               imageName: 'windows-2019'
-#               type: 'windows'
-#         pool:
-#           vmImage: $(imageName)
+      - job: Set_3
+        timeoutInMinutes: 120
+        strategy:
+          matrix:
+            Windows:
+              imageName: 'windows-2019'
+              type: 'windows'
+        pool:
+          vmImage: $(imageName)
 
-#         variables:
-#           - name: root_dir
-#             value: '$(System.DefaultWorkingDirectory)'
-#           - name: msi_dir
-#             value: '$(System.DefaultWorkingDirectory)/msi'
-#           - name: work_dir
-#             value: '$(Build.SourcesDirectory)'
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: msi_dir
+            value: '$(System.DefaultWorkingDirectory)/msi'
+          - name: work_dir
+            value: '$(Build.SourcesDirectory)'
           
-#         steps:
-#           - task: GoTool@0
-#             env:
-#               GO111MODULE: 'on'
-#             inputs:
-#               version: $(AZCOPY_GOLANG_VERSION)
+        steps:
+          - task: GoTool@0
+            env:
+              GO111MODULE: 'on'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION)
 
-#           - script: |
-#               echo 'Running GO Vet'
-#               go vet 
-#             displayName: 'Golang Vet - Windows'
-#             workingDirectory: $(root_dir)
+          - script: |
+              echo 'Running GO Vet'
+              go vet 
+            displayName: 'Golang Vet - Windows'
+            workingDirectory: $(root_dir)
 
-#           - script: |
-#               go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe"
-#             displayName: 'Generate Windows AMD64'
-#             env:
-#               GOARCH: amd64
-#               GOOS: windows
-#               CGO_ENABLED: 0
+          - script: |
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe"
+            displayName: 'Generate Windows AMD64'
+            env:
+              GOARCH: amd64
+              GOOS: windows
+              CGO_ENABLED: 0
 
-#           - script: |
-#               go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_386.exe"
-#             displayName: 'Generate Windows i386'
-#             env:
-#               GOARCH: 386
-#               GOOS: windows
-#               CGO_ENABLED: 0
+          - script: |
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_386.exe"
+            displayName: 'Generate Windows i386'
+            env:
+              GOARCH: 386
+              GOOS: windows
+              CGO_ENABLED: 0
 
-#           - script: |
-#               go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_v7_arm.exe"
-#             displayName: 'Generate Windows ARM'
-#             env:
-#               GOARCH: arm
-#               GOARM: 7
-#               GOOS: windows
-#               CGO_ENABLED: 0
+          - script: |
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_v7_arm.exe"
+            displayName: 'Generate Windows ARM'
+            env:
+              GOARCH: arm
+              GOARM: 7
+              GOOS: windows
+              CGO_ENABLED: 0
           
-#           - script: |
-#               go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_arm64.exe"
-#             displayName: 'Generate Windows ARM'
-#             env:
-#               GOARCH: arm64
-#               GOOS: windows
-#               CGO_ENABLED: 0
+          - script: |
+              go build -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_arm64.exe"
+            displayName: 'Generate Windows ARM'
+            env:
+              GOARCH: arm64
+              GOOS: windows
+              CGO_ENABLED: 0
 
-#           - script: |
-#               go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_se_arm64.exe"
-#             displayName: 'Generate Windows ARM'
-#             env:
-#               GOARCH: arm64
-#               GOOS: windows
-#               CGO_ENABLED: 0
+          - script: |
+              go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)\azcopy_windows_se_arm64.exe"
+            displayName: 'Generate Windows ARM'
+            env:
+              GOARCH: arm64
+              GOOS: windows
+              CGO_ENABLED: 0
 
-#           - powershell: |
-#               # Create the working directory if it doesn't exist
-#               New-Item -ItemType Directory -Force -Path $(msi_dir)
+          - powershell: |
+              # Create the working directory if it doesn't exist
+              New-Item -ItemType Directory -Force -Path $(msi_dir)
               
-#               # Copy the azcopy executable to the working directory with a new name
-#               Copy-Item -Path "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe" -Destination "$(work_dir)\azcopy.exe" -Force
-#             displayName: 'Copy required files for packaging'
+              # Copy the azcopy executable to the working directory with a new name
+              Copy-Item -Path "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe" -Destination "$(work_dir)\azcopy.exe" -Force
+            displayName: 'Copy required files for packaging'
 
-#           - template: setup/create_windows_msi.yml
-#             parameters:
-#               working_dir: $(work_dir)
-#               build_dir: $(Build.ArtifactStagingDirectory)
-#               msi_dir: $(msi_dir)
+          - template: setup/create_windows_msi.yml
+            parameters:
+              working_dir: $(work_dir)
+              build_dir: $(Build.ArtifactStagingDirectory)
+              msi_dir: $(msi_dir)
 
-#           - task: PublishBuildArtifacts@1
-#             inputs:
-#               artifactName: 'azCopy-windows-temp'
-#             displayName: 'Publish Artifacts'
-#             condition: succeededOrFailed()
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-windows-temp'
+            displayName: 'Publish Artifacts'
+            condition: succeededOrFailed()
         
-#           - task: ComponentGovernanceComponentDetection@0
-#             inputs:
-#               scanType: 'Register'
-#               verbosity: 'Verbose'
-#               alertWarningLevel: 'High'
+          - task: ComponentGovernanceComponentDetection@0
+            inputs:
+              scanType: 'Register'
+              verbosity: 'Verbose'
+              alertWarningLevel: 'High'
 
 #       - job: Set_4
 #         timeoutInMinutes: 360
