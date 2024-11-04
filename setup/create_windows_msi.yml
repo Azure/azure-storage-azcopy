@@ -41,17 +41,20 @@ steps:
 
     # Load the XML file with namespace handling
     [xml]$wixXml = Get-Content $wxsFilePath
-    $namespace = @{ wix = "http://schemas.microsoft.com/wix/2006/wi" }
+
+    # Define the XML namespace manager
+    $namespaceManager = New-Object System.Xml.XmlNamespaceManager($wixXml.NameTable)
+    $namespaceManager.AddNamespace("wix", "http://schemas.microsoft.com/wix/2006/wi")
 
     # Update fields using the namespace
-    $productNode = $wixXml.SelectSingleNode("//wix:Product", $namespace)
+    $productNode = $wixXml.SelectSingleNode("//wix:Product", $namespaceManager)
     $productNode.Name = "azcopy"
     $productNode.Version = "10.26.0"  # Update version as needed
     $productNode.Manufacturer = "Updated Manufacturer"
     $productNode.UpgradeCode = $uuid
 
     # Locate the Component node using the namespace
-    $component = $wixXml.SelectSingleNode("//wix:Directory[@Id='INSTALLDIR']/wix:Component", $namespace)
+    $component = $wixXml.SelectSingleNode("//wix:Directory[@Id='INSTALLDIR']/wix:Component", $namespaceManager)
 
     # Check if Component element exists
     if ($component) {
@@ -67,7 +70,23 @@ steps:
     }
 
     # Update the file source path
-    $file = $component.SelectSingleNode("wix:File", $namespace)
+    $file = $component.SelectSingleNode("wix:File", $namespaceManager)
     $file.Source = "$workDir\azcopy.exe" 
+
+    # Save the updated XML back to the file
+    $wixXml.Save($wxsFilePath)
+
+    Write-Host "WiX XML file updated successfully."
+
+    # Step 3: Compile the .wxs file using Candle
+    Write-Host "Compiling .wxs file..."
+    & "$wixToolsPath\candle.exe" -out $wixObjPath $wxsFilePath
+
+    # Step 4: Link the .wixobj to create the MSI using Light
+    Write-Host "Linking to create MSI..."
+    & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath
+
+    Write-Host "MSI creation process completed!"
+
 
  
