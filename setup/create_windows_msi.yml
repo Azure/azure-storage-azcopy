@@ -27,12 +27,12 @@ steps:
     # Step 1: Set Variables
     $msiDir = "${{ parameters.msi_dir }}"
     $workDir = "${{ parameters.working_dir }}"
-    $wixToolsPath = (where.exe candle.exe)  # Path to WiX toolset binaries
+    $wixToolsPath = (where.exe candle.exe) -replace '\\candle.exe$', ''  # Remove candle.exe from path
     $wxsFilePath = "$workDir\azcopy.wxs"
     $wixObjPath = "$msiDir\azcopy.wixobj"
     $outputMsi = "${{ parameters.build_dir }}\azcopy.msi"
 
-    Write-Host "Work dir: $workDir  $wixToolsPath"
+    Write-Host "Work dir: $workDir  WiX Toolset Path: $wixToolsPath"
     cd $msiDir
 
     # Step 2: Update the fields in the .wxs file
@@ -87,6 +87,3 @@ steps:
     & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath
 
     Write-Host "MSI creation process completed!"
-
-
- 
