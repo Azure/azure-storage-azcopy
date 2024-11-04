@@ -30,6 +30,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+var JobsCleanupSuccessMsg = "Successfully removed all jobs."
+
 func init() {
 	type JobsCleanReq struct {
 		withStatus string

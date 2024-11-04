@@ -3,8 +3,6 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
@@ -13,6 +11,9 @@ import (
 	"reflect"
 	"runtime/debug"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 )
 
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
@@ -52,13 +53,14 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy     AzCopyVerb = "copy"
-	AzCopyVerbSync     AzCopyVerb = "sync"
-	AzCopyVerbRemove   AzCopyVerb = "remove"
-	AzCopyVerbList     AzCopyVerb = "list"
-	AzCopyVerbLogin    AzCopyVerb = "login"
-	AzCopyVerbLogout   AzCopyVerb = "logout"
-	AzCopyVerbJobsList AzCopyVerb = "jobs"
+	AzCopyVerbCopy        AzCopyVerb = "copy"
+	AzCopyVerbSync        AzCopyVerb = "sync"
+	AzCopyVerbRemove      AzCopyVerb = "remove"
+	AzCopyVerbList        AzCopyVerb = "list"
+	AzCopyVerbLogin       AzCopyVerb = "login"
+	AzCopyVerbLogout      AzCopyVerb = "logout"
+	AzCopyVerbJobsList    AzCopyVerb = "jobs"
+	AzCopyVerbJobsCleanup AzCopyVerb = "jobs"
 )
 
 type AzCopyTarget struct {
