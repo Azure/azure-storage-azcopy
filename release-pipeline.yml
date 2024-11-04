@@ -5,7 +5,7 @@ parameters:
   - name: tag
     displayName: 'New Release Tag'
     type: string
-    default: 'azcopy-'
+    default: 'v10.'
 
   - name: publish_to_container
     displayName: 'Publish To Container'
@@ -1813,9 +1813,9 @@ stages:
                 today=$(date +"%Y%m%d")
                 
                 if [ $(Publish_To_Container) = "True" ]; then
-                  container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+                  container_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
                 else
-                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
                 fi
                 echo "Artifacts will be uploaded to: $container_url"
                 
@@ -1828,7 +1828,7 @@ stages:
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
                 if [ $(Publish_To_M1_Container) = "True" ]; then
-                  m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
+                  m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$azcopy_version-$today"
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
                 fi
 
