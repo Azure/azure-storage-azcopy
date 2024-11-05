@@ -181,6 +181,10 @@ type BlobContainerResourceManager struct {
 	internalClient  *container.Client
 }
 
+func (b *BlobContainerResourceManager) GetDatalakeContainerManager(a Asserter) ContainerResourceManager {
+	return b.internalAccount.GetService(a, common.ELocation.BlobFS()).GetContainer(b.containerName)
+}
+
 func (b *BlobContainerResourceManager) ValidAuthTypes() ExplicitCredentialTypes {
 	return (&BlobServiceResourceManager{}).ValidAuthTypes()
 }
@@ -642,6 +646,7 @@ type BlobObjectGetPropertiesOptions struct {
 
 func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options *BlobObjectGetPropertiesOptions) ObjectProperties {
 	a.HelperMarker().Helper()
+
 	resp, err := b.internalClient.GetProperties(ctx, &blob.GetPropertiesOptions{
 		CPKInfo: nil,
 	})
@@ -677,9 +682,10 @@ func (b *BlobObjectResourceManager) GetPropertiesWithOptions(a Asserter, options
 			Type:      resp.BlobType,
 			Tags: func() map[string]string {
 				out := make(map[string]string)
-				if b.internalAccount.AccountType() == EAccountType.PremiumPageBlobs() {
+				if b.internalAccount.AccountType() == EAccountType.PremiumPageBlobs() || b.internalAccount.AccountType() == EAccountType.HierarchicalNamespaceEnabled() {
 					return out
 				}
+
 				resp, err := b.internalClient.GetTags(ctx, nil)
 				a.NoError("Get tags", err)
 				for _, tag := range resp.BlobTagSet {

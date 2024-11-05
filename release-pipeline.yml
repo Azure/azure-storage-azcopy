@@ -1057,15 +1057,8 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
-
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-binaries/azcopy_linux*amd64'
@@ -1110,15 +1103,9 @@ stages:
           vmImage: $(vmImage)
         steps:
           - checkout: none
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
 
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy_linux_*amd64*.tar.gz'
@@ -1201,17 +1188,16 @@ stages:
             - ImageOverride -equals $(AgentName)
         steps:
           - checkout: none
-          
+
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
-            displayName: "GLIBC Version"
+            displayName: "Libsecret Install"
   
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy_linux_*arm64*.tar.gz'
@@ -1301,13 +1287,12 @@ stages:
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
-              sudo apt --fix-broken install -y
+              sudo apt --fix-broken install
               ldd --version
-            displayName: "GLIBC Version"
+            displayName: "Libsecret Install"
 
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-binaries/azcopy_linux*arm64'
@@ -1356,19 +1341,8 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo yum update -y
-              sudo yum install git -y
-            displayName: 'Install Git'
-
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"
-
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy-*arm64.rpm'
@@ -1403,22 +1377,11 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo yum update -y
-              sudo yum install git -y
-            displayName: 'Install Git'
-
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.rpm'
-          
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"
 
           - script: |
               sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
@@ -1450,23 +1413,12 @@ stages:
 
         steps:
           - checkout: none
-          
-          - script: |
-              sudo tdnf update -y
-              sudo tdnf install git -y
-            displayName: 'Install dependencies'
       
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/mariner/azcopy-*x86_64.rpm'
-
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"             
 
           - script: |
               sudo rpm -qip azcopy*x86_64.rpm
@@ -1496,18 +1448,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
         steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Mac'
-            workingDirectory: $(System.DefaultWorkingDirectory)
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
@@ -1565,18 +1505,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)'
           
         steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Windows'
-            workingDirectory: $(root_dir)
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
@@ -1670,12 +1598,6 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
@@ -1711,18 +1633,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)'
           
         steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Windows'
-            workingDirectory: $(root_dir)
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:

@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	suiteManager.RegisterSuite(&WorkloadIdentitySuite{})
+	suiteManager.RegisterEarlyRunSuite(&WorkloadIdentitySuite{})
 }
 
 type WorkloadIdentitySuite struct{}
@@ -31,7 +31,7 @@ func (s *WorkloadIdentitySuite) Scenario_SingleFileUploadDownloadWorkloadIdentit
 		}
 	}
 
-	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),

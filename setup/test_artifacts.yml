@@ -1,6 +1,4 @@
 parameters:
-  - name: go_version
-    type: string
   - name: artifact_name
     type: string
   - name: download_path
@@ -9,21 +7,6 @@ parameters:
     type: string
 
 steps:
-  - script: |
-      git clone https://github.com/Azure/azure-storage-azcopy
-    displayName: 'Checkout Code'
-    workingDirectory: $(System.DefaultWorkingDirectory)
-
-  - script: |
-      git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-    displayName: 'Checkout Branch'
-    workingDirectory: $(System.DefaultWorkingDirectory)/azure-storage-azcopy
-
-  - task: ShellScript@2
-    inputs:
-      scriptPath: "$(System.DefaultWorkingDirectory)/azure-storage-azcopy/go_installer.sh"
-      args: "$(System.DefaultWorkingDirectory)/ ${{ parameters.go_version }}"
-    displayName: "GoTool Custom Setup"
 
   - task: DownloadBuildArtifacts@0
     displayName: 'Download Build Artifacts'

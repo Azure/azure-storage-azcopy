@@ -606,14 +606,15 @@ func TestDryrunRemoveBlobsUnderContainerJson(t *testing.T) {
 		a.Zero(len(mockedRPC.transfers))
 
 		msg := <-mockedLcm.dryrunLog
-		deleteTransfer := common.CopyTransfer{}
+		deleteTransfer := DryrunTransfer{}
 		errMarshal := json.Unmarshal([]byte(msg), &deleteTransfer)
 		a.Nil(errMarshal)
 		// comparing some values of deleteTransfer
-		a.Equal(deleteTransfer.Source, "/"+blobName[0])
-		a.Equal(deleteTransfer.Destination, "/"+blobName[0])
+		targetUri := cc.NewBlobClient(blobName[0]).URL()
+		a.Equal(targetUri, deleteTransfer.Source)
+		a.Equal("", deleteTransfer.Destination)
 		a.Equal("File", deleteTransfer.EntityType.String())
-		a.Equal("BlockBlob", string(deleteTransfer.BlobType))
+		a.Equal("BlockBlob", deleteTransfer.BlobType.String())
 	})
 }
 

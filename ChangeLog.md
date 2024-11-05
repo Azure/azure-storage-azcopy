@@ -1,6 +1,36 @@
 
 # Change Log
 
+## Version 10.28.0-Preview
+
+### Bug Fixes
+1. Fixed an issue where AzCopy would not persist tokens when logging in via Device Code. ([#2361](https://github.com/Azure/azure-storage-azcopy/issues/2361))
+
+## Version 10.27.0
+
+### New Features
+1. Added ability to specify concurrency of piped uploads via the AZCOPY_CONCURRENCY_VALUE environment variable. ([#2821](https://github.com/Azure/azure-storage-azcopy/pull/2821))
+2. Update message returned when transfer failure is related to tags permission issues. ([#2798](https://github.com/Azure/azure-storage-azcopy/issues/2798)) 
+3. Optimized number of calls to create directory. ([#2828](https://github.com/Azure/azure-storage-azcopy/pull/2828))
+
+### Dependency updates
+1. Golang 1.22.5 -> 1.23.1
+2. azidentity 1.7.0 -> 1.8.0
+3. azcore 1.13.0 -> 1.16.0
+
+### Bug Fixes
+1. Fixed an issue where piped downloads in Linux would append AzCopy version information if on an older version. ([#2774](https://github.com/Azure/azure-storage-azcopy/pull/2774))
+2. Fixed an issue where sync with --hash-meta-dir would cause original files to be hidden. ([#2758](https://github.com/Azure/azure-storage-azcopy/issues/2758)) 
+3. Fixed an issue where jobs list would result in a segmentation violation. ([#2714](https://github.com/Azure/azure-storage-azcopy/issues/2714))
+4. Fixed an issue where list for File would not allow OAuth. ([#2821](https://github.com/Azure/azure-storage-azcopy/pull/2821))
+5. Fixed an issue where folders would be handled improperly on FNS accounts. ([#2809](https://github.com/Azure/azure-storage-azcopy/pull/2809))
+6. Fixed an issue where --dry-run would sometimes panic due to closing a log file that was already closed. ([#2832](https://github.com/Azure/azure-storage-azcopy/pull/2832))
+7. Fixed an issue where sync --delete-destination-files was overwriting all destination files. ([#2818](https://github.com/Azure/azure-storage-azcopy/pull/2818))
+8. Fixed an issue where AzCopy would panic due to sending on an already closed channel. ([#2703](https://github.com/Azure/azure-storage-azcopy/issues/2703))
+
+### Documentation
+1. Updated in line text help message to say that source and destinations cannot be modified during transfers. ([#2826](https://github.com/Azure/azure-storage-azcopy/pull/2826)) 
+
 ## Version 10.26.0
 
 ### Security fixes
@@ -16,7 +46,7 @@
 1. Golang 1.22.4 -> 1.22.5
 2. azidentity 1.6.0 -> 1.7.0
 
-## Bug Fixes
+### Bug Fixes
 
 1. Fixed an issue where AzCopy would fail to unmarshal the `_token_refresh_source` property correctly when performing copy jobs from OAuth-attached containers. ([#2710](https://github.com/Azure/azure-storage-azcopy/pull/2710))
 2. Fixed a CI pipeline in Azure DevOps to automatically detect CVEs declared against our dependencies. ([#2705](https://github.com/Azure/azure-storage-azcopy/pull/2705))
