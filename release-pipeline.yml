@@ -2168,6 +2168,8 @@ stages:
 
             - script: |
                 pip install azure-storage-blob
-                python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI
+                ACCESS_TOKEN=$(az account get-access-token) 
+                python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`" "$ACCESS_TOKEN"
               displayName: 'Updating version number'
               workingDirectory: $(root_dir)
