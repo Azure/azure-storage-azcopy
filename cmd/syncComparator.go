@@ -98,8 +98,14 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if sourceObjectInMap.md5 == nil {
-					syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonMissingHash, true)
-					return nil
+					if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
+						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+						return f.copyTransferScheduler(sourceObjectInMap)
+					} else {
+						// skip if dest is more recent
+						syncComparatorLog(sourceObjectInMap.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
+						return nil
+					}
 				}
 
 				if !reflect.DeepEqual(sourceObjectInMap.md5, destinationObject.md5) {
@@ -177,8 +183,14 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 			switch f.comparisonHashType {
 			case common.ESyncHashType.MD5():
 				if sourceObject.md5 == nil {
-					syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonMissingHash, true)
-					return nil
+					if sourceObject.isMoreRecentThan(destinationObjectInMap, f.preferSMBTime) {
+						syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+						return f.copyTransferScheduler(sourceObject)
+					} else {
+						// skip if dest is more recent
+						syncComparatorLog(sourceObject.relativePath, syncStatusSkipped, syncSkipReasonTime, false)
+						return nil
+					}
 				}
 
 				if !reflect.DeepEqual(sourceObject.md5, destinationObjectInMap.md5) {

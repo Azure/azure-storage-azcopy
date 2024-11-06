@@ -261,3 +261,9 @@ func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *Scena
 		},
 	}, true)
 }
+
+func (s *SyncTestSuite) Scenario_TestSyncHashTypeNoHash(svm *ScenarioVariationManager) {
+	//srcHash := ResolveVariation(svm, []bool{true, false})
+	//dstHash := ResolveVariation(svm, []bool{true, false})
+
+}
