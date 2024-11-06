@@ -53,14 +53,13 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy        AzCopyVerb = "copy"
-	AzCopyVerbSync        AzCopyVerb = "sync"
-	AzCopyVerbRemove      AzCopyVerb = "remove"
-	AzCopyVerbList        AzCopyVerb = "list"
-	AzCopyVerbLogin       AzCopyVerb = "login"
-	AzCopyVerbLogout      AzCopyVerb = "logout"
-	AzCopyVerbJobsList    AzCopyVerb = "jobs"
-	AzCopyVerbJobsCleanup AzCopyVerb = "jobs"
+	AzCopyVerbCopy   AzCopyVerb = "copy"
+	AzCopyVerbSync   AzCopyVerb = "sync"
+	AzCopyVerbRemove AzCopyVerb = "remove"
+	AzCopyVerbList   AzCopyVerb = "list"
+	AzCopyVerbLogin  AzCopyVerb = "login"
+	AzCopyVerbLogout AzCopyVerb = "logout"
+	AzCopyVerbJobs   AzCopyVerb = "jobs"
 )
 
 type AzCopyTarget struct {
@@ -320,7 +319,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			}
 		case commandSpec.Verb == AzCopyVerbList:
 			out = &AzCopyParsedListStdout{}
-		case commandSpec.Verb == AzCopyVerbJobsList:
+		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "list":
 			out = &AzCopyParsedJobsListStdout{}
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}
@@ -351,6 +350,11 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
+
+	// don't upload and cleanup logs for clean jobs
+	if !a.Failed() && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "clean" {
+		return out, &AzCopyJobPlan{}
+	}
 
 	a.Cleanup(func(a ScenarioAsserter) {
 		if !commandSpec.Environment.ManualLogin {
