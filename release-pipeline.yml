@@ -2166,19 +2166,33 @@ stages:
               displayName: 'Getting Python script'
               workingDirectory: $(root_dir)
 
-            - task: Bash@3
-              displayName: 'Install Azure CLI'
+            - task: AzureCLI@2
+              displayName: 'Updating version number with Azure CLI'
               inputs:
-                targetType: 'inline'
-                script: |
-                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-
-            - script: |
-                pip install azure-storage-blob
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI
-                executable_name=azcopy
-                azcopy_version=$(azcopy --version | awk '{print $3}' | head -n 1)
-                echo "azcopy version: $azcopy_version"
-                azcopy --version | awk '{print $3}' | head -n 1 | $executable_name copy https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt --from-to=PipeBlob
-              displayName: 'Updating version number'
-              workingDirectory: $(root_dir)
+                azureSubscription: 'ESRP KeyVault identity'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  pip install azure-storage-blob
+                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI
+                  executable_name=azcopy
+                  az login --identity
+                  
+                  #Extract the version number 
+                  azcopy_version=$(azcopy --version | awk '{print $3}' | head -n 1)
+                  echo "azcopy version: $azcopy_version"
+                  
+                  #Upload to release version blob file
+                  azcopy --version | awk '{print $3}' | head -n 1 | $executable_name copy https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt \
+                  --from-to=PipeBlob --log-level=INFO --output-type=json > azcopy_output.json
+                  
+                  # Handle errors 
+                  if [ $? -eq 0]; then
+                    echo "Release version file successfully uploaded." 
+                  else
+                    echo "File failed to upload: " 
+                    cat azcopy_output.json
+                    exit 1
+                  fi
+                workingDirectory: $(root_dir)
+                displayName: "Updating version number"
