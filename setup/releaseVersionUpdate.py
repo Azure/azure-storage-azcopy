@@ -16,9 +16,6 @@ if(len(releaseVersion)==0):
 containerUrl = sasUrl.split('?')[0]
 sasToken = sasUrl.split('?')[1]
 
-# Access token from EntraID
-access_token = sys.argv[3]
-
 # Create a file and write the release version to it
 file_name = 'latest_version.txt'
 with open(file_name, 'w') as file:

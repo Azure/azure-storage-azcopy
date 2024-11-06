@@ -2166,10 +2166,26 @@ stages:
               displayName: 'Getting Python script'
               workingDirectory: $(root_dir)
 
+            - task: Bash@3
+              displayName: 'Install Azure CLI'
+              inputs:
+                targetType: 'inline'
+                script: |
+                  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+            - task: AzureCLI@2
+              displayName: 'Azure CLI'
+              inputs:
+                azureSubscription: 'ESRP KeyVault identity'
+                scriptType: 'bash'
+                scriptLocation: 'inlineScript'
+                inlineScript: | 
+                  echo "Azure CLI working" 
+
             - script: |
                 pip install azure-storage-blob
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI
-                ACCESS_TOKEN=$(az account get-access-token) 
-                python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`" "$ACCESS_TOKEN"
+                executable_name=azcopy
+                azcopy --version | awk '{print $3}' | head -n 1 | $executable_name copy https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt --from-to=PipeBlob
               displayName: 'Updating version number'
               workingDirectory: $(root_dir)
