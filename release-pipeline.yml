@@ -2173,19 +2173,12 @@ stages:
                 script: |
                   curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-            - task: AzureCLI@2
-              displayName: 'Azure CLI'
-              inputs:
-                azureSubscription: 'ESRP KeyVault identity'
-                scriptType: 'bash'
-                scriptLocation: 'inlineScript'
-                inlineScript: | 
-                  echo "Azure CLI working" 
-
             - script: |
                 pip install azure-storage-blob
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI
                 executable_name=azcopy
+                azcopy_version=$(azcopy --version | awk '{print $3}' | head -n 1)
+                echo "azcopy version: $azcopy_version"
                 azcopy --version | awk '{print $3}' | head -n 1 | $executable_name copy https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt --from-to=PipeBlob
               displayName: 'Updating version number'
               workingDirectory: $(root_dir)
