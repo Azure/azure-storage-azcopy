@@ -2176,18 +2176,18 @@ stages:
                   pip install azure-storage-blob
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI
                   executable_name=azcopy
-                  az login --identity
+                  az login 
                   
                   #Extract the version number 
                   azcopy_version=$(azcopy --version | awk '{print $3}' | head -n 1)
                   echo "azcopy version: $azcopy_version"
                   
                   #Upload to release version blob file
-                  azcopy --version | awk '{print $3}' | head -n 1 | $executable_name copy https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt \
+                  azcopy --version | awk '{print $3}' | head -n 1 | azcopy copy https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt \
                   --from-to=PipeBlob --log-level=INFO --output-type=json > azcopy_output.json
                   
                   # Handle errors 
-                  if [ $? -eq 0]; then
+                  if [ $? -eq 0 ]; then
                     echo "Release version file successfully uploaded." 
                   else
                     echo "File failed to upload: " 
