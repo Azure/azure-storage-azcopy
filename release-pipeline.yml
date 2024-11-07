@@ -2175,8 +2175,7 @@ stages:
                 inlineScript: |
                   pip install azure-storage-blob
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI
-                  executable_name=azcopy
-                  az login 
+                  executable_name=azcopy 
                   
                   #Extract the version number 
                   azcopy_version=$(azcopy --version | awk '{print $3}' | head -n 1)
