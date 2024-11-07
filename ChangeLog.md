@@ -1,6 +1,11 @@
 
 # Change Log
 
+## Version 10.27.1
+
+### Bug Fixes
+1. Fixed an issue where file transfers would fail with ParentNotFound. ([#2858](https://github.com/Azure/azure-storage-azcopy/issues/2858))
+
 ## Version 10.27.0
 
 ### New Features
