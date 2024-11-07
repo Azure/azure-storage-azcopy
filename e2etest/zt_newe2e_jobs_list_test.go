@@ -13,6 +13,8 @@ func (s *JobsListSuite) Scenario_JobsListBasic(svm *ScenarioVariationManager) {
 		AzCopyCommand{
 			Verb:           AzCopyVerbJobs,
 			PositionalArgs: []string{"list"},
+			Stdout:         &AzcopyJobListOutput{},
+			ShouldFail:     false,
 		})
 	ValidateJobsListOutput(svm, jobsListOutput, 0)
 }
