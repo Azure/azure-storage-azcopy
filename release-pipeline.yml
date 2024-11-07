@@ -2174,23 +2174,22 @@ stages:
                 scriptLocation: inlineScript
                 inlineScript: |
                   pip install azure-storage-blob
-                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI
-                  executable_name=azcopy 
+                  export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
                   
                   #Extract the version number 
                   azcopy_version=$(azcopy --version | awk '{print $3}' | head -n 1)
                   echo "azcopy version: $azcopy_version"
                   
                   #Upload to release version blob file
-                  azcopy --version | awk '{print $3}' | head -n 1 | azcopy copy https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt \
-                  --from-to=PipeBlob --log-level=INFO --output-type=json > azcopy_output.json
+                  upload_url="https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
+                  echo "$azcopy_version" | azcopy copy "$upload_url" --from-to=PipeBlob --log-level=DEBUG --output-type=text > azcopy_output.txt
                   
                   # Handle errors 
                   if [ $? -eq 0 ]; then
                     echo "Release version file successfully uploaded." 
                   else
                     echo "File failed to upload: " 
-                    cat azcopy_output.json
+                    cat azcopy_output.txt
                     exit 1
                   fi
                 workingDirectory: $(root_dir)
