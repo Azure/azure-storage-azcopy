@@ -82,8 +82,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 	// If the folder has already been created, then we don't need to create it again
 	fNode, addedToTrie := f.contents.InsertDirNode(folder)
 
-	if !addedToTrie && (f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.FolderCreated() ||
-		f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.Success()) {
+	if !addedToTrie && (f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.FolderCreated()) {
 		return nil
 	}
 
@@ -126,8 +125,7 @@ func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.
 
 		var created bool
 		if fNode, ok := f.contents.GetDirNode(folder); ok {
-			created = f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.FolderCreated() ||
-				f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.Success()
+			created = f.plan.Transfer(fNode.TransferIndex).TransferStatus() == common.ETransferStatus.FolderCreated()
 		} else {
 			// This should not happen, ever.
 			// Folder property jobs register with the tracker before they start getting processed.
