@@ -180,7 +180,6 @@ func ValidateMessageOutput(a Asserter, stdout AzCopyStdout, message string) {
 		return
 	}
 	for _, line := range stdout.RawStdout() {
-		fmt.Println("Line:", line)
 		if strings.Contains(line, message) {
 			return
 		}
