@@ -88,7 +88,7 @@ steps:
 
     # Step 4: Link the .wixobj to create the MSI using Light with embedded CAB files
     Write-Host "Linking to create MSI with embedded CAB..."
-    & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath -cc
+    & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath -b $msiDir -sw1055
     Write-Host "MSI creation with embedded CAB completed!"
 
     Write-Host "MSI creation process completed!"
