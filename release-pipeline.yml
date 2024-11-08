@@ -2173,7 +2173,6 @@ stages:
                 scriptType: bash
                 scriptLocation: inlineScript
                 inlineScript: |
-                  pip install azure-storage-blob
                   export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
                   
                   #Extract the version number 
