@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
@@ -229,8 +230,22 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, datalakeURLParts azdatalake.URLParts, recursive bool) error {
 	//deleting a filesystem
 	if datalakeURLParts.PathName == "" {
-		glcm.Dryrun(func(_ common.OutputFormat) string {
-			return fmt.Sprintf("DRYRUN: remove filesystem %s", datalakeURLParts.FileSystemName)
+		glcm.Dryrun(func(of common.OutputFormat) string {
+			switch of {
+			case of.Text():
+				return fmt.Sprintf("DRYRUN: remove %s", dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).DFSURL())
+			case of.Json():
+				tx := DryrunTransfer{
+					EntityType: common.EEntityType.Folder(),
+					FromTo:     common.EFromTo.BlobFSTrash(),
+					Source:     dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).DFSURL(),
+				}
+
+				buf, _ := json.Marshal(tx)
+				return string(buf)
+			default:
+				panic("unsupported output format " + of.String())
+			}
 		})
 		return nil
 	}
@@ -246,8 +261,22 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 	// then we should short-circuit and simply remove that file
 	resourceType := common.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
-		glcm.Dryrun(func(_ common.OutputFormat) string {
-			return fmt.Sprintf("DRYRUN: remove file %s", datalakeURLParts.PathName)
+		glcm.Dryrun(func(of common.OutputFormat) string {
+			switch of {
+			case of.Text():
+				return fmt.Sprintf("DRYRUN: remove %s", directoryClient.DFSURL())
+			case of.Json():
+				tx := DryrunTransfer{
+					EntityType: common.EEntityType.File(),
+					FromTo:     common.EFromTo.BlobFSTrash(),
+					Source:     directoryClient.DFSURL(),
+				}
+
+				buf, _ := json.Marshal(tx)
+				return string(buf)
+			default:
+				panic("unsupported output format " + of.String())
+			}
 		})
 		return nil
 	}
@@ -267,8 +296,24 @@ func dryrunRemoveSingleDFSResource(ctx context.Context, dsc *service.Client, dat
 				entityType = "file"
 			}
 
-			glcm.Dryrun(func(_ common.OutputFormat) string {
-				return fmt.Sprintf("DRYRUN: remove %s %s", entityType, *v.Name)
+			glcm.Dryrun(func(of common.OutputFormat) string {
+				uri := dsc.NewFileSystemClient(datalakeURLParts.FileSystemName).NewFileClient(*v.Name).DFSURL()
+
+				switch of {
+				case of.Text():
+					return fmt.Sprintf("DRYRUN: remove %s", uri)
+				case of.Json():
+					tx := DryrunTransfer{
+						EntityType: common.Iff(entityType == "directory", common.EEntityType.Folder(), common.EEntityType.File()),
+						FromTo:     common.EFromTo.BlobFSTrash(),
+						Source:     uri,
+					}
+
+					buf, _ := json.Marshal(tx)
+					return string(buf)
+				default:
+					panic("unsupported output format " + of.String())
+				}
 			})
 		}
 	}

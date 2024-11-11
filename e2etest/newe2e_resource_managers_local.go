@@ -55,9 +55,15 @@ func (l *LocalContainerResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Container()
 }
 
-func (l *LocalContainerResourceManager) URI(opts ...GetURIOptions) string {
+func (l *LocalContainerResourceManager) URI(o ...GetURIOptions) string {
 	base := l.RootPath
-	base = addWildCard(base, opts...)
+	base = addWildCard(base, o...)
+
+	opts := FirstOrZero(o)
+	if opts.LocalOpts.PreferUNCPath {
+		base = common.ToExtendedPath(base)
+	}
+
 	return base
 }
 
@@ -222,9 +228,15 @@ func (l *LocalObjectResourceManager) Level() cmd.LocationLevel {
 	return cmd.ELocationLevel.Object()
 }
 
-func (l *LocalObjectResourceManager) URI(opts ...GetURIOptions) string {
+func (l *LocalObjectResourceManager) URI(o ...GetURIOptions) string {
 	base := filepath.Join(l.container.RootPath, l.objectPath)
-	base = addWildCard(base, opts...)
+	base = addWildCard(base, o...)
+
+	opts := FirstOrZero(o)
+	if opts.LocalOpts.PreferUNCPath {
+		base = common.ToExtendedPath(base)
+	}
+
 	return base
 }
 

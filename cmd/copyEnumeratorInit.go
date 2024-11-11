@@ -279,39 +279,24 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 		if cca.dryrunMode && shouldSendToSte {
 			glcm.Dryrun(func(format common.OutputFormat) string {
-				if format == common.EOutputFormat.Json() {
-					jsonOutput, err := json.Marshal(transfer)
-					common.PanicIfErr(err)
-					return string(jsonOutput)
-				} else {
-					if cca.FromTo.From() == common.ELocation.Local() {
-						// formatting from local source
-						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(cca.Source.Value))
-						if runtime.GOOS == "windows" {
-							dryrunValue += strings.ReplaceAll(srcRelPath, "/", "\\")
-						} else { // linux and mac
-							dryrunValue += srcRelPath
-						}
-						dryrunValue += fmt.Sprintf(" to %v%v", strings.Trim(cca.Destination.Value, "/"), dstRelPath)
-						return dryrunValue
-					} else if cca.FromTo.To() == common.ELocation.Local() {
-						// formatting to local source
-						dryrunValue := fmt.Sprintf("DRYRUN: copy %v%v to %v",
-							strings.Trim(cca.Source.Value, "/"), srcRelPath,
-							common.ToShortPath(cca.Destination.Value))
-						if runtime.GOOS == "windows" {
-							dryrunValue += strings.ReplaceAll(dstRelPath, "/", "\\")
-						} else { // linux and mac
-							dryrunValue += dstRelPath
-						}
-						return dryrunValue
-					} else {
-						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
-							cca.Source.Value,
-							srcRelPath,
-							cca.Destination.Value,
-							dstRelPath)
+				src := common.GenerateFullPath(cca.Source.Value, srcRelPath)
+				dst := common.GenerateFullPath(cca.Destination.Value, dstRelPath)
+
+				switch format {
+				case common.EOutputFormat.Json():
+					tx := DryrunTransfer{
+						EntityType:  transfer.EntityType,
+						BlobType:    common.FromBlobType(transfer.BlobType),
+						FromTo:      cca.FromTo,
+						Source:      src,
+						Destination: dst,
 					}
+
+					buf, _ := json.Marshal(tx)
+					return string(buf)
+				default:
+					return fmt.Sprintf("DRYRUN: copy %v to %v",
+						src, dst)
 				}
 			})
 			return nil
@@ -583,6 +568,10 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
+	}
+
+	if object.relativePath == "\x00" { // Short circuit, our relative path is requesting root/
+		return "\x00"
 	}
 
 	// source is a EXACT path to the file

@@ -18,7 +18,7 @@ type FileTestSuite struct{}
 func (s *FileTestSuite) Scenario_SingleFileUploadDifferentSizes(svm *ScenarioVariationManager) {
 	size := ResolveVariation(svm, []int64{0, 1, 4*common.MegaByte - 1, 4 * common.MegaByte, 4*common.MegaByte + 1})
 	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
-	body := NewRandomObjectContentContainer(svm, size)
+	body := NewRandomObjectContentContainer(size)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -133,7 +133,7 @@ func (s *FileTestSuite) Scenario_PartialSparseFileUpload(svm *ScenarioVariationM
 func (s *FileTestSuite) Scenario_GuessMimeType(svm *ScenarioVariationManager) {
 	size := int64(0)
 	fileName := "test_guessmimetype.html"
-	body := NewRandomObjectContentContainer(svm, size)
+	body := NewRandomObjectContentContainer(size)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File())
@@ -165,7 +165,7 @@ func (s *FileTestSuite) Scenario_GuessMimeType(svm *ScenarioVariationManager) {
 func (s *FileTestSuite) Scenario_UploadFileProperties(svm *ScenarioVariationManager) {
 	size := int64(0)
 	fileName := "test_properties"
-	body := NewRandomObjectContentContainer(svm, size)
+	body := NewRandomObjectContentContainer(size)
 
 	srcObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).
 		GetObject(svm, fileName, common.EEntityType.File()) // awkward capitalization to see if AzCopy catches it.
@@ -231,7 +231,7 @@ func (s *FileTestSuite) Scenario_DownloadPreserveLMTFile(svm *ScenarioVariationM
 }
 
 func (s *FileTestSuite) Scenario_Download63MBFile(svm *ScenarioVariationManager) {
-	body := NewRandomObjectContentContainer(svm, 63*common.MegaByte)
+	body := NewRandomObjectContentContainer(63 * common.MegaByte)
 	name := "test_63mb"
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
 	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{}).GetObject(svm, name, common.EEntityType.File())
@@ -269,7 +269,7 @@ func (s *FileTestSuite) Scenario_UploadDirectory(svm *ScenarioVariationManager) 
 		}
 		for i := range 3 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -326,7 +326,7 @@ func (s *FileTestSuite) Scenario_DownloadDirectory(svm *ScenarioVariationManager
 		}
 		for i := range 3 {
 			name := dir + "/test" + strconv.Itoa(i) + ".txt"
-			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K"))}
+			obj := ResourceDefinitionObject{ObjectName: pointerTo(name), Body: NewRandomObjectContentContainer(SizeFromString("1K"))}
 			srcObjs[name] = obj
 		}
 	}
@@ -370,7 +370,7 @@ func (s *FileTestSuite) Scenario_DownloadDirectory(svm *ScenarioVariationManager
 func (s *FileTestSuite) Scenario_SingleFileUploadWildcard(svm *ScenarioVariationManager) {
 	size := common.MegaByte
 	fileName := fmt.Sprintf("test_file_upload_%dB_fullname.txt", size)
-	body := NewRandomObjectContentContainer(svm, int64(size))
+	body := NewRandomObjectContentContainer(int64(size))
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
@@ -397,7 +397,7 @@ func (s *FileTestSuite) Scenario_SingleFileUploadWildcard(svm *ScenarioVariation
 func (s *FileTestSuite) Scenario_AllFileUploadWildcard(svm *ScenarioVariationManager) {
 	size := common.KiloByte
 	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
-	body := NewRandomObjectContentContainer(svm, int64(size))
+	body := NewRandomObjectContentContainer(int64(size))
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
@@ -426,7 +426,7 @@ func (s *FileTestSuite) Scenario_AllFileUploadWildcard(svm *ScenarioVariationMan
 func (s *FileTestSuite) Scenario_AllFileDownloadWildcard(svm *ScenarioVariationManager) {
 	size := common.KiloByte
 	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
-	body := NewRandomObjectContentContainer(svm, int64(size))
+	body := NewRandomObjectContentContainer(int64(size))
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
@@ -455,7 +455,7 @@ func (s *FileTestSuite) Scenario_AllFileDownloadWildcard(svm *ScenarioVariationM
 func (s *FileTestSuite) Scenario_SeveralFileUploadWildcard(svm *ScenarioVariationManager) {
 	size := common.KiloByte
 	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
-	body := NewRandomObjectContentContainer(svm, int64(size))
+	body := NewRandomObjectContentContainer(int64(size))
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())
@@ -484,7 +484,7 @@ func (s *FileTestSuite) Scenario_SeveralFileUploadWildcard(svm *ScenarioVariatio
 func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariationManager) {
 	size := common.KiloByte
 	fileName := fmt.Sprintf("test_file_upload_%dB_fullname", size)
-	body := NewRandomObjectContentContainer(svm, int64(size))
+	body := NewRandomObjectContentContainer(int64(size))
 
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
 	srcObj := srcContainer.GetObject(svm, fileName, common.EEntityType.File())

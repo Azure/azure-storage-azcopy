@@ -260,7 +260,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 			CPKScopeInfo:   s.jptm.CpkScopeInfo(),
 		})
 	if err != nil {
-		s.jptm.FailActiveSend("Creating blob", err)
+		s.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Creating blob (with tags)", "Creating blob"), err)
 		return
 	}
 
@@ -268,7 +268,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) (destinationModif
 
 	if setTags {
 		if _, err := s.destPageBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil); err != nil {
-			s.jptm.Log(common.LogWarning, err.Error())
+			s.jptm.FailActiveSend("Set blob tags", err)
 		}
 	}
 
