@@ -67,7 +67,10 @@ func (jm *jobMgr) SendJobPartCreatedMsg(msg JobPartCreatedMsg) {
 		}
 	}()
 	if jm.jstm.partCreated != nil { // Sends not allowed if channel is closed
-		jm.jstm.partCreated <- msg
+		select {
+		case jm.jstm.partCreated <- msg:
+		case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
+		}
 
 		if msg.IsFinalPart {
 			// Inform statusManager that this is all parts we've

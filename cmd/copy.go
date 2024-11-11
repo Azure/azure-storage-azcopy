@@ -2138,7 +2138,7 @@ func init() {
 		"'Enable'(Default) treats trailing dot file operations in a safe manner between systems that support these files. On Windows, the transfers will not occur to stop risk of data corruption. See 'AllowToUnsafeDestination' to bypass this."+
 		"'Disable' reverts to the legacy functionality, where trailing dot files are ignored. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (E.g 'path/foo' and 'path/foo.'). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration."+
-		"'AllowToUnsafeDestination' supports transferring trailing dot files to systems that do not support them e.g Windows or Blob Storage. Use with caution acknowledginge risk of data corruption, when two files with different contents 'path/bar' and 'path/bar.' (differ only by a trailing dot) are seen as identical.")
+		"'AllowToUnsafeDestination' supports transferring trailing dot files to systems that do not support them e.g Windows. Use with caution acknowledging risk of data corruption, when two files with different contents 'path/bar' and 'path/bar.' (differ only by a trailing dot) are seen as identical.")
 
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.
