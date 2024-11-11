@@ -70,7 +70,7 @@ func (s *RemoveSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager)
 		})
 
 	// Validate that the stdout contains these error URLs
-	ValidateErrorOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
+	ValidateMessageOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
 }
 
 func (s *RemoveSuite) Scenario_RemoveVirtualDirectory(svm *ScenarioVariationManager) {

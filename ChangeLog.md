@@ -1,6 +1,11 @@
 
 # Change Log
 
+## Version 10.28.0-Preview
+
+### Bug Fixes
+1. Fixed an issue where AzCopy would not persist tokens when logging in via Device Code. ([#2361](https://github.com/Azure/azure-storage-azcopy/issues/2361))
+
 ## Version 10.27.0
 
 ### New Features
