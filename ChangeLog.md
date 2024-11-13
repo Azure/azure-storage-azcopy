@@ -3,6 +3,9 @@
 
 ## Version 10.27.1
 
+### Bug Fixes
+1. Reverted a change that resulted in breaking file service transfers and a larger memory footprint. ([#2858](https://github.com/Azure/azure-storage-azcopy/issues/2858)[#2855](https://github.com/Azure/azure-storage-azcopy/issues/2855))
+
 ### Dependency updates
 1. github.com/golang-jwt/jwt/v4 v4.5.0 -> v4.5.1 ([#2861](https://github.com/Azure/azure-storage-azcopy/issues/2861))
 
