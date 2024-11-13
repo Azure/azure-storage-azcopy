@@ -427,7 +427,7 @@ func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int)
 	a.Assert("No of jobs executed should be equivalent", Equal{}, expectedJobIDs, jobsListStdout.JobsCount)
 }
 
-func ValidateLogFileRetaintion(a Asserter, logsDir string, expectedLogFileToRetain int) {
+func ValidateLogFileRetention(a Asserter, logsDir string, expectedLogFileToRetain int) {
 
 	files, err := os.ReadDir(logsDir)
 	a.NoError("Failed to read log dir", err)

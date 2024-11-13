@@ -44,6 +44,4 @@ func (s *JobsCleanSuite) Scenario_JobsCleanBasic(svm *ScenarioVariationManager) 
 		})
 
 	ValidateMessageOutput(svm, jobsCleanOutput, cmd.JobsCleanupSuccessMsg)
-	ValidateLogFileRetaintion(svm, logsDir, 1)
-
 }

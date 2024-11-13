@@ -351,9 +351,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
 
-	// don't upload and cleanup logs for clean jobs
+	// validate log file retention for jobs clean command before the job logs are cleaned up and uploaded
 	if !a.Failed() && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "clean" {
-		return out, &AzCopyJobPlan{}
+		ValidateLogFileRetention(a, *commandSpec.Environment.LogLocation, 1)
 	}
 
 	a.Cleanup(func(a ScenarioAsserter) {
