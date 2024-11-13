@@ -1,6 +1,11 @@
 
 # Change Log
 
+## Version 10.27.1
+
+### Dependency updates
+1. github.com/golang-jwt/jwt/v4 v4.5.0 -> v4.5.1 ([#2861](https://github.com/Azure/azure-storage-azcopy/issues/2861))
+
 ## Version 10.27.0
 
 ### New Features
