@@ -29,15 +29,14 @@ import (
 
 const (
 	syncSkipReasonTime                        = "the source has an older LMT than the destination"
-	syncSkipReasonTimeAndMissingHash          = "the source lacks an associated hash and has an older LMT than the destination"
+	syncSkipReasonTimeAndMissingHash          = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and has an older LMT than the destination"
 	syncSkipReasonMissingHash                 = "the source lacks an associated hash; please upload with --put-md5"
 	syncSkipReasonSameHash                    = "the source has the same hash"
 	syncOverwriteReasonNewerHash              = "the source has a differing hash"
 	syncOverwriteReasonNewerLMT               = "the source is more recent than the destination"
-	syncOverwriteReasonNewerLMTAndMissingHash = "the source lacks an associated hash and is more recent than the destination"
+	syncOverwriteReasonNewerLMTAndMissingHash = "the source lacks an associated hash (please upload with --put-md5 for hash comparison) and is more recent than the destination"
 	syncStatusSkipped                         = "skipped"
 	syncStatusOverwritten                     = "overwritten"
-	syncOverwriteReasonDeleteDestinationFile  = "the flag delete-destination-file is set to true"
 )
 
 func syncComparatorLog(fileName, status, skipReason string, stdout bool) {
