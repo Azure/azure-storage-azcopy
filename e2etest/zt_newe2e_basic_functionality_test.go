@@ -414,7 +414,7 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
 }
 
-// Test of Copy and Sync commands to UnsafeDestinations (Windows Local and Blob dest)
+// Test of Copy and Sync commands to UnsafeDestinations (Windows Local dest)
 func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm,
 		[]AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
