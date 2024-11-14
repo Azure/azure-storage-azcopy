@@ -806,7 +806,7 @@ func (s *ListSuite) Scenario_ListHierarchyTrailingDotDisable(svm *ScenarioVariat
 
 func (s *ListSuite) Scenario_ListTrailingDotAllowToUnsafeDestination(svm *ScenarioVariationManager) {
 	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.Local()})) // Initialize the service to unsafe Blob and Local
+	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local()})) // Initialize the service to unsafe Local dest
 
 	svm.InsertVariationSeparator(":")
 	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
@@ -815,7 +815,7 @@ func (s *ListSuite) Scenario_ListTrailingDotAllowToUnsafeDestination(svm *Scenar
 		expectedObjects = map[AzCopyOutputKey]cmd.AzCopyListObject{}
 	}
 	objects := []ResourceDefinitionObject{
-		{ObjectName: pointerTo("file."), Body: NewRandomObjectContentContainer(svm, SizeFromString("1K")), Size: "1.00 KiB"},
+		{ObjectName: pointerTo("file."), Body: NewRandomObjectContentContainer(SizeFromString("1K")), Size: "1.00 KiB"},
 	}
 
 	// Scale up from service to object

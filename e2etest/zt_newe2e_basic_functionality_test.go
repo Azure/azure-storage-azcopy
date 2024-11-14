@@ -414,7 +414,7 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
 }
 
-// Test of Copy and Sync commands to UnsafeDestinations (Windows Local and Blob dest)
+// Test of Copy and Sync commands to UnsafeDestinations (Windows Local dest)
 func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm,
 		[]AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
@@ -430,9 +430,8 @@ func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVaria
 	dstObj := CreateResource[ContainerResourceManager](svm,
 		GetRootResource(svm,
 			ResolveVariation(svm, []common.Location{common.ELocation.File(),
-				common.ELocation.Local(),
-				common.ELocation.Blob()})),
-		ResourceDefinitionContainer{}).GetObject(svm, fileName, common.EEntityType.File()) //TODO transfer to container w/o GetObject
+				common.ELocation.Local()})),
+		ResourceDefinitionContainer{}).GetObject(svm, fileName, common.EEntityType.File())
 
 	// Create new obj because it must exist already if we're syncing.
 	if azCopyVerb == AzCopyVerbSync {
@@ -443,10 +442,10 @@ func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVaria
 		}
 	}
 
-	body := NewRandomObjectContentContainer(svm, SizeFromString("10K"))
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm,
-		GetRootResource(svm, common.ELocation.File()), // Only source is File - Local & Blob doesn't support T.D
+		GetRootResource(svm, common.ELocation.File()), // Only source is File - Windows Local & Blob doesn't support T.D
 		ResourceDefinitionObject{
 			ObjectName: pointerTo(fileName),
 			Body:       body,
@@ -480,7 +479,8 @@ func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVaria
 		ResourceDefinitionObject{
 			Body: body,
 		}, false)
-  
+}
+
 func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
 	objectType := ResolveVariation(svm, []common.EntityType{common.EEntityType.File(), common.EEntityType.Folder(), common.EEntityType.Symlink()})
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})
@@ -552,5 +552,4 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 	)
 
 	ValidateMessageOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission")
-
 }

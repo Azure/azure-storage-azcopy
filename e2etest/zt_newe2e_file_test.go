@@ -520,8 +520,8 @@ func (s *FileTestSuite) Scenario_FileDownloadTrailingDotDisable(svm *ScenarioVar
 	fileNameWithoutDot := "test"
 
 	// Create the content for the files
-	bodyWithDot := NewRandomObjectContentContainer(svm, int64(size))
-	bodyWithoutDot := NewRandomObjectContentContainer(svm, int64(size))
+	bodyWithDot := NewRandomObjectContentContainer(int64(size))
+	bodyWithoutDot := NewRandomObjectContentContainer(int64(size))
 
 	// Create the source container and objects
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{})
@@ -559,7 +559,7 @@ func (s *FileTestSuite) Scenario_FileDownloadTrailingDotDisable(svm *ScenarioVar
 
 // Test copy with AllowToUnsafeDestination option
 func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioVariationManager) {
-	body := NewRandomObjectContentContainer(svm, 0)
+	body := NewRandomObjectContentContainer(0)
 
 	name := "test."
 	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),

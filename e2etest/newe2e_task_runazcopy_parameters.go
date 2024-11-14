@@ -191,7 +191,7 @@ type GlobalFlags struct {
 	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
 
 	// TODO: reconsider/reengineer this flag; WI#26475473
-	DebugSkipFiles []string `flag:"debug-skip-files"`
+	// DebugSkipFiles []string `flag:"debug-skip-files"`
 
 	// TODO: handle prompting and input; WI#26475441
 	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
