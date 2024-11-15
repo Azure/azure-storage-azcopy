@@ -449,10 +449,10 @@ func (AzureFileParentDirCreator) getParentDirectoryClient(uh FileClientStub, sha
 // and there is no permission on directory level, i.e. create directory is a general permission for each level directories for Azure file.
 func (AzureFileParentDirCreator) verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
-		var respErr *azcore.ResponseError
-		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusConflict { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
+		if errors.Is(err, common.FolderCreationErrorAlreadyExists) {
 			return nil
 		}
+
 		return err
 	}
 
@@ -484,7 +484,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 	if len(segments) == 0 {
 		// If we are trying to create root, perform GetProperties instead.
 		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
-		// some operations like SetMetadata or SetProperties will fail. 
+		// some operations like SetMetadata or SetProperties will fail.
 		// TODO: Remove this block once the bug is fixed.
 		_, err := directoryClient.GetProperties(ctx, nil)
 		return err
@@ -499,13 +499,34 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 			return err
 		}
 		recorderURL.RawQuery = ""
-		err = t.CreateFolder(recorderURL.String(), func() error {
+
+		err, _ = t.CreateFolder(recorderURL.String(), func() error {
 			_, err := currentDirectoryClient.Create(ctx, nil)
+
+			var azerr *azcore.ResponseError
+			if errors.As(err, &azerr) {
+				switch azerr.StatusCode {
+				case http.StatusConflict: // The dir already existed
+					return common.FolderCreationErrorAlreadyExists
+				case http.StatusPreconditionFailed: // The parent dir is missing. What?
+					return err
+				}
+			}
+
 			return err
+		}, func() error {
+			_, err := currentDirectoryClient.GetProperties(ctx, nil)
+			if err != nil {
+				return fmt.Errorf("directory was not really created %w", err)
+			}
+
+			return nil
 		})
+
 		if verifiedErr := d.verifyAndHandleCreateErrors(err); verifiedErr != nil {
 			return verifiedErr
 		}
 	}
+
 	return nil
 }

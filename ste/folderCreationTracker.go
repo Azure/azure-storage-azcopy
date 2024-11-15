@@ -37,9 +37,9 @@ func NewFolderCreationTracker(fpo common.FolderPropertyOption, plan *JobPartPlan
 
 type nullFolderTracker struct{}
 
-func (f *nullFolderTracker) CreateFolder(folder string, doCreation func() error) error {
+func (f *nullFolderTracker) CreateFolder(folder string, doCreation func() error, doValidate func() error) (error, bool) {
 	// no-op (the null tracker doesn't track anything)
-	return doCreation()
+	return doCreation(), true
 }
 
 func (f *nullFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {
@@ -75,14 +75,15 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 
 		delete(f.unregisteredButCreated, folder)
 	}
+
 }
 
-func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error) error {
+func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error, doValidate func() error) (error, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	if folder == common.Dev_Null {
-		return nil // Never persist to dev-null
+		return nil, false // Never persist to dev-null
 	}
 
 	if idx, ok := f.contents[folder]; ok &&
@@ -94,10 +95,8 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		return nil
 	}
 
-	err := doCreation()
-	if err != nil {
-		return err
-	}
+		// Mark it as created.
+		fNode.Status = common.BitflagsAdd(fNode.Status, common.DirCreationStatusCreated)
 
 	if idx, ok := f.contents[folder]; ok {
 		// overwrite it's transfer status
@@ -108,7 +107,7 @@ func (f *jpptFolderTracker) CreateFolder(folder string, doCreation func() error)
 		f.unregisteredButCreated[folder] = struct{}{}
 	}
 
-	return nil
+	return nil, false
 }
 
 func (f *jpptFolderTracker) ShouldSetProperties(folder string, overwrite common.OverwriteOption, prompter common.Prompter) bool {

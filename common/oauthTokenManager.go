@@ -88,7 +88,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial,                   /*Context*/
+			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -518,7 +518,7 @@ type TokenStoreCredential struct {
 // we do not make repeated GetToken calls.
 // This is a temporary fix for issue where we would request a
 // new token from Stg Exp even while they've not yet populated the
-// tokenstore. 
+// tokenstore.
 //
 // This is okay because we use same credential on both source and
 // destination. If we move to a case where the credentials are
@@ -526,7 +526,6 @@ type TokenStoreCredential struct {
 //
 // We should move to a method where the token is always read  from
 // tokenstore, and azcopy is invoked after tokenstore is populated.
-//
 var globalTokenStoreCredential *TokenStoreCredential
 var globalTsc sync.Once
 
@@ -695,12 +694,16 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 	tc, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
 		TenantID:                       credInfo.Tenant,
 		ClientID:                       ApplicationID,
-		DisableAutomaticAuthentication: true,
+		DisableAutomaticAuthentication: false,
 		Cache:                          persistentCache,
 		AuthenticationRecord:           record,
 		ClientOptions: azcore.ClientOptions{
 			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
 			Transport: newAzcopyHTTPClient(),
+		},
+		UserPrompt: func(ctx context.Context, message azidentity.DeviceCodeMessage) error {
+			lcm.Info(fmt.Sprintf("Manual intervention is required. To log in, visit %s and enter the code %s to authenticate.", Iff(message.VerificationURL != "", message.VerificationURL, "https://microsoft.com/devicelogin"), message.UserCode))
+			return nil
 		},
 	})
 	if err != nil {

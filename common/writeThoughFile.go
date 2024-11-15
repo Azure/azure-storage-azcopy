@@ -84,8 +84,10 @@ func CreateDirectoryIfNotExist(directory string, tracker FolderCreationTracker) 
 		_ = CreateParentDirectoryIfNotExist(directory, tracker)
 
 		// then create the directory
-		mkDirErr := tracker.CreateFolder(directory, func() error {
+		mkDirErr, _ := tracker.CreateFolder(directory, func() error {
 			return os.Mkdir(directory, os.ModePerm)
+		}, func() error {
+			return nil
 		})
 
 		// another routine might have created the directory at the same time
