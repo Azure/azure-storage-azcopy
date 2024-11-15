@@ -2154,9 +2154,9 @@ stages:
                 rm -rf /usr/local/bin/azcopy
                 rm -rf /usr/bin/azcopy
                 cd $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
-                ls azcopy*.arm64.deb
-                sudo dpkg --info azcopy-*arm64.deb
-                sudo dpkg -i azcopy-*arm64.deb
+                ls azcopy*.x86_64.deb
+                sudo dpkg --info azcopy-*x86_64.deb
+                sudo dpkg -i azcopy-*x86_64.deb
                 azcopy --version
               displayName: 'Installing azcopy'
             
@@ -2166,8 +2166,30 @@ stages:
               displayName: 'Getting Python script'
               workingDirectory: $(root_dir)
 
-            - script: |
-                pip install azure-storage-blob
-                python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
-              displayName: 'Updating version number'
-              workingDirectory: $(root_dir)
+            - task: AzureCLI@2
+              displayName: 'Updating version number with Azure CLI'
+              inputs:
+                azureSubscription: 'ESRP KeyVault identity'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
+                  
+                  #Extract the version number 
+                  azcopy_version=$(azcopy --version | awk '{print $3}' | head -n 1)
+                  echo "azcopy version: $azcopy_version"
+                  
+                  #Upload to release version blob file
+                  upload_url="https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
+                  echo "$azcopy_version" | azcopy copy "$upload_url" --from-to=PipeBlob --log-level=DEBUG --output-type=text > azcopy_output.txt
+                  
+                  # Handle errors 
+                  if [ $? -eq 0 ]; then
+                    echo "Release version file successfully uploaded." 
+                  else
+                    echo "File failed to upload: " 
+                    cat azcopy_output.txt
+                    exit 1
+                  fi
+                workingDirectory: $(root_dir)
+                displayName: "Updating version number"
