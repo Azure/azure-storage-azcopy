@@ -282,6 +282,8 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
 }
 
+const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/releasemetadata/latest_version.txt"
+
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
 // aka.ms is not resolvable to a reachable IP address). In such cases, this routine will run for ever, and the caller should
 // just give up on it.
@@ -290,8 +292,6 @@ func init() {
 func beginDetectNewVersion() chan struct{} {
 	completionChannel := make(chan struct{})
 	go func() {
-		const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/releasemetadata/latest_version.txt"
-
 		// step 0: check the Stderr, check local version
 		_, err := os.Stderr.Stat()
 		if err != nil {
