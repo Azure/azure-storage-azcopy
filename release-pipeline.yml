@@ -2134,6 +2134,8 @@ stages:
             - group: AZCOPY_TESTS_VAR
             - name: root_dir
               value: '$(System.DefaultWorkingDirectory)'
+            - name: Release_Account_Name
+              value: 'azcopyvnextrelease'
           
           steps:
             - checkout: none
@@ -2180,7 +2182,7 @@ stages:
                   echo "azcopy version: $azcopy_version"
                   
                   #Upload to release version blob file
-                  upload_url="https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
+                  upload_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/releasemetadata/latest_version.txt"
                   echo "$azcopy_version" | azcopy copy "$upload_url" --from-to=PipeBlob --log-level=DEBUG --output-type=text > azcopy_output.txt
                   
                   # Handle errors 
