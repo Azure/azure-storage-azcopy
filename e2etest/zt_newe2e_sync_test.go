@@ -347,3 +347,92 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeSourceHash(svm *ScenarioVariati
 		},
 	})
 }
+
+// Note : For local destinations, the hash is computed by a hashProcessor created in zc_traverser_local, so there is no way
+// for local destinations to have no source hash. As such these tests only cover remote destinations.
+func (s *SyncTestSuite) Scenario_TestSyncHashTypeDestinationHash(svm *ScenarioVariationManager) {
+
+	// There are 4 cases to consider, this test will cover all of them
+	// 1. Has hash and is equal -> skip
+	// 2. Has hash and is not equal -> overwrite
+	// 3. Has no hash and src LMT after dest LMT -> overwrite
+	// 4. Has no hash and src LMT before dest LMT -> overwrite
+
+	// Create dest
+	hashEqualBody := NewRandomObjectContentContainer(512)
+	hashNotEqualBody := NewRandomObjectContentContainer(512)
+	noHashDestSrc := NewRandomObjectContentContainer(512)
+	noHashSrcDest := NewRandomObjectContentContainer(512)
+
+	zeroBody := NewZeroObjectContentContainer(512)
+
+	dest := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, common.ELocation.Blob()),
+		ResourceDefinitionContainer{
+			Objects: ObjectResourceMappingFlat{
+				"hashequal":     ResourceDefinitionObject{Body: hashEqualBody},
+				"hashnotequal":  ResourceDefinitionObject{Body: zeroBody},
+				"nohashdestsrc": ResourceDefinitionObject{Body: zeroBody},
+				"nohashsrcdest": ResourceDefinitionObject{Body: zeroBody},
+			},
+		},
+	)
+
+	time.Sleep(time.Second * 10) // Make sure source is newer
+
+	srcObjs := ObjectResourceMappingFlat{
+		"hashequal":     ResourceDefinitionObject{Body: hashEqualBody},
+		"hashnotequal":  ResourceDefinitionObject{Body: hashNotEqualBody},
+		"nohashdestsrc": ResourceDefinitionObject{Body: noHashDestSrc},
+		"nohashsrcdest": ResourceDefinitionObject{Body: noHashSrcDest},
+	}
+
+	src := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.Local()})),
+		ResourceDefinitionContainer{
+			Objects: srcObjs,
+		},
+	)
+
+	// Need to manually unset the md5
+	dest.GetObject(svm, "nohashdestsrc", common.EEntityType.File()).SetHTTPHeaders(svm, contentHeaders{contentMD5: nil})
+	dest.GetObject(svm, "nohashsrcdest", common.EEntityType.File()).SetHTTPHeaders(svm, contentHeaders{contentMD5: nil})
+
+	time.Sleep(time.Second * 10) // Make sure destination is newer
+
+	// Re-create nohashsrcdest so the src LMT is before dest LMT
+	dest.GetObject(svm, "nohashsrcdest", common.EEntityType.File()).Create(svm, zeroBody, ObjectProperties{})
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb:    AzCopyVerbSync,
+			Targets: []ResourceManager{src, dest},
+			Flags: SyncFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+				CompareHash: pointerTo(common.ESyncHashType.MD5()),
+			},
+		})
+
+	// All source, dest should match
+	ValidateResource[ContainerResourceManager](svm, dest, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, true)
+
+	// Only non skipped paths should be in plan file
+	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
+		Objects: map[PlanFilePath]PlanFileObject{
+			PlanFilePath{SrcPath: "/hashnotequal", DstPath: "/hashnotequal"}: {
+				Properties: ObjectProperties{},
+			},
+			PlanFilePath{SrcPath: "/nohashdestsrc", DstPath: "/nohashdestsrc"}: {
+				Properties: ObjectProperties{},
+			},
+			PlanFilePath{SrcPath: "/nohashsrcdest", DstPath: "/nohashsrcdest"}: {
+				Properties: ObjectProperties{},
+			},
+		},
+	})
+}
