@@ -278,6 +278,18 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		b.clientOptions.PerCallPolicies = append([]policy.Policy{common.NewRecursivePolicy()}, b.clientOptions.PerCallPolicies...)
 	}
 	*/
+	objectPath := path.Join(b.rootPath, object.relativePath)
+	if object.relativePath == "\x00" && b.targetLocation != common.ELocation.Blob() {
+		return nil // Do nothing, we don't want to accidentally delete the root.
+	} else if object.relativePath == "\x00" { // this is acceptable on blob, though. Dir stubs are a thing, and they aren't necessary for normal function.
+		objectPath = b.rootPath
+	}
+
+	if strings.HasSuffix(object.relativePath, "/") && !strings.HasSuffix(objectPath, "/") && b.targetLocation == common.ELocation.Blob() {
+		// If we were targeting a directory, we still need to be. path.join breaks that.
+		// We also want to defensively code around this, and make sure we are not putting folder// or trying to put a weird URI in to an endpoint that can't do this.
+		objectPath += "/"
+	}
 
 	sc := b.remoteClient
 	if object.entityType == common.EEntityType.File() {
@@ -294,7 +306,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		switch b.targetLocation {
 		case common.ELocation.Blob():
 			bsc, _ := sc.BlobServiceClient()
-			var blobClient *blob.Client = bsc.NewContainerClient(b.containerName).NewBlobClient(path.Join(b.rootPath, object.relativePath))
+			var blobClient *blob.Client = bsc.NewContainerClient(b.containerName).NewBlobClient(objectPath)
 
 			objURL, err = b.getObjectURL(blobClient.URL())
 			if err != nil {
@@ -306,7 +318,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			_, err = blobClient.Delete(b.ctx, nil)
 		case common.ELocation.File():
 			fsc, _ := sc.FileServiceClient()
-			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(path.Join(b.rootPath, object.relativePath))
+			fileClient := fsc.NewShareClient(b.containerName).NewRootDirectoryClient().NewFileClient(objectPath)
 
 			objURL, err = b.getObjectURL(fileClient.URL())
 			if err != nil {
@@ -320,7 +332,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			}, fileClient, b.forceIfReadOnly)
 		case common.ELocation.BlobFS():
 			dsc, _ := sc.DatalakeServiceClient()
-			fileClient := dsc.NewFileSystemClient(b.containerName).NewFileClient(path.Join(b.rootPath, object.relativePath))
+			fileClient := dsc.NewFileSystemClient(b.containerName).NewFileClient(objectPath)
 
 			objURL, err = b.getObjectURL(fileClient.DFSURL())
 			if err != nil {
@@ -356,7 +368,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 		switch b.targetLocation {
 		case common.ELocation.Blob():
 			bsc, _ := sc.BlobServiceClient()
-			blobClient := bsc.NewContainerClient(b.containerName).NewBlobClient(path.Join(b.rootPath, object.relativePath))
+			blobClient := bsc.NewContainerClient(b.containerName).NewBlobClient(objectPath)
 			// HNS endpoint doesn't like delete snapshots on a directory
 			objURL, err = b.getObjectURL(blobClient.URL())
 			if err != nil {
@@ -369,7 +381,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			}
 		case common.ELocation.File():
 			fsc, _ := sc.FileServiceClient()
-			dirClient := fsc.NewShareClient(b.containerName).NewDirectoryClient(path.Join(b.rootPath, object.relativePath))
+			dirClient := fsc.NewShareClient(b.containerName).NewDirectoryClient(objectPath)
 			objURL, err = b.getObjectURL(dirClient.URL())
 			if err != nil {
 				return err
@@ -383,7 +395,7 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 			}
 		case common.ELocation.BlobFS():
 			dsc, _ := sc.DatalakeServiceClient()
-			directoryClient := dsc.NewFileSystemClient(b.containerName).NewDirectoryClient(path.Join(b.rootPath, object.relativePath))
+			directoryClient := dsc.NewFileSystemClient(b.containerName).NewDirectoryClient(objectPath)
 			objURL, err = b.getObjectURL(directoryClient.DFSURL())
 			if err != nil {
 				return err

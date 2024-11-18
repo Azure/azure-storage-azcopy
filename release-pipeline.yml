@@ -5,7 +5,7 @@ parameters:
   - name: tag
     displayName: 'New Release Tag'
     type: string
-    default: 'azcopy-'
+    default: 'v10.'
 
   - name: publish_to_container
     displayName: 'Publish To Container'
@@ -1057,15 +1057,8 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
-
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-binaries/azcopy_linux*amd64'
@@ -1110,15 +1103,9 @@ stages:
           vmImage: $(vmImage)
         steps:
           - checkout: none
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
 
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy_linux_*amd64*.tar.gz'
@@ -1201,17 +1188,16 @@ stages:
             - ImageOverride -equals $(AgentName)
         steps:
           - checkout: none
-          
+
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
               sudo apt --fix-broken install
               ldd --version
-            displayName: "GLIBC Version"
+            displayName: "Libsecret Install"
   
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy_linux_*arm64*.tar.gz'
@@ -1301,13 +1287,12 @@ stages:
           - script: |
               sudo apt update
               sudo apt-get install libsecret-1-dev -y
-              sudo apt --fix-broken install -y
+              sudo apt --fix-broken install
               ldd --version
-            displayName: "GLIBC Version"
+            displayName: "Libsecret Install"
 
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-binaries'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-binaries/azcopy_linux*arm64'
@@ -1356,19 +1341,8 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo yum update -y
-              sudo yum install git -y
-            displayName: 'Install Git'
-
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"
-
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy-*arm64.rpm'
@@ -1403,22 +1377,11 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo yum update -y
-              sudo yum install git -y
-            displayName: 'Install Git'
-
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/azcopy-*x86_64.rpm'
-          
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"
 
           - script: |
               sudo sed -i '/^failovermethod=/d' /etc/yum.repos.d/*.repo
@@ -1450,23 +1413,12 @@ stages:
 
         steps:
           - checkout: none
-          
-          - script: |
-              sudo tdnf update -y
-              sudo tdnf install git -y
-            displayName: 'Install dependencies'
       
           - template: setup/test_artifacts.yml
             parameters:
-              go_version: '$(AZCOPY_GOLANG_VERSION)'
               artifact_name: 'azCopy-linux-signed'
               download_path: '$(System.DefaultWorkingDirectory)'
               item_pattern: 'azCopy-linux-signed/mariner/azcopy-*x86_64.rpm'
-
-          # get glibc version with which build is done
-          - script: |
-             ldd --version
-            displayName: "GLIBC Version"             
 
           - script: |
               sudo rpm -qip azcopy*x86_64.rpm
@@ -1496,18 +1448,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
         steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Mac'
-            workingDirectory: $(System.DefaultWorkingDirectory)
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
@@ -1565,18 +1505,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)'
           
         steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Windows'
-            workingDirectory: $(root_dir)
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
@@ -1670,12 +1598,6 @@ stages:
         steps:
           - checkout: none
 
-          - script: |
-              sudo apt update
-              sudo apt --fix-broken install
-              ldd --version
-            displayName: "GLIBC Version"
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
@@ -1711,18 +1633,6 @@ stages:
             value: '$(System.DefaultWorkingDirectory)'
           
         steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
-            inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
-
-          - script: |
-              echo 'Running GO Vet'
-              go vet 
-            displayName: 'Golang Vet - Windows'
-            workingDirectory: $(root_dir)
-
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
@@ -1903,9 +1813,9 @@ stages:
                 today=$(date +"%Y%m%d")
                 
                 if [ $(Publish_To_Container) = "True" ]; then
-                  container_url="https://$(Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+                  container_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
                 else
-                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/releases/release-$azcopy_version-$today"
+                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
                 fi
                 echo "Artifacts will be uploaded to: $container_url"
                 
@@ -1918,7 +1828,7 @@ stages:
                 AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
 
                 if [ $(Publish_To_M1_Container) = "True" ]; then
-                  m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/azcopy-m1-drops/azcopy-$azcopy_version-$today"
+                  m1_container_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$azcopy_version-$today"
                   AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
                 fi
 
@@ -2224,6 +2134,8 @@ stages:
             - group: AZCOPY_TESTS_VAR
             - name: root_dir
               value: '$(System.DefaultWorkingDirectory)'
+            - name: Release_Account_Name
+              value: 'azcopyvnextrelease'
           
           steps:
             - checkout: none
@@ -2244,9 +2156,9 @@ stages:
                 rm -rf /usr/local/bin/azcopy
                 rm -rf /usr/bin/azcopy
                 cd $(Build.ArtifactStagingDirectory)/azCopy-linux-signed
-                ls azcopy*.arm64.deb
-                sudo dpkg --info azcopy-*arm64.deb
-                sudo dpkg -i azcopy-*arm64.deb
+                ls azcopy*.x86_64.deb
+                sudo dpkg --info azcopy-*x86_64.deb
+                sudo dpkg -i azcopy-*x86_64.deb
                 azcopy --version
               displayName: 'Installing azcopy'
             
@@ -2256,8 +2168,30 @@ stages:
               displayName: 'Getting Python script'
               workingDirectory: $(root_dir)
 
-            - script: |
-                pip install azure-storage-blob
-                python3 releaseVersionUpdate.py "$(VERSION_CNT_SAS_URL)" "`azcopy --version`"
-              displayName: 'Updating version number'
-              workingDirectory: $(root_dir)
+            - task: AzureCLI@2
+              displayName: 'Updating version number with Azure CLI'
+              inputs:
+                azureSubscription: 'ESRP KeyVault identity'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
+                  
+                  #Extract the version number 
+                  azcopy_version=$(azcopy --version | awk '{print $3}' | head -n 1)
+                  echo "azcopy version: $azcopy_version"
+                  
+                  #Upload to release version blob file
+                  upload_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/releasemetadata/latest_version.txt"
+                  echo "$azcopy_version" | azcopy copy "$upload_url" --from-to=PipeBlob --log-level=DEBUG --output-type=text > azcopy_output.txt
+                  
+                  # Handle errors 
+                  if [ $? -eq 0 ]; then
+                    echo "Release version file successfully uploaded." 
+                  else
+                    echo "File failed to upload: " 
+                    cat azcopy_output.txt
+                    exit 1
+                  fi
+                workingDirectory: $(root_dir)
+                displayName: "Updating version number"
