@@ -76,6 +76,10 @@ steps:
     # Save the updated XML back to the file
     $wixXml.Save($wxsFilePath)
 
+    # Print the updated content of the .wxs file
+    Write-Host "Updated content of the .wxs file:"
+    Get-Content $wxsFilePath
+
     Write-Host "File source: $file.Source"
 
     Write-Host "WiX XML file updated successfully."
