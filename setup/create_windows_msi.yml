@@ -1,7 +1,7 @@
 parameters:
   working_dir: ''
   build_dir: ''
-  msi_dir: ''
+  #msi_dir: ''
 
 steps:
 - powershell: |
@@ -25,15 +25,15 @@ steps:
     # PowerShell Script to create MSI in an Azure Pipeline
 
     # Step 1: Set Variables
-    $msiDir = "${{ parameters.msi_dir }}"
+    #$msiDir = "${{ parameters.msi_dir }}"
     $workDir = "${{ parameters.working_dir }}"
     $wixToolsPath = (where.exe candle.exe) -replace '\\candle.exe$', ''  # Remove candle.exe from path
     $wxsFilePath = "$workDir\azcopy.wxs"
-    $wixObjPath = "$msiDir\azcopy.wixobj"
+    $wixObjPath = "$workDir\azcopy.wixobj"
     $outputMsi = "${{ parameters.build_dir }}\azcopy.msi"
 
     Write-Host "Work dir: $workDir  WiX Toolset Path: $wixToolsPath"
-    cd $msiDir
+    #cd $msiDir
 
     # Step 2: Update the fields in the .wxs file
     Write-Host "Updating Uuid in .wxs file..."
@@ -94,7 +94,12 @@ steps:
 
     # Link and create MSI with embedded CABs
     Write-Host "Linking to create MSI with embedded CAB..."
-    & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath -b $workDir -sw1055
+    & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath -b $ -sw1055
     Write-Host "MSI creation with embedded CAB completed!"
+
+    Get-ChildItem -Path $workDir -Filter "*.cab"
+
+    Get-ChildItem -Path $msiDir -Filter "*.cab" | Format-Table Name, FullName
+
 
     Write-Host "MSI creation process completed!"

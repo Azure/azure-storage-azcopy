@@ -453,7 +453,7 @@ stages:
             parameters:
               working_dir: $(work_dir)
               build_dir: $(Build.ArtifactStagingDirectory)
-              msi_dir: $(msi_dir)
+              #msi_dir: $(msi_dir)
 
           - task: PublishBuildArtifacts@1
             inputs:
