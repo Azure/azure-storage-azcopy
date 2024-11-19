@@ -76,6 +76,8 @@ steps:
     # Save the updated XML back to the file
     $wixXml.Save($wxsFilePath)
 
+    Write-Host "File source: $file.Source"
+
     Write-Host "WiX XML file updated successfully."
 
     # Step 3: Compile the .wxs file using Candle
@@ -86,7 +88,7 @@ steps:
     # Write-Host "Linking to create MSI..."
     # & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath
 
-    # Step 4: Link the .wixobj to create the MSI using Light with embedded CAB files
+    # Link and create MSI with embedded CABs
     Write-Host "Linking to create MSI with embedded CAB..."
     & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath -b $msiDir -sw1055
     Write-Host "MSI creation with embedded CAB completed!"

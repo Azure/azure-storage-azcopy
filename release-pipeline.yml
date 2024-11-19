@@ -5,7 +5,7 @@ parameters:
   - name: tag
     displayName: 'New Release Tag'
     type: string
-    default: 'azcopy-'
+    default: 'v10.'
 
   - name: publish_to_container
     displayName: 'Publish To Container'
@@ -1937,12 +1937,6 @@ stages:
 
 #   # - ${{ if eq(parameters.post_release, true) }}:
 #   #   - stage: ReleaseToGithub
-#   #     dependsOn: TestArtifacts
-#   #     condition: succeeded('TestArtifacts')
-#   #     jobs:  
-#   #       - job: ReleaseToGithub
-#   #         timeoutInMinutes: 120
-#   #         strategy:
 #   #           matrix:
 #   #             Ubuntu-22:
 #   #               vmImage: 'Ubuntu-20.04'
@@ -2139,21 +2133,6 @@ stages:
 #             - group: AZCOPY_TESTS_VAR
 #             - name: root_dir
 #               value: '$(System.DefaultWorkingDirectory)'
-          
-#           steps:
-#             - checkout: none
-
-#             - script: |
-#                 sudo apt-get install python3 -y
-#                 python3 --version
-#               displayName: 'Installing Python'
-
-#             - task: DownloadBuildArtifacts@0
-#               displayName: 'Download Build Artifacts'
-#               inputs:
-#                 artifactName: 'azCopy-linux-signed'
-#                 downloadPath: $(Build.ArtifactStagingDirectory)
-            
 #             # install azcopy
 #             - script: |
 #                 rm -rf /usr/local/bin/azcopy
