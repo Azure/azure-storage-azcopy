@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -424,4 +425,18 @@ func ValidateJobsListOutput(a Asserter, stdout AzCopyStdout, expectedJobIDs int)
 	jobsListStdout, ok := stdout.(*AzCopyParsedJobsListStdout)
 	a.AssertNow("stdout must be AzCopyParsedJobsListStdout", Equal{}, ok, true)
 	a.Assert("No of jobs executed should be equivalent", Equal{}, expectedJobIDs, jobsListStdout.JobsCount)
+}
+
+func ValidateLogFileRetention(a Asserter, logsDir string, expectedLogFileToRetain int) {
+
+	files, err := os.ReadDir(logsDir)
+	a.NoError("Failed to read log dir", err)
+	cnt := 0
+
+	for _, file := range files { // first, find the job ID
+		if strings.HasSuffix(file.Name(), ".log") {
+			cnt++
+		}
+	}
+	a.AssertNow("Expected job log files to be retained", Equal{}, cnt, expectedLogFileToRetain)
 }
