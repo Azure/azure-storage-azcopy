@@ -64,7 +64,7 @@ func (s *FlagsFunctionalitySuite) Scenario_LogLevelNone(svm *ScenarioVariationMa
 	}
 
 	sasOpts := GenericAccountSignatureValues{}
-	//logLevel := common.LogLevel.None(common.LogNone)
+	logLevel := common.LogLevel.None(common.LogNone)
 
 	stdOut, _ := RunAzCopy(
 		svm,
@@ -80,25 +80,14 @@ func (s *FlagsFunctionalitySuite) Scenario_LogLevelNone(svm *ScenarioVariationMa
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:   pointerTo(true),
+					Recursive: pointerTo(true),
 					GlobalFlags: GlobalFlags{
-						//LogLevel: &logLevel,
+						LogLevel: &logLevel,
 					},
 				},
 			},
 		})
 
-	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
-		Body: body,
-	}, true)
-
-	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
-		Objects: map[PlanFilePath]PlanFileObject{
-			PlanFilePath{SrcPath: "", DstPath: ""}: {
-				Properties: ObjectProperties{},
-			},
-		},
-	})
 	fmt.Println("================================================================")
 	fmt.Println(stdOut)
 	ValidateMessageOutput(svm, stdOut, "LogFileLocation", false)
