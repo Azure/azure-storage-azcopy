@@ -1,7 +1,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -515,7 +514,6 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile_PanicCheck(svm *ScenarioVa
 	}
 
 	sasOpts := GenericAccountSignatureValues{}
-
 	sasOpts.Permissions = (&blobsas.ContainerPermissions{
 		Read: true, Add: false, Create: false, Write: false, Delete: false, List: false,
 	}).String()
@@ -539,18 +537,6 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFile_PanicCheck(svm *ScenarioVa
 			},
 			ShouldFail: true,
 		})
-	fmt.Println(stdOut.String())
 	ValidateMessageOutput(svm, stdOut, "panic")
 
-	// ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
-	// 	Body: body,
-	// }, true)
-
-	// ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
-	// 	Objects: map[PlanFilePath]PlanFileObject{
-	// 		PlanFilePath{SrcPath: "", DstPath: ""}: {
-	// 			Properties: ObjectProperties{},
-	// 		},
-	// 	},
-	// })
 }
