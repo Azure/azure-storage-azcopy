@@ -150,7 +150,7 @@ func (uotm *UserOAuthTokenManager) validateAndPersistLogin(oAuthTokenInfo *OAuth
 		return err
 	}
 	scopes := []string{StorageScope}
-	_, err = tc.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes})
+	_, err = tc.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes, EnableCAE: true})
 	if err != nil {
 		return err
 	}
@@ -467,7 +467,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*Token, error) {
 		return nil, err
 	}
 	scopes := []string{StorageScope}
-	t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes})
+	t, err := tc.GetToken(ctx, policy.TokenRequestOptions{Scopes: scopes, EnableCAE: true})
 	if err != nil {
 		return nil, err
 	}
