@@ -88,7 +88,7 @@ func newAzcopyHTTPClient() *http.Client {
 				Timeout:   10 * time.Second,
 				KeepAlive: 10 * time.Second,
 				DualStack: true,
-			}).Dial,                   /*Context*/
+			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    1000,
 			IdleConnTimeout:        180 * time.Second,
@@ -518,7 +518,7 @@ type TokenStoreCredential struct {
 // we do not make repeated GetToken calls.
 // This is a temporary fix for issue where we would request a
 // new token from Stg Exp even while they've not yet populated the
-// tokenstore. 
+// tokenstore.
 //
 // This is okay because we use same credential on both source and
 // destination. If we move to a case where the credentials are
@@ -526,7 +526,6 @@ type TokenStoreCredential struct {
 //
 // We should move to a method where the token is always read  from
 // tokenstore, and azcopy is invoked after tokenstore is populated.
-//
 var globalTokenStoreCredential *TokenStoreCredential
 var globalTsc sync.Once
 
@@ -709,7 +708,10 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 
 	if record == (azidentity.AuthenticationRecord{}) {
 		// No stored record; call Authenticate to acquire one
-		record, err = tc.Authenticate(context.TODO(), &policy.TokenRequestOptions{Scopes: []string{StorageScope}})
+		record, err = tc.Authenticate(context.TODO(), &policy.TokenRequestOptions{
+			EnableCAE: true,
+			Scopes:    []string{StorageScope},
+		})
 		if err != nil {
 			return nil, err
 		}
