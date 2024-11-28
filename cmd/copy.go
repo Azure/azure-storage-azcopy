@@ -2176,12 +2176,8 @@ func init() {
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
 }
 
-// @brief IsSystemToSytemContainerCopy checks if the source and destination are system containers
+// @brief IsSystemToSytemContainerCopy checks if the destination are system containers
 func (cca *CookedCopyCmdArgs) CheckIfSystemToSytemContainerCopy() error {
-	srcContainerName, err := GetContainerName(cca.Source.Value, cca.FromTo.From())
-	if err != nil {
-		return fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
-	}
 
 	dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
 	if err != nil {
@@ -2189,8 +2185,8 @@ func (cca *CookedCopyCmdArgs) CheckIfSystemToSytemContainerCopy() error {
 	}
 
 	// Check if both source and destination are system containers
-	if IsSystemContainer(srcContainerName) && IsSystemContainer(dstContainerName) {
-		return fmt.Errorf("cannot copy from system container '%s' to system container '%s'", srcContainerName, dstContainerName)
+	if IsSystemContainer(dstContainerName) {
+		return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
 	}
 	return nil
 }
