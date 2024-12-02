@@ -747,7 +747,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
 		}
-		// Check if destination is system container
 		if common.IsSystemContainer(dstContainerName) {
 			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
 		}
