@@ -1634,10 +1634,15 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
 	}
 
+	// Check if destination is system container
 	if cca.FromTo.IsS2S() {
-		err := cca.CheckIfSystemToSytemContainerCopy()
+		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
+		}
+		// Check if destination is system container
+		if common.IsSystemContainer(dstContainerName) {
+			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
 		}
 	}
 
@@ -2174,31 +2179,4 @@ func init() {
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
-}
-
-// @brief IsSystemToSytemContainerCopy checks if the destination are system containers
-func (cca *CookedCopyCmdArgs) CheckIfSystemToSytemContainerCopy() error {
-
-	dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
-	if err != nil {
-		return fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
-	}
-
-	// Check if both source and destination are system containers
-	if IsSystemContainer(dstContainerName) {
-		return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
-	}
-	return nil
-}
-
-// @brief Thia API check if the container name provided is a system container or not
-func IsSystemContainer(containerName string) bool {
-	// define the system variables for the system containers
-	systemContainers := []string{"$blobchangefeed"}
-	for _, sys := range systemContainers {
-		if containerName == sys {
-			return true
-		}
-	}
-	return false
 }

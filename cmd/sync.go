@@ -741,6 +741,18 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return fmt.Errorf("S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
 	}
 
+	// Check if destination is system container
+	if cca.fromTo.IsS2S() {
+		dstContainerName, err := GetContainerName(cca.destination.Value, cca.fromTo.To())
+		if err != nil {
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
+		}
+		// Check if destination is system container
+		if common.IsSystemContainer(dstContainerName) {
+			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
+		}
+	}
+
 	enumerator, err := cca.initEnumerator(ctx)
 	if err != nil {
 		return err

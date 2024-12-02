@@ -382,3 +382,15 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 	_, err = action()
 	return err
 }
+
+// @brief Thia API check if the container name provided is a system container or not
+func IsSystemContainer(containerName string) bool {
+	// define the system variables for the system containers
+	systemContainers := []string{"$blobchangefeed", "$logs"}
+	for _, sys := range systemContainers {
+		if containerName == sys {
+			return true
+		}
+	}
+	return false
+}
