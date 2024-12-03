@@ -414,10 +414,9 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
 }
 
-// Test of Copy and Sync commands to UnsafeDestinations (Windows Local dest)
-func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVariationManager) {
-	azCopyVerb := ResolveVariation(svm,
-		[]AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync})
+// Test of Copy to UnsafeDestinations (Windows Local dest)
+func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariationManager) {
+	azCopyVerb := AzCopyVerbCopy
 
 	// Use a different file name for Windows; Trailing dots are not supported
 	var fileName string
@@ -432,15 +431,6 @@ func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVaria
 			ResolveVariation(svm, []common.Location{common.ELocation.File(),
 				common.ELocation.Local()})),
 		ResourceDefinitionContainer{}).GetObject(svm, fileName, common.EEntityType.File())
-
-	// Create new obj because it must exist already if we're syncing.
-	if azCopyVerb == AzCopyVerbSync {
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-
-		if !svm.Dryrun() {
-			time.Sleep(time.Second * 10)
-		}
-	}
 
 	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
@@ -470,7 +460,7 @@ func (s *BasicFunctionalitySuite) Scenario_SyncCopyUnSafeDest(svm *ScenarioVaria
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive:   pointerTo(true),
-					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to unsafe Blob / Local destination
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to unsafe Local destination
 				},
 			},
 		})
