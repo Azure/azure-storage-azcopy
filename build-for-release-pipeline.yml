@@ -99,10 +99,17 @@ extends:
             CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
             GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64" 
           displayName: 'Build AzCopy for MacOS'
+
+        - task: Bash@3
+          displayName: 'Extract AzCopy Version'
+          inputs:
+            targetType: 'inline'
+            script: |
+              azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
+              echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
+               
         - script: |
             set -ex
-            azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
-            echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
             darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
             echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
             darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
