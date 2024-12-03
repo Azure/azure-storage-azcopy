@@ -42,11 +42,11 @@ extends:
             echo 'Hello World'
           displayName: 'Hello World'
 
-      - job: BuildWindowsARM
+      - job: BuildLinux
         pool:
           name: azcopy-pool
-          image: windows2022arm-1espt
-          os: windows
+          image: ubuntu22-1espt
+          os: linux
         # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
         # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
         templateContext:
@@ -61,11 +61,11 @@ extends:
             echo 'Hello World'
           displayName: 'Hello World'
 
-      - job: BuildLinux
+      - job: BuildMacOS
         pool:
-          name: azcopy-pool
-          image: ubuntu22-1espt
-          os: linux
+          name: Azure Pipelines
+          image: macos-latest
+          os: macOS
         # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
         # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
         templateContext:
