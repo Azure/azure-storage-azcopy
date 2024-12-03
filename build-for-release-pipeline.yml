@@ -16,17 +16,17 @@ extends:
   parameters:
     sdl:
       sourceAnalysisPool:
-        name: azcopy-windows-pool  # Name of your hosted pool
+        name: azcopy-pool  # Name of your hosted pool
         image: windows-1espt
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
     # Update the pool with your team's 1ES hosted pool.
     pool:
-      name: azcopy-windows-pool  # Name of your hosted pool
+      name: azcopy-pool  # Name of your hosted pool
       image: windows-1espt
       os: windows  # OS of the image. This value cannot be a variable. Allowed values: windows, linux, macOS
 
     stages:
-    - stage: Stage
+    - stage: BuildArtifacts
       jobs:
       - job: HostJob
         # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
@@ -34,7 +34,7 @@ extends:
         templateContext:
           outputs:
           - output: pipelineArtifact
-            targetPath: $(System.DefaultWorkingDirectory)/Samples
+            targetPath: $(System.DefaultWorkingDirectory)
             artifactName: artifactName
         # Define the steps that the pipeline will run.
         # In most cases, copy and paste the steps from the original pipeline.
