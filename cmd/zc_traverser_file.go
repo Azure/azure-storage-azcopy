@@ -123,7 +123,7 @@ func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse
 func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) (err error) {
 	invalidBlobOrWindowsName := func(path string) bool {
 		if t.destination != nil {
-			if t.trailingDot == common.ETrailingDotOption.AllowToUnsafeDestination() && runtime.GOOS == "windows" { // Allow only Local, Trailing dot files not supported in Blob
+			if t.trailingDot == common.ETrailingDotOption.AllowToUnsafeDestination() && (*t.destination != common.ELocation.Blob() || *t.destination != common.ELocation.BlobFS()) { // Allow only Local, Trailing dot files not supported in Blob
 				return false // Please let me shoot myself in the foot!
 			}
 
