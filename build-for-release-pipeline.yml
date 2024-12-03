@@ -14,6 +14,10 @@ extends:
   # For productions pipelines, use "Official".
   template: v1/1ES.Unofficial.PipelineTemplate.yml@1esPipelines
   parameters:
+    sdl:
+      sourceAnalysisPool:
+        name: azcopy-windows-pool  # Name of your hosted pool
+        os: windows  # OS of the image. Allowed values: windows, linux, macOS
     # Update the pool with your team's 1ES hosted pool.
     pool:
       name: blobfuse-ubuntu-pool  # Name of your hosted pool
