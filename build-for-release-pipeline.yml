@@ -20,9 +20,9 @@ extends:
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
     # Update the pool with your team's 1ES hosted pool.
     pool:
-      name: blobfuse-ubuntu-pool  # Name of your hosted pool
-      image: blobfuse-ubuntu20
-      os: linux  # OS of the image. This value cannot be a variable. Allowed values: windows, linux, macOS
+      name: azcopy-windows-pool  # Name of your hosted pool
+      image: azcopy-windows-22
+      os: windows  # OS of the image. This value cannot be a variable. Allowed values: windows, linux, macOS
 
     stages:
     - stage: Stage
