@@ -1,4 +1,9 @@
+variables:
+  AZCOPY_GOLANG_VERSION: '1.21.8'
+
+# Do not trigger this pipeline automatically
 trigger: none
+pr: none
 
 # The `resources` specify the location and version of the 1ES PT.
 resources:
@@ -71,11 +76,58 @@ extends:
         templateContext:
           outputs:
           - output: pipelineArtifact
-            targetPath: $(System.DefaultWorkingDirectory)
-            artifactName: artifactName
+            targetPath: $(Build.ArtifactStagingDirectory)
+            artifactName: 'azCopy-mac-temp'
         # Define the steps that the pipeline will run.
         # In most cases, copy and paste the steps from the original pipeline.
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+          - name: archives
+            value: $(root_dir)/archives
         steps:
+        - task: GoTool@0
+          env:
+            GO111MODULE: 'on'
+          inputs:
+            version: $(AZCOPY_GOLANG_VERSION)
         - script: |
-            echo 'Hello World'
-          displayName: 'Hello World'
+            set -ex
+            go vet 
+            CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
+            GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64" 
+          displayName: 'Build AzCopy for MacOS'
+        - script: |
+            set -ex
+            azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
+            echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
+            darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
+            echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
+            darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
+            echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"  
+            mkdir -p $darwin_amd_dir
+            mkdir -p $darwin_arm_dir
+            mkdir -p $(archives)
+            cp NOTICE.txt $(darwin_amd_dir)
+            cp NOTICE.txt $(darwin_arm_dir)
+            mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
+            mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
+          displayName: 'Prepare MacOS Build for Packaging'
+
+        - task: ArchiveFiles@2
+          displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
+          inputs:
+            rootFolderOrFile: '$(darwin_amd_dir)'
+            archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
+
+        - task: ArchiveFiles@2
+          displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
+          inputs:
+            rootFolderOrFile: '$(darwin_arm_dir)'
+            archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
+        
+        - script: |
+              cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)
+          displayName: 'Copy Archives to Staging Directory'
