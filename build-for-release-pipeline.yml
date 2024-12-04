@@ -108,7 +108,7 @@ extends:
               azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
               echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
 
-        - template: setup/trigger_m1_build.yml
+        - template: setup/trigger_m1_build.yml@self
           
         - script: |
             set -ex
