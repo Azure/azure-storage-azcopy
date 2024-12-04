@@ -175,12 +175,14 @@ extends:
 
         - script: |
             set -ex
+            ls -lah $(root_dir)
+            pwd
             cp NOTICE.txt $(darwin_amd_dir)
             cp NOTICE.txt $(darwin_arm_dir)
             cp NOTICE.txt $(darwin_arm64_m1_dir)
             mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
             mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
-            mv $(Build.ArtifactStagingDirectory)/azcopy  $(darwin_arm64_m1_dir)/azcopy
+            cp $(Build.ArtifactStagingDirectory)/azcopy  $(darwin_arm64_m1_dir)/azcopy
           displayName: 'Copy Files for Packaging'
 
         - task: ArchiveFiles@2
