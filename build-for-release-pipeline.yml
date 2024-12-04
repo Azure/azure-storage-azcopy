@@ -76,7 +76,7 @@ extends:
         templateContext:
           outputs:
           - output: pipelineArtifact
-            targetPath: $(Build.ArtifactStagingDirectory)
+            targetPath: $(System.DefaultWorkingDirectory)/binaries
             artifactName: 'azCopy-mac-temp'
         # Define the steps that the pipeline will run.
         # In most cases, copy and paste the steps from the original pipeline.
@@ -156,7 +156,7 @@ extends:
         - script: |
             set -ex
             rm -rf $(Build.ArtifactStagingDirectory)/azcopy
-            cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)
+            cp $(archives)/azcopy_darwin* $(System.DefaultWorkingDirectory)/binaries
           displayName: 'Copy Archives to Staging Directory'
 
         # - task: 1ES.PublishPipelineArtifact@1
