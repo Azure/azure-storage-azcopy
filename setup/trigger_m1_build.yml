@@ -3,6 +3,7 @@ steps:
     inputs:
       targetType: 'inline'
       script: |
+        set -ex
         echo "Triggering GitHub Actions workflow"
 
         GITHUB_OWNER="Azure"
