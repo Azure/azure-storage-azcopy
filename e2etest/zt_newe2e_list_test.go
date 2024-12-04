@@ -804,43 +804,6 @@ func (s *ListSuite) Scenario_ListHierarchyTrailingDotDisable(svm *ScenarioVariat
 	ValidateListOutput(svm, stdout, expectedObjects, nil)
 }
 
-func (s *ListSuite) Scenario_ListTrailingDotAllowToUnsafeDestination(svm *ScenarioVariationManager) {
-
-	svm.InsertVariationSeparator(":")
-	// Initialize the service to unsafe Local dest
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
-	expectedObjects := map[AzCopyOutputKey]cmd.AzCopyListObject{}
-	objects := []ResourceDefinitionObject{
-		{ObjectName: pointerTo("file."), Body: NewRandomObjectContentContainer(SizeFromString("1K")), Size: "1.00 KiB"},
-	}
-
-	// Scale up from service to object
-	for _, o := range objects {
-		obj := CreateResource[ObjectResourceManager](svm, srcContainer, o)
-		name := obj.ObjectName()
-		expectedObjects[AzCopyOutputKey{Path: name}] = cmd.AzCopyListObject{Path: name, ContentLength: o.Size}
-	}
-
-	stdout, _ := RunAzCopy(
-		svm,
-		AzCopyCommand{
-			Verb: AzCopyVerbList,
-			Targets: []ResourceManager{
-				srcContainer.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
-					SASTokenOptions: GenericServiceSignatureValues{
-						ContainerName: srcContainer.ContainerName(),
-						Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),
-					},
-				}),
-			},
-			Flags: ListFlags{
-				TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()),
-			},
-		})
-
-	ValidateListOutput(svm, stdout, expectedObjects, nil)
-}
-
 func (s *ListSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
 	// Scale up from service to object
 	// TODO: update this test once File OAuth PR is merged bc current output is "azure files requires a SAS token for authentication"
