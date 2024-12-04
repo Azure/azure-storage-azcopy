@@ -73,13 +73,11 @@ extends:
             version: $(AZCOPY_GOLANG_VERSION)
 
         - script: |
-            set -ex
             go vet 
           displayName: 'Go Vet'
 
         - script: |
-            set -ex
-            mkdir -p $(binaries) 
+            mkdir $(binaries)
           displayName: 'Create Required Directories for Packaging'
 
         - script: |
