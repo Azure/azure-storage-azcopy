@@ -1,5 +1,5 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.21.8'
+  AZCOPY_GOLANG_VERSION: '1.23.1'
 
 # Do not trigger this pipeline automatically
 trigger: none
@@ -154,7 +154,7 @@ extends:
           inputs:
             targetType: 'inline'
             script: |
-              azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
+              azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}')
               echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
 
         - template: setup/trigger_m1_build.yml@self
