@@ -2,11 +2,12 @@ package e2etest
 
 import (
 	"flag"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 	"path"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/testSuite/cmd"
 )
 
 var runDeviceCodeTest = flag.Bool("device-code", false, "Whether or not to run device code tests. These must be run manually due to interactive nature.")
@@ -94,9 +95,9 @@ func (s *DeviceLoginManualSuite) Scenario_CopySync(svm *ScenarioVariationManager
 	}, true)
 
 	if srcObj.Location().IsRemote() {
-		ValidateMessageOutput(svm, stdout, "Authenticating to source using Azure AD")
+		ValidateMessageOutput(svm, stdout, "Authenticating to source using Azure AD", true)
 	}
 	if dstObj.Location().IsRemote() {
-		ValidateMessageOutput(svm, stdout, "Authenticating to destination using Azure AD")
+		ValidateMessageOutput(svm, stdout, "Authenticating to destination using Azure AD", true)
 	}
 }
