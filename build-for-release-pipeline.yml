@@ -142,3 +142,9 @@ extends:
         - script: |
               cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)
           displayName: 'Copy Archives to Staging Directory'
+
+        - task: 1ES.PublishPipelineArtifact@1
+          inputs:
+            targetPath: $(Build.ArtifactStagingDirectory)  # Explicitly specify the path here.
+            artifactName: 'azCopy-mac-temp'
+          displayName: 'Publish Artifact'
