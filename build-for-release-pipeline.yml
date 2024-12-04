@@ -131,8 +131,6 @@ extends:
           - group: AZCOPY_TESTS_VAR
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
-          - name: work_dir
-            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
           - name: archives
             value: $(root_dir)/archives
         steps:
@@ -161,11 +159,11 @@ extends:
           
         - script: |
             set -ex
-            darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
+            darwin_amd_dir="$(root_dir)/azcopy_darwin_amd64_$(azcopy_version)"
             echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
-            darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
+            darwin_arm_dir="$(root_dir)/azcopy_darwin_arm64_$(azcopy_version)"
             echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"  
-            darwin_arm64_m1_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"  
+            darwin_arm64_m1_dir="$(root_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"  
             echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
             mkdir -p $darwin_amd_dir
             mkdir -p $darwin_arm_dir
@@ -175,8 +173,6 @@ extends:
 
         - script: |
             set -ex
-            ls -lah $(root_dir)
-            pwd
             cp NOTICE.txt $(darwin_amd_dir)
             cp NOTICE.txt $(darwin_arm_dir)
             cp NOTICE.txt $(darwin_arm64_m1_dir)
