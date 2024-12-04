@@ -198,6 +198,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			ContentLanguageLength:            uint16(len(order.BlobAttributes.ContentLanguage)),
 			CacheControlLength:               uint16(len(order.BlobAttributes.CacheControl)),
 			PutMd5:                           order.BlobAttributes.PutMd5, // here because it relates to uploads (blob destination)
+			TamperProof:                      order.BlobAttributes.TamperProof,
 			BlockBlobTier:                    order.BlobAttributes.BlockBlobTier,
 			PageBlobTier:                     order.BlobAttributes.PageBlobTier,
 			MetadataLength:                   uint16(len(order.BlobAttributes.Metadata)),
