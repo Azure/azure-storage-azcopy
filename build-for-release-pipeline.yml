@@ -77,7 +77,7 @@ extends:
           displayName: 'Go Vet'
 
         - script: |
-            mkdir $(binaries)
+            mkdir "$(binaries)"
           displayName: 'Create Required Directories for Packaging'
 
         - script: |
