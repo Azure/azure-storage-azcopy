@@ -81,6 +81,7 @@ extends:
         # Define the steps that the pipeline will run.
         # In most cases, copy and paste the steps from the original pipeline.
         variables:
+          - group: AZCOPY_TESTS_VAR
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
           - name: work_dir
