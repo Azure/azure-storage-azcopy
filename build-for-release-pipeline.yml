@@ -156,6 +156,7 @@ extends:
         - script: |
             set -ex
             rm -rf $(Build.ArtifactStagingDirectory)/azcopy
+            mkdir -p $(System.DefaultWorkingDirectory)/binaries
             cp $(archives)/azcopy_darwin* $(System.DefaultWorkingDirectory)/binaries
           displayName: 'Copy Archives to Staging Directory'
 
