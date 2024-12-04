@@ -80,8 +80,6 @@ var JobsAdmin interface {
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
 	ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string, srcServiceClient *common.ServiceClient, dstServiceClient *common.ServiceClient, srcIsOAuth bool) bool
 
-	ResurrectJobParts()
-
 	// AppPathFolder returns the Azcopy application path folder.
 	// JobPartPlanFile will be created inside this folder.
 	AppPathFolder() string
@@ -401,7 +399,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 			ScheduleTransfers: false,
 			CompletionChan:    nil,
 		}
-		jm.AddJobPart2(args)
+		jm.AddJobPart(args)
 	}
 
 	jm, _ := ja.JobMgr(jobId)
@@ -409,34 +407,6 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID,
 	jm.ResurrectSummary(js)
 
 	return true
-}
-
-// reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile
-func (ja *jobsAdmin) ResurrectJobParts() {
-	// Get all the Job part plan files in the plan directory
-	files := func(ext string) []os.FileInfo {
-		var files []os.FileInfo
-		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasSuffix(fileInfo.Name(), ext) {
-				files = append(files, fileInfo)
-			}
-			return nil
-		})
-		return files
-	}(fmt.Sprintf(".steV%d", ste.DataSchemaVersion))
-
-	// TODO : sort the file.
-	for f := 0; f < len(files); f++ {
-		planFile := ste.JobPartPlanFileName(files[f].Name())
-		jobID, partNum, err := planFile.Parse()
-		if err != nil {
-			continue
-		}
-		mmf := planFile.Map()
-		//todo : call the compute transfer function here for each job.
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
-		jm.AddJobPart(partNum, planFile, mmf, EMPTY_SAS_STRING, EMPTY_SAS_STRING, false, nil)
-	}
 }
 
 func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {

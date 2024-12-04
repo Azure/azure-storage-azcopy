@@ -57,8 +57,6 @@ func ToFixed(num float64, precision int) float64 {
 func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder, providePerfAdvice)
-	// No need to read the existing JobPartPlan files since Azcopy is running in process
-	// JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
@@ -188,10 +186,10 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		ExistingPlanMMF:   nil,
 		SrcClient:         order.SrcServiceClient,
 		DstClient:         order.DstServiceClient,
-		SrcIsOAuth: order.S2SSourceCredentialType.IsAzureOAuth(),
+		SrcIsOAuth:        order.S2SSourceCredentialType.IsAzureOAuth(),
 		ScheduleTransfers: true,
 	}
-	jm.AddJobPart2(args)
+	jm.AddJobPart(args)
 
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
