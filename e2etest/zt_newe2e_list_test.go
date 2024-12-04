@@ -805,15 +805,11 @@ func (s *ListSuite) Scenario_ListHierarchyTrailingDotDisable(svm *ScenarioVariat
 }
 
 func (s *ListSuite) Scenario_ListTrailingDotAllowToUnsafeDestination(svm *ScenarioVariationManager) {
-	acct := GetAccount(svm, PrimaryStandardAcct)
-	srcService := acct.GetService(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local()})) // Initialize the service to unsafe Local dest
 
 	svm.InsertVariationSeparator(":")
-	srcContainer := CreateResource[ContainerResourceManager](svm, srcService, ResourceDefinitionContainer{})
-	var expectedObjects map[AzCopyOutputKey]cmd.AzCopyListObject
-	if srcService.Location() == common.ELocation.Blob() {
-		expectedObjects = map[AzCopyOutputKey]cmd.AzCopyListObject{}
-	}
+	// Initialize the service to unsafe Local dest
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
+	expectedObjects := map[AzCopyOutputKey]cmd.AzCopyListObject{}
 	objects := []ResourceDefinitionObject{
 		{ObjectName: pointerTo("file."), Body: NewRandomObjectContentContainer(SizeFromString("1K")), Size: "1.00 KiB"},
 	}
@@ -830,7 +826,7 @@ func (s *ListSuite) Scenario_ListTrailingDotAllowToUnsafeDestination(svm *Scenar
 		AzCopyCommand{
 			Verb: AzCopyVerbList,
 			Targets: []ResourceManager{
-				srcContainer.(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+				srcContainer.Parent().(RemoteResourceManager).WithSpecificAuthType(EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: GenericServiceSignatureValues{
 						ContainerName: srcContainer.ContainerName(),
 						Permissions:   (&blobsas.ContainerPermissions{Read: true, List: true}).String(),

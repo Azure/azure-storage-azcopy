@@ -312,7 +312,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 	var fileSrcClientOptions any
 	if fromTo.From() == common.ELocation.File() {
-		fileSrcClientOptions = common.FileClientOptions{
+		fileSrcClientOptions = &common.FileClientOptions{
 			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
 		}
 	}
@@ -328,7 +328,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() {
-		fileClientOptions = common.FileClientOptions{
+		fileClientOptions = &common.FileClientOptions{
 			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
 			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
 		}
