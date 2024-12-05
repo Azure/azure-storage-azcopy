@@ -109,22 +109,22 @@ extends:
         # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
         - script: |
             fpm -s dir -t deb -n azcopy -C pkgDir/ \
-            -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+            -v $(azcopy_version) \
             --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
             --url "https://github.com/Azure/azure-storage-azcopy" \
             --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-            mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.arm64.deb
+            mv ./azcopy*.deb ./azcopy-$(azcopy_version).arm64.deb
             cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
           workingDirectory: $(root_dir)
           displayName: 'Make ARM64 deb Package'
 
         - script: |
             fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
-            -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+            -v $(azcopy_version) \
             --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
             --url "https://github.com/Azure/azure-storage-azcopy" \
             --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-            mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.arm64.rpm
+            mv ./azcopy*.rpm ./azcopy-$(azcopy_version).arm64.rpm
             cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
           workingDirectory: $(root_dir)
           displayName: 'Make ARM64 rpm Package'
@@ -135,7 +135,6 @@ extends:
             rootFolderOrFile: '$(linux_arm64_dir)'
             archiveType: tar
             archiveFile: '$(archives)/azcopy_linux_arm64_$(azcopy_version).tar.gz'
-          continueOnError: true
 
         - task: ArchiveFiles@2
           displayName: 'Archive Partner(SE) Linux Build'
@@ -143,7 +142,6 @@ extends:
             rootFolderOrFile: '$(linux_se_arm64_dir)'
             archiveType: tar
             archiveFile: '$(archives)/azcopy_linux_se_arm64_$(azcopy_version).tar.gz'
-          continueOnError: true
 
       - job: BuildWindows
         pool:
