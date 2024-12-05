@@ -114,8 +114,7 @@ extends:
             --url "https://github.com/Azure/azure-storage-azcopy" \
             --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
             mv ./azcopy*.deb ./azcopy-$(azcopy_version).amd64.deb
-            cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
-          workingDirectory: $(root_dir)
+            cp ./azcopy*.deb $(archives)
           displayName: 'Make AMD64 deb Package'
 
         - script: |
@@ -125,8 +124,7 @@ extends:
             --url "https://github.com/Azure/azure-storage-azcopy" \
             --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
             mv ./azcopy*.rpm ./azcopy-$(azcopy_version).amd64.rpm
-            cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-          workingDirectory: $(root_dir)
+            cp ./azcopy*.rpm $(archives)
           displayName: 'Make AMD64 rpm Package'
 
         - task: ArchiveFiles@2
