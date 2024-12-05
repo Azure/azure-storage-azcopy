@@ -163,11 +163,13 @@ extends:
         # Define the steps that the pipeline will run.
         # In most cases, copy and paste the steps from the original pipeline.
         steps:
-          - task: GoTool@0
-            env:
-              GO111MODULE: 'on'
+          # Go needs to be manually installed in ARM machines since GoTool does not support it yet
+          # https://github.com/microsoft/azure-pipelines-tasks/issues/17348
+          - task: ShellScript@2
             inputs:
-              version: $(AZCOPY_GOLANG_VERSION)
+              scriptPath: "$(work_dir)/go_installer.sh"
+              args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+            displayName: "Installing Go tools"
 
           - script: |
               go vet
