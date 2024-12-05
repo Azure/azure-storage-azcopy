@@ -93,20 +93,20 @@ extends:
             echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
             linux_se_amd64_dir="$(root_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
             echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
-            mkdir -p $linux_amd64_dir
-            mkdir -p $linux_se_amd64_dir
-            mkdir -p $(archives)
+            mkdir -pv $linux_amd64_dir
+            mkdir -pv $linux_se_amd64_dir
+            mkdir -pv $(archives)
           displayName: 'Create Required Directories for Packaging'
         
         - script: |
             set -e
-            mkdir -p pkgDir/usr/bin
-            mv "$(root_dir)/azcopy_linux_amd64"  "$(linux_amd64_dir)/azcopy"
-            mv "$(root_dir)/azcopy_linux_se_amd64"  "$(linux_se_amd64_dir)/azcopy"
-            cp "$(linux_amd64_dir)/azcopy" pkgDir/usr/bin/
-            cp NOTICE.txt "$(linux_amd64_dir)"
-            cp NOTICE.txt "$(linux_se_amd64_dir)"
-            cp NOTICE.txt pkgDir/usr/bin/
+            mkdir -pv pkgDir/usr/bin
+            mv -v "$(root_dir)/azcopy_linux_amd64"  "$(linux_amd64_dir)/azcopy"
+            mv -v "$(root_dir)/azcopy_linux_se_amd64"  "$(linux_se_amd64_dir)/azcopy"
+            cp -v "$(linux_amd64_dir)/azcopy" pkgDir/usr/bin/
+            cp -v NOTICE.txt "$(linux_amd64_dir)"
+            cp -v NOTICE.txt "$(linux_se_amd64_dir)"
+            cp -v NOTICE.txt pkgDir/usr/bin/
           displayName: 'Copy Files for Packaging'
 
         # using fpm tool for packaging of our binary & performing post-install operations
