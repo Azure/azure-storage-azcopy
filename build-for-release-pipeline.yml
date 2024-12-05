@@ -141,6 +141,34 @@ extends:
             archiveType: tar
             archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
 
+      - job: BuildLinuxARM
+        pool:
+          name: azcopy-arm-pool
+          image: mariner2-1espt
+          os: linux
+          hostArchitecture: Arm64
+        # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+        # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+        templateContext:
+          outputs:
+            - output: pipelineArtifact
+              targetPath: $(System.DefaultWorkingDirectory)/archives
+              artifactName: 'azCopy-linux-temp'
+
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: archives
+            value: '$(System.DefaultWorkingDirectory)/archives'
+        # Define the steps that the pipeline will run.
+        # In most cases, copy and paste the steps from the original pipeline.
+        steps:
+          - task: GoTool@0
+            env:
+              GO111MODULE: 'on'
+            inputs:
+              version: $(AZCOPY_GOLANG_VERSION)
+
       - job: BuildWindows
         pool:
           name: azcopy-pool
