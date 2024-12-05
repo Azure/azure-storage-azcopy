@@ -84,7 +84,7 @@ extends:
               echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
 
         - script: |
-            set -ex
+            set -e
             echo $(azcopy_version)
             echo $azcopy_version
             linux_amd64_dir="$(root_dir)/azcopy_linux_amd64_$(azcopy_version)"
@@ -99,7 +99,7 @@ extends:
           displayName: 'Create Required Directories for Packaging'
         
         - script: |
-            set -ex
+            set -e
             mkdir -p pkgDir/usr/bin
             mv "$(root_dir)/azcopy_linux_amd64"  "$(linux_amd64_dir)/azcopy"
             mv "$(root_dir)/azcopy_linux_se_amd64"  "$(linux_se_amd64_dir)/azcopy"
