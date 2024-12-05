@@ -144,7 +144,7 @@ extends:
       - job: BuildLinuxARM
         pool:
           name: azcopy-arm-pool
-          image: mariner2-1espt
+          image: mariner2arm-1espt
           os: linux
           hostArchitecture: Arm64
         # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
