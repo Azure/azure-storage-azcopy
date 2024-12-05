@@ -34,7 +34,8 @@ func WorkloadIdentitySetup(a Asserter) {
 	})
 	a.NoError("Workload identity failed to spawn", err, true)
 	_, err = tc.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{common.StorageScope},
+		Scopes:    []string{common.StorageScope},
+		EnableCAE: true,
 	})
 	a.NoError("Workload identity failed to fetch token", err, true)
 }
