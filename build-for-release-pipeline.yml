@@ -169,6 +169,34 @@ extends:
             inputs:
               version: $(AZCOPY_GOLANG_VERSION)
 
+          - script: |
+              go vet
+            displayName: 'Go Vet'
+
+          - script: |
+              set -ex
+              sudo apt-get clean
+              sudo apt-get update --fix-missing
+              sudo apt-get install pkg-config libsecret-1-dev -y
+              sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+              sudo gem install dotenv -v 2.8.1
+              sudo gem install fpm -V
+            displayName: "Install Dependencies"
+
+          - script: |
+              set -ex
+              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/arm64"
+              GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_arm64"
+            displayName: 'Build AzCopy for Linux ARM64'
+
+          - task: Bash@3
+            displayName: 'Extract AzCopy Version'
+            inputs:
+              targetType: 'inline'
+              script: |
+                azcopy_version=$($(root_dir)/azcopy_linux_amd64 --version | awk '{print $3}' | head -n 1)
+                echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
+
       - job: BuildWindows
         pool:
           name: azcopy-pool
