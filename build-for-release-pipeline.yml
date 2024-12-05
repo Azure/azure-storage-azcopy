@@ -167,7 +167,7 @@ extends:
           # https://github.com/microsoft/azure-pipelines-tasks/issues/17348
           - task: ShellScript@2
             inputs:
-              scriptPath: "$(work_dir)/go_installer.sh"
+              scriptPath: "$(root_dir)/go_installer.sh"
               args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
             displayName: "Installing Go tools"
 
