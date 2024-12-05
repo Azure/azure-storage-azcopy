@@ -4,7 +4,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"runtime"
 	"strconv"
 	"time"
 )
@@ -418,21 +417,9 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariationManager) {
 	azCopyVerb := AzCopyVerbCopy
 
-	// Use a different file name for Windows; Trailing dots are not supported
-	var fileName string
-	if runtime.GOOS == "windows" {
-		fileName = "file_with_dot"
-	} else {
-		fileName = "file."
-	}
-
-	dstObj := CreateResource[ContainerResourceManager](svm,
-		GetRootResource(svm,
-			ResolveVariation(svm, []common.Location{common.ELocation.File(),
-				common.ELocation.Local()})),
-		ResourceDefinitionContainer{}).GetObject(svm, fileName, common.EEntityType.File())
-
+	fileName := "file."
 	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+
 	// Scale up from service to object
 	srcObj := CreateResource[ObjectResourceManager](svm,
 		GetRootResource(svm, common.ELocation.File()), // Only source is File - Windows Local & Blob doesn't support T.D
@@ -440,6 +427,12 @@ func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariation
 			ObjectName: pointerTo(fileName),
 			Body:       body,
 		})
+
+	dstObj := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm,
+			ResolveVariation(svm, []common.Location{common.ELocation.File(),
+				common.ELocation.Local()})),
+		ResourceDefinitionContainer{}).GetObject(svm, "file", common.EEntityType.File())
 
 	sasOpts := GenericAccountSignatureValues{}
 
