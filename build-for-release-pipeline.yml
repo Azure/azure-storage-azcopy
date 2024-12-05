@@ -93,10 +93,10 @@ extends:
             mkdir -p $linux_se_amd64_dir
             mkdir -p $(archives)
           displayName: 'Create Required Directories for Packaging'
-
+        
         - script: |
             set -ex
-            mkdir -p pkgDir/usr/bin/
+            mkdir -p pkgDir/usr/bin
             mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
             mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
             cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
@@ -107,40 +107,40 @@ extends:
 
         # using fpm tool for packaging of our binary & performing post-install operations
         # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-        - script: |
-            fpm -s dir -t deb -n azcopy -C pkgDir/ \
-            -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
-            --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-            --url "https://github.com/Azure/azure-storage-azcopy" \
-            --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-            mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.deb
-            cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
-          displayName: 'Create AMD64 deb Package'
+        # - script: |
+        #     fpm -s dir -t deb -n azcopy -C pkgDir/ \
+        #     -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+        #     --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+        #     --url "https://github.com/Azure/azure-storage-azcopy" \
+        #     --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+        #     mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.deb
+        #     cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+        #   displayName: 'Create AMD64 deb Package'
 
-        - script: |
-            fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
-            -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
-            --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-            --url "https://github.com/Azure/azure-storage-azcopy" \
-            --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-            mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.rpm
-            cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
-          workingDirectory: $(root_dir)
-          displayName: 'Create AMD64 rpm Package'
+        # - script: |
+        #     fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+        #     -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+        #     --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+        #     --url "https://github.com/Azure/azure-storage-azcopy" \
+        #     --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+        #     mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.rpm
+        #     cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+        #   workingDirectory: $(root_dir)
+        #   displayName: 'Create AMD64 rpm Package'
 
-        - task: ArchiveFiles@2
-          displayName: 'Archive Partner(SE) Linux Build'
-          inputs:
-            rootFolderOrFile: '$(linux_se_amd64_dir)'
-            archiveType: tar
-            archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
+        # - task: ArchiveFiles@2
+        #   displayName: 'Archive Partner(SE) Linux Build'
+        #   inputs:
+        #     rootFolderOrFile: '$(linux_se_amd64_dir)'
+        #     archiveType: tar
+        #     archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
 
-        - task: ArchiveFiles@2
-          displayName: 'Archive AMD Linux Build'
-          inputs:
-            rootFolderOrFile: '$(linux_amd64_dir)'
-            archiveType: tar
-            archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
+        # - task: ArchiveFiles@2
+        #   displayName: 'Archive AMD Linux Build'
+        #   inputs:
+        #     rootFolderOrFile: '$(linux_amd64_dir)'
+        #     archiveType: tar
+        #     archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
 
 
       - job: BuildWindows
