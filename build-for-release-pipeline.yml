@@ -38,14 +38,110 @@ extends:
         templateContext:
           outputs:
           - output: pipelineArtifact
-            targetPath: $(System.DefaultWorkingDirectory)
-            artifactName: artifactName
+            targetPath: $(System.DefaultWorkingDirectory)/binaries
+            artifactName: 'azCopy-linux-temp'
+
+        variables:
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: archives
+            value: '$(System.DefaultWorkingDirectory)/archives'
         # Define the steps that the pipeline will run.
         # In most cases, copy and paste the steps from the original pipeline.
         steps:
+        - task: GoTool@0
+          env:
+            GO111MODULE: 'on'
+          inputs:
+            version: $(AZCOPY_GOLANG_VERSION)
+
         - script: |
-            echo 'Hello World'
-          displayName: 'Hello World'
+            go vet 
+          displayName: 'Go Vet'
+
+        - script: |
+            set -ex
+            sudo apt-get clean
+            sudo apt-get update --fix-missing
+            sudo apt-get install pkg-config libsecret-1-dev -y
+            sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+            sudo gem install dotenv -v 2.8.1
+            sudo gem install fpm -V
+          displayName: "Install Dependencies"
+
+        - script: |
+            set -ex
+            GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(binaries)/azcopy_linux_amd64"
+            GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(binaries)/azcopy_linux_se_amd64"
+          displayName: 'Build AzCopy for Linux'
+
+        - task: Bash@3
+          displayName: 'Extract AzCopy Version'
+          inputs:
+            targetType: 'inline'
+            script: |
+              azcopy_version=$($(root_dir)/azcopy_linux_amd64 --version | awk '{print $3}')
+              echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
+
+        - script: |
+            set -ex
+            linux_amd64_dir="$(root_dir)/azcopy_linux_amd64_$(azcopy_version)"
+            echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
+            linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
+            echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
+            mkdir -p $linux_amd64_dir
+            mkdir -p $linux_se_amd64_dir
+            mkdir -p $(archives)
+          displayName: 'Create Required Directories for Packaging'
+
+        - script: |
+            set -ex
+            mkdir -p pkgDir/usr/bin/
+            mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
+            mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
+            cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
+            cp NOTICE.txt $(linux_amd64_dir)/
+            cp NOTICE.txt $(linux_se_amd64_dir)/
+            cp NOTICE.txt pkgDir/usr/bin/
+          displayName: 'Copy Files for Packaging'
+
+        # using fpm tool for packaging of our binary & performing post-install operations
+        # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+        - script: |
+            fpm -s dir -t deb -n azcopy -C pkgDir/ \
+            -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+            --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+            --url "https://github.com/Azure/azure-storage-azcopy" \
+            --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+            mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.deb
+            cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)
+          displayName: 'Create AMD64 deb Package'
+
+        - script: |
+            fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+            -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+            --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+            --url "https://github.com/Azure/azure-storage-azcopy" \
+            --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+            mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.rpm
+            cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)
+          workingDirectory: $(root_dir)
+          displayName: 'Create AMD64 rpm Package'
+
+        - task: ArchiveFiles@2
+          displayName: 'Archive Partner(SE) Linux Build'
+          inputs:
+            rootFolderOrFile: '$(linux_se_amd64_dir)'
+            archiveType: tar
+            archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
+
+        - task: ArchiveFiles@2
+          displayName: 'Archive AMD Linux Build'
+          inputs:
+            rootFolderOrFile: '$(linux_amd64_dir)'
+            archiveType: tar
+            archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
+
 
       - job: BuildWindows
         pool:
