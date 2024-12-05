@@ -172,10 +172,6 @@ extends:
             displayName: "Installing Go tools"
 
           - script: |
-              go vet
-            displayName: 'Go Vet'
-
-          - script: |
               set -ex
               sudo apt-get clean
               sudo apt-get update --fix-missing
@@ -184,6 +180,10 @@ extends:
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
             displayName: "Install Dependencies"
+
+          - script: |
+              go vet
+            displayName: 'Go Vet'
 
           - script: |
               set -ex
