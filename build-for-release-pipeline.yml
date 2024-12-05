@@ -71,9 +71,8 @@ extends:
 
         - script: |
             set -ex
-            mkdir -p $(archives)
-            GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(archives)/azcopy_linux_amd64"
-            GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(archives)/azcopy_linux_se_amd64"
+            GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_amd64"
+            GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_amd64"
           displayName: 'Build AzCopy for Linux'
 
         - task: Bash@3
@@ -81,7 +80,7 @@ extends:
           inputs:
             targetType: 'inline'
             script: |
-              azcopy_version=$($(archives)/azcopy_linux_amd64 --version | awk '{print $3}')
+              azcopy_version=$($(root_dir)/azcopy_linux_amd64 --version | awk '{print $3}')
               echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
 
         - script: |
@@ -92,13 +91,14 @@ extends:
             echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
             mkdir -p $linux_amd64_dir
             mkdir -p $linux_se_amd64_dir
+            mkdir -p $(archives)
           displayName: 'Create Required Directories for Packaging'
 
         - script: |
             set -ex
             mkdir -p pkgDir/usr/bin/
-            mv $(archives)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
-            mv $(archives)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
+            mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
+            mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
             cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
             cp NOTICE.txt $(linux_amd64_dir)/
             cp NOTICE.txt $(linux_se_amd64_dir)/
