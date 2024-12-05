@@ -88,7 +88,7 @@ extends:
             set -ex
             linux_amd64_dir="$(root_dir)/azcopy_linux_amd64_$(azcopy_version)"
             echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
-            linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
+            linux_se_amd64_dir="$(root_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
             echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
             mkdir -p $linux_amd64_dir
             mkdir -p $linux_se_amd64_dir
