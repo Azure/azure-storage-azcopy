@@ -38,7 +38,7 @@ extends:
         templateContext:
           outputs:
           - output: pipelineArtifact
-            targetPath: $(System.DefaultWorkingDirectory)/binaries
+            targetPath: $(System.DefaultWorkingDirectory)/archives
             artifactName: 'azCopy-linux-temp'
 
         variables:
