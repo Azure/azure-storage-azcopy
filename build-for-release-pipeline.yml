@@ -96,7 +96,7 @@ extends:
 
         - script: |
             set -ex
-            ls $(root_dir)
+            ls -lah $(root_dir)
             
             mkdir -p pkgDir/usr/bin/
             mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
