@@ -98,11 +98,6 @@ extends:
             set -ex
             mkdir -p pkgDir/usr/bin
             mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
-            mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
-            cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
-            cp NOTICE.txt $(linux_amd64_dir)/
-            cp NOTICE.txt $(linux_se_amd64_dir)/
-            cp NOTICE.txt pkgDir/usr/bin/
           displayName: 'Copy Files for Packaging'
 
         # using fpm tool for packaging of our binary & performing post-install operations
