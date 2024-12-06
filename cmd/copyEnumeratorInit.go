@@ -428,7 +428,13 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),
