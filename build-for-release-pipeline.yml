@@ -187,7 +187,7 @@ extends:
 
           - script: |
               set -ex
-              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/arm64"
+              GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_arm64"
               GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_arm64"
             displayName: 'Build AzCopy for Linux ARM64'
 
