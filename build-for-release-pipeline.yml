@@ -144,7 +144,7 @@ extends:
       - job: BuildLinuxARM
         pool:
           name: azcopy-arm-pool
-          image: mariner2arm-1espt
+          image: ubuntu22arm-custom1espt
           os: linux
           hostArchitecture: Arm64
         # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
@@ -173,9 +173,10 @@ extends:
 
           - script: |
               set -ex
-              sudo tdnf clean all
-              sudo tdnf update 
-              sudo tdnf install -y pkg-config libsecret-devel ruby ruby-devel rubygems glib-devel rpmbuild gcc make
+              sudo apt-get clean
+              sudo apt-get update --fix-missing
+              sudo apt-get install pkg-config libsecret-1-dev wget -y
+              sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
               sudo gem install dotenv -v 2.8.1
               sudo gem install fpm -V
             displayName: "Install Dependencies"
