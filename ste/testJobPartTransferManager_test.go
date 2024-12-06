@@ -292,7 +292,7 @@ func (t *testJobPartTransferManager) S2SSourceClientOptions() azcore.ClientOptio
 
 	httpClient := NewAzcopyHTTPClient(4)
 
-	return NewClientOptions(retryOptions, telemetryOptions, httpClient, LogOptions{}, nil)
+	return NewClientOptions(retryOptions, telemetryOptions, httpClient, LogOptions{}, nil, nil)
 }
 
 func (t *testJobPartTransferManager) CredentialOpOptions() *common.CredentialOpOptions {

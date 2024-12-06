@@ -294,18 +294,25 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		}
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
 
 	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var srcCred *common.ScopedCredential
+	var srcCred *common.ScopedToken
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
 	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, nil)
 	if err != nil {
 		return nil, nil, err

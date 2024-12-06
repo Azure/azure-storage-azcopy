@@ -701,6 +701,11 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
 			Transport: newAzcopyHTTPClient(),
 		},
+		UserPrompt: func(ctx context.Context, message azidentity.DeviceCodeMessage) error {
+			lcm.Info(fmt.Sprintf("Authentication is required. To sign in, open the webpage %s and enter the code %s to authenticate.",
+				Iff(message.VerificationURL != "", message.VerificationURL, "https://aka.ms/devicelogin"), message.UserCode))
+			return nil
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -725,6 +730,11 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 
 	credInfo.TokenCredential = tc
 	return tc, nil
+}
+
+type AuthenticateToken interface {
+	azcore.TokenCredential
+	Authenticate(ctx context.Context, opts *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error)
 }
 
 func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, error) {

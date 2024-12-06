@@ -68,6 +68,7 @@ var EPromptType = PromptType("")
 
 type PromptType string
 
+func (PromptType) Reauth() PromptType            { return PromptType("Reauth") }
 func (PromptType) Cancel() PromptType            { return PromptType("Cancel") }
 func (PromptType) Overwrite() PromptType         { return PromptType("Overwrite") }
 func (PromptType) DeleteDestination() PromptType { return PromptType("DeleteDestination") }

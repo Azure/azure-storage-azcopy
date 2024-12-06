@@ -90,8 +90,14 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return err
 	}
 
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	resourceURL := cookedArgs.resourceURL.String()
 	cred := credentialInfo.OAuthTokenInfo.TokenCredential
 
