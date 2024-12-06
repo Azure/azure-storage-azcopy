@@ -199,6 +199,64 @@ extends:
                 azcopy_version=$($(root_dir)/azcopy_linux_arm64 --version | awk '{print $3}' | head -n 1)
                 echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
 
+          - script: |
+              set -e
+              linux_arm64_dir="$(root_dir)/azcopy_linux_arm64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=linux_arm64_dir]$linux_arm64_dir"
+              linux_se_arm64_dir="$(root_dir)/azcopy_linux_se_arm64_$(azcopy_version)"
+              echo "##vso[task.setvariable variable=linux_se_arm64_dir]$linux_se_arm64_dir"
+              mkdir -pv $linux_arm64_dir
+              mkdir -pv $linux_se_arm64_dir
+              mkdir -pv $(archives)
+            displayName: 'Create Required Directories for Packaging'
+
+          - script: |
+              set -e
+              mkdir -pv pkgDir/usr/bin
+              mv -v "$(root_dir)/azcopy_linux_arm64"  "$(linux_arm64_dir)/azcopy"
+              mv -v "$(root_dir)/azcopy_linux_se_arm64"  "$(linux_se_arm64_dir)/azcopy"
+              cp -v "$(linux_arm64_dir)/azcopy" pkgDir/usr/bin/
+              cp -v NOTICE.txt "$(linux_arm64_dir)"
+              cp -v NOTICE.txt "$(linux_se_arm64_dir)"
+              cp -v NOTICE.txt pkgDir/usr/bin/
+            displayName: 'Copy Files for Packaging'
+
+          # using fpm tool for packaging of our binary & performing post-install operations
+          # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+          - script: |
+              fpm -s dir -t deb -n azcopy -C pkgDir/ \
+              -v $(azcopy_version) \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+              mv ./azcopy*.deb ./azcopy-$(azcopy_version).arm64.deb
+              cp ./azcopy*.deb $(archives)
+            displayName: 'Make ARM64 deb Package'
+
+          - script: |
+              fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+              -v $(azcopy_version) \
+              --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+              --url "https://github.com/Azure/azure-storage-azcopy" \
+              --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
+              mv ./azcopy*.rpm ./azcopy-$(azcopy_version).arm64.rpm
+              cp ./azcopy*.rpm $(archives)
+            displayName: 'Make ARM64 rpm Package'
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Standard Linux Build'
+            inputs:
+              rootFolderOrFile: '$(linux_arm64_dir)'
+              archiveType: tar
+              archiveFile: '$(archives)/azcopy_linux_arm64_$(azcopy_version).tar.gz'
+
+          - task: ArchiveFiles@2
+            displayName: 'Archive Partner(SE) Linux Build'
+            inputs:
+              rootFolderOrFile: '$(linux_se_arm64_dir)'
+              archiveType: tar
+              archiveFile: '$(archives)/azcopy_linux_se_arm64_$(azcopy_version).tar.gz'
+
       - job: BuildWindows
         pool:
           name: azcopy-pool
