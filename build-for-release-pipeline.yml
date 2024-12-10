@@ -566,6 +566,12 @@ extends:
                   version: $(AZCOPY_GOLANG_VERSION)
 
               - script: |
+                  sudo apt-get clean
+                  sudo apt-get update --fix-missing
+                  sudo apt-get install -y unzip
+                displayName: "Installing Dependencies"
+
+              - script: |
                   echo 'Running GO Vet'
                   go vet
                 displayName: 'Golang Vet'
