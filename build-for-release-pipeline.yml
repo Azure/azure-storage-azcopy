@@ -51,10 +51,10 @@ extends:
               outputs:
                 - output: buildArtifacts
                   PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-linux-temp'
+                  ArtifactName: 'azCopy-linux-temp'
                 - output: buildArtifacts
                   PathtoPublish: $(Build.ArtifactStagingDirectory)/binaries
-                  artifactName: 'azCopy-binaries'
+                  ArtifactName: 'azCopy-binaries'
 
             variables:
               - name: root_dir
@@ -209,10 +209,10 @@ extends:
               outputs:
                 - output: buildArtifacts
                   PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-linux-temp'
+                  ArtifactName: 'azCopy-linux-temp'
                 - output: buildArtifacts
                   PathtoPublish: $(Build.ArtifactStagingDirectory)/binaries
-                  artifactName: 'azCopy-binaries'
+                  ArtifactName: 'azCopy-binaries'
 
             variables:
               - name: root_dir
@@ -363,7 +363,7 @@ extends:
               outputs:
                 - output: buildArtifacts
                   PathtoPublish: $(Build.ArtifactStagingDirectory)\binaries
-                  artifactName: 'azCopy-windows-temp'
+                  ArtifactName: 'azCopy-windows-temp'
 
             variables:
               - name: root_dir
@@ -447,7 +447,7 @@ extends:
               outputs:
                 - output: buildArtifacts
                   PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-mac-temp'
+                  ArtifactName: 'azCopy-mac-temp'
 
             variables:
               - name: root_dir
@@ -546,8 +546,8 @@ extends:
             templateContext:
               outputs:
                 - output: buildArtifacts
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-mac-temp'
+                  PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
+                  ArtifactName: 'azCopy-mac-temp'
 
             variables:
               - group: AZCOPY_TESTS_VAR
