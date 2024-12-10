@@ -51,7 +51,7 @@ extends:
               outputs:
                 - output: pipelineArtifact
                   targetPath: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-linux-temp'
+                  artifactName: 'azCopy-linux-temp-amd64'
                 - output: pipelineArtifact
                   targetPath: $(Build.ArtifactStagingDirectory)/binaries
                   artifactName: 'azCopy-binaries-linux-amd64'
@@ -209,7 +209,7 @@ extends:
               outputs:
                 - output: pipelineArtifact
                   targetPath: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-linux-temp'
+                  artifactName: 'azCopy-linux-temp-arm64'
                 - output: pipelineArtifact
                   targetPath: $(Build.ArtifactStagingDirectory)/binaries
                   artifactName: 'azCopy-binaries-linux-arm64'
