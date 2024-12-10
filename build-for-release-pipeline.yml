@@ -54,7 +54,7 @@ extends:
                   artifactName: 'azCopy-linux-temp'
                 - output: pipelineArtifact
                   targetPath: $(Build.ArtifactStagingDirectory)/binaries
-                  artifactName: 'azCopy-binaries'
+                  artifactName: 'azCopy-binaries-linux-amd64'
 
             variables:
               - name: root_dir
@@ -212,7 +212,7 @@ extends:
                   artifactName: 'azCopy-linux-temp'
                 - output: pipelineArtifact
                   targetPath: $(Build.ArtifactStagingDirectory)/binaries
-                  artifactName: 'azCopy-binaries'
+                  artifactName: 'azCopy-binaries-linux-arm64'
 
             variables:
               - name: root_dir
@@ -568,7 +568,7 @@ extends:
               - script: |
                   sudo apt-get clean
                   sudo apt-get update --fix-missing
-                  sudo apt-get install -y unzip
+                  sudo apt-get install -y zip unzip
                 displayName: "Installing Dependencies"
 
               - script: |
