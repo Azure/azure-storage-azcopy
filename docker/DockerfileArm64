@@ -1,5 +1,8 @@
-# Create container based on Ubuntu-22.04 Jammy Jellyfish image
-FROM --platform=linux/arm64 mcr.microsoft.com/mirror/docker/library/ubuntu:22.04 
+ARG GO_VERSION=1.23.1
+ARG ALPINE_VERSION=3.21
+
+# Create container based on golang alpine image
+FROM --platform=linux/arm64 golang:$GO_VERSION-alpine$ALPINE_VERSION AS build
 
 # Copy azcopy binary to executable path
 COPY ./azcopy /usr/local/bin/
