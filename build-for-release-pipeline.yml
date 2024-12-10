@@ -690,21 +690,21 @@ extends:
                   sudo apt install dotnet-sdk-3.1 -y
                 displayName: "Update dependencies"
 
-              - template: setup/esrp_sign_linux.yml
+              - template: setup/esrp_sign_linux.yml@self
                 parameters:
                   FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
                   ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
                   Pattern: '*.rpm, *.deb'
                   DisplayName: 'ESRP CodeSigning azCopy linux amd64'
 
-              - template: setup/esrp_sign_linux.yml
+              - template: setup/esrp_sign_linux.yml@self
                 parameters:
                   FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
                   ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
                   Pattern: '*.rpm, *.deb'
                   DisplayName: 'ESRP CodeSigning azCopy linux arm64'
 
-              - template: setup/esrp_sign_linux.yml
+              - template: setup/esrp_sign_linux.yml@self
                 parameters:
                   FolderPath: $(Build.ArtifactStagingDirectory)/mariner
                   ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
@@ -795,7 +795,7 @@ extends:
                   sudo apt-get install -y zip
                 displayName: "Update dependencies"
 
-              - template: setup/esrp_sign_windows.yml
+              - template: setup/esrp_sign_windows.yml@self
                 parameters:
                   FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
                   ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
@@ -962,7 +962,7 @@ extends:
                   sudo apt install dotnet-sdk-6.0 -y
                 displayName: "Update dependencies"
 
-              - template: setup/esrp_sign_notarize_macos.yml
+              - template: setup/esrp_sign_notarize_macos.yml@self
                 parameters:
                   FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
                   ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
