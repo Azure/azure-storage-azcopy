@@ -49,12 +49,12 @@ extends:
             # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
             templateContext:
               outputs:
-                - output: buildArtifacts
-                  PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
-                  ArtifactName: 'azCopy-linux-temp'
-                - output: buildArtifacts
-                  PathtoPublish: $(Build.ArtifactStagingDirectory)/binaries
-                  ArtifactName: 'azCopy-binaries'
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  artifactName: 'azCopy-linux-temp'
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+                  artifactName: 'azCopy-binaries'
 
             variables:
               - name: root_dir
@@ -207,12 +207,12 @@ extends:
             # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
             templateContext:
               outputs:
-                - output: buildArtifacts
-                  PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
-                  ArtifactName: 'azCopy-linux-temp'
-                - output: buildArtifacts
-                  PathtoPublish: $(Build.ArtifactStagingDirectory)/binaries
-                  ArtifactName: 'azCopy-binaries'
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  artifactName: 'azCopy-linux-temp'
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+                  artifactName: 'azCopy-binaries'
 
             variables:
               - name: root_dir
@@ -361,9 +361,9 @@ extends:
             # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
             templateContext:
               outputs:
-                - output: buildArtifacts
-                  PathtoPublish: $(Build.ArtifactStagingDirectory)\binaries
-                  ArtifactName: 'azCopy-windows-temp'
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)\binaries
+                  artifactName: 'azCopy-windows-temp'
 
             variables:
               - name: root_dir
@@ -445,9 +445,9 @@ extends:
             # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
             templateContext:
               outputs:
-                - output: buildArtifacts
-                  PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
-                  ArtifactName: 'azCopy-mac-temp'
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  artifactName: 'azCopy-mac-temp'
 
             variables:
               - name: root_dir
@@ -545,9 +545,9 @@ extends:
             # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
             templateContext:
               outputs:
-                - output: buildArtifacts
-                  PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
-                  ArtifactName: 'azCopy-mac-temp'
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  artifactName: 'azCopy-mac-temp'
 
             variables:
               - group: AZCOPY_TESTS_VAR
