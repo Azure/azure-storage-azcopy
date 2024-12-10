@@ -111,7 +111,7 @@ extends:
                   cp $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
                 displayName: 'List the binaries and add to staging directory'
 
-              - template: setup/azcopy_version_check_linux.yml
+              - template: setup/azcopy_version_check_linux.yml@self
                 parameters:
                   azcopy_executable: $(root_dir)/azcopy_linux_amd64
 
@@ -269,7 +269,7 @@ extends:
                   cp -r $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
                 displayName: 'List the binaries and add to staging directory'
 
-              - template: setup/azcopy_version_check_linux.yml
+              - template: setup/azcopy_version_check_linux.yml@self
                 parameters:
                   azcopy_executable: $(root_dir)/azcopy_linux_arm64
 
@@ -575,11 +575,11 @@ extends:
                   CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
                 displayName: 'Generate build'
 
-              - template: setup/azcopy_version_check_linux.yml
+              - template: setup/azcopy_version_check_linux.yml@self
                 parameters:
                   azcopy_executable: $(root_dir)/azcopy
 
-              - template: setup/trigger_m1_build.yml
+              - template: setup/trigger_m1_build.yml@self
 
               - script: |
                   mkdir -p $(archives)
