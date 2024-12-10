@@ -50,10 +50,10 @@ extends:
             templateContext:
               outputs:
                 - output: buildArtifacts
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
                   artifactName: 'azCopy-linux-temp'
                 - output: buildArtifacts
-                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+                  PathtoPublish: $(Build.ArtifactStagingDirectory)/binaries
                   artifactName: 'azCopy-binaries'
 
             variables:
@@ -208,10 +208,10 @@ extends:
             templateContext:
               outputs:
                 - output: buildArtifacts
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
                   artifactName: 'azCopy-linux-temp'
                 - output: buildArtifacts
-                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+                  PathtoPublish: $(Build.ArtifactStagingDirectory)/binaries
                   artifactName: 'azCopy-binaries'
 
             variables:
@@ -362,7 +362,7 @@ extends:
             templateContext:
               outputs:
                 - output: buildArtifacts
-                  targetPath: $(Build.ArtifactStagingDirectory)\binaries
+                  PathtoPublish: $(Build.ArtifactStagingDirectory)\binaries
                   artifactName: 'azCopy-windows-temp'
 
             variables:
@@ -446,7 +446,7 @@ extends:
             templateContext:
               outputs:
                 - output: buildArtifacts
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  PathtoPublish: $(Build.ArtifactStagingDirectory)/temp
                   artifactName: 'azCopy-mac-temp'
 
             variables:
