@@ -655,25 +655,27 @@ extends:
                 displayName: 'Download Pipeline Artifacts'
                 inputs:
                   artifactName: 'azCopy-linux-temp-arm64'
-                  targetPath: $(Build.ArtifactStagingDirectory)
+                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
 
               - task: DownloadPipelineArtifact@2
                 displayName: 'Download Pipeline Artifacts'
                 inputs:
                   artifactName: 'azCopy-linux-temp-amd64'
-                  targetPath: $(Build.ArtifactStagingDirectory)
+                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
 
               - script: |
                   rm -rf azcopy_linux*
-                  sudo ls -lRt azCopy-linux-temp
-                  md5sum azCopy-linux-temp/*
+                  sudo ls -lRt azCopy-linux-temp-arm64
+                  sudo ls -lRt azCopy-linux-temp-amd64
+                  md5sum azCopy-linux-temp-arm64/*
+                  md5sum azCopy-linux-temp-amd64/*
                 displayName: 'List Artifacts'
                 workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
               - script: |
                   mkdir mariner && chmod 755 mariner
-                  cp azCopy-linux-temp/*arm64.rpm mariner
-                  cp azCopy-linux-temp/*x86_64.rpm mariner
+                  cp azCopy-linux-temp-arm64/*arm64.rpm mariner
+                  cp azCopy-linux-temp-amd64/*x86_64.rpm mariner
                   sudo ls -lRt mariner
                   md5sum mariner/*
                 displayName: 'Copy artifacts for Mariner'
@@ -684,7 +686,7 @@ extends:
                   sudo apt-get update
                   sudo apt-get upgrade -y
                   sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb 
                   sudo dpkg -i packages-microsoft-prod.deb 
                   sudo apt install apt-transport-https -y
                   sudo apt install dotnet-sdk-3.1 -y
@@ -768,7 +770,7 @@ extends:
                 displayName: 'Download Pipeline Artifacts'
                 inputs:
                   artifactName: 'azCopy-windows-temp'
-                  targetPath: $(Build.ArtifactStagingDirectory)
+                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
 
               - task: DownloadPipelineArtifact@2
                 displayName: 'Download linux binary for extracting version'
@@ -788,7 +790,7 @@ extends:
                   sudo apt-get update
                   sudo apt-get upgrade -y
                   sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb 
                   sudo dpkg -i packages-microsoft-prod.deb 
                   sudo apt install apt-transport-https -y
                   sudo apt install dotnet-sdk-6.0 -y
@@ -943,10 +945,10 @@ extends:
                 displayName: 'Download Pipeline Artifacts'
                 inputs:
                   artifactName: 'azCopy-mac-temp'
-                  targetPath: $(Build.ArtifactStagingDirectory)
+                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
 
               - script: |
-                  sudo ls -lRt $(Build.ArtifactStagingDirectory)
+                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
                   md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
                 displayName: 'List Artifacts'
 
@@ -956,7 +958,7 @@ extends:
                   sudo apt-get upgrade -y
                   sudo apt-get install unzip -y
                   sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb 
+                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb 
                   sudo dpkg -i packages-microsoft-prod.deb 
                   sudo apt install apt-transport-https -y
                   sudo apt install dotnet-sdk-6.0 -y
