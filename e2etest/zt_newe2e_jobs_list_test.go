@@ -11,7 +11,7 @@ func (s *JobsListSuite) Scenario_JobsListBasic(svm *ScenarioVariationManager) {
 	jobsListOutput, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:           AzCopyVerbJobsList,
+			Verb:           AzCopyVerbJobs,
 			PositionalArgs: []string{"list"},
 			Stdout:         &AzCopyParsedJobsListStdout{},
 			Flags:          ListFlags{},

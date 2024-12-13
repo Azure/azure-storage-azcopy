@@ -85,12 +85,7 @@ func (jm *jobMgr) SendXferDoneMsg(msg xferDoneMsg) {
 			jm.Log(common.LogError, "Cannot send message on channel")
 		}
 	}()
-	if jm.jstm.xferDone != nil {
-		select {
-		case jm.jstm.xferDone <- msg:
-		case <-jm.jstm.statusMgrDone: // Nobody is listening anymore, let's back off.
-		}
-	}
+	jm.jstm.xferDone <- msg
 }
 
 func (jm *jobMgr) ListJobSummary() common.ListJobSummaryResponse {
@@ -189,7 +184,6 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			case <-jstm.statusMgrDone:
 				// If we time out, no biggie. This isn't world-ending, nor is it essential info. The other side stopped listening by now.
 			}
-
 			// Reset the lists so that they don't keep accumulating and take up excessive memory
 			// There is no need to keep sending the same items over and over again
 			js.FailedTransfers = []common.TransferDetail{}

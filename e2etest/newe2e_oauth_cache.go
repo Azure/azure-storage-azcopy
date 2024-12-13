@@ -85,8 +85,9 @@ func (o *OAuthCache) GetAccessToken(scope string) (*AzCoreAccessToken, error) {
 	if !ok || time.Now().Add(time.Minute*3).After(tok.ExpiresOn) {
 		o.mut.Lock()
 		newTok, err := o.tc.GetToken(ctx, policy.TokenRequestOptions{
-			Scopes:   []string{scope},
-			TenantID: o.tenant,
+			Scopes:    []string{scope},
+			TenantID:  o.tenant,
+			EnableCAE: true,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed fetching new AccessToken: %w", err)
