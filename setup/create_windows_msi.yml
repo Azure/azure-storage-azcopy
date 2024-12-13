@@ -25,15 +25,11 @@ steps:
     # PowerShell Script to create MSI in an Azure Pipeline
 
     # Step 1: Set Variables
-    #$msiDir = "${{ parameters.msi_dir }}"
     $workDir = "${{ parameters.working_dir }}"
     $wixToolsPath = (where.exe candle.exe) -replace '\\candle.exe$', ''  # Remove candle.exe from path
     $wxsFilePath = "$workDir\azcopy.wxs"
     $wixObjPath = "$workDir\azcopy.wixobj"
     $outputMsi = "${{ parameters.build_dir }}\azcopy.msi"
-
-    Write-Host "Work dir: $workDir  WiX Toolset Path: $wixToolsPath"
-    #cd $msiDir
 
     # Step 2: Update the fields in the .wxs file
     Write-Host "Updating Uuid in .wxs file..."
@@ -49,7 +45,7 @@ steps:
     # Update fields using the namespace
     $productNode = $wixXml.SelectSingleNode("//wix:Product", $namespaceManager)
     $productNode.Name = "azcopy"
-    $productNode.Version = "10.26.0"  # Update version as needed
+    $productNode.Version = "10.26.0"  # TODO: Make it variable. Hardcoded for now
     $productNode.Manufacturer = "Updated Manufacturer"
     $productNode.UpgradeCode = $uuid
 
