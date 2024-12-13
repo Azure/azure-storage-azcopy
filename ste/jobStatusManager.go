@@ -44,7 +44,6 @@ type jobStatusManager struct {
 	xferDone        chan xferDoneMsg
 	xferDoneDrained chan struct{} // To signal that all xferDone have been processed
 	statusMgrDone   chan struct{} // To signal statusManager has closed
-	isChanClosed    bool
 }
 
 func (jm *jobMgr) waitToDrainXferDone() {
