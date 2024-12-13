@@ -1927,6 +1927,9 @@ stages:
                 ./dockerinstall.sh
                 ./buildcontainer.sh DockerfileArm64 ubuntu-arm64
                 ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-arm64
+
+                ./buildcontainer.sh DockerfileMarinerArm64 mariner-arm64
+                ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-arm64
               displayName: "Create docker image for arm64 and push to the containers registry"
               workingDirectory: $(work_dir)/docker
 
