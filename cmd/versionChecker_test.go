@@ -216,7 +216,6 @@ func TestCheckReleaseMetadata(t *testing.T) {
 
 	// sanity test for checking if the release metadata exists and can be downloaded
 	options := createClientOptions(nil, nil)
-	versionMetadataUrl := "https://azcopyvnextrelease.blob.core.windows.net/releasemetadata/latest_version.txt"
 
 	blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
 	a.NoError(err)

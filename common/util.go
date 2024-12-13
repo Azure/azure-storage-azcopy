@@ -249,7 +249,7 @@ type ScopedCredential struct {
 }
 
 func (s *ScopedCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes})
+	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
 }
 
 type ServiceClient struct {
