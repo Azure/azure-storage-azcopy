@@ -44,6 +44,7 @@ type jobStatusManager struct {
 	xferDone        chan xferDoneMsg
 	xferDoneDrained chan struct{} // To signal that all xferDone have been processed
 	statusMgrDone   chan struct{} // To signal statusManager has closed
+	isChanClosed    bool
 }
 
 func (jm *jobMgr) waitToDrainXferDone() {
@@ -139,10 +140,12 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 		case msg, ok := <-jstm.xferDone:
 			if !ok { // Channel is closed, all transfers have been attended.
 				jstm.xferDone = nil
-
 				// close drainXferDone so that other components can know no further updates happen
 				allXferDoneHandled = true
-				close(jstm.xferDoneDrained)
+				if jstm.xferDoneDrained != nil {
+					close(jstm.xferDoneDrained)
+					jstm.xferDoneDrained = nil
+				}
 				continue
 			}
 

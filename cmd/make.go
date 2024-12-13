@@ -208,6 +208,6 @@ func init() {
 		},
 	}
 
-	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), 0 means you accept the file service's default quota.")
+	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "Specifies the maximum size of the share in gigabytes (GiB), 0 means you accept the file service's default quota. If `ShareSizeLimitReached` error is hit, increase quota and call resume command.")
 	rootCmd.AddCommand(makeCmd)
 }
