@@ -45,7 +45,7 @@ const MAX_SYMLINKS_TO_FOLLOW = 40
 type localTraverser struct {
 	fullPath        string
 	recursive       bool
-	stripTopDir    bool
+	stripTopDir     bool
 	symlinkHandling common.SymlinkHandlingType
 	appCtx          context.Context
 	// a generic function to notify that a new stored object has been enumerated
@@ -53,7 +53,7 @@ type localTraverser struct {
 	errorChannel                chan ErrorFileInfo
 
 	targetHashType common.SyncHashType
-	hashAdapter common.HashDataAdapter
+	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
 }
@@ -790,7 +790,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						preprocessor,
 						entry.Name(),
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
-						entityType,                                                                                                       // TODO: add code path for folders
+						entityType, // TODO: add code path for folders
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
@@ -829,8 +829,8 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, str
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		errorChannel:                errorChannel,
 		targetHashType:              syncHashType,
-		hashAdapter: hashAdapter,
-		stripTopDir: stripTopDir,
+		hashAdapter:                 hashAdapter,
+		stripTopDir:                 stripTopDir,
 	}
 	return &traverser, nil
 }
