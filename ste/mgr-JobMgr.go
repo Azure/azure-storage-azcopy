@@ -717,7 +717,7 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				// Inform StatusManager that all parts are done.
 				if jm.jstm.xferDone != nil {
 					close(jm.jstm.xferDone)
-					jm.jstm.xferDone = nil
+					// jm.jstm.xferDone = nil
 				}
 
 				// Wait  for all XferDone messages to be processed by statusManager. Front end
