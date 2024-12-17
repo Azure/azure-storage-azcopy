@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/google/uuid"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -436,4 +438,105 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeDestinationHash(svm *ScenarioVa
 			},
 		},
 	})
+}
+
+func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationManager) {
+	// Set up the scenario
+	a.InsertVariationSeparator("Blob->")
+	srcLoc := common.ELocation.Blob()
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	a.InsertVariationSeparator("|Create:")
+
+	const (
+		CreateContainer = "Container"
+		CreateFolder    = "Folder"
+		CreateObject    = "Object"
+	)
+
+	resourceType := ResolveVariation(a, []string{CreateContainer, CreateFolder, CreateObject})
+
+	// Select source map
+	srcMap := map[string]ObjectResourceMappingFlat{
+		CreateContainer: {
+			"foo": ResourceDefinitionObject{},
+		},
+		CreateFolder: {
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+			},
+			"foo/bar": ResourceDefinitionObject{},
+		},
+		CreateObject: {
+			"foo": ResourceDefinitionObject{},
+		},
+	}[resourceType]
+
+	// Create resources and targets
+	src := CreateResource(a, GetRootResource(a, srcLoc), ResourceDefinitionContainer{
+		Objects: srcMap,
+	})
+	srcTarget := map[string]ResourceManager{
+		CreateContainer: src,
+		CreateFolder:    src.GetObject(a, "foo", common.EEntityType.Folder()),
+		CreateObject:    src.GetObject(a, "foo", common.EEntityType.File()),
+	}[resourceType]
+
+	var dstTarget ResourceManager
+	var dst ContainerResourceManager
+	if dstLoc == common.ELocation.Local() {
+		dst = GetRootResource(a, dstLoc).(ContainerResourceManager) // No need to grab a container
+	} else {
+		dst = GetRootResource(a, dstLoc).(ServiceResourceManager).GetContainer(uuid.NewString())
+	}
+
+	if resourceType != CreateContainer {
+		dst.Create(a, ContainerProperties{})
+	}
+
+	dstTarget = map[string]ResourceManager{
+		CreateContainer: dst,
+		CreateFolder:    dst.GetObject(a, "foo", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
+		CreateObject:    dst.GetObject(a, "foo", common.EEntityType.File()),
+	}[resourceType]
+
+	// Run the test for realsies.
+	RunAzCopy(a, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			srcTarget,
+			AzCopyTarget{
+				ResourceManager: dstTarget,
+				AuthType:        EExplicitCredentialType.SASToken(),
+				Opts: CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericAccountSignatureValues{
+						Permissions: (&blobsas.AccountPermissions{
+							Read:   true,
+							Write:  true,
+							Delete: true,
+							List:   true,
+							Add:    true,
+							Create: true,
+						}).String(),
+						ResourceTypes: (&blobsas.AccountResourceTypes{
+							Service:   true,
+							Container: true,
+							Object:    true,
+						}).String(),
+					},
+				},
+			},
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:             pointerTo(true),
+				IncludeDirectoryStubs: pointerTo(true),
+			},
+		},
+	})
+
+	ValidateResource(a, dst, ResourceDefinitionContainer{
+		Objects: srcMap,
+	}, false)
 }

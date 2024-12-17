@@ -71,14 +71,25 @@ type blobTraverser struct {
 	isDFS bool
 }
 
-func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
+var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, and can overlap.")
+
+func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error) {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	// On HNS accounts, we would still perform this test. The user may have provided directory name without path-separator
 	if isDirDirect { // a container or a path ending in '/' is always directory
-		return true, nil
+		// If it's a container, let's ensure that container exists. Listing is a safe assumption to be valid, because how else would we enumerate?
+		blobURLParts, err := blob.ParseURL(t.rawURL)
+		if err != nil {
+			return false, err
+		}
+		containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
+		p := containerClient.NewListBlobsFlatPager(nil)
+		_, err = p.NextPage(t.ctx)
+
+		return true, err
 	}
 	if !isSource && !t.isDFS {
 		// destination on blob endpoint. If it does not end in '/' it is a file
@@ -116,12 +127,8 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	}
 
 	if len(resp.Segment.BlobItems) == 0 {
-		// Not a directory
-		// If the blob is not found return the error to throw
-		if bloberror.HasCode(blobErr, bloberror.BlobNotFound) {
-			return false, errors.New(common.FILE_NOT_FOUND)
-		}
-		return false, blobErr
+		// Not a directory, but there was also no file on site. Therefore, there's nothing.
+		return false, errors.New(common.FILE_NOT_FOUND)
 	}
 
 	return true, nil

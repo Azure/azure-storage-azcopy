@@ -202,3 +202,168 @@ func (*FNSSuite) Scenario_SyncTrailingSlashDeletion(a *ScenarioVariationManager)
 		},
 	}, false)
 }
+
+func (*FNSSuite) Scenario_SyncOverlap(a *ScenarioVariationManager) {
+	// Sync must be capable of mirroring a source resource type onto a blob destination.
+
+	// Define our scenario up front; reduce complexity in debugging.
+	srcLoc := ResolveVariation(a, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.Local()})
+	dstLoc := common.ELocation.Blob()
+	a.InsertVariationSeparator("->Blob|Overwrite:")
+
+	const (
+		DestTypeStandardStub = iota
+		DestTypeOverlapStup
+	)
+
+	dstType := NamedResolveVariation(a, map[string]uint{
+		"StandardStub":      DestTypeStandardStub,
+		"TrailingSlashStub": DestTypeOverlapStup,
+	})
+
+	// Set up the resource maps
+	srcMap := ObjectResourceMappingFlat{
+		"foo": ResourceDefinitionObject{},
+	}
+
+	dstMap := map[uint]ObjectResourceMappingFlat{
+		DestTypeStandardStub: {
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+			},
+		},
+		DestTypeOverlapStup: {
+			"foo/": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+			},
+		},
+	}[dstType]
+
+	// Spin up the resources
+	src := CreateResource(a, GetRootResource(a, srcLoc), ResourceDefinitionContainer{
+		Objects: srcMap,
+	})
+
+	dst := CreateResource(a, GetRootResource(a, dstLoc), ResourceDefinitionContainer{
+		Objects: dstMap,
+	})
+
+	// Execute the test
+	RunAzCopy(a, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			src.GetObject(a, "foo", common.EEntityType.File()),
+			dst.GetObject(a, "foo", common.EEntityType.File()),
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:             pointerTo(true),
+				IncludeDirectoryStubs: pointerTo(true),
+			},
+		},
+	})
+
+	ValidateResource(a, dst, ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat(JoinMap(dstMap, srcMap)),
+	}, false)
+}
+
+/*
+This tests that sync is capable of creating the destination resource if it does not exist, including the root container.
+*/
+//func (*FNSSuite) Scenario_OverlapWithTrailingSlash(a *ScenarioVariationManager) {
+//	srcLoc := ResolveVariation(a, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.Local()})
+//	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.File(), common.ELocation.Blob(), common.ELocation.BlobFS(), common.ELocation.Local()})
+//
+//	if srcLoc == common.ELocation.Local() && dstLoc == common.ELocation.Local() {
+//		a.InvalidateScenario()
+//	}
+//
+//	srcResType := ResolveVariation(a, []common.EntityType{common.EEntityType.File(), common.EEntityType.Folder()})
+//
+//	const (
+//		DEST_TYPE_NONE int8 = iota - 1
+//		DEST_TYPE_STANDARD_STUB
+//		DEST_TYPE_OVERLAP_STUB
+//	)
+//
+//	blobDestType := DEST_TYPE_NONE // Just blob can overwrite a stub, or overlap.
+//	if dstLoc == common.ELocation.Blob() && srcResType == common.EEntityType.File() {
+//		blobDestType = NamedResolveVariation(a, map[string]int8{
+//			"DestOverlapDirStub":  DEST_TYPE_OVERLAP_STUB,
+//			"DestStandardDirStub": DEST_TYPE_STANDARD_STUB,
+//			"DestNone":            DEST_TYPE_NONE,
+//		})
+//	}
+//
+//	destMaps := map[int8]ObjectResourceMapping{
+//		DEST_TYPE_NONE: ObjectResourceMappingFlat{},
+//		DEST_TYPE_STANDARD_STUB: ObjectResourceMappingFlat{
+//			"foo": ResourceDefinitionObject{
+//				ObjectProperties: ObjectProperties{
+//					EntityType: common.EEntityType.Folder(),
+//				},
+//			},
+//		},
+//		DEST_TYPE_OVERLAP_STUB: ObjectResourceMappingFlat{
+//			"foo/": ResourceDefinitionObject{
+//				ObjectProperties: ObjectProperties{
+//					EntityType: common.EEntityType.Folder(),
+//				},
+//			},
+//		},
+//	}
+//
+//	var dst ContainerResourceManager
+//	if blobDestType != DEST_TYPE_NONE {
+//		dst = CreateResource(a, GetRootResource(a, dstLoc), ResourceDefinitionContainer{
+//			Objects: destMaps[blobDestType],
+//		})
+//	} else {
+//		// GetRootResource will be a service if remote, and a container if local.
+//		if dstLoc.IsRemote() {
+//			dst = GetRootResource(a, dstLoc).(ServiceResourceManager).GetContainer(uuid.NewString())
+//		} else {
+//			dst = GetRootResource(a, dstLoc).(ContainerResourceManager)
+//		}
+//	}
+//
+//	var sourceMap = ObjectResourceMappingFlat{
+//		"foo": ResourceDefinitionObject{
+//			ObjectProperties: ObjectProperties{
+//				EntityType: srcResType,
+//			},
+//		},
+//	}
+//
+//	if srcResType == common.EEntityType.Folder() {
+//		sourceMap["foo/bar"] = ResourceDefinitionObject{
+//			ObjectProperties: ObjectProperties{
+//				EntityType: common.EEntityType.File(),
+//			},
+//		}
+//	}
+//
+//	src := CreateResource(a, GetRootResource(a, srcLoc), ResourceDefinitionContainer{
+//		Objects: sourceMap,
+//	})
+//
+//	RunAzCopy(a, AzCopyCommand{
+//		Verb: ResolveVariation(a, []AzCopyVerb{AzCopyVerbSync}),
+//		Targets: []ResourceManager{
+//			src.GetObject(a, "foo", common.EEntityType.File()),
+//			dst.GetObject(a, "foo", common.EEntityType.File())},
+//		Flags: SyncFlags{
+//			CopySyncCommonFlags: CopySyncCommonFlags{
+//				Recursive:             pointerTo(true),
+//				IncludeDirectoryStubs: pointerTo(true),
+//			},
+//		},
+//	})
+//
+
+//}
