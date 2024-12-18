@@ -864,6 +864,10 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 				common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
 			}
 
+			if serviceCode == "ShareSizeLimitReached" {
+				common.GetLifecycleMgr().Error(fmt.Sprintf("Fix: Increase the file share quota and call Resume command"))
+			}
+
 			// and use the normal cancelling mechanism so that we can exit in a clean and controlled way
 			jptm.jobPartMgr.(*jobPartMgr).jobMgr.CancelPauseJobOrder(common.EJobStatus.Cancelling())
 			// TODO: this results in the final job output line being: Final Job Status: Cancelled
