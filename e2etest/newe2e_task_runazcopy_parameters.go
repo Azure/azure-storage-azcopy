@@ -383,6 +383,7 @@ type SyncFlags struct {
 	LocalHashStorageMode *common.HashStorageMode `flag:"local-hash-storage-mode"`
 	// The real flag name is not all that great due to `delete-destination`, but, it works.
 	DeleteIfNecessary *bool `flag:"delete-destination-file"`
+	IncludeRoot       *bool `flag:"include-root"`
 }
 
 // RemoveFlags is not tiered like CopySyncCommonFlags is, because it is dissimilar in functionality, and would be hard to test in the same scenario.
