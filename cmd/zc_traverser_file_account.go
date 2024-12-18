@@ -37,8 +37,8 @@ type fileAccountTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	trailingDot common.TrailingDotOption
-	destination *common.Location
+	trailingDot                 common.TrailingDotOption
+	destination                 *common.Location
 }
 
 func (t *fileAccountTraverser) IsDirectory(isSource bool) (bool, error) {
@@ -107,13 +107,13 @@ func (t *fileAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 func newFileAccountTraverser(serviceClient *service.Client, shareName string, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc, trailingDot common.TrailingDotOption, destination *common.Location) (t *fileAccountTraverser) {
 	t = &fileAccountTraverser{
-		ctx: ctx,
+		ctx:                         ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,
-		serviceClient: serviceClient,
-		sharePattern: shareName,
-		getProperties: getProperties,
-		trailingDot: trailingDot,
-		destination: destination,
+		serviceClient:               serviceClient,
+		sharePattern:                shareName,
+		getProperties:               getProperties,
+		trailingDot:                 trailingDot,
+		destination:                 destination,
 	}
 	return
 }
