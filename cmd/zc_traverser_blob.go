@@ -76,18 +76,21 @@ var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, a
 func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error) {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
 
+	blobURLParts, err := blob.ParseURL(t.rawURL)
+	if err != nil {
+		return false, err
+	}
+
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	// On HNS accounts, we would still perform this test. The user may have provided directory name without path-separator
 	if isDirDirect { // a container or a path ending in '/' is always directory
-		// If it's a container, let's ensure that container exists. Listing is a safe assumption to be valid, because how else would we enumerate?
-		blobURLParts, err := blob.ParseURL(t.rawURL)
-		if err != nil {
-			return false, err
+		if blobURLParts.ContainerName != "" && blobURLParts.BlobName == "" {
+			// If it's a container, let's ensure that container exists. Listing is a safe assumption to be valid, because how else would we enumerate?
+			containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
+			p := containerClient.NewListBlobsFlatPager(nil)
+			_, err = p.NextPage(t.ctx)
 		}
-		containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
-		p := containerClient.NewListBlobsFlatPager(nil)
-		_, err = p.NextPage(t.ctx)
 
 		return true, err
 	}
@@ -109,10 +112,6 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 		return isDirStub, nil
 	}
 
-	blobURLParts, err := blob.ParseURL(t.rawURL)
-	if err != nil {
-		return false, err
-	}
 	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
 	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
 	maxResults := int32(1)

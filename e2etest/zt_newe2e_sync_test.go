@@ -157,8 +157,11 @@ func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariatio
 	})
 
 	RunAzCopy(svm, AzCopyCommand{
-		Verb:    AzCopyVerbSync,
-		Targets: []ResourceManager{srcRes, dstRes},
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			srcRes,
+			dstRes,
+		},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive: pointerTo(true),
@@ -533,6 +536,7 @@ func (s *SyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationMan
 				Recursive:             pointerTo(true),
 				IncludeDirectoryStubs: pointerTo(true),
 			},
+			IncludeRoot: pointerTo(true),
 		},
 	})
 
