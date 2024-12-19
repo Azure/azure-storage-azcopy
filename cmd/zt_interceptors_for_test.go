@@ -142,9 +142,6 @@ func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
 }
 func (*mockedLifecycleManager) EnableInputWatcher()    {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn() {}
-func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
-	return userAgent
-}
 
 func (*mockedLifecycleManager) SetForceLogging() {}
 

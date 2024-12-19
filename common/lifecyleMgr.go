@@ -64,7 +64,6 @@ type LifecycleMgr interface {
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
 	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
 	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
-	AddUserAgentPrefix(string) string                            // append the global user agent prefix, if applicable
 	E2EAwaitContinue()                                           // used by E2E tests
 	E2EAwaitAllowOpenFiles()                                     // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
@@ -625,15 +624,6 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 			oldCount = newCount
 		}
 	}()
-}
-
-func (lcm *lifecycleMgr) AddUserAgentPrefix(userAgent string) string {
-	prefix := GetEnvironmentVariable(EEnvironmentVariable.UserAgentPrefix())
-	if len(prefix) > 0 {
-		userAgent = prefix + " " + userAgent
-	}
-
-	return userAgent
 }
 
 func (_ *lifecycleMgr) awaitChannel(ch chan struct{}, timeout time.Duration) {
