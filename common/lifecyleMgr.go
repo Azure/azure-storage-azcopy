@@ -71,7 +71,6 @@ type LifecycleMgr interface {
 	RegisterCloseFunc(func())
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
-	DownloadToTempPath() bool
 	MsgHandlerChannel() <-chan *LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
@@ -681,15 +680,6 @@ func (lcm *lifecycleMgr) SetForceLogging() {
 
 func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
 	return lcm.disableSyslog
-}
-
-func (lcm *lifecycleMgr) DownloadToTempPath() bool {
-	ret, err := strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DownloadToTempPath()))
-	if err != nil {
-		// By default we'll download to temp path
-		ret = true
-	}
-	return ret
 }
 
 func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan *LCMMsg {
