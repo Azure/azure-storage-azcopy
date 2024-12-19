@@ -293,7 +293,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
-				return fmt.Errorf("cannot list files due to reason %s", err)
+				return fmt.Errorf("cannot list files due to reason %w", err)
 			}
 			for _, fileInfo := range lResp.Segment.Files {
 				if invalidBlobOrWindowsName(*fileInfo.Name) {

@@ -298,7 +298,7 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// Error for invalid JobId format
-		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 
 	var getJobDetailsResponse common.GetJobDetailsResponse
@@ -347,7 +347,7 @@ func (rca resumeCmdArgs) process() error {
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
-		return fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 
 	includeTransfer := make(map[string]int)
