@@ -93,7 +93,7 @@ func (t *gcpServiceTraverser) Traverse(preprocessor objectMorpher, processor obj
 }
 
 func newGCPServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter enumerationCounterFunc) (*gcpServiceTraverser, error) {
-	projectID = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleCloudProject())
+	projectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleCloudProject())
 	t := &gcpServiceTraverser{
 		ctx:                         ctx,
 		incrementEnumerationCounter: incrementEnumerationCounter,

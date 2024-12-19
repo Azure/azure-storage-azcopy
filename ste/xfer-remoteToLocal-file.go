@@ -27,6 +27,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -569,7 +570,13 @@ func tryDeleteFile(info *TransferInfo, jptm IJobPartTransferMgr) {
 // download to a temp path we return a temp path in format
 // /actual/parent/path/.azDownload-<jobID>-<actualFileName>
 func (info *TransferInfo) getDownloadPath() string {
-	if common.GetLifecycleMgr().DownloadToTempPath() && info.SourceSize > 0 { // 0-byte files don't need a rename.
+	downloadToTempPath, err := strconv.ParseBool(common.GetEnvironmentVariable(common.EEnvironmentVariable.DownloadToTempPath()))
+	if err != nil {
+		// By default, we'll download to temp path
+		downloadToTempPath = true
+	}
+
+	if downloadToTempPath && info.SourceSize > 0 { // 0-byte files don't need a rename.
 		parent, fileName := filepath.Split(info.Destination)
 		fileName = fmt.Sprintf(azcopyTempDownloadPrefix, info.JobID.String()) + fileName
 		return filepath.Join(parent, fileName)

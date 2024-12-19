@@ -71,8 +71,7 @@ func ProcessOSSpecificInitialization() (int, error) {
 // GetAzCopyAppPath returns the path of Azcopy folder in local appdata.
 // Azcopy folder in local appdata contains all the files created by azcopy locally.
 func GetAzCopyAppPath() string {
-	lcm := common.GetLifecycleMgr()
-	localAppData := lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
+	localAppData := common.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
 	azcopyAppDataFolder := path.Join(localAppData, ".azcopy")
 	return azcopyAppDataFolder
 }

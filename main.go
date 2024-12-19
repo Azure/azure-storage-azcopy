@@ -33,8 +33,8 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
-	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
-	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
+	azcopyLogPathFolder := common.GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
+	azcopyJobPlanFolder := common.GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
 
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
 	// but all the above can be put elsewhere as they can become very large

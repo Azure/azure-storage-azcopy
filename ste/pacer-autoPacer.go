@@ -78,7 +78,7 @@ var (
 func newPageBlobAutoPacer(bytesPerSecond int64, expectedBytesPerRequest int64, isFair bool, logger common.ILogger) autopacer {
 
 	shouldPaceOncer.Do(func() {
-		raw := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.PacePageBlobs())
+		raw := common.GetEnvironmentVariable(common.EEnvironmentVariable.PacePageBlobs())
 		shouldPacePageBlobs = strings.ToLower(raw) != "false"
 	})
 

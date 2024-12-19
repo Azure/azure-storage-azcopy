@@ -324,7 +324,7 @@ var stashedEnvOAuthTokenExists = false
 // Note: This is useful for only checking whether the env var exists, please use getTokenInfoFromEnvVar
 // directly in the case getting token info is necessary.
 func EnvVarOAuthTokenInfoExists() bool {
-	if lcm.GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo()) == "" && !stashedEnvOAuthTokenExists {
+	if GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo()) == "" && !stashedEnvOAuthTokenExists {
 		return false
 	}
 	stashedEnvOAuthTokenExists = true
@@ -341,14 +341,14 @@ func IsErrorEnvVarOAuthTokenInfoNotSet(err error) bool {
 
 // getTokenInfoFromEnvVar gets token info from environment variable.
 func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (*OAuthTokenInfo, error) {
-	rawToken := lcm.GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
+	rawToken := GetEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
 	if rawToken == "" {
 		return nil, errors.New(ErrorCodeEnvVarOAuthTokenInfoNotSet)
 	}
 
 	// Remove the env var after successfully fetching once,
 	// in case of env var is further spreading into child processes unexpectedly.
-	lcm.ClearEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
+	ClearEnvironmentVariable(EEnvironmentVariable.OAuthTokenInfo())
 
 	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))
 	if err != nil {
