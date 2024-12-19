@@ -47,7 +47,7 @@ func (i *ConfiguredInt) GetDescription() string {
 
 // tryNewConfiguredInt populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
 func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
-	override := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	override := common.GetEnvironmentVariable(envVar)
 	if override != "" {
 		val, err := strconv.ParseInt(override, 10, 32)
 		if err != nil {
@@ -77,7 +77,7 @@ func (b *ConfiguredBool) GetDescription() string {
 
 // tryNewConfiguredBool populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
 func tryNewConfiguredBool(envVar common.EnvironmentVariable) *ConfiguredBool {
-	override := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	override := common.GetEnvironmentVariable(envVar)
 	if override != "" {
 		val, err := strconv.ParseBool(override)
 		if err != nil {
@@ -177,7 +177,7 @@ func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *Con
 
 	envVar := common.EEnvironmentVariable.ConcurrencyValue()
 
-	if common.GetLifecycleMgr().GetEnvironmentVariable(envVar) == "AUTO" {
+	if common.GetEnvironmentVariable(envVar) == "AUTO" {
 		// Allow user to force auto-tuning from the env var, even when not in benchmark mode
 		// Might be handy in some S2S cases, where we know that release 10.2.1 was using too few goroutines
 		// This feature will probably remain undocumented for at least one release cycle, while we consider
