@@ -57,7 +57,7 @@ func (t *s3Traverser) IsDirectory(isSource bool) (bool, error) {
 	_, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 
 	if err != nil {
-		return true, nil
+		return true, err
 	}
 
 	return false, nil
