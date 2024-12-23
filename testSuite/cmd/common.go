@@ -28,9 +28,8 @@ type createS3ResOptions struct {
 }
 
 func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
-	lcm := common.GetLifecycleMgr()
-	accessKeyID := lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
-	secretAccessKey := lcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
+	accessKeyID := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
+	secretAccessKey := common.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
 
 	if accessKeyID == "" || secretAccessKey == "" {
 		fmt.Println("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")

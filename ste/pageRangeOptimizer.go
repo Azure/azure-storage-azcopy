@@ -51,7 +51,7 @@ func withNoRetryForBlob(ctx context.Context) context.Context {
 func (p *pageRangeOptimizer) fetchPages() {
 	// don't fetch page blob list if optimizations are not desired,
 	// the lack of page list indicates that there's data everywhere
-	if !strings.EqualFold(common.GetLifecycleMgr().GetEnvironmentVariable(
+	if !strings.EqualFold(common.GetEnvironmentVariable(
 		common.EEnvironmentVariable.OptimizeSparsePageBlobTransfers()), "true") {
 		return
 	}

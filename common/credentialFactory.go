@@ -63,14 +63,13 @@ func (o CredentialOpOptions) panicError(err error) {
 
 // CreateS3Credential creates AWS S3 credential according to credential info.
 func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
-	glcm := GetLifecycleMgr()
 	switch credInfo.CredentialType {
 	case ECredentialType.S3PublicBucket():
 		return credentials.NewStatic("", "", "", credentials.SignatureAnonymous), nil
 	case ECredentialType.S3AccessKey():
-		accessKeyID := glcm.GetEnvironmentVariable(EEnvironmentVariable.AWSAccessKeyID())
-		secretAccessKey := glcm.GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
-		sessionToken := glcm.GetEnvironmentVariable(EEnvironmentVariable.AwsSessionToken())
+		accessKeyID := GetEnvironmentVariable(EEnvironmentVariable.AWSAccessKeyID())
+		secretAccessKey := GetEnvironmentVariable(EEnvironmentVariable.AWSSecretAccessKey())
+		sessionToken := GetEnvironmentVariable(EEnvironmentVariable.AwsSessionToken())
 
 		// create and return s3 credential
 		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken), nil // S3 uses V4 signature
@@ -185,11 +184,11 @@ func GetCpkInfo(cpkInfo bool) *blob.CPKInfo {
 	}
 
 	// fetch EncryptionKey and EncryptionKeySHA256 from the environment variables
-	glcm := GetLifecycleMgr()
-	encryptionKey := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKey())
-	encryptionKeySHA256 := glcm.GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
+	encryptionKey := GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKey())
+	encryptionKeySHA256 := GetEnvironmentVariable(EEnvironmentVariable.CPKEncryptionKeySHA256())
 	encryptionAlgorithmAES256 := blob.EncryptionAlgorithmTypeAES256
 
+	glcm := GetLifecycleMgr()
 	if encryptionKey == "" || encryptionKeySHA256 == "" {
 		glcm.Error("fatal: failed to fetch cpk encryption key (" + EEnvironmentVariable.CPKEncryptionKey().Name +
 			") or hash (" + EEnvironmentVariable.CPKEncryptionKeySHA256().Name + ") from environment variables")

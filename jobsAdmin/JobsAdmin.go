@@ -172,7 +172,7 @@ func getMaxRamForChunks() int64 {
 
 	// return the user-specified override value, if any
 	envVar := common.EEnvironmentVariable.BufferGB()
-	overrideString := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	overrideString := common.GetEnvironmentVariable(envVar)
 	if overrideString != "" {
 		overrideValue, err := strconv.ParseFloat(overrideString, 64)
 		if err != nil {
