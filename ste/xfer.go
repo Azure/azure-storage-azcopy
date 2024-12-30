@@ -35,7 +35,6 @@ const UploadMaxTries = 20
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 60
 
-var UploadTryTimeout = time.Minute * 15
 var ADLSFlushThreshold uint32 = 7500 // The # of blocks to flush at a time-- Implemented only for CI.
 
 // download related
@@ -176,4 +175,16 @@ func inferBlobType(filename string, defaultBlobType blob.BlobType) blob.BlobType
 	}
 
 	return defaultBlobType
+}
+
+var UploadTryTimeout = time.Minute * 15
+
+func init() {
+	requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
+	if requestTryTimeout != "" {
+		timeout, err := time.ParseDuration(requestTryTimeout + "m")
+		if err == nil {
+			UploadTryTimeout = timeout
+		}
+	}
 }

@@ -289,13 +289,11 @@ func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile i
 	return uint(fc), bpf, uint(nf), nil
 }
 
-var benchCmd *cobra.Command
-
 func init() {
 	raw := rawBenchmarkCmdArgs{}
 
 	// benCmd represents the bench command
-	benchCmd = &cobra.Command{
+	benchCmd := &cobra.Command{
 		Use:        "bench [destination]",
 		Aliases:    []string{"ben", "benchmark"},
 		SuggestFor: []string{"b", "bn"},
