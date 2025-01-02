@@ -1,4 +1,4 @@
-# Create container based on Ubuntu-22.04 Jammy Jellyfish image
+# Create container based on mariner 2.0 image
 FROM --platform=linux/arm64 mcr.microsoft.com/cbl-mariner/base/core:2.0
 
 # Install dependencies
