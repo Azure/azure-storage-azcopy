@@ -31,7 +31,6 @@ jobs:
       value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
     steps:
-      # TODO remove when merging to main
       - checkout: none
       - script: |
           git clone https://github.com/Azure/azure-storage-azcopy
@@ -59,10 +58,15 @@ jobs:
       - script: |
           chmod 777 *.sh
           ./dockerinstall.sh
-          ./buildcontainer.sh Dockerfile ${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}ubuntu-x86_64${{ else }}ubuntu-arm64
-          ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER) $(AZCOPY_DOCKER_REG_PWD) ${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}ubuntu-x86_64${{ else }}ubuntu-arm64
 
-          ./buildcontainer.sh DockerfileMariner${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}${{ else }}Arm64
-          ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER) $(AZCOPY_DOCKER_REG_PWD) mariner-${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}x86_64${{ else }}arm64
+          # Build and publish Docker containers
+          ./buildcontainer.sh Dockerfile $DOCKER_TAG
+          ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER) $(AZCOPY_DOCKER_REG_PWD) $DOCKER_TAG
+
+          ./buildcontainer.sh DockerfileMariner $MARINER_TAG
+          ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER) $(AZCOPY_DOCKER_REG_PWD) $MARINER_TAG
         displayName: "Create docker image and push to the containers registry"
         workingDirectory: $(work_dir)/docker
+        env:
+          DOCKER_TAG: ${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}ubuntu-x86_64${{ else }}ubuntu-arm64
+          MARINER_TAG: ${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}mariner-x86_64${{ else }}mariner-arm64
