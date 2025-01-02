@@ -1837,7 +1837,7 @@ stages:
       # dependsOn: TestArtifacts
       # condition: succeeded('TestArtifacts')
       jobs:
-        - template: build_publish_docker.yml
+        - template: setup/build_publish_docker.yml
           parameters:
             jobName: Set_1_Ubuntu_Mariner_AMD64
             matrix:
@@ -1847,7 +1847,7 @@ stages:
                 container: 'test-cnt-ubn-22'
             poolName: $(vmImage)
 
-        - template: build_publish_docker.yml
+        - template: setup/build_publish_docker.yml
           parameters:
             jobName: Set_2_Ubuntu_Mariner_ARM64
             matrix:
