@@ -33,7 +33,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.0
 	github.com/Azure/go-autorest/autorest/date v0.3.0
-	golang.org/x/net v0.30.0
+	golang.org/x/net v0.33.0
 )
 
 require (
