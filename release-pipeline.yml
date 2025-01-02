@@ -1846,6 +1846,8 @@ stages:
                 vmImage: 'Ubuntu-22.04'
                 container: 'test-cnt-ubn-22'
             poolName: $(vmImage)
+            ubuntu_tag: 'ubuntu-x86_64'
+            mari_tag: 'mariner-x86_64'
 
         - template: setup/build_publish_docker.yml
           parameters:
@@ -1858,6 +1860,8 @@ stages:
             poolName: "blobfuse-ubn-arm64-pool"
             demands:
               - ImageOverride -equals $(AgentName)
+            ubuntu_tag: 'ubuntu-arm64'
+            mari_tag: 'mariner-arm64'
 
   - ${{ if eq(parameters.post_release, true) }}:
     - stage: ReleaseToGithub
