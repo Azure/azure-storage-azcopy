@@ -1,0 +1,68 @@
+parameters:
+  - name: jobName
+    type: string
+  - name: matrix
+    type: object
+  - name: poolName
+    type: string
+  - name: demands
+    type: object
+    default: []
+  - name: vmImage
+    type: string
+  - name: container
+    type: string
+
+jobs:
+  - job: ${{ parameters.jobName }}
+    timeoutInMinutes: 120
+    strategy:
+      matrix: ${{ parameters.matrix }}
+    pool:
+      name: ${{ parameters.poolName }}
+      vmImage: ${{ parameters.vmImage }}
+      demands: ${{ parameters.demands }}
+
+    variables:
+    - group: AZCOPY_SECRET_VAULT
+    - name: root_dir
+      value: '$(System.DefaultWorkingDirectory)'
+    - name: work_dir
+      value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+
+    steps:
+      # TODO remove when merging to main
+      - checkout: none
+      - script: |
+          git clone https://github.com/Azure/azure-storage-azcopy
+        displayName: 'Checkout Code'
+        workingDirectory: $(root_dir)
+
+      - script: |
+          git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
+        displayName: 'Checkout branch'
+        workingDirectory: $(work_dir)
+
+      - ${{ if eq(parameters.jobName, 'Set_2_Ubuntu_Mariner_ARM64') }}:
+        - task: ShellScript@2
+          inputs:
+            scriptPath: "$(work_dir)/go_installer.sh"
+            args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+          displayName: "Installing Go tools"
+
+      - ${{ if eq(parameters.jobName, 'Set_2_Ubuntu_Mariner_ARM64') }}:
+        - script: |
+            sudo apt update
+            sudo apt --fix-broken install
+          displayName: "Install dependencies"
+
+      - script: |
+          chmod 777 *.sh
+          ./dockerinstall.sh
+          ./buildcontainer.sh Dockerfile ${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}ubuntu-x86_64${{ else }}ubuntu-arm64
+          ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER) $(AZCOPY_DOCKER_REG_PWD) ${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}ubuntu-x86_64${{ else }}ubuntu-arm64
+
+          ./buildcontainer.sh DockerfileMariner${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}${{ else }}Arm64
+          ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER) $(AZCOPY_DOCKER_REG_PWD) mariner-${{ if eq(parameters.jobName, 'Set_1_Ubuntu_Mariner_AMD64') }}x86_64${{ else }}arm64
+        displayName: "Create docker image and push to the containers registry"
+        workingDirectory: $(work_dir)/docker
