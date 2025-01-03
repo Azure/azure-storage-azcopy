@@ -22,6 +22,13 @@ jobs:
           - ImageOverride -equals ${{ parameters.matrix['Ubuntu_arm64'].agentName }}
       ${{ if eq(parameters.useDemands, false) }}:
         vmImage: ${{ parameters.matrix['Ubuntu_amd64'].vmImage }}
+    
+    variables:
+          - group: AZCOPY_SECRET_VAULT
+          - name: root_dir
+            value: '$(System.DefaultWorkingDirectory)'
+          - name: work_dir
+            value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
     steps:
       - checkout: none
