@@ -1846,8 +1846,6 @@ stages:
                 agentName: "blobfuse-ubuntu22"
                 vmImage: 'Ubuntu-22.04'
                 container: 'test-cnt-ubn-22'
-            pool:
-              vmImage: $(vmImage)
             ubuntu_tag: 'ubuntu-x86_64'
             mariner_tag: 'mariner-x86_64'
 
@@ -1860,10 +1858,6 @@ stages:
                 agentName: "blobfuse-ubn22-arm64"
                 vmImage: 'Ubuntu-22.04'
                 container: 'test-cnt-ubn-22-arm64'
-            pool:
-              name: "blobfuse-ubn-arm64-pool"
-              demands:
-                - ImageOverride -equals $(agentName)
             ubuntu_tag: 'ubuntu-arm64'
             mariner_tag: 'mariner-arm64'
 
