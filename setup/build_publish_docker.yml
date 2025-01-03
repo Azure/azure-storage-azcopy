@@ -1,7 +1,7 @@
 parameters:
   - name: jobName
     type: string
-  - name: useDemands: 
+  - name: useDemands
     type: boolean
   - name: matrix
     type: object
