@@ -1,17 +1,10 @@
 parameters:
   - name: jobName
     type: string
+  - name: useDemands: 
+    type: boolean
   - name: matrix
     type: object
-  - name: poolName
-    type: string
-  - name: demands
-    type: object
-    default: []
-  - name: vmImage
-    type: string
-  - name: container
-    type: string
   - name: ubuntu_tag
     type: string
   - name: mariner_tag
@@ -23,16 +16,13 @@ jobs:
     strategy:
       matrix: ${{ parameters.matrix }}
     pool:
-      name: ${{ parameters.poolName }}
-      vmImage: ${{ parameters.vmImage }}
-      demands: ${{ parameters.demands }}
-
-    variables:
-    - group: AZCOPY_SECRET_VAULT
-    - name: root_dir
-      value: '$(System.DefaultWorkingDirectory)'
-    - name: work_dir
-      value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+      ${{ if eq(parameters.useDemands, true) }}:
+        name: "blobfuse-ubn-arm64-pool"
+        demands:
+          - ImageOverride -equals ${{ parameters.matrix.agentName }}
+      ${{ if eq(parameters.useDemands, false) }}:
+        vmImage: ${{ parameters.matrix.vmImage }}
+      
 
     steps:
       - checkout: none

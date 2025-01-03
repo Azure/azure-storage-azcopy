@@ -1838,28 +1838,34 @@ stages:
       # condition: succeeded('TestArtifacts')
       jobs:
         - template: setup/build_publish_docker.yml
-          parameters:
-            jobName: Set_1_Ubuntu_Mariner_AMD64
-            matrix:
-              Ubuntu_amd64:
-                agentName: "blobfuse-ubuntu22"
-                vmImage: 'Ubuntu-22.04'
-                container: 'test-cnt-ubn-22'
-            poolName: $(vmImage)
-            ubuntu_tag: 'ubuntu-x86_64'
-            mariner_tag: 'mariner-x86_64'
+            parameters:
+              jobName: Set_1_Ubuntu_Mariner_AMD64
+              useDemands: false
+              matrix:
+                Ubuntu_amd64:
+                  agentName: "blobfuse-ubuntu22"
+                  vmImage: 'Ubuntu-22.04'
+                  container: 'test-cnt-ubn-22'
+              pool:
+                vmImage: $(vmImage)
+              ubuntu_tag: 'ubuntu-x86_64'
+              mariner_tag: 'mariner-x86_64'
+
+              
 
         - template: setup/build_publish_docker.yml
           parameters:
             jobName: Set_2_Ubuntu_Mariner_ARM64
+            useDemands: true
             matrix:
-              Ubuntu-22-ARM64:
+              Ubuntu_arm64:
+                agentName: "blobfuse-ubn22-arm64"
                 vmImage: 'Ubuntu-22.04'
                 container: 'test-cnt-ubn-22-arm64'
-                AgentName: "blobfuse-ubn22-arm64"
-            poolName: "blobfuse-ubn-arm64-pool"
-            demands:
-              - ImageOverride -equals $(AgentName)
+            pool:
+              name: "blobfuse-ubn-arm64-pool"
+              demands:
+                - ImageOverride -equals $(agentName)
             ubuntu_tag: 'ubuntu-arm64'
             mariner_tag: 'mariner-arm64'
 
