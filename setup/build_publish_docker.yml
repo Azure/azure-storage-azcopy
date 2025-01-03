@@ -31,16 +31,7 @@ jobs:
             value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
 
     steps:
-      - checkout: none
-      - script: |
-          git clone https://github.com/Azure/azure-storage-azcopy
-        displayName: "Checkout Code"
-        workingDirectory: $(root_dir)
-
-      - script: |
-          git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-        displayName: "Checkout branch"
-        workingDirectory: $(work_dir)
+      - checkout: self
 
       - ${{ if eq(parameters.jobName, 'Set_2_Ubuntu_Mariner_ARM64') }}:
         - task: ShellScript@2
