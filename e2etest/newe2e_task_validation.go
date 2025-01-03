@@ -175,14 +175,19 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
 }
 
-func ValidateMessageOutput(a Asserter, stdout AzCopyStdout, message string) {
+func ValidateMessageOutput(a Asserter, stdout AzCopyStdout, message string, shouldContain bool) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
+	var contains bool
 	for _, line := range stdout.RawStdout() {
 		if strings.Contains(line, message) {
-			return
+			contains = true
+			break
 		}
+	}
+	if (!contains && !shouldContain) || (contains && shouldContain) {
+		return
 	}
 	fmt.Println(stdout.String())
 	a.Error(fmt.Sprintf("expected message (%s) not found in azcopy output", message))

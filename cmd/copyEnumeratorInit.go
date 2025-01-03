@@ -157,7 +157,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 				logDstContainerCreateFailureOnce.Do(func() {
-					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+					glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
 				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to create destination container %s. The transfer will continue if the container exists", dstContainerName), common.LogWarning)
 				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
@@ -194,7 +194,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 					if _, ok := seenFailedContainers[bucketName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+							glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", bucketName), common.LogWarning)
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
@@ -215,7 +215,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+							glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", resName), common.LogWarning)
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
