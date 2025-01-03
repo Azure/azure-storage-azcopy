@@ -1834,8 +1834,8 @@ stages:
 
   - ${{ if eq(parameters.publish_docker_image, true) }}:
     - stage: BuildAndPublishDockerImage
-      # dependsOn: TestArtifacts
-      # condition: succeeded('TestArtifacts')
+      dependsOn: TestArtifacts
+      condition: succeeded('TestArtifacts')
       jobs:
         - template: setup/build_publish_docker.yml
           parameters:
