@@ -1836,19 +1836,20 @@ stages:
     - stage: BuildAndPublishDockerImage
       # dependsOn: TestArtifacts
       # condition: succeeded('TestArtifacts')
+      jobs:
         - template: setup/build_publish_docker.yml
-            parameters:
-              jobName: Set_1_Ubuntu_Mariner_AMD64
-              useDemands: false
-              matrix:
-                Ubuntu_amd64:
-                  agentName: "blobfuse-ubuntu22"
-                  vmImage: 'Ubuntu-22.04'
-                  container: 'test-cnt-ubn-22'
-              pool:
-                vmImage: $(vmImage)
-              ubuntu_tag: 'ubuntu-x86_64'
-              mariner_tag: 'mariner-x86_64'
+          parameters:
+            jobName: Set_1_Ubuntu_Mariner_AMD64
+            useDemands: false
+            matrix:
+              Ubuntu_amd64:
+                agentName: "blobfuse-ubuntu22"
+                vmImage: 'Ubuntu-22.04'
+                container: 'test-cnt-ubn-22'
+            pool:
+              vmImage: $(vmImage)
+            ubuntu_tag: 'ubuntu-x86_64'
+            mariner_tag: 'mariner-x86_64'
 
         - template: setup/build_publish_docker.yml
           parameters:
