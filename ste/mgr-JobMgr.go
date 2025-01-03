@@ -580,7 +580,7 @@ func (jm *jobMgr) setFinalPartOrdered(partNum PartNumber, isFinalPart bool) {
 		if partNum == 0 {
 			// We can't complain because, when resuming a job, there are actually TWO calls made the ResurrectJob.
 			// The effect is that all the parts are ordered... then all the parts are ordered _again_ (with new JobPartManagers replacing those from the first time)
-			// (The first resurrect is from GetJobFromTo and the second is from ResumeJobOrder)
+			// (The first resurrect is from GetJobDetails and the second is from ResumeJobOrder)
 			// So we don't object if the _first_ part clears the flag. The assumption we make, by allowing this special case here, is that
 			// the first part will be scheduled before any higher-numbered part.  As long as that assumption is true, this is safe.
 			// TODO: do we really need to to Resurrect the job twice?
@@ -715,7 +715,9 @@ func (jm *jobMgr) reportJobPartDoneHandler() {
 				(isCancelling && !haveFinalPart) // If we're cancelling, it's OK to try to exit early; the user already accepted this job cannot be resumed. Outgoing requests will fail anyway, so nothing can properly clean up.
 			if shouldComplete {
 				// Inform StatusManager that all parts are done.
-				close(jm.jstm.xferDone)
+				if jm.jstm.xferDone != nil {
+					close(jm.jstm.xferDone)
+				}
 
 				// Wait  for all XferDone messages to be processed by statusManager. Front end
 				// depends on JobStatus to determine if we've to quit job. Setting it here without

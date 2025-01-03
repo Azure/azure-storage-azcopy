@@ -53,7 +53,7 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 	case common.ERpcCmd.PauseJob():
 	case common.ERpcCmd.CancelJob():
 	case common.ERpcCmd.ResumeJob():
-	case common.ERpcCmd.GetJobFromTo():
+	case common.ERpcCmd.GetJobDetails():
 		fallthrough
 	default:
 		panic("RPC mock not implemented")

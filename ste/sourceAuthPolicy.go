@@ -32,9 +32,9 @@ import (
 // sourceAuthPolicy should be used as a per-retry policy
 // when source is authenticated via oAuth.
 type sourceAuthPolicy struct {
-	cred azcore.TokenCredential
+	cred  azcore.TokenCredential
 	token *azcore.AccessToken
-	lock sync.RWMutex
+	lock  sync.RWMutex
 }
 
 const copySourceAuthHeader = "x-ms-copy-source-authorization"
@@ -49,12 +49,12 @@ func (s *sourceAuthPolicy) Do(req *policy.Request) (*http.Response, error) {
 		return req.Next()
 	}
 
-	// s.cred is common.ScopedCredential, options gets ignored. This is done so 
+	// s.cred is common.ScopedCredential, options gets ignored. This is done so
 	// that common.ScopedCredential is tagged as azcore.TokenCredential interface
-	options := policy.TokenRequestOptions{Scopes: nil}
+	options := policy.TokenRequestOptions{Scopes: nil, EnableCAE: true}
 	s.lock.RLock()
 	if s.token == nil || time.Until(s.token.ExpiresOn) < minimumTokenValidDuration {
-		s.lock.RUnlock()			
+		s.lock.RUnlock()
 		s.lock.Lock()
 		// If someone else has updated the token while we waited
 		// above, we dont have to refresh again

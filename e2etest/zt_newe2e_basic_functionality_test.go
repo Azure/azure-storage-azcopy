@@ -1,6 +1,9 @@
 package e2etest
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
 	"time"
 
@@ -411,6 +414,57 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+}
+
+// Test of Copy to UnsafeDestinations (Windows Local dest)
+func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariationManager) {
+	azCopyVerb := AzCopyVerbCopy
+
+	fileName := "file."
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()), // Only source is File - Windows Local & Blob doesn't support T.D
+		ResourceDefinitionObject{
+			ObjectName: pointerTo(fileName),
+			Body:       body,
+		})
+
+	dstObj := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm,
+			ResolveVariation(svm, []common.Location{common.ELocation.File(),
+				common.ELocation.Local()})),
+		ResourceDefinitionContainer{}).GetObject(svm, "file", common.EEntityType.File())
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:   pointerTo(true),
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to unsafe Local destination
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj,
+		ResourceDefinitionObject{
+			Body: body,
+		}, false)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
