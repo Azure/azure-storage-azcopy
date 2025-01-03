@@ -19,21 +19,20 @@ jobs:
       ${{ if eq(parameters.useDemands, true) }}:
         name: "blobfuse-ubn-arm64-pool"
         demands:
-          - ImageOverride -equals ${{ parameters.matrix.agentName }}
+          - ImageOverride -equals ${{ parameters.matrix['Ubuntu_arm64'].agentName }}
       ${{ if eq(parameters.useDemands, false) }}:
-        vmImage: ${{ parameters.matrix.vmImage }}
-      
+        vmImage: ${{ parameters.matrix['Ubuntu_amd64'].vmImage }}
 
     steps:
       - checkout: none
       - script: |
           git clone https://github.com/Azure/azure-storage-azcopy
-        displayName: 'Checkout Code'
+        displayName: "Checkout Code"
         workingDirectory: $(root_dir)
 
       - script: |
           git checkout `echo $(Build.SourceBranch) | cut -d "/" -f 1,2 --complement`
-        displayName: 'Checkout branch'
+        displayName: "Checkout branch"
         workingDirectory: $(work_dir)
 
       - ${{ if eq(parameters.jobName, 'Set_2_Ubuntu_Mariner_ARM64') }}:
