@@ -546,3 +546,53 @@ func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioV
 		Body: body,
 	}, false)
 }
+
+// Test empty files are not uploaded when File share quota is hit
+func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationManager) {
+	quotaMB := int32(10) // 10 MB quota
+	shareName := "testsharewithquota"
+	shareResource := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{
+		ContainerName: &shareName,
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				Quota: &quotaMB},
+		},
+	})
+
+	fileSizeMB := int64(6)
+	fileNames := []string{"file_1.txt", "file_2.txt", "file_3.txt"}
+
+	// Create src obj mapping
+	srcObjs := make(ObjectResourceMappingFlat)
+	// Creat source files
+	for _, fileName := range fileNames {
+		body := NewRandomObjectContentContainer(fileSizeMB * common.MegaByte)
+		obj := ResourceDefinitionObject{
+			ObjectName: &fileName,
+			Body:       body,
+		}
+		srcObjs[fileName] = obj
+	}
+
+	for _, fileName := range fileNames {
+		srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), srcObjs[fileName])
+		dstObj := shareResource.GetObject(svm, fileName, common.EEntityType.File())
+
+		// Upload all files
+		RunAzCopy(svm, AzCopyCommand{
+			Verb:    AzCopyVerbCopy,
+			Targets: []ResourceManager{srcObj, dstObj},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:   pointerTo(true),
+					BlockSizeMB: pointerTo(4.0),
+				},
+			},
+		})
+	}
+
+	// Validate uploaded files are not empty
+	ValidateResource[ContainerResourceManager](svm, shareResource, ResourceDefinitionContainer{
+		Objects: srcObjs,
+	}, true)
+}
