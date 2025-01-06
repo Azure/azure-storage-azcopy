@@ -823,9 +823,9 @@ extends:
                 workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
               - script: |
-                  chmod 755 $(work_dir)/azCopy-binaries/azcopy_linux_amd64
+                  chmod 755 $(work_dir)/azCopy-binaries-linux-amd64
                   # Run azcopy --version and capture the output
-                  azcopyOutput=$($(work_dir)/azCopy-binaries/azcopy_linux_amd64 --version)
+                  azcopyOutput=$($(work_dir)/azCopy-binaries-linux-amd64 --version)
 
                   if echo "$azcopyOutput" | grep -q "azcopy version"; then
                     version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
@@ -947,9 +947,17 @@ extends:
                   artifactName: 'azCopy-mac-temp'
                   targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
 
+              - task: DownloadPipelineArtifact@2
+                displayName: 'Download Pipeline Artifacts'
+                inputs:
+                  artifactName: 'azCopy-mac-temp-m1'
+                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
+
               - script: |
                   sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
                   md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
+                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*
                 displayName: 'List Artifacts'
 
               - script: |
@@ -970,14 +978,24 @@ extends:
                   ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
                   Pattern: '*.zip'
 
+              - template: setup/esrp_sign_notarize_macos.yml@self
+                parameters:
+                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
+                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+                  Pattern: '*.zip'
+
               # Validate signed images have md5sum changed
               - script: |
                   mkdir $(System.DefaultWorkingDirectory)/signed
                   mkdir $(System.DefaultWorkingDirectory)/binaries
                   chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*
                   rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
+                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*.md
                   mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(System.DefaultWorkingDirectory)/signed/
+                  mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/* $(System.DefaultWorkingDirectory)/signed/
                   rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
+                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/
                 displayName: 'Make Artifacts executable'
 
               - script: |
@@ -989,9 +1007,9 @@ extends:
                   mkdir -p unzipped_amd64
                   mkdir -p unzipped_arm64
                   mkdir -p unzipped_m1_arm64
-                  unzip -o azcopy*amd64*.zip -d unzipped_amd64
-                  unzip -o azcopy_darwin_arm64*.zip -d unzipped_arm64
-                  unzip -o azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
+                  unzip -o signed/azcopy*amd64*.zip -d unzipped_amd64
+                  unzip -o signed/azcopy_darwin_arm64*.zip -d unzipped_arm64
+                  unzip -o signed/azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
 
                   # Use find to retrieve the folder name
                   amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
@@ -1040,6 +1058,7 @@ extends:
                   rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
                   rm -rf $(Build.ArtifactStagingDirectory)/*.zip
                   sudo ls -ltR $(System.DefaultWorkingDirectory)/signed
+                  cp $(System.DefaultWorkingDirectory)/signed/ $(System.DefaultWorkingDirectory)/binaries/
                 displayName:  'Copy and list signed mac binary to staging directory'
                 workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
