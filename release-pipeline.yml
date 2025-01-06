@@ -1,5 +1,5 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.21.8'
+  AZCOPY_GOLANG_VERSION: '1.23.1'
 
 parameters:
   - name: tag
