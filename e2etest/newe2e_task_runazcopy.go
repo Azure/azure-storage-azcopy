@@ -193,12 +193,9 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 
 			if c.Environment.AutoLoginMode == nil && c.Environment.ServicePrincipalAppID == nil && c.Environment.ServicePrincipalClientSecret == nil && c.Environment.AutoLoginTenantID == nil {
 				if GlobalConfig.StaticResources() {
-					c.Environment.AutoLoginMode = pointerTo("SPN")
+					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
 					oAuthInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
-					a.AssertNow("At least NEW_E2E_STATIC_APPLICATION_ID and NEW_E2E_STATIC_CLIENT_SECRET must be specified to use OAuth.", Empty{true}, oAuthInfo.ApplicationID, oAuthInfo.ClientSecret)
-
 					c.Environment.ServicePrincipalAppID = &oAuthInfo.ApplicationID
-					c.Environment.ServicePrincipalClientSecret = &oAuthInfo.ClientSecret
 					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
 				} else {
 					// oauth should reliably work

@@ -53,8 +53,9 @@ type NewE2EConfig struct {
 			StaticOAuth struct {
 				TenantID      string `env:"NEW_E2E_STATIC_TENANT_ID"`
 				ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID,required"`
-				ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET,required"`
+				ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET"`
 			}
+			Environment string `env:"NEW_E2E_ENVIRONMENT,required"`
 
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
 			Standard struct {

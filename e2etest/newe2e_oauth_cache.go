@@ -40,8 +40,8 @@ func SetupOAuthCache(a Asserter) {
 		tenantId = common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicOAuth.SPNSecret.TenantID)
 		cred, err = azidentity.NewClientSecretCredential(
 			tenantId,
-			common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID),
-			common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret),
+			dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID, //Only use the dynamic info would be used
+			dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret,
 			nil, // Hopefully the defaults should be OK?
 		)
 	}
