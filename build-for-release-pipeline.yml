@@ -731,7 +731,7 @@ extends:
 
               - script: |
                   sudo ls -lRt $(Build.ArtifactStagingDirectory)/signed
-                  md5sum $(Build.ArtifactStagingDirectory)/signed*
+                  md5sum $(Build.ArtifactStagingDirectory)/signed/*
                   md5sum $(Build.ArtifactStagingDirectory)/signed/mariner/*
                 displayName: 'List Signed Artifacts'
 
