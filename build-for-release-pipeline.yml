@@ -716,6 +716,7 @@ extends:
               # Validate signed images have md5sum changed
               - script: |
                   mkdir -p $(Build.ArtifactStagingDirectory)/signed
+                  mkdir -p $(Build.ArtifactStagingDirectory)/signed/mariner
                   chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/*
                   chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/*
                   chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
