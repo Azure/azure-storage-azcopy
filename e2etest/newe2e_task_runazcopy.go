@@ -195,7 +195,6 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				if GlobalConfig.StaticResources() {
 					c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
 					oAuthInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
-					c.Environment.ServicePrincipalAppID = &oAuthInfo.ApplicationID
 					c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.TenantID != "", &oAuthInfo.TenantID, nil)
 				} else {
 					// oauth should reliably work

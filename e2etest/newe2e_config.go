@@ -52,7 +52,7 @@ type NewE2EConfig struct {
 		StaticStgAcctInfo struct {
 			StaticOAuth struct {
 				TenantID      string `env:"NEW_E2E_STATIC_TENANT_ID"`
-				ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID,required"`
+				ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID"`
 				ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET"`
 			}
 
