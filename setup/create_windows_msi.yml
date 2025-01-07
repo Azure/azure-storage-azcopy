@@ -84,21 +84,28 @@ steps:
     Write-Host "Compiling .wxs file..."
     & "$wixToolsPath\candle.exe" -out $wixObjPath $wxsFilePath
 
-    # # Step 4: Link the .wixobj to create the MSI using Light
-    # Write-Host "Linking to create MSI..."
-    # & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath
+    # Step 4: Link the .wixobj to create the MSI using Light
+    Write-Host "Linking to create MSI..."
+    & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath
 
-    # Link and create MSI with embedded CABs
-    Write-Host "Linking to create MSI with embedded CAB..."
-    & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath -b $workDir -sw1055 -v
-    Write-Host "MSI creation with embedded CAB completed!"
+    # # Link and create MSI with embedded CABs
+    # Write-Host "Linking to create MSI with embedded CAB..."
+    # & "$wixToolsPath\light.exe" -out $outputMsi $wixObjPath -b $workDir -sw1055 -v
+    # Write-Host "MSI creation with embedded CAB completed!"
 
-    Write-Host "Work Dir: $workDir"
+    # Write-Host "Work Dir: $workDir"
 
-    Get-ChildItem -Path $workDir -Filter "*.cab"
+    # Get-ChildItem -Path $workDir -Filter "*.cab"
 
-    Write-Host "output msi Dir: $outputMsi"
-    Get-ChildItem -Path $outputMsi -Filter "*.cab" | Format-Table Name, FullName
+    # Write-Host "output msi Dir: $outputMsi"
+    # Get-ChildItem -Path $outputMsi -Filter "*.cab" | Format-Table Name, FullName
 
 
     Write-Host "MSI creation process completed!"
+
+    msiexec /i $outputMsi
+    if ($LASTEXITCODE -eq 0) {
+    Write-Host "Installation was successful."
+    } else {
+        Write-Host "Installation failed with exit code $LASTEXITCODE."
+    }

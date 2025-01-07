@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="azcopy" Language="1033" Version="10.26.0" Manufacturer="Microsoft" UpgradeCode="abeee33a-0cca-4060-89d7-0687f7374f7a">
+  <Product Id="*" Name="azcopy" Language="1033" Version="10.28.0" Manufacturer="Microsoft" UpgradeCode="abeee33a-0cca-4060-89d7-0687f7374f7a">
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
 
-    <MediaTemplate />
+    <!-- Avoid using an external .cab file by setting EmbedCab="no" -->
+    <Media Id="1" Cabinet="product.cab" EmbedCab="no" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
