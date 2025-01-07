@@ -483,7 +483,7 @@ extends:
                 inputs:
                   targetType: 'inline'
                   script: |
-                    azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}' | cut -d'-' -f1)
+                    azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}')
                     echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
 
               - script: |
@@ -638,7 +638,7 @@ extends:
             templateContext:
               outputs:
                 - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)
+                  targetPath: $(Build.ArtifactStagingDirectory)/signed
                   artifactName: 'azCopy-linux-signed'
 
             variables:
@@ -715,22 +715,24 @@ extends:
 
               # Validate signed images have md5sum changed
               - script: |
+                  mkdir -p $(Build.ArtifactStagingDirectory)/signed
                   chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/*
                   chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/*
                   chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
                   rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/*.md
                   rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/*.md
                   rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/* $(Build.ArtifactStagingDirectory)/
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/* $(Build.ArtifactStagingDirectory)/
+                  mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/* $(Build.ArtifactStagingDirectory)/signed
+                  mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/* $(Build.ArtifactStagingDirectory)/signed
+                  mv $(Build.ArtifactStagingDirectory)/mariner/* $(Build.ArtifactStagingDirectory)/signed/mariner
                   rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
                   rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
                 displayName: 'Make Artifacts executable'
 
               - script: |
-                  sudo ls -lRt $(Build.ArtifactStagingDirectory)
-                  md5sum $(Build.ArtifactStagingDirectory)/*
-                  md5sum $(Build.ArtifactStagingDirectory)/mariner/*
+                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/signed
+                  md5sum $(Build.ArtifactStagingDirectory)/signed*
+                  md5sum $(Build.ArtifactStagingDirectory)/signed/mariner/*
                 displayName: 'List Signed Artifacts'
 
           - job: Set_2
@@ -780,7 +782,7 @@ extends:
                   itemPattern: 'azCopy-binaries-linux-amd64/azcopy_linux_amd64'
 
               - script: |
-                  sudo ls -lRt $(Build.ArtifactStagingDirectory)
+                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
                   md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
                   rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
                 displayName: 'List Artifacts'
@@ -808,14 +810,11 @@ extends:
                   mkdir $(System.DefaultWorkingDirectory)/signed
                   rm -rf azCopy-windows-temp/*.md
                   cp azCopy-windows-temp/* $(System.DefaultWorkingDirectory)/binaries
-                  mv azCopy-windows-temp $(work_dir)
                 displayName: 'Add signed windows binary to staging directory'
                 workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
               # Validate signed images have md5sum changed
               - script: |
-                  rm -rf  $(Build.ArtifactStagingDirectory)/*
-                  mv $(work_dir)/azCopy-windows-temp .
                   rm -rf azCopy-windows-temp/azcopy_windows_v7_arm.exe
                   chmod 755 azCopy-windows-temp/*
                   rm -rf azCopy-windows-temp/*.md
@@ -823,9 +822,9 @@ extends:
                 workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
               - script: |
-                  chmod 755 $(work_dir)/azCopy-binaries-linux-amd64
+                  chmod 755 $(work_dir)/azcopy_linux_amd64
                   # Run azcopy --version and capture the output
-                  azcopyOutput=$($(work_dir)/azCopy-binaries-linux-amd64 --version)
+                  azcopyOutput=$($(work_dir)/azcopy_linux_amd64 --version)
 
                   if echo "$azcopyOutput" | grep -q "azcopy version"; then
                     version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
@@ -1007,9 +1006,9 @@ extends:
                   mkdir -p unzipped_amd64
                   mkdir -p unzipped_arm64
                   mkdir -p unzipped_m1_arm64
-                  unzip -o signed/azcopy*amd64*.zip -d unzipped_amd64
-                  unzip -o signed/azcopy_darwin_arm64*.zip -d unzipped_arm64
-                  unzip -o signed/azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
+                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy*amd64*.zip -d unzipped_amd64
+                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_arm64*.zip -d unzipped_arm64
+                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
 
                   # Use find to retrieve the folder name
                   amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
@@ -1025,7 +1024,7 @@ extends:
                   if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
                       echo "Found matching AMD64 directory: $amd64FolderName"
                       cd "$amd64FolderName"
-                      mv azcopy $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_amd64
+                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_amd64
                   else
                       echo "Error: Expected exactly one matching AMD64 directory, found $(echo "$amd64FolderName" | wc -l)."
                       exit 1
@@ -1037,7 +1036,7 @@ extends:
                   if [ $(echo "$arm64FolderName" | wc -l) -eq 1 ]; then
                       echo "Found matching ARM64 directory: $arm64FolderName"
                       cd "$arm64FolderName"
-                      mv azcopy $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_arm64
+                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_arm64
                   else
                       echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
                       exit 1
@@ -1049,7 +1048,7 @@ extends:
                   if [ $(echo "$m1Arm64FolderName" | wc -l) -eq 1 ]; then
                       echo "Found matching ARM64 M1 directory: $m1Arm64FolderName"
                       cd "$m1Arm64FolderName"
-                      mv azcopy $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_m1_arm64
+                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_m1_arm64
                   else
                       echo "Error: Expected exactly one matching ARM64 M1 directory, found $(echo "$m1Arm64FolderName" | wc -l)."
                       exit 1
@@ -1057,8 +1056,7 @@ extends:
 
                   rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
                   rm -rf $(Build.ArtifactStagingDirectory)/*.zip
-                  sudo ls -ltR $(System.DefaultWorkingDirectory)/signed
-                  cp $(System.DefaultWorkingDirectory)/signed/ $(System.DefaultWorkingDirectory)/binaries/
+                  sudo ls -ltR $(System.DefaultWorkingDirectory)/binaries
                 displayName:  'Copy and list signed mac binary to staging directory'
                 workingDirectory: '$(Build.ArtifactStagingDirectory)'
 
