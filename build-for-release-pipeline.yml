@@ -779,9 +779,10 @@ extends:
                 inputs:
                   artifactName: 'azCopy-binaries-linux-amd64'
                   targetPath: $(work_dir)
-                  itemPattern: 'azCopy-binaries-linux-amd64/azcopy_linux_amd64'
+                  itemPattern: 'azcopy_linux_amd64'
 
               - script: |
+                  sudo ls -lRt $(work_dir)
                   sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
                   md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
                   rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
