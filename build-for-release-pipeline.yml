@@ -1069,11 +1069,6 @@ extends:
         jobs:
           - job: Set_1
             timeoutInMinutes: 120
-            strategy:
-              matrix:
-                Linux-Signing:
-                  vmImage: 'Ubuntu-20.04'
-                  AgentName: "blobfuse-ubuntu20"
             pool:
               name: azcopy-pool
               image: ubuntu22-1espt
@@ -1083,9 +1078,9 @@ extends:
 
               - template: setup/test_artifacts.yml
                 parameters:
-                  artifact_name: 'azCopy-binaries'
-                  download_path: '$(System.DefaultWorkingDirectory)'
-                  item_pattern: 'azCopy-binaries/azcopy_linux*amd64'
+                  artifact_name: 'azCopy-binaries-linux-amd64'
+                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-binaries'
+                  item_pattern: 'azcopy_linux*amd64'
 
               - script: |
                   ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries/
@@ -1100,7 +1095,7 @@ extends:
                 displayName: 'Download Build Artifacts'
                 inputs:
                   artifactName: 'azCopy-linux-signed'
-                  downloadPath: '$(System.DefaultWorkingDirectory)'
+                  downloadPath: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
                   itemPattern: 'azCopy-linux-signed/azcopy-*x86_64.deb'
 
               - script: |
