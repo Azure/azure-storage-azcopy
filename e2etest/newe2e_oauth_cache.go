@@ -38,9 +38,11 @@ func SetupOAuthCache(a Asserter) {
 		})
 	} else {
 		tenantId = common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicOAuth.SPNSecret.TenantID)
-		cred, err = azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{
-			TenantID: tenantId,
-		})
+		cred, err = azidentity.NewClientSecretCredential(
+			tenantId,
+			dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID,
+			dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret,
+			nil)
 	}
 	a.NoError("create credentials", err)
 

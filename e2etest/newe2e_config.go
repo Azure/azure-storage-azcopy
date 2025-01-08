@@ -50,10 +50,8 @@ type NewE2EConfig struct {
 		} `env:",required"`
 
 		StaticStgAcctInfo struct {
-			StaticOAuth struct {
-				TenantID      string `env:"NEW_E2E_STATIC_TENANT_ID"`
-				ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID"`
-				ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET"`
+			StaticOAuth struct { //defaults to AzCLI auth
+				TenantID string `env:"NEW_E2E_STATIC_TENANT_ID"`
 			}
 
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
