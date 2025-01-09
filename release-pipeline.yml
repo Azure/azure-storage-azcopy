@@ -451,12 +451,8 @@ stages:
               # Get AzCopy version
               $azcopyVersion = & "$(work_dir)\azcopy.exe" --version
 
-              # Set the AzCopy version as an environment variable
-              [System.Environment]::SetEnvironmentVariable("AZCOPY_VERSION", $azcopyVersion, [System.EnvironmentVariableTarget]::User)
-
-              # Use the environment variable in a template or script
-              $azcopyVersion = $env:AZCOPY_VERSION
-              Write-Host "The AzCopy version is: $azcopyVersion"
+              # Output the version to be captured as a pipeline variable
+              Write-Host "##vso[task.setvariable variable=azcopyVersion]$azcopyVersion"
             displayName: 'Copy required files for packaging'
 
           - template: setup/create_windows_msi.yml
