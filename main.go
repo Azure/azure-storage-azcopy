@@ -33,6 +33,7 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
+	runtime.MemProfileRate=0
 	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
 	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
 
