@@ -3,7 +3,6 @@
   <Product Id="*" Name="azcopy" Language="1033" Version="10.28.0" Manufacturer="Microsoft" UpgradeCode="abeee33a-0cca-4060-89d7-0687f7374f7a">
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
 
-    <!-- Avoid using an external .cab file by setting EmbedCab="no" -->
     <Media Id="1" Cabinet="azcopy.cab" EmbedCab="yes" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
