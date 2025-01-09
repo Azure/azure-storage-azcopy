@@ -4,7 +4,7 @@
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
 
     <!-- Avoid using an external .cab file by setting EmbedCab="no" -->
-    <Media Id="1" Cabinet="product.cab" EmbedCab="no" />
+    <Media Id="1" Cabinet="azcopy.cab" EmbedCab="yes" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
