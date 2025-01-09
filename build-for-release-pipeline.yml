@@ -1033,7 +1033,7 @@ extends:
             steps:
               - checkout: none
 
-              - template: setup/test_artifacts.yml
+              - template: setup/test_artifacts.yml@self
                 parameters:
                   artifact_name: 'azCopy-binaries-linux-amd64'
                   download_path: '$(System.DefaultWorkingDirectory)/azCopy-binaries'
@@ -1076,7 +1076,7 @@ extends:
             steps:
               - checkout: none
 
-              - template: setup/test_artifacts.yml
+              - template: setup/test_artifacts.yml@self
                 parameters:
                   artifact_name: 'azCopy-linux-signed'
                   download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
@@ -1163,7 +1163,7 @@ extends:
                   ldd --version
                 displayName: "Libsecret Install"
 
-              - template: setup/test_artifacts.yml
+              - template: setup/test_artifacts.yml@self
                 parameters:
                   artifact_name: 'azCopy-linux-signed'
                   download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
@@ -1253,7 +1253,7 @@ extends:
                   ldd --version
                 displayName: "Libsecret Install"
 
-              - template: setup/test_artifacts.yml
+              - template: setup/test_artifacts.yml@self
                 parameters:
                   artifact_name: 'azCopy-binaries'
                   download_path: '$(System.DefaultWorkingDirectory)/azCopy-binaries'
@@ -1295,7 +1295,7 @@ extends:
             steps:
               - checkout: none
 
-              - template: setup/test_artifacts.yml
+              - template: setup/test_artifacts.yml@self
                 parameters:
                   artifact_name: 'azCopy-linux-signed'
                   download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner'
