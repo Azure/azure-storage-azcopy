@@ -385,10 +385,16 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 
 // @brief Checks if the container name provided is a system container or not
 func IsSystemContainer(containerName string) bool {
+	// Decode the container name in case it's URL-encoded
+	decodedName, err := url.QueryUnescape(containerName)
+	if err != nil {
+		// If decoding fails, it's unlikely the name matches a system container
+		return false
+	}
 	// define the system variables for the system containers
 	systemContainers := []string{"$blobchangefeed", "$logs"}
 	for _, sys := range systemContainers {
-		if containerName == sys {
+		if decodedName == sys {
 			return true
 		}
 	}

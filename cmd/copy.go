@@ -1638,7 +1638,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.IsS2S() {
 		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
 		if err != nil {
-			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
 		}
 		if common.IsSystemContainer(dstContainerName) {
 			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
