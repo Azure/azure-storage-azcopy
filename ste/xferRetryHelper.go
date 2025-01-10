@@ -48,6 +48,13 @@ func getShouldRetry() func(*http.Response, error) bool {
 				}
 			}
 		}
+
+		// This is probably something in between us and azure storage dropping our traffic.
+		// Should be retryable, since it's possibly a one-off network error.
+		if strings.Contains(err.Error(), "wsarecv: An existing connection was forcibly closed by the remote host.") {
+			return true
+		}
+
 		return false
 	}
 }
