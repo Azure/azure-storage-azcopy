@@ -1,9 +1,11 @@
 package e2etest
 
 import (
+	"strconv"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strconv"
 )
 
 func init() {
@@ -618,4 +620,53 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirNonRecursive
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
 		Objects: dstObjs,
 	}, true)
+}
+
+func (s *S2STestSuite) Scenario_SystemContainerCopy(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Scale up from service to object
+	containerName := "$blobchangefeed"
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()})), ResourceDefinitionContainer{
+		ContainerName: &containerName,
+	}).GetObject(svm, "test", common.EEntityType.File())
+
+	// The object must exist already if we're syncing.
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 10)
+		}
+	}
+
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{
+		ObjectName: pointerTo("test"),
+		Body:       body,
+	})
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(true),
+				},
+			},
+			ShouldFail: true,
+		})
+	ValidateMessageOutput(svm, stdOut, "cannot copy to system container")
 }
