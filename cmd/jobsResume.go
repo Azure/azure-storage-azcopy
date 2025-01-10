@@ -295,8 +295,28 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 	}
 
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	jobID, err := common.ParseJobID(rca.jobID)
+	if err != nil {
+		// Error for invalid JobId format
+		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+	}
 
-	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, nil)
+	var getJobDetailsResponse common.GetJobDetailsResponse
+	// Get job details from the STE
+	Rpc(common.ERpcCmd.GetJobDetails(),
+		&common.GetJobDetailsRequest{JobID: jobID},
+		&getJobDetailsResponse)
+	if getJobDetailsResponse.ErrorMsg != "" {
+		glcm.Error(getJobDetailsResponse.ErrorMsg)
+	}
+
+	var fileSrcClientOptions any
+	if fromTo.From() == common.ELocation.File() {
+		fileSrcClientOptions = &common.FileClientOptions{
+			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
+		}
+	}
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -306,11 +326,17 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
-	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, nil)
+	var fileClientOptions any
+	if fromTo.To() == common.ELocation.File() {
+		fileClientOptions = &common.FileClientOptions{
+			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
+		}
+	}
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return srcServiceClient, dstServiceClient, nil
 }
 
@@ -357,9 +383,9 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
-	var getJobFromToResponse common.GetJobFromToResponse
-	Rpc(common.ERpcCmd.GetJobFromTo(),
-		&common.GetJobFromToRequest{JobID: jobID},
+	var getJobFromToResponse common.GetJobDetailsResponse
+	Rpc(common.ERpcCmd.GetJobDetails(),
+		&common.GetJobDetailsRequest{JobID: jobID},
 		&getJobFromToResponse)
 	if getJobFromToResponse.ErrorMsg != "" {
 		glcm.Error(getJobFromToResponse.ErrorMsg)
