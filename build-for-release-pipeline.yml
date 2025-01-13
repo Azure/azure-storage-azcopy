@@ -1552,3 +1552,6 @@ extends:
                 displayName: 'Extract Files and Run Version and Help Command on Windows Arm64'
 
       # TestArtifacts ends here
+
+
+      # TODO: Build Docker image

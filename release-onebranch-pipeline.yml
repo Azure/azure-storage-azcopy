@@ -1,0 +1,146 @@
+variables:
+  AZCOPY_GOLANG_VERSION: '1.21.8'
+
+parameters:
+  - name: publish_to_container
+    displayName: 'Publish To Container'
+    type: boolean
+    default: false
+
+  - name: publish_to_m1_container
+    displayName: 'Publish To M1 Container'
+    type: boolean
+    default: false
+
+# Do not trigger this pipeline automatically
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+  pipelines:
+    - pipeline: Build
+      source: Build for Release
+# ReleaseToContainer -> How to do this - OneBranch does not support AzureCLI task
+# PublishDockerImage -> Has examples
+# Release to Github -> GithubRelease is supported by OneBranch too
+# Publish Artifacts -> May or may not Just Work
+# Update Latest Version -> How to do this - OneBranch does not support AzureCLI task
+
+extends: # Governed template expands from here which defines over all pipeline orchestration with OneBranch security, Compliance & Governance enabled
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    stages:
+    - stage: ReleaseToContainer
+    jobs:
+      - job: ReleaseToContainer
+        templateContext:
+          inputs:
+            - input: pipelineArtifact
+              pipeline: Build
+              artifactName: azCopy-linux-signed
+            - input: pipelineArtifact
+              pipeline: Build
+              artifactName: azCopy-windows-signed
+            - input: pipelineArtifact
+              pipeline: Build
+              artifactName: azCopy-mac-signed
+            - input: pipelineArtifact
+              pipeline: Build
+              artifactName: azCopy-binaries-linux-amd64
+            - input: pipelineArtifact
+              pipeline: Build
+              artifactName: azCopy-binaries-linux-arm64
+            - input: pipelineArtifact
+              pipeline: Build
+              artifactName: azCopy-binaries-windows
+            - input: pipelineArtifact
+              pipeline: Build
+              artifactName: azCopy-binaries-mac
+        pool:
+          type: release
+          os: linux
+        variables:
+          - name: Test_Release_Account_Name
+            value: 'azcopyprivatedrops'
+          - name: Release_Account_Name
+            value: 'azcopyvnextrelease'
+          - name: Publish_To_Container
+            value: ${{ parameters.publish_to_container }}
+          - name: Publish_To_M1_Container
+            value: ${{ parameters.publish_to_m1_container }}
+          - name: work_dir
+            value: '$(Build.SourcesDirectory)'
+
+        steps:
+          - script: |
+              sudo apt-get install -y zip
+              cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
+              rm -rf /usr/local/bin/azcopy
+              rm -rf /usr/bin/azcopy
+              sudo dpkg --info azcopy-*x86_64.deb
+              sudo dpkg -i azcopy-*x86_64.deb
+              sudo apt-get install build-essential -y
+            displayName: 'Create drop.zip file and install azcopy deb package'
+
+          - script: |
+              cp $(work_dir)/NOTICE.txt $(Build.ArtifactStagingDirectory)/azCopy-binaries
+              cd $(Build.ArtifactStagingDirectory)/azCopy-binaries
+              echo "Contents of $(Build.ArtifactStagingDirectory)/azCopy-binaries:"
+              ls -l
+              
+              # Create the zip archive with all files inside azCopy-binaries
+              zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
+              cd $(Build.ArtifactStagingDirectory)
+
+              # List the contents of the resulting zip file for verification
+              unzip -l $(Build.ArtifactStagingDirectory)/drop.zip
+
+              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner .
+            displayName: 'Archive all binaries to drop.zip'
+            workingDirectory: '$(Build.ArtifactStagingDirectory)'
+
+          - task: Bash@3
+            displayName: 'Install Azure CLI'
+            inputs:
+              targetType: 'inline'
+              script: |
+                curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+          - task: AzureCLI@2
+            displayName: 'Azure CLI'
+            inputs:
+              azureSubscription: 'ESRP KeyVault identity'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                # Find the current version
+                raw_version_output=$(azcopy --version)
+                azcopy_version=$(echo $raw_version_output | awk '{print $3}')
+
+                today=$(date +"%Y%m%d")
+                
+                if [ $(Publish_To_Container) = "True" ]; then
+                  container_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
+                else
+                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
+                fi
+                echo "Artifacts will be uploaded to: $container_url"
+                
+                executable_name=azcopy
+                
+                # Upload the archived builds
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
+                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
+
+                if [ $(Publish_To_M1_Container) = "True" ]; then
+                  m1_container_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$azcopy_version-$today"
+                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
+                fi
