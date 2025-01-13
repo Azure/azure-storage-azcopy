@@ -64,7 +64,7 @@ const oauthLoginSessionCacheServiceName = "AzCopyV10"
 const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
 
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
-// Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
+// Note: Currently, only support to have TokenManager for one user mapping to one TenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	once.Do(func() {
 		if common.AzcopyJobPlanFolder == "" {
@@ -88,7 +88,7 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 	var err error
 	autoOAuth.Do(func() {
-		var lca loginCmdArgs
+		var lca LoginCmdArgs
 		autoLoginType := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.AutoLoginType()))
 		if autoLoginType == "" {
 			glcm.Info("Autologin not specified.")
@@ -96,25 +96,25 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		}
 
 		if tenantID := common.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
-			lca.tenantID = tenantID
+			lca.TenantID = tenantID
 		}
 
 		if endpoint := common.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
-			lca.aadEndpoint = endpoint
+			lca.AadEndpoint = endpoint
 		}
 
 		// Fill up lca
-		lca.loginType = autoLoginType
+		lca.LoginType = autoLoginType
 		switch autoLoginType {
 		case common.EAutoLoginType.SPN().String():
-			lca.applicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
-			lca.certPath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
+			lca.ApplicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
+			lca.CertificatePath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
 			lca.certPass = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			lca.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 		case common.EAutoLoginType.MSI().String():
-			lca.identityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
+			lca.IdentityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
 			lca.identityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
-			lca.identityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
+			lca.IdentityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
 		case common.EAutoLoginType.Device().String():
 		case common.EAutoLoginType.AzCLI().String():
 		case common.EAutoLoginType.PsCred().String():
