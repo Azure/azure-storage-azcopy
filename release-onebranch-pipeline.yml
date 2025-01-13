@@ -26,11 +26,11 @@ resources:
   pipelines:
     - pipeline: Build
       source: Build for Release
-# ReleaseToContainer -> How to do this - OneBranch does not support AzureCLI task
+# ReleaseToContainer -> Supported as our ServiceTree External metadata is False
 # PublishDockerImage -> Has examples
 # Release to Github -> GithubRelease is supported by OneBranch too
 # Publish Artifacts -> May or may not Just Work
-# Update Latest Version -> How to do this - OneBranch does not support AzureCLI task
+# Update Latest Version -> Supported as our ServiceTree External metadata is False
 
 extends: # Governed template expands from here which defines over all pipeline orchestration with OneBranch security, Compliance & Governance enabled
   template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
