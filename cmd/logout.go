@@ -26,8 +26,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func RunLogout(options LogoutOptions) error {
+	err := options.process()
+	if err != nil {
+		return fmt.Errorf("failed to perform logout command, %v", err)
+	}
+	return nil
+}
+
 func init() {
-	logoutCmdArgs := logoutCmdArgs{}
+	logoutCmdArgs := LogoutOptions{}
 
 	// logoutCmd represents the logout command
 	logoutCmd := &cobra.Command{
@@ -39,20 +47,16 @@ func init() {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := logoutCmdArgs.process()
-			if err != nil {
-				return fmt.Errorf("failed to perform logout command, %v", err)
-			}
-			return nil
+			return RunLogout(logoutCmdArgs)
 		},
 	}
 
 	rootCmd.AddCommand(logoutCmd)
 }
 
-type logoutCmdArgs struct{}
+type LogoutOptions struct{}
 
-func (lca logoutCmdArgs) process() error {
+func (lca LogoutOptions) process() error {
 	uotm := GetUserOAuthTokenManagerInstance()
 	if err := uotm.RemoveCachedToken(); err != nil {
 		return err

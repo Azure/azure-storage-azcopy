@@ -28,13 +28,38 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	type loginStatus struct {
-		tenantID bool
-		endpoint bool
-	}
-	commandLineInput := loginStatus{}
+type LoginStatusOptions struct {
+	TenantId    bool
+	AadEndpoint bool
+}
 
+var commandLineInput = LoginStatusOptions{}
+
+func RunLoginStatus(options LoginStatusOptions) {
+	// getting current token info and refreshing it with GetTokenInfo()
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	uotm := GetUserOAuthTokenManagerInstance()
+	tokenInfo, err := uotm.GetTokenInfo(ctx)
+
+	if err == nil && !tokenInfo.IsExpired() {
+		glcm.Info("You have successfully refreshed your token. Your login session is still active")
+
+		if options.TenantId {
+			glcm.Info(fmt.Sprintf("Tenant ID: %v", tokenInfo.Tenant))
+		}
+
+		if options.AadEndpoint {
+			glcm.Info(fmt.Sprintf("Active directory endpoint: %v", tokenInfo.ActiveDirectoryEndpoint))
+		}
+
+		glcm.Exit(nil, common.EExitCode.Success())
+	}
+
+	glcm.Info("You are currently not logged in. Please login using 'azcopy login'")
+	glcm.Exit(nil, common.EExitCode.Error())
+}
+
+func init() {
 	lgStatus := &cobra.Command{
 		Use:   "status",
 		Short: loginStatusShortDescription,
@@ -46,31 +71,11 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			// getting current token info and refreshing it with GetTokenInfo()
-			ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-			uotm := GetUserOAuthTokenManagerInstance()
-			tokenInfo, err := uotm.GetTokenInfo(ctx)
-
-			if err == nil && !tokenInfo.IsExpired() {
-				glcm.Info("You have successfully refreshed your token. Your login session is still active")
-
-				if commandLineInput.tenantID {
-					glcm.Info(fmt.Sprintf("Tenant ID: %v", tokenInfo.Tenant))
-				}
-
-				if commandLineInput.endpoint {
-					glcm.Info(fmt.Sprintf("Active directory endpoint: %v", tokenInfo.ActiveDirectoryEndpoint))
-				}
-
-				glcm.Exit(nil, common.EExitCode.Success())
-			}
-
-			glcm.Info("You are currently not logged in. Please login using 'azcopy login'")
-			glcm.Exit(nil, common.EExitCode.Error())
+			RunLoginStatus(commandLineInput)
 		},
 	}
 
 	lgCmd.AddCommand(lgStatus)
-	lgStatus.PersistentFlags().BoolVar(&commandLineInput.tenantID, "tenant", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
-	lgStatus.PersistentFlags().BoolVar(&commandLineInput.endpoint, "endpoint", false, "Prints the Azure Active Directory endpoint that is being used in the current session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.TenantId, "tenant", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.AadEndpoint, "endpoint", false, "Prints the Azure Active Directory endpoint that is being used in the current session.")
 }

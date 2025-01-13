@@ -50,3 +50,24 @@ func (cc Client) Login(options LoginOptions) error {
 	cmd.RunLogin(setLoginArgs(options))
 	return nil
 }
+
+type LoginStatusOptions cmd.LoginStatusOptions
+
+func (cc Client) LoginStatus(options LoginStatusOptions) error {
+	err := cc.Initialize(common.JobID{}, false)
+	if err != nil {
+		return err
+	}
+	cmd.RunLoginStatus(cmd.LoginStatusOptions(options))
+	return nil
+}
+
+type LogoutOptions cmd.LogoutOptions
+
+func (cc Client) Logout(options LogoutOptions) error {
+	err := cc.Initialize(common.JobID{}, false)
+	if err != nil {
+		return err
+	}
+	return cmd.RunLogout(cmd.LogoutOptions(options))
+}
