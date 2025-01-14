@@ -1574,6 +1574,9 @@ extends:
             templateContext:
               authenticatedContainerRegistries:
               - serviceConnection: AzCopyContainers_ACR
+              outputs:
+                - output: containerImage
+                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
 
             variables:
               - group: AZCOPY_SECRET_VAULT
@@ -1595,11 +1598,11 @@ extends:
 
               - script: |
                   mv azcopy_linux_amd64 azcopy
-                displayName: 'Check Version and Help'
+                displayName: 'Set up azcopy in expected location'
                 workingDirectory: '$(Build.SourcesDirectory)'
 
               - task: 1ES.BuildContainerImage@1
                 inputs:
-                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64/ubuntu:${{ parameters.azcopy_version }}
+                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
                   path: '$(Build.SourcesDirectory)'
                   dockerfile: docker/Dockerfile
