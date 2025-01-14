@@ -29,159 +29,160 @@ extends:
         name: azcopy-pool  # Name of your hosted pool
         image: windows2022-1espt
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
-
+    authenticatedContainerRegistries:
+      - serviceConnection: AzCopyContainers_ACR
     stages:
-#      - stage: BuildArtifacts
-#        jobs:
-#          - job: Set_1
-#            timeoutInMinutes: 120
-#            pool:
-#              name: azcopy-pool
-#              image: ubuntu22-1espt
-#              os: linux
-#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(Build.ArtifactStagingDirectory)/temp
-#                  artifactName: 'azCopy-linux-temp-amd64'
-#                - output: pipelineArtifact
-#                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
-#                  artifactName: 'azCopy-binaries-linux-amd64'
-#
-#            variables:
-#              - name: root_dir
-#                value: '$(System.DefaultWorkingDirectory)'
-#              - name: work_dir
-#                value: '$(Build.SourcesDirectory)'
-#              - name: archives
-#                value: $(root_dir)/archives
-#
-#            steps:
-#              - checkout: self
-#                displayName: 'Checkout repository'
-#
-#              # Custom script to install Go-lang
-#              - task: ShellScript@2
-#                inputs:
-#                  scriptPath: "$(work_dir)/go_installer.sh"
-#                  args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
-#                displayName: "Installing Go tools"
-#
-#              - script: |
-#                  echo 'Running GO Vet'
-#                  go vet
-#                displayName: 'Golang Vet - Linux'
-#                workingDirectory: $(root_dir)
-#
-#              # install dependencies required for compiling azcopy
-#              - script: |
-#                  sudo apt-get clean
-#                  sudo apt-get update --fix-missing
-#                  sudo apt-get install pkg-config libsecret-1-dev -y
-#                  sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
-#                  sudo gem install dotenv -v 2.8.1
-#                  sudo gem install fpm -V
-#                displayName: "Installing Dependencies"
-#
-#              # get glibc version with which build is done
-#              - script: |
-#                  ldd --version
-#                displayName: "GLIBC Version"
-#
-#              - script: |
-#                  GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_amd64"
-#                displayName: 'Generate Linux AMD64'
-#
-#              - script: |
-#                  GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_amd64"
-#                displayName: 'Generate Linux AMD64 SE Integration'
-#
-#              - script: |
-#                  sudo ls -lRt $(root_dir)/
-#                  mkdir -p $(Build.ArtifactStagingDirectory)/binaries
-#                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
-#                  cp $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
-#                displayName: 'List the binaries and add to staging directory'
-#
-#              - template: setup/azcopy_version_check_linux.yml@self
-#                parameters:
-#                  azcopy_executable: $(root_dir)/azcopy_linux_amd64
-#
-#              - script: |
-#                  linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
-#
-#                  linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
-#
-#                  mkdir -p $linux_amd64_dir
-#                  mkdir -p $linux_se_amd64_dir
-#                  mkdir -p $(archives)
-#                  ls -ltR $(work_dir)
-#                displayName: 'Create required directories'
-#
-#              - script: |
-#                  mkdir -p pkgDir/usr/bin/
-#                  mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
-#                  mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
-#                  cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
-#                  cp NOTICE.txt $(linux_amd64_dir)/
-#                  cp NOTICE.txt $(linux_se_amd64_dir)/
-#                  cp NOTICE.txt pkgDir/usr/bin/
-#                displayName: 'Copy required files for packaging'
-#
-#              # using fpm tool for packaging of our binary & performing post-install operations
-#              # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-#              - script: |
-#                  fpm -s dir -t deb -n azcopy -C pkgDir/ \
-#                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
-#                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-#                  --url "https://github.com/Azure/azure-storage-azcopy" \
-#                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
-#                  mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.deb
-#                  cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)/temp
-#                workingDirectory: $(root_dir)
-#                displayName: 'Make AMD64 deb Package'
-#
-#              - script: |
-#                  fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
-#                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
-#                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-#                  --url "https://github.com/Azure/azure-storage-azcopy" \
-#                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
-#                  mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.rpm
-#                  cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)/temp
-#                workingDirectory: $(root_dir)
-#                displayName: 'Make AMD64 rpm Package'
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive Partner(SE) Linux Build'
-#                inputs:
-#                  rootFolderOrFile: '$(linux_se_amd64_dir)'
-#                  archiveType: tar
-#                  archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
-#                continueOnError: true
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive Amd Linux Build'
-#                inputs:
-#                  rootFolderOrFile: '$(linux_amd64_dir)'
-#                  archiveType: tar
-#                  archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
-#                continueOnError: true
-#
-#              - script: |
-#                  cp -r $(archives)/* $(Build.ArtifactStagingDirectory)/temp
-#                workingDirectory: $(root_dir)
-#                displayName: 'Add tar.gz to signing stage'
-#
-#              - task: ComponentGovernanceComponentDetection@0
-#                inputs:
-#                  scanType: 'Register'
-#                  verbosity: 'Verbose'
-#                  alertWarningLevel: 'High'
+      - stage: BuildArtifacts
+        jobs:
+          - job: Set_1
+            timeoutInMinutes: 120
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  artifactName: 'azCopy-linux-temp-amd64'
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+                  artifactName: 'azCopy-binaries-linux-amd64'
+
+            variables:
+              - name: root_dir
+                value: '$(System.DefaultWorkingDirectory)'
+              - name: work_dir
+                value: '$(Build.SourcesDirectory)'
+              - name: archives
+                value: $(root_dir)/archives
+
+            steps:
+              - checkout: self
+                displayName: 'Checkout repository'
+
+              # Custom script to install Go-lang
+              - task: ShellScript@2
+                inputs:
+                  scriptPath: "$(work_dir)/go_installer.sh"
+                  args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+                displayName: "Installing Go tools"
+
+              - script: |
+                  echo 'Running GO Vet'
+                  go vet
+                displayName: 'Golang Vet - Linux'
+                workingDirectory: $(root_dir)
+
+              # install dependencies required for compiling azcopy
+              - script: |
+                  sudo apt-get clean
+                  sudo apt-get update --fix-missing
+                  sudo apt-get install pkg-config libsecret-1-dev -y
+                  sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+                  sudo gem install dotenv -v 2.8.1
+                  sudo gem install fpm -V
+                displayName: "Installing Dependencies"
+
+              # get glibc version with which build is done
+              - script: |
+                  ldd --version
+                displayName: "GLIBC Version"
+
+              - script: |
+                  GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_amd64"
+                displayName: 'Generate Linux AMD64'
+
+              - script: |
+                  GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_amd64"
+                displayName: 'Generate Linux AMD64 SE Integration'
+
+              - script: |
+                  sudo ls -lRt $(root_dir)/
+                  mkdir -p $(Build.ArtifactStagingDirectory)/binaries
+                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
+                  cp $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
+                displayName: 'List the binaries and add to staging directory'
+
+              - template: setup/azcopy_version_check_linux.yml@self
+                parameters:
+                  azcopy_executable: $(root_dir)/azcopy_linux_amd64
+
+              - script: |
+                  linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
+
+                  linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
+
+                  mkdir -p $linux_amd64_dir
+                  mkdir -p $linux_se_amd64_dir
+                  mkdir -p $(archives)
+                  ls -ltR $(work_dir)
+                displayName: 'Create required directories'
+
+              - script: |
+                  mkdir -p pkgDir/usr/bin/
+                  mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
+                  mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
+                  cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
+                  cp NOTICE.txt $(linux_amd64_dir)/
+                  cp NOTICE.txt $(linux_se_amd64_dir)/
+                  cp NOTICE.txt pkgDir/usr/bin/
+                displayName: 'Copy required files for packaging'
+
+              # using fpm tool for packaging of our binary & performing post-install operations
+              # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+              - script: |
+                  fpm -s dir -t deb -n azcopy -C pkgDir/ \
+                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+                  --url "https://github.com/Azure/azure-storage-azcopy" \
+                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
+                  mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.deb
+                  cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)/temp
+                workingDirectory: $(root_dir)
+                displayName: 'Make AMD64 deb Package'
+
+              - script: |
+                  fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+                  --url "https://github.com/Azure/azure-storage-azcopy" \
+                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
+                  mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.rpm
+                  cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)/temp
+                workingDirectory: $(root_dir)
+                displayName: 'Make AMD64 rpm Package'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive Partner(SE) Linux Build'
+                inputs:
+                  rootFolderOrFile: '$(linux_se_amd64_dir)'
+                  archiveType: tar
+                  archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
+                continueOnError: true
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive Amd Linux Build'
+                inputs:
+                  rootFolderOrFile: '$(linux_amd64_dir)'
+                  archiveType: tar
+                  archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
+                continueOnError: true
+
+              - script: |
+                  cp -r $(archives)/* $(Build.ArtifactStagingDirectory)/temp
+                workingDirectory: $(root_dir)
+                displayName: 'Add tar.gz to signing stage'
+
+              - task: ComponentGovernanceComponentDetection@0
+                inputs:
+                  scanType: 'Register'
+                  verbosity: 'Verbose'
+                  alertWarningLevel: 'High'
 #
 #          - job: Set_2
 #            timeoutInMinutes: 120
@@ -1579,53 +1580,20 @@ extends:
               - checkout: self
                 displayName: 'Checkout repository'
 
-              - script: |
-                  chmod 777 *.sh
-                  ./dockerinstall.sh
-                  
-                  ./buildcontainer.sh Dockerfile ubuntu-x86_64
-                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-x86_64
-                  
-                  ./buildcontainer.sh DockerfileMariner mariner-x86_64
-                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
-
-                displayName: "Create docker image and push to the containers registry"
-                workingDirectory: $(work_dir)/docker
-
-          - job: Set_2_Ubuntu_ARM64
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-arm-pool
-              image: ubuntu22arm-custom1espt
-              os: linux
-              hostArchitecture: Arm64
-
-            variables:
-              - group: AZCOPY_SECRET_VAULT
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(Build.SourcesDirectory)'
-
-            steps:
-              - checkout: self
-                displayName: 'Checkout repository'
-
-              - task: ShellScript@2
+              - task: DownloadPipelineArtifact@2
+                displayName: 'Download Pipeline Artifacts'
                 inputs:
-                  scriptPath: "$(work_dir)/go_installer.sh"
-                  args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
-                displayName: "Installing Go tools"
+                  artifactName: 'azCopy-binaries-linux-amd64'
+                  targetPath: '$(Build.SourcesDirectory)'
+                  itemPattern: 'azcopy_linux_amd64'
 
               - script: |
-                  sudo apt update
-                  sudo apt --fix-broken install
-                displayName: "Install dependencies"
+                  mv azcopy_linux_amd64 azcopy
+                displayName: 'Check Version and Help'
+                workingDirectory: '$(Build.SourcesDirectory)'
 
-              - script: |
-                  chmod 777 *.sh
-                  ./dockerinstall.sh
-                  ./buildcontainer.sh DockerfileArm64 ubuntu-arm64
-                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-arm64
-                displayName: "Create docker image for arm64 and push to the containers registry"
-                workingDirectory: $(work_dir)/docker
+              - task: 1ES.BuildContainerImage@1
+                inputs:
+                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64/ubuntu:${{ parameters.azcopy_version }}
+                  path: '$(Build.SourcesDirectory)'
+                  dockerfile: docker/Dockerfile
