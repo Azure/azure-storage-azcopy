@@ -6,6 +6,10 @@ parameters:
     displayName: 'New Release Tag'
     type: string
     default: 'v10.'
+  - name: azcopy_version
+    displayName: 'Version'
+    type: string
+    default: '10.28.0-preview'
 
 # Do not trigger this pipeline automatically
 trigger: none
