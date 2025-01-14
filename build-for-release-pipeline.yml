@@ -58,7 +58,7 @@ extends:
 
               - script: |
                   # Run azcopy --version and capture the output
-                  azcopyOutput=$(azcopy --version)
+                  azcopyOutput=$(./azcopy --version)
 
                   # Extract the version part
                   if echo "$azcopyOutput" | grep -q "azcopy version"; then
