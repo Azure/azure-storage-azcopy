@@ -1115,6 +1115,12 @@ extends:
                 workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
               - script: |
+                  sudo apt-get clean
+                  sudo apt-get update --fix-missing
+                  sudo apt-get install libsecret-1-dev -y
+                displayName: "Installing Dependencies"
+
+              - script: |
                   TAR_GZ_FILE=$(ls azcopy_linux_se_amd64*.tar.gz)
                   EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_se"
                   
@@ -1255,7 +1261,7 @@ extends:
 
               - template: setup/test_artifacts.yml@self
                 parameters:
-                  artifact_name: 'azCopy-binaries'
+                  artifact_name: 'azCopy-binaries-linux-arm64'
                   download_path: '$(System.DefaultWorkingDirectory)/azCopy-binaries'
                   item_pattern: 'azcopy_linux*arm64'
 
@@ -1298,14 +1304,14 @@ extends:
               - template: setup/test_artifacts.yml@self
                 parameters:
                   artifact_name: 'azCopy-linux-signed'
-                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner'
+                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
                   item_pattern: 'mariner/azcopy-*x86_64.rpm'
 
               - script: |
                   sudo rpm -qip azcopy*x86_64.rpm
                   sudo rpm -i azcopy*x86_64.rpm
                 displayName: 'Install Package'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
+                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
 
               - script: |
                   azcopy --version
