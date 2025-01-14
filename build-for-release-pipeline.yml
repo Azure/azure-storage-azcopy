@@ -33,8 +33,6 @@ extends:
         name: azcopy-pool  # Name of your hosted pool
         image: windows2022-1espt
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
-    authenticatedContainerRegistries:
-      - serviceConnection: AzCopyContainers_ACR
     stages:
       - stage: BuildArtifacts
         jobs:
@@ -1572,6 +1570,10 @@ extends:
               name: azcopy-pool
               image: ubuntu22-1espt
               os: linux
+
+            templateContext:
+              authenticatedContainerRegistries:
+              - serviceConnection: AzCopyContainers_ACR
 
             variables:
               - group: AZCOPY_SECRET_VAULT
