@@ -1311,7 +1311,7 @@ extends:
                   sudo rpm -qip azcopy*x86_64.rpm
                   sudo rpm -i azcopy*x86_64.rpm
                 displayName: 'Install Package'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
 
               - script: |
                   azcopy --version
