@@ -34,7 +34,51 @@ extends:
         image: windows2022-1espt
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
     stages:
+      - stage: AzCopyVersion
+        jobs:
+          - job: GetAzCopyVersion
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+
+            steps:
+              - checkout: self
+                displayName: 'Checkout repository'
+
+              - task: GoTool@0
+                env:
+                  GO111MODULE: 'on'
+                inputs:
+                  version: $(AZCOPY_GOLANG_VERSION)
+
+              - script: |
+                  go build -tags "netgo" -o azcopy
+                displayName: 'Build AzCopy'
+
+              - script: |
+                  # Run azcopy --version and capture the output
+                  azcopyOutput=$(azcopy --version)
+
+                  # Extract the version part
+                  if echo "$azcopyOutput" | grep -q "azcopy version"; then
+                    version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+                    if [[ -n "$version" ]]; then
+                      echo "Extracted version: $version"
+                      echo "##vso[task.setvariable variable=azcopy_version;isOutput=true]$version"
+                    else
+                      echo "Unable to extract version from azcopy output"
+                      exit 1
+                    fi
+                  else
+                    echo "azcopy version string not found in output"
+                    exit 1
+                  fi
+                displayName: 'Verify and extract the generated build version'
+                name: SetAzCopyVersion
+
       - stage: BuildArtifacts
+        dependsOn: AzCopyVersion
         jobs:
           - job: Set_1
             timeoutInMinutes: 120
@@ -60,6 +104,8 @@ extends:
                 value: '$(Build.SourcesDirectory)'
               - name: archives
                 value: $(root_dir)/archives
+              - name: azcopy_version
+                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
             steps:
               - checkout: self
@@ -73,6 +119,7 @@ extends:
                 displayName: "Installing Go tools"
 
               - script: |
+                  echo $(azcopy_version)
                   echo 'Running GO Vet'
                   go vet
                 displayName: 'Golang Vet - Linux'
@@ -1561,48 +1608,51 @@ extends:
 #                displayName: 'Extract Files and Run Version and Help Command on Windows Arm64'
 
       # TestArtifacts ends here
-      - stage: BuildDockerImage
+#      - stage: BuildDockerImage
 #        dependsOn: TestArtifacts
 #        condition: succeeded('TestArtifacts')
-        jobs:
-          - job: Set_1_Ubuntu_Mariner_AMD64
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-
-            templateContext:
-              authenticatedContainerRegistries:
-              - serviceConnection: AzCopyContainers_ACR
-              outputs:
-                - output: containerImage
-                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
-
-            variables:
-              - group: AZCOPY_SECRET_VAULT
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(Build.SourcesDirectory)'
-
-            steps:
-              - checkout: self
-                displayName: 'Checkout repository'
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Pipeline Artifacts'
-                inputs:
-                  artifactName: 'azCopy-binaries-linux-amd64'
-                  targetPath: '$(Build.SourcesDirectory)'
-                  itemPattern: 'azcopy_linux_amd64'
-
-              - script: |
-                  mv azcopy_linux_amd64 azcopy
-                displayName: 'Set up azcopy in expected location'
-                workingDirectory: '$(Build.SourcesDirectory)'
-
-              - task: 1ES.BuildContainerImage@1
-                inputs:
-                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
-                  path: '$(Build.SourcesDirectory)'
-                  dockerfile: docker/Dockerfile
+#        jobs:
+#          - job: Set_1_Ubuntu_Mariner_AMD64
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#
+#            templateContext:
+#              authenticatedContainerRegistries:
+#              - serviceConnection: AzCopyContainers_ACR
+#              outputs:
+#                - output: containerImage
+#                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
+#                  remoteImage:
+#                    - azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:latest
+#                    - azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
+#
+#            variables:
+#              - group: AZCOPY_SECRET_VAULT
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#              - name: work_dir
+#                value: '$(Build.SourcesDirectory)'
+#
+#            steps:
+#              - checkout: self
+#                displayName: 'Checkout repository'
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Pipeline Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-binaries-linux-amd64'
+#                  targetPath: '$(Build.SourcesDirectory)'
+#                  itemPattern: 'azcopy_linux_amd64'
+#
+#              - script: |
+#                  mv azcopy_linux_amd64 azcopy
+#                displayName: 'Set up azcopy in expected location'
+#                workingDirectory: '$(Build.SourcesDirectory)'
+#
+#              - task: 1ES.BuildContainerImage@1
+#                inputs:
+#                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
+#                  path: '$(Build.SourcesDirectory)'
+#                  dockerfile: docker/Dockerfile
