@@ -1552,3 +1552,74 @@ extends:
                 displayName: 'Extract Files and Run Version and Help Command on Windows Arm64'
 
       # TestArtifacts ends here
+      - stage: BuildDockerImage
+        dependsOn: TestArtifacts
+        condition: succeeded('TestArtifacts')
+        jobs:
+          - job: Set_1_Ubuntu_Mariner_AMD64
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+
+            variables:
+              - group: AZCOPY_SECRET_VAULT
+              - name: root_dir
+                value: '$(System.DefaultWorkingDirectory)'
+              - name: work_dir
+                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+
+            steps:
+              - checkout: self
+                displayName: 'Checkout repository'
+
+              - script: |
+                  chmod 777 *.sh
+                  ./dockerinstall.sh
+                  
+                  ./buildcontainer.sh Dockerfile ubuntu-x86_64
+                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-x86_64
+                  
+                  ./buildcontainer.sh DockerfileMariner mariner-x86_64
+                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) mariner-x86_64
+
+                displayName: "Create docker image and push to the containers registry"
+                workingDirectory: $(work_dir)/docker
+
+          - job: Set_2_Ubuntu_ARM64
+            timeoutInMinutes: 120
+            pool:
+              name: azcopy-arm-pool
+              image: ubuntu22arm-custom1espt
+              os: linux
+              hostArchitecture: Arm64
+
+            variables:
+              - group: AZCOPY_SECRET_VAULT
+              - name: root_dir
+                value: '$(System.DefaultWorkingDirectory)'
+              - name: work_dir
+                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+
+            steps:
+              - checkout: self
+                displayName: 'Checkout repository'
+
+              - task: ShellScript@2
+                inputs:
+                  scriptPath: "$(work_dir)/go_installer.sh"
+                  args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+                displayName: "Installing Go tools"
+
+              - script: |
+                  sudo apt update
+                  sudo apt --fix-broken install
+                displayName: "Install dependencies"
+
+              - script: |
+                  chmod 777 *.sh
+                  ./dockerinstall.sh
+                  ./buildcontainer.sh DockerfileArm64 ubuntu-arm64
+                  ./publishcontainer.sh $(AZCOPY_DOCKER_REG_USER)  $(AZCOPY_DOCKER_REG_PWD) ubuntu-arm64
+                displayName: "Create docker image for arm64 and push to the containers registry"
+                workingDirectory: $(work_dir)/docker

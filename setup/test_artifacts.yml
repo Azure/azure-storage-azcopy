@@ -18,4 +18,4 @@ steps:
   - script: |
       ls -l
     displayName: 'List Downloaded Package'
-    workingDirectory: ${{ parameters.download_path }}/${{ parameters.artifact_name }}
+    workingDirectory: ${{ parameters.download_path }}
