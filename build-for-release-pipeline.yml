@@ -31,1536 +31,1536 @@ extends:
         os: windows  # OS of the image. Allowed values: windows, linux, macOS
 
     stages:
-      - stage: BuildArtifacts
-        jobs:
-          - job: Set_1
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-linux-temp-amd64'
-                - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
-                  artifactName: 'azCopy-binaries-linux-amd64'
-
-            variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(Build.SourcesDirectory)'
-              - name: archives
-                value: $(root_dir)/archives
-
-            steps:
-              - checkout: self
-                displayName: 'Checkout repository'
-
-              # Custom script to install Go-lang
-              - task: ShellScript@2
-                inputs:
-                  scriptPath: "$(work_dir)/go_installer.sh"
-                  args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
-                displayName: "Installing Go tools"
-
-              - script: |
-                  echo 'Running GO Vet'
-                  go vet
-                displayName: 'Golang Vet - Linux'
-                workingDirectory: $(root_dir)
-
-              # install dependencies required for compiling azcopy
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update --fix-missing
-                  sudo apt-get install pkg-config libsecret-1-dev -y
-                  sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
-                  sudo gem install dotenv -v 2.8.1
-                  sudo gem install fpm -V
-                displayName: "Installing Dependencies"
-
-              # get glibc version with which build is done
-              - script: |
-                  ldd --version
-                displayName: "GLIBC Version"
-
-              - script: |
-                  GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_amd64"
-                displayName: 'Generate Linux AMD64'
-
-              - script: |
-                  GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_amd64"
-                displayName: 'Generate Linux AMD64 SE Integration'
-
-              - script: |
-                  sudo ls -lRt $(root_dir)/
-                  mkdir -p $(Build.ArtifactStagingDirectory)/binaries
-                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
-                  cp $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
-                displayName: 'List the binaries and add to staging directory'
-
-              - template: setup/azcopy_version_check_linux.yml@self
-                parameters:
-                  azcopy_executable: $(root_dir)/azcopy_linux_amd64
-
-              - script: |
-                  linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
-                  
-                  linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
-                  
-                  mkdir -p $linux_amd64_dir
-                  mkdir -p $linux_se_amd64_dir
-                  mkdir -p $(archives)
-                  ls -ltR $(work_dir)
-                displayName: 'Create required directories'
-
-              - script: |
-                  mkdir -p pkgDir/usr/bin/
-                  mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
-                  mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
-                  cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
-                  cp NOTICE.txt $(linux_amd64_dir)/
-                  cp NOTICE.txt $(linux_se_amd64_dir)/
-                  cp NOTICE.txt pkgDir/usr/bin/
-                displayName: 'Copy required files for packaging'
-
-              # using fpm tool for packaging of our binary & performing post-install operations
-              # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-              - script: |
-                  fpm -s dir -t deb -n azcopy -C pkgDir/ \
-                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
-                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-                  --url "https://github.com/Azure/azure-storage-azcopy" \
-                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-                  mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.deb
-                  cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)/temp
-                workingDirectory: $(root_dir)
-                displayName: 'Make AMD64 deb Package'
-
-              - script: |
-                  fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
-                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
-                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-                  --url "https://github.com/Azure/azure-storage-azcopy" \
-                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-                  mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.rpm
-                  cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)/temp
-                workingDirectory: $(root_dir)
-                displayName: 'Make AMD64 rpm Package'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Partner(SE) Linux Build'
-                inputs:
-                  rootFolderOrFile: '$(linux_se_amd64_dir)'
-                  archiveType: tar
-                  archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
-                continueOnError: true
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Amd Linux Build'
-                inputs:
-                  rootFolderOrFile: '$(linux_amd64_dir)'
-                  archiveType: tar
-                  archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
-                continueOnError: true
-
-              - script: |
-                  cp -r $(archives)/* $(Build.ArtifactStagingDirectory)/temp
-                workingDirectory: $(root_dir)
-                displayName: 'Add tar.gz to signing stage'
-
-              - task: ComponentGovernanceComponentDetection@0
-                inputs:
-                  scanType: 'Register'
-                  verbosity: 'Verbose'
-                  alertWarningLevel: 'High'
-
-          - job: Set_2
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-arm-pool
-              image: ubuntu22arm-custom1espt
-              os: linux
-              hostArchitecture: Arm64
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-linux-temp-arm64'
-                - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
-                  artifactName: 'azCopy-binaries-linux-arm64'
-
-            variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(Build.SourcesDirectory)'
-              - name: archives
-                value: $(root_dir)/archives
-
-            steps:
-              - checkout: self
-                displayName: 'Checkout repository'
-
-              # Custom script to install Go-lang
-              - task: ShellScript@2
-                inputs:
-                  scriptPath: "$(work_dir)/go_installer.sh"
-                  args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
-                displayName: "Installing Go tools"
-
-              - script: |
-                  echo 'Running GO Vet'
-                  go vet
-                displayName: 'Golang Vet - Linux'
-                workingDirectory: $(root_dir)
-
-              # install dependencies required for compiling azcopy
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update --fix-missing
-                  sudo apt-get install pkg-config libsecret-1-dev wget -y
-                  sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
-                  sudo gem install dotenv -v 2.8.1
-                  sudo gem install fpm -V
-                displayName: "Installing Dependencies"
-
-              # get glibc version with which build is done
-              - script: |
-                  ldd --version
-                displayName: "GLIBC Version"
-
-              - script: |
-                  GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_arm64"
-                displayName: 'Generate Linux ARM64'
-
-              - script: |
-                  GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_arm64"
-                displayName: 'Generate Linux ARM64 SE Integration'
-
-              - script: |
-                  sudo ls -lRt $(root_dir)/
-                  mkdir -p $(Build.ArtifactStagingDirectory)/binaries
-                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
-                  cp -r $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
-                displayName: 'List the binaries and add to staging directory'
-
-              - template: setup/azcopy_version_check_linux.yml@self
-                parameters:
-                  azcopy_executable: $(root_dir)/azcopy_linux_arm64
-
-              - script: |
-                  linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=linux_arm64_dir]$linux_arm64_dir"
-                  
-                  linux_se_arm64_dir="$(work_dir)/azcopy_linux_se_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=linux_se_arm64_dir]$linux_se_arm64_dir"
-                  
-                  mkdir -p $linux_arm64_dir
-                  mkdir -p $linux_se_arm64_dir
-                  mkdir -p $(archives)
-                displayName: 'Create required directories'
-
-              - script: |
-                  mkdir -p pkgDir/usr/bin/
-                  cp NOTICE.txt pkgDir/usr/bin/
-                  mv $(root_dir)/azcopy_linux_arm64 $(linux_arm64_dir)/azcopy
-                  mv $(root_dir)/azcopy_linux_se_arm64 $(linux_se_arm64_dir)/azcopy
-                  cp $(linux_arm64_dir)/azcopy pkgDir/usr/bin/
-                  cp NOTICE.txt $(linux_arm64_dir)/
-                  cp NOTICE.txt $(linux_se_arm64_dir)/
-                displayName: 'Copy required files for packaging'
-
-              # using fpm tool for packaging of our binary & performing post-install operations
-              # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
-              - script: |
-                  fpm -s dir -t deb -n azcopy -C pkgDir/ \
-                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
-                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-                  --url "https://github.com/Azure/azure-storage-azcopy" \
-                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-                  mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.arm64.deb
-                  cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)/temp
-                workingDirectory: $(root_dir)
-                displayName: 'Make ARM64 deb Package'
-
-              - script: |
-                  fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
-                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
-                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
-                  --url "https://github.com/Azure/azure-storage-azcopy" \
-                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts" 
-                  mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.arm64.rpm
-                  cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)/temp
-                workingDirectory: $(root_dir)
-                displayName: 'Make ARM64 rpm Package'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Standard Linux Build'
-                inputs:
-                  rootFolderOrFile: '$(linux_arm64_dir)'
-                  archiveType: tar
-                  archiveFile: '$(archives)/azcopy_linux_arm64_$(azcopy_version).tar.gz'
-                continueOnError: true
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Partner(SE) Linux Build'
-                inputs:
-                  rootFolderOrFile: '$(linux_se_arm64_dir)'
-                  archiveType: tar
-                  archiveFile: '$(archives)/azcopy_linux_se_arm64_$(azcopy_version).tar.gz'
-                continueOnError: true
-
-              - script: |
-                  cp -r $(archives)/* $(Build.ArtifactStagingDirectory)/temp
-                workingDirectory: $(root_dir)
-                displayName: 'Add tar.gz to staging directory'
-
-              - task: ComponentGovernanceComponentDetection@0
-                inputs:
-                  scanType: 'Register'
-                  verbosity: 'Verbose'
-                  alertWarningLevel: 'High'
-
-          - job: Set_3
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: windows2022-1espt
-              os: windows
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)\binaries
-                  artifactName: 'azCopy-windows-temp'
-
-            variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-
-            steps:
-              - task: GoTool@0
-                env:
-                  GO111MODULE: 'on'
-                inputs:
-                  version: $(AZCOPY_GOLANG_VERSION)
-
-              - script: |
-                  echo 'Running GO Vet'
-                  go vet
-                  mkdir "$(Build.ArtifactStagingDirectory)\binaries"
-                displayName: 'Golang Vet - Windows'
-                workingDirectory: $(root_dir)
-
-              - script: |
-                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_amd64.exe"
-                displayName: 'Generate Windows AMD64'
-                env:
-                  GOARCH: amd64
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - script: |
-                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_386.exe"
-                displayName: 'Generate Windows i386'
-                env:
-                  GOARCH: 386
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - script: |
-                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_v7_arm.exe"
-                displayName: 'Generate Windows ARM'
-                env:
-                  GOARCH: arm
-                  GOARM: 7
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - script: |
-                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_arm64.exe"
-                displayName: 'Generate Windows ARM'
-                env:
-                  GOARCH: arm64
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - script: |
-                  go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_se_arm64.exe"
-                displayName: 'Generate Windows ARM'
-                env:
-                  GOARCH: arm64
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - task: ComponentGovernanceComponentDetection@0
-                inputs:
-                  scanType: 'Register'
-                  verbosity: 'Verbose'
-                  alertWarningLevel: 'High'
-
-          - job: Set_4
-            timeoutInMinutes: 360
-            pool:
-              name: Azure Pipelines
-              image: macos-latest
-              os: macOS
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-mac-temp'
-
-            variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-              - name: archives
-                value: $(root_dir)/archives
-
-            steps:
-              - task: GoTool@0
-                env:
-                  GO111MODULE: 'on'
-                inputs:
-                  version: $(AZCOPY_GOLANG_VERSION)
-
-              - script: |
-                  echo 'Running GO Vet'
-                  go vet
-                displayName: 'Golang Vet - Mac'
-                workingDirectory: $(System.DefaultWorkingDirectory)
-
-              - script: |
-                  CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
-                displayName: 'Generate MacOS Build with AMD64'
-
-              - script: |
-                  GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64"
-                displayName: 'Test Cross-compiled MacOS Build with ARM64'
-
-              - task: Bash@3
-                displayName: 'Extract AZCopy version'
-                inputs:
-                  targetType: 'inline'
-                  script: |
-                    azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}')
-                    echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
-
-              - script: |
-                  darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
-
-                  darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
-
-                  mkdir -p $darwin_amd_dir
-                  mkdir -p $darwin_arm_dir
-                  mkdir -p $(archives)
-                displayName: 'Create required directories'
-
-              - script: |
-                  cp NOTICE.txt $(darwin_amd_dir)
-                  cp NOTICE.txt $(darwin_arm_dir)
-                  mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
-                  mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
-                displayName: 'Copy required files for packaging'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
-                inputs:
-                  rootFolderOrFile: '$(darwin_amd_dir)'
-                  archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
-                continueOnError: true
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
-                inputs:
-                  rootFolderOrFile: '$(darwin_arm_dir)'
-                  archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
-                continueOnError: true
-
-              - script: |
-                  mkdir $(Build.ArtifactStagingDirectory)/temp
-                  cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)/temp
-                displayName: 'Copy zip to staging directory'
-
-              - task: ComponentGovernanceComponentDetection@0
-                inputs:
-                  scanType: 'Register'
-                  verbosity: 'Verbose'
-                  alertWarningLevel: 'High'
-
-          - job: Set_5
-            timeoutInMinutes: 360
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
-                  artifactName: 'azCopy-mac-temp-m1'
-
-            variables:
-              - group: AZCOPY_TESTS_VAR
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(Build.SourcesDirectory)'
-              - name: archives
-                value: $(root_dir)/archives
-
-            steps:
-              - task: GoTool@0
-                env:
-                  GO111MODULE: 'on'
-                inputs:
-                  version: $(AZCOPY_GOLANG_VERSION)
-
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update --fix-missing
-                  sudo apt-get install -y zip unzip
-                displayName: "Installing Dependencies"
-
-              - script: |
-                  echo 'Running GO Vet'
-                  go vet
-                displayName: 'Golang Vet'
-                workingDirectory: $(System.DefaultWorkingDirectory)
-
-              - script: |
-                  CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
-                displayName: 'Generate build'
-
-              - template: setup/azcopy_version_check_linux.yml@self
-                parameters:
-                  azcopy_executable: $(root_dir)/azcopy
-
-              - template: setup/trigger_m1_build.yml@self
-
-              - script: |
-                  mkdir -p $(archives)
-                  darwin_arm64_m1_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"
-
-                  echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
-                  mkdir -p $darwin_arm64_m1_dir
-
-                  cp NOTICE.txt $darwin_arm64_m1_dir
-                  cp $(Build.ArtifactStagingDirectory)/azcopy  $darwin_arm64_m1_dir
-                displayName: 'Copy required files for packaging'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
-                inputs:
-                  rootFolderOrFile: '$(darwin_arm64_m1_dir)'
-                  archiveFile: '$(archives)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
-                continueOnError: true
-
-              - script: |
-                  rm -rf $(Build.ArtifactStagingDirectory)/azcopy
-                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
-                  cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)/temp
-                displayName: 'Copy zip to staging directory'
-
-              - task: ComponentGovernanceComponentDetection@0
-                inputs:
-                  scanType: 'Register'
-                  verbosity: 'Verbose'
-                  alertWarningLevel: 'High'
-
-        # BuildArtifacts end here
-
-      - stage: SignArtifacts
-        dependsOn: BuildArtifacts
-        condition: succeeded('BuildArtifacts')
-        jobs:
-          - job: Set_1
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/signed
-                  artifactName: 'azCopy-linux-signed'
-
-            variables:
-              - group: AZCOPY_SECRET_VAULT
-
-            steps:
-              - checkout: none
-
-              - script: |
-                  echo ${{ parameters.tag }}
-                displayName: 'Tag Name'
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Pipeline Artifacts'
-                inputs:
-                  artifactName: 'azCopy-linux-temp-arm64'
-                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Pipeline Artifacts'
-                inputs:
-                  artifactName: 'azCopy-linux-temp-amd64'
-                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
-
-              - script: |
-                  rm -rf azcopy_linux*
-                  sudo ls -lRt azCopy-linux-temp-arm64
-                  sudo ls -lRt azCopy-linux-temp-amd64
-                  md5sum azCopy-linux-temp-arm64/*
-                  md5sum azCopy-linux-temp-amd64/*
-                displayName: 'List Artifacts'
-                workingDirectory: '$(Build.ArtifactStagingDirectory)'
-
-              - script: |
-                  mkdir mariner && chmod 755 mariner
-                  cp azCopy-linux-temp-arm64/*arm64.rpm mariner
-                  cp azCopy-linux-temp-amd64/*x86_64.rpm mariner
-                  sudo ls -lRt mariner
-                  md5sum mariner/*
-                displayName: 'Copy artifacts for Mariner'
-                workingDirectory: $(Build.ArtifactStagingDirectory)
-
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb 
-                  sudo dpkg -i packages-microsoft-prod.deb 
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
-                displayName: "Update dependencies"
-
-              - template: setup/esrp_sign_linux.yml@self
-                parameters:
-                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
-                  ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-                  Pattern: '*.rpm, *.deb'
-                  DisplayName: 'ESRP CodeSigning azCopy linux amd64'
-
-              - template: setup/esrp_sign_linux.yml@self
-                parameters:
-                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
-                  ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
-                  Pattern: '*.rpm, *.deb'
-                  DisplayName: 'ESRP CodeSigning azCopy linux arm64'
-
-              - template: setup/esrp_sign_linux.yml@self
-                parameters:
-                  FolderPath: $(Build.ArtifactStagingDirectory)/mariner
-                  ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
-                  Pattern: '*.rpm, *.deb'
-                  DisplayName: 'ESRP CodeSigning azCopy mariner'
-
-              # Validate signed images have md5sum changed
-              - script: |
-                  mkdir -p $(Build.ArtifactStagingDirectory)/signed
-                  mkdir -p $(Build.ArtifactStagingDirectory)/signed/mariner
-                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/*
-                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/*
-                  chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/*.md
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/*.md
-                  rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/* $(Build.ArtifactStagingDirectory)/signed
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/* $(Build.ArtifactStagingDirectory)/signed
-                  mv $(Build.ArtifactStagingDirectory)/mariner/* $(Build.ArtifactStagingDirectory)/signed/mariner
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
-                displayName: 'Make Artifacts executable'
-
-              - script: |
-                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/signed
-                  md5sum $(Build.ArtifactStagingDirectory)/signed/*
-                  md5sum $(Build.ArtifactStagingDirectory)/signed/mariner/*
-                displayName: 'List Signed Artifacts'
-
-          - job: Set_2
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/signed
-                  artifactName: 'azCopy-windows-signed'
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  artifactName: 'azCopy-binaries-windows'
-
-            variables:
-              - group: AZCOPY_SECRET_VAULT
-              - name: work_dir
-                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-              - name: archives
-                value: '$(work_dir)/archives'
-
-            steps:
-              - script: |
-                  echo ${{ parameters.tag }}
-                displayName: 'Tag Name'
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Pipeline Artifacts'
-                inputs:
-                  artifactName: 'azCopy-windows-temp'
-                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download linux binary for extracting version'
-                inputs:
-                  artifactName: 'azCopy-binaries-linux-amd64'
-                  targetPath: $(work_dir)
-                  itemPattern: 'azcopy_linux_amd64'
-
-              - script: |
-                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
-                displayName: 'List Artifacts'
-
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo dpkg -i packages-microsoft-prod.deb
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
-                  sudo apt-get install -y zip
-                displayName: "Update dependencies"
-
-              - template: setup/esrp_sign_windows.yml@self
-                parameters:
-                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-                  ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
-                  Pattern: 'azcopy_windows*'
-
-              - script: |
-                  mkdir $(System.DefaultWorkingDirectory)/binaries
-                  mkdir $(System.DefaultWorkingDirectory)/signed
-                  rm -rf azCopy-windows-temp/*.md
-                  cp azCopy-windows-temp/* $(System.DefaultWorkingDirectory)/binaries
-                displayName: 'Add signed windows binary to staging directory'
-                workingDirectory: '$(Build.ArtifactStagingDirectory)'
-
-              # Validate signed images have md5sum changed
-              - script: |
-                  rm -rf azCopy-windows-temp/azcopy_windows_v7_arm.exe
-                  chmod 755 azCopy-windows-temp/*
-                  rm -rf azCopy-windows-temp/*.md
-                displayName: 'Make Artifacts executable'
-                workingDirectory: '$(Build.ArtifactStagingDirectory)'
-
-              - script: |
-                  chmod 755 $(work_dir)/azcopy_linux_amd64
-                  # Run azcopy --version and capture the output
-                  azcopyOutput=$($(work_dir)/azcopy_linux_amd64 --version)
-
-                  if echo "$azcopyOutput" | grep -q "azcopy version"; then
-                    version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-                    if [[ -n "$version" ]]; then
-                      echo "Extracted version: $version"
-                      echo "##vso[task.setvariable variable=azcopy_version]$version"
-                    fi
-                  fi
-                displayName: 'Extract the generated build version'
-
-              - script: |
-                  windows_amd64="$(work_dir)/azcopy_windows_amd64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
-
-                  windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
-
-                  windows_se_arm64="$(work_dir)/azcopy_windows_se_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_se_arm64]$windows_se_arm64"
-
-                  windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=windows_386]$windows_386"
-
-                  mkdir -p $windows_amd64
-                  mkdir -p $windows_arm64
-                  mkdir -p $windows_se_arm64
-                  mkdir -p $windows_386
-                  mkdir -p $(archives)
-                displayName: 'Create required directories'
-
-              - script: |
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)/azcopy.exe
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_se_arm64.exe $(windows_se_arm64)/azcopy.exe
-                  cp NOTICE.txt $(windows_amd64)
-                  cp NOTICE.txt $(windows_arm64)
-                  cp NOTICE.txt $(windows_386)
-                  cp NOTICE.txt $(windows_se_arm64)
-                  zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
-                  zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
-                  zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
-                  zip -r $(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip .
-                displayName: 'Copy required files'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 64 bit AMD Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_amd64)'
-                  archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
-                continueOnError: true
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 64 bit ARM Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_arm64)'
-                  archiveFile: '$(archives)/azcopy_windows_arm64_$(azcopy_version).zip'
-                continueOnError: true
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows 32 bit Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_386)'
-                  archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
-                continueOnError: true
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive Windows SE 64 bit ARM Build'
-                inputs:
-                  rootFolderOrFile: '$(windows_se_arm64)'
-                  archiveFile: '$(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip'
-                continueOnError: true
-
-              - script: |
-                  cp $(archives)/azcopy_windows* $(System.DefaultWorkingDirectory)/signed
-                displayName: 'Copy zip to staging directory'
-
-              - script: |
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-                  sudo ls -lRt $(System.DefaultWorkingDirectory)/signed
-                  md5sum $(System.DefaultWorkingDirectory)/signed/*
-                  rm -rf $(System.DefaultWorkingDirectory)/signed/*.md
-                displayName: 'List Signed Artifacts'
-
-          - job: Set_3
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/signed
-                  artifactName: 'azCopy-mac-signed'
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  artifactName: 'azCopy-binaries-mac'
-
-            variables:
-              - group: AZCOPY_SECRET_VAULT
-
-            steps:
-              - checkout: none
-
-              - script: |
-                  echo ${{ parameters.tag }}
-                displayName: 'Tag Name'
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Pipeline Artifacts'
-                inputs:
-                  artifactName: 'azCopy-mac-temp'
-                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Pipeline Artifacts'
-                inputs:
-                  artifactName: 'azCopy-mac-temp-m1'
-                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
-
-              - script: |
-                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
-                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
-                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*
-                displayName: 'List Artifacts'
-
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update
-                  sudo apt-get upgrade -y
-                  sudo apt-get install unzip -y
-                  sudo apt-get install -f --fix-missing
-                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-                  sudo dpkg -i packages-microsoft-prod.deb
-                  sudo apt install apt-transport-https -y
-                  sudo apt install dotnet-sdk-6.0 -y
-                displayName: "Update dependencies"
-
-              - template: setup/esrp_sign_notarize_macos.yml@self
-                parameters:
-                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-                  Pattern: '*.zip'
-
-              - template: setup/esrp_sign_notarize_macos.yml@self
-                parameters:
-                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
-                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-                  Pattern: '*.zip'
-
-              # Validate signed images have md5sum changed
-              - script: |
-                  mkdir $(System.DefaultWorkingDirectory)/signed
-                  mkdir $(System.DefaultWorkingDirectory)/binaries
-                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
-                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*.md
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(System.DefaultWorkingDirectory)/signed/
-                  mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/* $(System.DefaultWorkingDirectory)/signed/
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
-                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/
-                displayName: 'Make Artifacts executable'
-
-              - script: |
-                  sudo ls -lRt $(System.DefaultWorkingDirectory)/signed
-                  md5sum $(System.DefaultWorkingDirectory)/signed/*
-                displayName: 'List Signed Artifacts'
-
-              - script: |
-                  mkdir -p unzipped_amd64
-                  mkdir -p unzipped_arm64
-                  mkdir -p unzipped_m1_arm64
-                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy*amd64*.zip -d unzipped_amd64
-                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_arm64*.zip -d unzipped_arm64
-                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
-
-                  # Use find to retrieve the folder name
-                  amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
-                  echo "AMD64 Folder name: $amd64FolderName"
-
-                  arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
-                  echo "ARM64 Folder name: $arm64FolderName"
-
-                  m1Arm64FolderName=$(find unzipped_m1_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64*")
-                  echo "ARM64 M1 Folder name: $m1Arm64FolderName"
-
-                  # Check if there is exactly one matching directory for amd64
-                  if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
-                      echo "Found matching AMD64 directory: $amd64FolderName"
-                      cd "$amd64FolderName"
-                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_amd64
-                  else
-                      echo "Error: Expected exactly one matching AMD64 directory, found $(echo "$amd64FolderName" | wc -l)."
-                      exit 1
-                  fi
-
-                  cd $(Build.ArtifactStagingDirectory)
-
-                  # Check if there is exactly one matching directory for arm64
-                  if [ $(echo "$arm64FolderName" | wc -l) -eq 1 ]; then
-                      echo "Found matching ARM64 directory: $arm64FolderName"
-                      cd "$arm64FolderName"
-                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_arm64
-                  else
-                      echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
-                      exit 1
-                  fi
-
-                  cd $(Build.ArtifactStagingDirectory)
-
-                  # Check if there is exactly one matching directory for arm64
-                  if [ $(echo "$m1Arm64FolderName" | wc -l) -eq 1 ]; then
-                      echo "Found matching ARM64 M1 directory: $m1Arm64FolderName"
-                      cd "$m1Arm64FolderName"
-                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_m1_arm64
-                  else
-                      echo "Error: Expected exactly one matching ARM64 M1 directory, found $(echo "$m1Arm64FolderName" | wc -l)."
-                      exit 1
-                  fi
-
-                  rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
-                  rm -rf $(Build.ArtifactStagingDirectory)/*.zip
-                  sudo ls -ltR $(System.DefaultWorkingDirectory)/binaries
-                displayName:  'Copy and list signed mac binary to staging directory'
-                workingDirectory: '$(Build.ArtifactStagingDirectory)'
-
-      # SignArtifacts end here
-
-      - stage: TestArtifacts
-        dependsOn: SignArtifacts
-        condition: succeeded('SignArtifacts')
-        jobs:
-          - job: Set_1
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-            steps:
-              - checkout: none
-
-              - template: setup/test_artifacts.yml@self
-                parameters:
-                  artifact_name: 'azCopy-binaries-linux-amd64'
-                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-binaries'
-                  item_pattern: 'azcopy_linux*amd64'
-
-              - script: |
-                  ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries/
-                  chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries/*
-                  $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version
-                  $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_se_amd64 --version
-                  rm -rf /usr/local/bin/azcopy
-                  rm -rf /usr/bin/azcopy
-                displayName: 'Test signed linux binaries'
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Build Artifacts'
-                inputs:
-                  artifactName: 'azCopy-linux-signed'
-                  downloadPath: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
-                  itemPattern: 'azcopy-*x86_64.deb'
-
-              - script: |
-                  sudo dpkg --info azcopy-*x86_64.deb
-                  sudo dpkg -i azcopy-*x86_64.deb
-                  sudo apt-get install build-essential -y
-                displayName: 'Install deb Package'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
-
-              - script: |
-                  azcopy --version
-                  azcopy --help
-                displayName: 'Check Version and Help'
-
-          - job: Set_2
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: ubuntu22-1espt
-              os: linux
-            steps:
-              - checkout: none
-
-              - template: setup/test_artifacts.yml@self
-                parameters:
-                  artifact_name: 'azCopy-linux-signed'
-                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
-                  item_pattern: 'azcopy_linux_*amd64*.tar.gz'
-
-              - script: |
-                  TAR_GZ_FILE=$(ls azcopy_linux_amd64*.tar.gz)
-                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
-                  
-                  # Create extraction directory
-                  mkdir -p "$EXTRACT_DIR"
-                  
-                  # Extract the .tar.gz file
-                  tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
-                  if [ $? -ne 0 ]; then
-                      echo "Error: Failed to extract $TAR_GZ_FILE"
-                      exit 1
-                  fi
-                  
-                  # Find the directory matching the pattern
-                  matching_dirs=("$EXTRACT_DIR"/azcopy_linux_amd64*)
-                  
-                  # Check if there is exactly one matching directory
-                  if [ ${#matching_dirs[@]} -eq 1 ]; then
-                      echo "Found matching directory: ${matching_dirs[0]}"
-                      cd "${matching_dirs[0]}"
-                  else
-                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
-                      exit 1
-                  fi
-                  
-                  # Run azcopy commands
-                  ./azcopy --version
-                  ./azcopy --help
-                displayName: 'Check Version and Help'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
-
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update --fix-missing
-                  sudo apt-get install libsecret-1-dev -y
-                displayName: "Installing Dependencies"
-
-              - script: |
-                  TAR_GZ_FILE=$(ls azcopy_linux_se_amd64*.tar.gz)
-                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_se"
-                  
-                  # Create extraction directory
-                  mkdir -p "$EXTRACT_DIR"
-                  
-                  # Extract the .tar.gz file
-                  tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
-                  if [ $? -ne 0 ]; then
-                      echo "Error: Failed to extract $TAR_GZ_FILE"
-                      exit 1
-                  fi
-                  
-                  # Find the directory matching the pattern
-                  matching_dirs=("$EXTRACT_DIR"/azcopy_linux_se_amd64*)
-                  
-                  # Check if there is exactly one matching directory
-                  if [ ${#matching_dirs[@]} -eq 1 ]; then
-                      echo "Found matching directory: ${matching_dirs[0]}"
-                      cd "${matching_dirs[0]}"
-                  else
-                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
-                      exit 1
-                  fi
-                  
-                  # Run azcopy commands
-                  ./azcopy --version
-                  ./azcopy --help
-                displayName: 'Check Version and Help'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
-
-          - job: Set_3
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-arm-pool
-              image: ubuntu22arm-custom1espt
-              os: linux
-              hostArchitecture: Arm64
-            steps:
-              - checkout: none
-
-              - script: |
-                  sudo apt update
-                  sudo apt-get install libsecret-1-dev -y
-                  sudo apt --fix-broken install
-                  ldd --version
-                displayName: "Libsecret Install"
-
-              - template: setup/test_artifacts.yml@self
-                parameters:
-                  artifact_name: 'azCopy-linux-signed'
-                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
-                  item_pattern: 'azcopy_linux_*arm64*.tar.gz'
-
-              - script: |
-                  TAR_GZ_FILE=$(ls azcopy_linux_arm64*.tar.gz)
-                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
-                  
-                  # Create extraction directory
-                  mkdir -p "$EXTRACT_DIR"
-                  
-                  # Extract the .tar.gz file
-                  tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
-                  if [ $? -ne 0 ]; then
-                      echo "Error: Failed to extract $TAR_GZ_FILE"
-                      exit 1
-                  fi
-                  
-                  # Find the directory matching the pattern
-                  matching_dirs=("$EXTRACT_DIR"/azcopy_linux_arm64*)
-                  
-                  # Check if there is exactly one matching directory
-                  if [ ${#matching_dirs[@]} -eq 1 ]; then
-                      echo "Found matching directory: ${matching_dirs[0]}"
-                      cd "${matching_dirs[0]}"
-                  else
-                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
-                      exit 1
-                  fi
-                  
-                  # Run azcopy commands
-                  ./azcopy --version
-                  ./azcopy --help
-
-                displayName: 'Check Version and Help for arm64 tar.gz'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
-
-              - script: |
-                  TAR_GZ_FILE=$(ls azcopy_linux_se_arm64*.tar.gz)
-                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_se"
-                  
-                  # Create extraction directory
-                  mkdir -p "$EXTRACT_DIR"
-                  
-                  # Extract the .tar.gz file
-                  tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
-                  if [ $? -ne 0 ]; then
-                      echo "Error: Failed to extract $TAR_GZ_FILE"
-                      exit 1
-                  fi
-                  
-                  # Find the directory matching the pattern
-                  matching_dirs=("$EXTRACT_DIR"/azcopy_linux_se_arm64*)
-                  
-                  # Check if there is exactly one matching directory
-                  if [ ${#matching_dirs[@]} -eq 1 ]; then
-                      echo "Found matching directory: ${matching_dirs[0]}"
-                      cd "${matching_dirs[0]}"
-                  else
-                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
-                      exit 1
-                  fi
-                  
-                  # Run azcopy commands
-                  ./azcopy --version
-                  ./azcopy --help
-
-                displayName: 'Check Version and Help for SE arm64 tar.gz'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
-
-          - job: Set_4
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-arm-pool
-              image: ubuntu22arm-custom1espt
-              os: linux
-              hostArchitecture: Arm64
-
-            steps:
-              - checkout: none
-
-              - script: |
-                  sudo apt update
-                  sudo apt-get install libsecret-1-dev -y
-                  sudo apt --fix-broken install
-                  ldd --version
-                displayName: "Libsecret Install"
-
-              - template: setup/test_artifacts.yml@self
-                parameters:
-                  artifact_name: 'azCopy-binaries-linux-arm64'
-                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-binaries'
-                  item_pattern: 'azcopy_linux*arm64'
-
-              - script: |
-                  ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries
-                  chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries/*
-                  $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_arm64 --version
-                  $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_se_arm64 --version
-                displayName: 'Test signed linux binaries'
-
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Build Artifacts'
-                inputs:
-                  artifactName: 'azCopy-linux-signed'
-                  downloadPath: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
-                  itemPattern: 'azcopy-*arm64.deb'
-
-              - script: |
-                  rm -rf /usr/bin/azcopy
-                  rm -rf /usr/local/bin/azcopy
-                  sudo dpkg --info azcopy-*arm64.deb
-                  sudo dpkg -i azcopy-*arm64.deb
-                displayName: 'Install Package'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
-
-              - script: |
-                  azcopy --version
-                  azcopy --help
-                displayName: 'Check Version and Help'
-
-          - job: Set_5
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: mariner2-1espt
-              os: linux
-            steps:
-              - checkout: none
-
-              - template: setup/test_artifacts.yml@self
-                parameters:
-                  artifact_name: 'azCopy-linux-signed'
-                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
-                  item_pattern: 'mariner/azcopy-*x86_64.rpm'
-
-              - script: |
-                  sudo rpm -qip azcopy*x86_64.rpm
-                  sudo rpm -i azcopy*x86_64.rpm
-                displayName: 'Install Package'
-                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
-
-              - script: |
-                  azcopy --version
-                  azcopy --help
-                displayName: 'Check Version and Help command'
-
-          - job: Set_6
-            timeoutInMinutes: 360
-            pool:
-              name: Azure Pipelines
-              image: macos-latest
-              os: macOS
-
-            variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-
-            steps:
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Build Artifacts'
-                inputs:
-                  artifactName: 'azCopy-mac-signed'
-                  downloadPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-signed
-                  itemPattern: 'azcopy*amd64*.zip'
-
-              - script: |
-                  # Install Homebrew if not already installed
-                  if ! command -v brew &> /dev/null
-                  then
-                    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-                    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/$(whoami)/.zprofile
-                    eval "$(/opt/homebrew/bin/brew shellenv)"
-                  fi
-                  
-                  # Define variables
-                  ZIP_FILE_PATH=$(ls $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/azcopy*amd64*.zip)
-                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
-                  
-                  # Create extraction directory
-                  mkdir -p $EXTRACT_DIR
-                  
-                  # Extract the zip file
-                  unzip $ZIP_FILE_PATH -d $EXTRACT_DIR
-                  
-                  # Find the directory matching the pattern
-                  matching_dirs=($EXTRACT_DIR/azcopy_darwin_amd64*)
-                  
-                  # Check if there is exactly one matching directory
-                  if [ ${#matching_dirs[@]} -eq 1 ]; then
-                      cd "${matching_dirs[0]}"
-                  else
-                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
-                      exit 1
-                  fi
-                  
-                  # Run the azcopy version command
-                  ./azcopy --version
-                  ./azcopy --help
-                displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
-
-          - job: Set_7
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-pool
-              image: windows2022-1espt
-              os: windows
-
-            variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-
-            steps:
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Build Artifacts'
-                inputs:
-                  artifactName: 'azCopy-windows-signed'
-                  downloadPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-signed
-                  itemPattern: 'azcopy*amd64*.zip'
-
-              - task: PowerShell@2
-                inputs:
-                  targetType: 'inline'
-                  script: |
-                    $artifactDir = "$(Build.ArtifactStagingDirectory)\azCopy-windows-signed"
-                    $extractDir = "$(Build.ArtifactStagingDirectory)\extracted"
-                    
-                    # Find the zip file matching the pattern
-                    $zipFile = Get-ChildItem -Path $artifactDir -Filter "azcopy*amd64*.zip" | Select-Object -First 1
-                    
-                    if ($null -eq $zipFile) {
-                      Write-Error "No zip file found matching pattern 'azcopy*amd64*.zip' in directory: $artifactDir"
-                      exit 1
-                    }
-                    
-                    $zipFilePath = $zipFile.FullName
-                    
-                    # Create extraction directory
-                    New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-                    
-                    # Extract the zip file
-                    try {
-                      Add-Type -AssemblyName System.IO.Compression.FileSystem
-                      [System.IO.Compression.ZipFile]::ExtractToDirectory($zipFilePath, $extractDir)
-                    } catch {
-                      Write-Error "Failed to extract zip file: $_"
-                      exit 1
-                    }
-                    
-                    # Change to the directory containing azcopy
-                    Set-Location -Path $extractDir
-                    
-                    # Find directories matching the pattern
-                    $matchingDirs = Get-ChildItem -Directory -Path .\azcopy_windows_amd64* | Select-Object -First 1
-                    
-                    # Check if there is exactly one matching directory
-                    if ($matchingDirs.Count -eq 0) {
-                        Write-Error "No directories found matching the pattern: .\azcopy_windows_amd64*"
-                        exit 1
-                    } elseif ($matchingDirs.Count -gt 1) {
-                        Write-Error "Multiple directories found matching the pattern: .\azcopy_windows_amd64*"
-                        exit 1
-                    }
-                    
-                    # Check if the azcopy executable exists in the matching directory
-                    $azcopyPath = Join-Path -Path $matchingDirs.FullName -ChildPath "azcopy.exe"
-                    if (-Not (Test-Path -Path $azcopyPath)) {
-                        Write-Error "azcopy not found in extraction directory: $($matchingDirs.FullName)"
-                        exit 1
-                    } else {
-                        Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
-                        # Ensure the azcopy executable has the correct permissions
-                        icacls $azcopyPath
-                    
-                        # Run azcopy --version and capture output
-                        try {
-                            $versionOutput = & $azcopyPath --version 2>&1
-                            Write-Output "azcopy version output: $versionOutput"
-                        } catch {
-                            Write-Error "Failed to run azcopy --version: $_"
-                        }
-                    
-                        # Run azcopy --help and capture output
-                        try {
-                            $helpOutput = & $azcopyPath --help 2>&1
-                            Write-Output "azcopy help output: $helpOutput"
-                        } catch {
-                            Write-Error "Failed to run azcopy --help: $_"
-                        }
-                    }
-                displayName: 'Extract Files and Run Version and Help Command on Windows'
-
-          - job: Set_8
-            timeoutInMinutes: 120
-            pool:
-              name: azcopy-arm-pool
-              image: windows2022arm-1espt
-              os: windows
-              hostArchitecture: Arm64
-
-            variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-
-            steps:
-              - task: DownloadPipelineArtifact@2
-                displayName: 'Download Build Artifacts'
-                inputs:
-                  artifactName: 'azCopy-windows-signed'
-                  downloadPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-signed
-                  itemPattern: 'azcopy_windows_se_arm64*.zip'
-
-              - task: PowerShell@2
-                inputs:
-                  targetType: 'inline'
-                  script: |
-                    $artifactDir = "$(Build.ArtifactStagingDirectory)\azCopy-windows-signed"
-                    $extractDir = "$(Build.ArtifactStagingDirectory)\extracted"
-                    
-                    # Find the zip file matching the pattern
-                    $zipFile = Get-ChildItem -Path $artifactDir -Filter "azcopy*se_arm64*.zip" | Select-Object -First 1
-                    
-                    if ($null -eq $zipFile) {
-                      Write-Error "No zip file found matching pattern 'azcopy*se_arm64*.zip' in directory: $artifactDir"
-                      exit 1
-                    }
-                    
-                    $zipFilePath = $zipFile.FullName
-                    
-                    # Create extraction directory
-                    New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-                    
-                    # Extract the zip file
-                    try {
-                      Add-Type -AssemblyName System.IO.Compression.FileSystem
-                      [System.IO.Compression.ZipFile]::ExtractToDirectory($zipFilePath, $extractDir)
-                    } catch {
-                      Write-Error "Failed to extract zip file: $_"
-                      exit 1
-                    }
-                    
-                    # Change to the directory containing azcopy
-                    Set-Location -Path $extractDir
-                    
-                    # Find directories matching the pattern
-                    $matchingDirs = Get-ChildItem -Directory -Path .\azcopy_windows_se_arm64* | Select-Object -First 1
-                    
-                    # Check if there is exactly one matching directory
-                    if ($matchingDirs.Count -eq 0) {
-                        Write-Error "No directories found matching the pattern: .\azcopy_windows_se_arm64*"
-                        exit 1
-                    } elseif ($matchingDirs.Count -gt 1) {
-                        Write-Error "Multiple directories found matching the pattern: .\azcopy_windows_se_arm64*"
-                        exit 1
-                    }
-                    
-                    # Check if the azcopy executable exists in the matching directory
-                    $azcopyPath = Join-Path -Path $matchingDirs.FullName -ChildPath "azcopy.exe"
-                    if (-Not (Test-Path -Path $azcopyPath)) {
-                        Write-Error "azcopy not found in extraction directory: $($matchingDirs.FullName)"
-                        exit 1
-                    } else {
-                        Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
-                        # Ensure the azcopy executable has the correct permissions
-                        icacls $azcopyPath
-                    
-                        # Run azcopy --version and capture output
-                        try {
-                            $versionOutput = & $azcopyPath --version 2>&1
-                            Write-Output "azcopy version output: $versionOutput"
-                        } catch {
-                            Write-Error "Failed to run azcopy --version: $_"
-                        }
-                    
-                        # Run azcopy --help and capture output
-                        try {
-                            $helpOutput = & $azcopyPath --help 2>&1
-                            Write-Output "azcopy help output: $helpOutput"
-                        } catch {
-                            Write-Error "Failed to run azcopy --help: $_"
-                        }
-                    }
-                displayName: 'Extract Files and Run Version and Help Command on Windows Arm64'
+#      - stage: BuildArtifacts
+#        jobs:
+#          - job: Set_1
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+#                  artifactName: 'azCopy-linux-temp-amd64'
+#                - output: pipelineArtifact
+#                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+#                  artifactName: 'azCopy-binaries-linux-amd64'
+#
+#            variables:
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#              - name: work_dir
+#                value: '$(Build.SourcesDirectory)'
+#              - name: archives
+#                value: $(root_dir)/archives
+#
+#            steps:
+#              - checkout: self
+#                displayName: 'Checkout repository'
+#
+#              # Custom script to install Go-lang
+#              - task: ShellScript@2
+#                inputs:
+#                  scriptPath: "$(work_dir)/go_installer.sh"
+#                  args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+#                displayName: "Installing Go tools"
+#
+#              - script: |
+#                  echo 'Running GO Vet'
+#                  go vet
+#                displayName: 'Golang Vet - Linux'
+#                workingDirectory: $(root_dir)
+#
+#              # install dependencies required for compiling azcopy
+#              - script: |
+#                  sudo apt-get clean
+#                  sudo apt-get update --fix-missing
+#                  sudo apt-get install pkg-config libsecret-1-dev -y
+#                  sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+#                  sudo gem install dotenv -v 2.8.1
+#                  sudo gem install fpm -V
+#                displayName: "Installing Dependencies"
+#
+#              # get glibc version with which build is done
+#              - script: |
+#                  ldd --version
+#                displayName: "GLIBC Version"
+#
+#              - script: |
+#                  GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_amd64"
+#                displayName: 'Generate Linux AMD64'
+#
+#              - script: |
+#                  GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_amd64"
+#                displayName: 'Generate Linux AMD64 SE Integration'
+#
+#              - script: |
+#                  sudo ls -lRt $(root_dir)/
+#                  mkdir -p $(Build.ArtifactStagingDirectory)/binaries
+#                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
+#                  cp $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
+#                displayName: 'List the binaries and add to staging directory'
+#
+#              - template: setup/azcopy_version_check_linux.yml@self
+#                parameters:
+#                  azcopy_executable: $(root_dir)/azcopy_linux_amd64
+#
+#              - script: |
+#                  linux_amd64_dir="$(work_dir)/azcopy_linux_amd64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=linux_amd64_dir]$linux_amd64_dir"
+#
+#                  linux_se_amd64_dir="$(work_dir)/azcopy_linux_se_amd64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=linux_se_amd64_dir]$linux_se_amd64_dir"
+#
+#                  mkdir -p $linux_amd64_dir
+#                  mkdir -p $linux_se_amd64_dir
+#                  mkdir -p $(archives)
+#                  ls -ltR $(work_dir)
+#                displayName: 'Create required directories'
+#
+#              - script: |
+#                  mkdir -p pkgDir/usr/bin/
+#                  mv $(root_dir)/azcopy_linux_amd64 $(linux_amd64_dir)/azcopy
+#                  mv $(root_dir)/azcopy_linux_se_amd64 $(linux_se_amd64_dir)/azcopy
+#                  cp $(linux_amd64_dir)/azcopy pkgDir/usr/bin/
+#                  cp NOTICE.txt $(linux_amd64_dir)/
+#                  cp NOTICE.txt $(linux_se_amd64_dir)/
+#                  cp NOTICE.txt pkgDir/usr/bin/
+#                displayName: 'Copy required files for packaging'
+#
+#              # using fpm tool for packaging of our binary & performing post-install operations
+#              # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+#              - script: |
+#                  fpm -s dir -t deb -n azcopy -C pkgDir/ \
+#                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+#                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+#                  --url "https://github.com/Azure/azure-storage-azcopy" \
+#                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
+#                  mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.deb
+#                  cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)/temp
+#                workingDirectory: $(root_dir)
+#                displayName: 'Make AMD64 deb Package'
+#
+#              - script: |
+#                  fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+#                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+#                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+#                  --url "https://github.com/Azure/azure-storage-azcopy" \
+#                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
+#                  mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.x86_64.rpm
+#                  cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)/temp
+#                workingDirectory: $(root_dir)
+#                displayName: 'Make AMD64 rpm Package'
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Partner(SE) Linux Build'
+#                inputs:
+#                  rootFolderOrFile: '$(linux_se_amd64_dir)'
+#                  archiveType: tar
+#                  archiveFile: '$(archives)/azcopy_linux_se_amd64_$(azcopy_version).tar.gz'
+#                continueOnError: true
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Amd Linux Build'
+#                inputs:
+#                  rootFolderOrFile: '$(linux_amd64_dir)'
+#                  archiveType: tar
+#                  archiveFile: '$(archives)/azcopy_linux_amd64_$(azcopy_version).tar.gz'
+#                continueOnError: true
+#
+#              - script: |
+#                  cp -r $(archives)/* $(Build.ArtifactStagingDirectory)/temp
+#                workingDirectory: $(root_dir)
+#                displayName: 'Add tar.gz to signing stage'
+#
+#              - task: ComponentGovernanceComponentDetection@0
+#                inputs:
+#                  scanType: 'Register'
+#                  verbosity: 'Verbose'
+#                  alertWarningLevel: 'High'
+#
+#          - job: Set_2
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-arm-pool
+#              image: ubuntu22arm-custom1espt
+#              os: linux
+#              hostArchitecture: Arm64
+#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+#                  artifactName: 'azCopy-linux-temp-arm64'
+#                - output: pipelineArtifact
+#                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+#                  artifactName: 'azCopy-binaries-linux-arm64'
+#
+#            variables:
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#              - name: work_dir
+#                value: '$(Build.SourcesDirectory)'
+#              - name: archives
+#                value: $(root_dir)/archives
+#
+#            steps:
+#              - checkout: self
+#                displayName: 'Checkout repository'
+#
+#              # Custom script to install Go-lang
+#              - task: ShellScript@2
+#                inputs:
+#                  scriptPath: "$(work_dir)/go_installer.sh"
+#                  args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+#                displayName: "Installing Go tools"
+#
+#              - script: |
+#                  echo 'Running GO Vet'
+#                  go vet
+#                displayName: 'Golang Vet - Linux'
+#                workingDirectory: $(root_dir)
+#
+#              # install dependencies required for compiling azcopy
+#              - script: |
+#                  sudo apt-get clean
+#                  sudo apt-get update --fix-missing
+#                  sudo apt-get install pkg-config libsecret-1-dev wget -y
+#                  sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+#                  sudo gem install dotenv -v 2.8.1
+#                  sudo gem install fpm -V
+#                displayName: "Installing Dependencies"
+#
+#              # get glibc version with which build is done
+#              - script: |
+#                  ldd --version
+#                displayName: "GLIBC Version"
+#
+#              - script: |
+#                  GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_arm64"
+#                displayName: 'Generate Linux ARM64'
+#
+#              - script: |
+#                  GOARCH=arm64 GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_arm64"
+#                displayName: 'Generate Linux ARM64 SE Integration'
+#
+#              - script: |
+#                  sudo ls -lRt $(root_dir)/
+#                  mkdir -p $(Build.ArtifactStagingDirectory)/binaries
+#                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
+#                  cp -r $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
+#                displayName: 'List the binaries and add to staging directory'
+#
+#              - template: setup/azcopy_version_check_linux.yml@self
+#                parameters:
+#                  azcopy_executable: $(root_dir)/azcopy_linux_arm64
+#
+#              - script: |
+#                  linux_arm64_dir="$(work_dir)/azcopy_linux_arm64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=linux_arm64_dir]$linux_arm64_dir"
+#
+#                  linux_se_arm64_dir="$(work_dir)/azcopy_linux_se_arm64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=linux_se_arm64_dir]$linux_se_arm64_dir"
+#
+#                  mkdir -p $linux_arm64_dir
+#                  mkdir -p $linux_se_arm64_dir
+#                  mkdir -p $(archives)
+#                displayName: 'Create required directories'
+#
+#              - script: |
+#                  mkdir -p pkgDir/usr/bin/
+#                  cp NOTICE.txt pkgDir/usr/bin/
+#                  mv $(root_dir)/azcopy_linux_arm64 $(linux_arm64_dir)/azcopy
+#                  mv $(root_dir)/azcopy_linux_se_arm64 $(linux_se_arm64_dir)/azcopy
+#                  cp $(linux_arm64_dir)/azcopy pkgDir/usr/bin/
+#                  cp NOTICE.txt $(linux_arm64_dir)/
+#                  cp NOTICE.txt $(linux_se_arm64_dir)/
+#                displayName: 'Copy required files for packaging'
+#
+#              # using fpm tool for packaging of our binary & performing post-install operations
+#              # for additional information about fpm refer https://fpm.readthedocs.io/en/v1.13.1/
+#              - script: |
+#                  fpm -s dir -t deb -n azcopy -C pkgDir/ \
+#                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+#                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+#                  --url "https://github.com/Azure/azure-storage-azcopy" \
+#                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
+#                  mv ./azcopy*.deb ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.arm64.deb
+#                  cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)/temp
+#                workingDirectory: $(root_dir)
+#                displayName: 'Make ARM64 deb Package'
+#
+#              - script: |
+#                  fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
+#                  -v `./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3` \
+#                  --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
+#                  --url "https://github.com/Azure/azure-storage-azcopy" \
+#                  --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
+#                  mv ./azcopy*.rpm ./azcopy-`./pkgDir/usr/bin/azcopy --version | cut -d " " -f 3`.arm64.rpm
+#                  cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)/temp
+#                workingDirectory: $(root_dir)
+#                displayName: 'Make ARM64 rpm Package'
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Standard Linux Build'
+#                inputs:
+#                  rootFolderOrFile: '$(linux_arm64_dir)'
+#                  archiveType: tar
+#                  archiveFile: '$(archives)/azcopy_linux_arm64_$(azcopy_version).tar.gz'
+#                continueOnError: true
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Partner(SE) Linux Build'
+#                inputs:
+#                  rootFolderOrFile: '$(linux_se_arm64_dir)'
+#                  archiveType: tar
+#                  archiveFile: '$(archives)/azcopy_linux_se_arm64_$(azcopy_version).tar.gz'
+#                continueOnError: true
+#
+#              - script: |
+#                  cp -r $(archives)/* $(Build.ArtifactStagingDirectory)/temp
+#                workingDirectory: $(root_dir)
+#                displayName: 'Add tar.gz to staging directory'
+#
+#              - task: ComponentGovernanceComponentDetection@0
+#                inputs:
+#                  scanType: 'Register'
+#                  verbosity: 'Verbose'
+#                  alertWarningLevel: 'High'
+#
+#          - job: Set_3
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: windows2022-1espt
+#              os: windows
+#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(Build.ArtifactStagingDirectory)\binaries
+#                  artifactName: 'azCopy-windows-temp'
+#
+#            variables:
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#
+#            steps:
+#              - task: GoTool@0
+#                env:
+#                  GO111MODULE: 'on'
+#                inputs:
+#                  version: $(AZCOPY_GOLANG_VERSION)
+#
+#              - script: |
+#                  echo 'Running GO Vet'
+#                  go vet
+#                  mkdir "$(Build.ArtifactStagingDirectory)\binaries"
+#                displayName: 'Golang Vet - Windows'
+#                workingDirectory: $(root_dir)
+#
+#              - script: |
+#                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_amd64.exe"
+#                displayName: 'Generate Windows AMD64'
+#                env:
+#                  GOARCH: amd64
+#                  GOOS: windows
+#                  CGO_ENABLED: 0
+#
+#              - script: |
+#                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_386.exe"
+#                displayName: 'Generate Windows i386'
+#                env:
+#                  GOARCH: 386
+#                  GOOS: windows
+#                  CGO_ENABLED: 0
+#
+#              - script: |
+#                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_v7_arm.exe"
+#                displayName: 'Generate Windows ARM'
+#                env:
+#                  GOARCH: arm
+#                  GOARM: 7
+#                  GOOS: windows
+#                  CGO_ENABLED: 0
+#
+#              - script: |
+#                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_arm64.exe"
+#                displayName: 'Generate Windows ARM'
+#                env:
+#                  GOARCH: arm64
+#                  GOOS: windows
+#                  CGO_ENABLED: 0
+#
+#              - script: |
+#                  go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_se_arm64.exe"
+#                displayName: 'Generate Windows ARM'
+#                env:
+#                  GOARCH: arm64
+#                  GOOS: windows
+#                  CGO_ENABLED: 0
+#
+#              - task: ComponentGovernanceComponentDetection@0
+#                inputs:
+#                  scanType: 'Register'
+#                  verbosity: 'Verbose'
+#                  alertWarningLevel: 'High'
+#
+#          - job: Set_4
+#            timeoutInMinutes: 360
+#            pool:
+#              name: Azure Pipelines
+#              image: macos-latest
+#              os: macOS
+#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+#                  artifactName: 'azCopy-mac-temp'
+#
+#            variables:
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#              - name: work_dir
+#                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+#              - name: archives
+#                value: $(root_dir)/archives
+#
+#            steps:
+#              - task: GoTool@0
+#                env:
+#                  GO111MODULE: 'on'
+#                inputs:
+#                  version: $(AZCOPY_GOLANG_VERSION)
+#
+#              - script: |
+#                  echo 'Running GO Vet'
+#                  go vet
+#                displayName: 'Golang Vet - Mac'
+#                workingDirectory: $(System.DefaultWorkingDirectory)
+#
+#              - script: |
+#                  CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
+#                displayName: 'Generate MacOS Build with AMD64'
+#
+#              - script: |
+#                  GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64"
+#                displayName: 'Test Cross-compiled MacOS Build with ARM64'
+#
+#              - task: Bash@3
+#                displayName: 'Extract AZCopy version'
+#                inputs:
+#                  targetType: 'inline'
+#                  script: |
+#                    azcopy_version=$($(root_dir)/azcopy_darwin_amd64 --version | awk '{print $3}')
+#                    echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
+#
+#              - script: |
+#                  darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
+#
+#                  darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
+#
+#                  mkdir -p $darwin_amd_dir
+#                  mkdir -p $darwin_arm_dir
+#                  mkdir -p $(archives)
+#                displayName: 'Create required directories'
+#
+#              - script: |
+#                  cp NOTICE.txt $(darwin_amd_dir)
+#                  cp NOTICE.txt $(darwin_arm_dir)
+#                  mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
+#                  mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
+#                displayName: 'Copy required files for packaging'
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
+#                inputs:
+#                  rootFolderOrFile: '$(darwin_amd_dir)'
+#                  archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
+#                continueOnError: true
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
+#                inputs:
+#                  rootFolderOrFile: '$(darwin_arm_dir)'
+#                  archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
+#                continueOnError: true
+#
+#              - script: |
+#                  mkdir $(Build.ArtifactStagingDirectory)/temp
+#                  cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)/temp
+#                displayName: 'Copy zip to staging directory'
+#
+#              - task: ComponentGovernanceComponentDetection@0
+#                inputs:
+#                  scanType: 'Register'
+#                  verbosity: 'Verbose'
+#                  alertWarningLevel: 'High'
+#
+#          - job: Set_5
+#            timeoutInMinutes: 360
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+#                  artifactName: 'azCopy-mac-temp-m1'
+#
+#            variables:
+#              - group: AZCOPY_TESTS_VAR
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#              - name: work_dir
+#                value: '$(Build.SourcesDirectory)'
+#              - name: archives
+#                value: $(root_dir)/archives
+#
+#            steps:
+#              - task: GoTool@0
+#                env:
+#                  GO111MODULE: 'on'
+#                inputs:
+#                  version: $(AZCOPY_GOLANG_VERSION)
+#
+#              - script: |
+#                  sudo apt-get clean
+#                  sudo apt-get update --fix-missing
+#                  sudo apt-get install -y zip unzip
+#                displayName: "Installing Dependencies"
+#
+#              - script: |
+#                  echo 'Running GO Vet'
+#                  go vet
+#                displayName: 'Golang Vet'
+#                workingDirectory: $(System.DefaultWorkingDirectory)
+#
+#              - script: |
+#                  CGO_ENABLED=1 go build -o "$(root_dir)/azcopy"
+#                displayName: 'Generate build'
+#
+#              - template: setup/azcopy_version_check_linux.yml@self
+#                parameters:
+#                  azcopy_executable: $(root_dir)/azcopy
+#
+#              - template: setup/trigger_m1_build.yml@self
+#
+#              - script: |
+#                  mkdir -p $(archives)
+#                  darwin_arm64_m1_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"
+#
+#                  echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
+#                  mkdir -p $darwin_arm64_m1_dir
+#
+#                  cp NOTICE.txt $darwin_arm64_m1_dir
+#                  cp $(Build.ArtifactStagingDirectory)/azcopy  $darwin_arm64_m1_dir
+#                displayName: 'Copy required files for packaging'
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
+#                inputs:
+#                  rootFolderOrFile: '$(darwin_arm64_m1_dir)'
+#                  archiveFile: '$(archives)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
+#                continueOnError: true
+#
+#              - script: |
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azcopy
+#                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
+#                  cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)/temp
+#                displayName: 'Copy zip to staging directory'
+#
+#              - task: ComponentGovernanceComponentDetection@0
+#                inputs:
+#                  scanType: 'Register'
+#                  verbosity: 'Verbose'
+#                  alertWarningLevel: 'High'
+#
+#        # BuildArtifacts end here
+#
+#      - stage: SignArtifacts
+#        dependsOn: BuildArtifacts
+#        condition: succeeded('BuildArtifacts')
+#        jobs:
+#          - job: Set_1
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(Build.ArtifactStagingDirectory)/signed
+#                  artifactName: 'azCopy-linux-signed'
+#
+#            variables:
+#              - group: AZCOPY_SECRET_VAULT
+#
+#            steps:
+#              - checkout: none
+#
+#              - script: |
+#                  echo ${{ parameters.tag }}
+#                displayName: 'Tag Name'
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Pipeline Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-linux-temp-arm64'
+#                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Pipeline Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-linux-temp-amd64'
+#                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
+#
+#              - script: |
+#                  rm -rf azcopy_linux*
+#                  sudo ls -lRt azCopy-linux-temp-arm64
+#                  sudo ls -lRt azCopy-linux-temp-amd64
+#                  md5sum azCopy-linux-temp-arm64/*
+#                  md5sum azCopy-linux-temp-amd64/*
+#                displayName: 'List Artifacts'
+#                workingDirectory: '$(Build.ArtifactStagingDirectory)'
+#
+#              - script: |
+#                  mkdir mariner && chmod 755 mariner
+#                  cp azCopy-linux-temp-arm64/*arm64.rpm mariner
+#                  cp azCopy-linux-temp-amd64/*x86_64.rpm mariner
+#                  sudo ls -lRt mariner
+#                  md5sum mariner/*
+#                displayName: 'Copy artifacts for Mariner'
+#                workingDirectory: $(Build.ArtifactStagingDirectory)
+#
+#              - script: |
+#                  sudo apt-get clean
+#                  sudo apt-get update
+#                  sudo apt-get upgrade -y
+#                  sudo apt-get install -f --fix-missing
+#                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+#                  sudo dpkg -i packages-microsoft-prod.deb
+#                  sudo apt install apt-transport-https -y
+#                  sudo apt install dotnet-sdk-6.0 -y
+#                displayName: "Update dependencies"
+#
+#              - template: setup/esrp_sign_linux.yml@self
+#                parameters:
+#                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
+#                  ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
+#                  Pattern: '*.rpm, *.deb'
+#                  DisplayName: 'ESRP CodeSigning azCopy linux amd64'
+#
+#              - template: setup/esrp_sign_linux.yml@self
+#                parameters:
+#                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
+#                  ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_KEY_CODE)
+#                  Pattern: '*.rpm, *.deb'
+#                  DisplayName: 'ESRP CodeSigning azCopy linux arm64'
+#
+#              - template: setup/esrp_sign_linux.yml@self
+#                parameters:
+#                  FolderPath: $(Build.ArtifactStagingDirectory)/mariner
+#                  ESRP_AZCOPY_KEY_CODE: $(ESRP_AZCOPY_MARINER_KEY_CODE)
+#                  Pattern: '*.rpm, *.deb'
+#                  DisplayName: 'ESRP CodeSigning azCopy mariner'
+#
+#              # Validate signed images have md5sum changed
+#              - script: |
+#                  mkdir -p $(Build.ArtifactStagingDirectory)/signed
+#                  mkdir -p $(Build.ArtifactStagingDirectory)/signed/mariner
+#                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/*
+#                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/*
+#                  chmod 755 $(Build.ArtifactStagingDirectory)/mariner/*
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/*.md
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/*.md
+#                  rm -rf $(Build.ArtifactStagingDirectory)/mariner/*.md
+#                  mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64/* $(Build.ArtifactStagingDirectory)/signed
+#                  mv $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64/* $(Build.ArtifactStagingDirectory)/signed
+#                  mv $(Build.ArtifactStagingDirectory)/mariner/* $(Build.ArtifactStagingDirectory)/signed/mariner
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-amd64
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-linux-temp-arm64
+#                displayName: 'Make Artifacts executable'
+#
+#              - script: |
+#                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/signed
+#                  md5sum $(Build.ArtifactStagingDirectory)/signed/*
+#                  md5sum $(Build.ArtifactStagingDirectory)/signed/mariner/*
+#                displayName: 'List Signed Artifacts'
+#
+#          - job: Set_2
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(System.DefaultWorkingDirectory)/signed
+#                  artifactName: 'azCopy-windows-signed'
+#                - output: pipelineArtifact
+#                  targetPath: $(System.DefaultWorkingDirectory)/binaries
+#                  artifactName: 'azCopy-binaries-windows'
+#
+#            variables:
+#              - group: AZCOPY_SECRET_VAULT
+#              - name: work_dir
+#                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+#              - name: archives
+#                value: '$(work_dir)/archives'
+#
+#            steps:
+#              - script: |
+#                  echo ${{ parameters.tag }}
+#                displayName: 'Tag Name'
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Pipeline Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-windows-temp'
+#                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download linux binary for extracting version'
+#                inputs:
+#                  artifactName: 'azCopy-binaries-linux-amd64'
+#                  targetPath: $(work_dir)
+#                  itemPattern: 'azcopy_linux_amd64'
+#
+#              - script: |
+#                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
+#                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
+#                displayName: 'List Artifacts'
+#
+#              - script: |
+#                  sudo apt-get clean
+#                  sudo apt-get update
+#                  sudo apt-get upgrade -y
+#                  sudo apt-get install -f --fix-missing
+#                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+#                  sudo dpkg -i packages-microsoft-prod.deb
+#                  sudo apt install apt-transport-https -y
+#                  sudo apt install dotnet-sdk-6.0 -y
+#                  sudo apt-get install -y zip
+#                displayName: "Update dependencies"
+#
+#              - template: setup/esrp_sign_windows.yml@self
+#                parameters:
+#                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
+#                  ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
+#                  Pattern: 'azcopy_windows*'
+#
+#              - script: |
+#                  mkdir $(System.DefaultWorkingDirectory)/binaries
+#                  mkdir $(System.DefaultWorkingDirectory)/signed
+#                  rm -rf azCopy-windows-temp/*.md
+#                  cp azCopy-windows-temp/* $(System.DefaultWorkingDirectory)/binaries
+#                displayName: 'Add signed windows binary to staging directory'
+#                workingDirectory: '$(Build.ArtifactStagingDirectory)'
+#
+#              # Validate signed images have md5sum changed
+#              - script: |
+#                  rm -rf azCopy-windows-temp/azcopy_windows_v7_arm.exe
+#                  chmod 755 azCopy-windows-temp/*
+#                  rm -rf azCopy-windows-temp/*.md
+#                displayName: 'Make Artifacts executable'
+#                workingDirectory: '$(Build.ArtifactStagingDirectory)'
+#
+#              - script: |
+#                  chmod 755 $(work_dir)/azcopy_linux_amd64
+#                  # Run azcopy --version and capture the output
+#                  azcopyOutput=$($(work_dir)/azcopy_linux_amd64 --version)
+#
+#                  if echo "$azcopyOutput" | grep -q "azcopy version"; then
+#                    version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+#                    if [[ -n "$version" ]]; then
+#                      echo "Extracted version: $version"
+#                      echo "##vso[task.setvariable variable=azcopy_version]$version"
+#                    fi
+#                  fi
+#                displayName: 'Extract the generated build version'
+#
+#              - script: |
+#                  windows_amd64="$(work_dir)/azcopy_windows_amd64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
+#
+#                  windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
+#
+#                  windows_se_arm64="$(work_dir)/azcopy_windows_se_arm64_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=windows_se_arm64]$windows_se_arm64"
+#
+#                  windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
+#                  echo "##vso[task.setvariable variable=windows_386]$windows_386"
+#
+#                  mkdir -p $windows_amd64
+#                  mkdir -p $windows_arm64
+#                  mkdir -p $windows_se_arm64
+#                  mkdir -p $windows_386
+#                  mkdir -p $(archives)
+#                displayName: 'Create required directories'
+#
+#              - script: |
+#                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
+#                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
+#                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)/azcopy.exe
+#                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_se_arm64.exe $(windows_se_arm64)/azcopy.exe
+#                  cp NOTICE.txt $(windows_amd64)
+#                  cp NOTICE.txt $(windows_arm64)
+#                  cp NOTICE.txt $(windows_386)
+#                  cp NOTICE.txt $(windows_se_arm64)
+#                  zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
+#                  zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
+#                  zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
+#                  zip -r $(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip .
+#                displayName: 'Copy required files'
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Windows 64 bit AMD Build'
+#                inputs:
+#                  rootFolderOrFile: '$(windows_amd64)'
+#                  archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
+#                continueOnError: true
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Windows 64 bit ARM Build'
+#                inputs:
+#                  rootFolderOrFile: '$(windows_arm64)'
+#                  archiveFile: '$(archives)/azcopy_windows_arm64_$(azcopy_version).zip'
+#                continueOnError: true
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Windows 32 bit Build'
+#                inputs:
+#                  rootFolderOrFile: '$(windows_386)'
+#                  archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
+#                continueOnError: true
+#
+#              - task: ArchiveFiles@2
+#                displayName: 'Archive Windows SE 64 bit ARM Build'
+#                inputs:
+#                  rootFolderOrFile: '$(windows_se_arm64)'
+#                  archiveFile: '$(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip'
+#                continueOnError: true
+#
+#              - script: |
+#                  cp $(archives)/azcopy_windows* $(System.DefaultWorkingDirectory)/signed
+#                displayName: 'Copy zip to staging directory'
+#
+#              - script: |
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
+#                  sudo ls -lRt $(System.DefaultWorkingDirectory)/signed
+#                  md5sum $(System.DefaultWorkingDirectory)/signed/*
+#                  rm -rf $(System.DefaultWorkingDirectory)/signed/*.md
+#                displayName: 'List Signed Artifacts'
+#
+#          - job: Set_3
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#
+#            templateContext:
+#              outputs:
+#                - output: pipelineArtifact
+#                  targetPath: $(System.DefaultWorkingDirectory)/signed
+#                  artifactName: 'azCopy-mac-signed'
+#                - output: pipelineArtifact
+#                  targetPath: $(System.DefaultWorkingDirectory)/binaries
+#                  artifactName: 'azCopy-binaries-mac'
+#
+#            variables:
+#              - group: AZCOPY_SECRET_VAULT
+#
+#            steps:
+#              - checkout: none
+#
+#              - script: |
+#                  echo ${{ parameters.tag }}
+#                displayName: 'Tag Name'
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Pipeline Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-mac-temp'
+#                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Pipeline Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-mac-temp-m1'
+#                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
+#
+#              - script: |
+#                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
+#                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+#                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
+#                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*
+#                displayName: 'List Artifacts'
+#
+#              - script: |
+#                  sudo apt-get clean
+#                  sudo apt-get update
+#                  sudo apt-get upgrade -y
+#                  sudo apt-get install unzip -y
+#                  sudo apt-get install -f --fix-missing
+#                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+#                  sudo dpkg -i packages-microsoft-prod.deb
+#                  sudo apt install apt-transport-https -y
+#                  sudo apt install dotnet-sdk-6.0 -y
+#                displayName: "Update dependencies"
+#
+#              - template: setup/esrp_sign_notarize_macos.yml@self
+#                parameters:
+#                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
+#                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+#                  Pattern: '*.zip'
+#
+#              - template: setup/esrp_sign_notarize_macos.yml@self
+#                parameters:
+#                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
+#                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+#                  Pattern: '*.zip'
+#
+#              # Validate signed images have md5sum changed
+#              - script: |
+#                  mkdir $(System.DefaultWorkingDirectory)/signed
+#                  mkdir $(System.DefaultWorkingDirectory)/binaries
+#                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
+#                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*.md
+#                  mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(System.DefaultWorkingDirectory)/signed/
+#                  mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/* $(System.DefaultWorkingDirectory)/signed/
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
+#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/
+#                displayName: 'Make Artifacts executable'
+#
+#              - script: |
+#                  sudo ls -lRt $(System.DefaultWorkingDirectory)/signed
+#                  md5sum $(System.DefaultWorkingDirectory)/signed/*
+#                displayName: 'List Signed Artifacts'
+#
+#              - script: |
+#                  mkdir -p unzipped_amd64
+#                  mkdir -p unzipped_arm64
+#                  mkdir -p unzipped_m1_arm64
+#                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy*amd64*.zip -d unzipped_amd64
+#                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_arm64*.zip -d unzipped_arm64
+#                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
+#
+#                  # Use find to retrieve the folder name
+#                  amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
+#                  echo "AMD64 Folder name: $amd64FolderName"
+#
+#                  arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
+#                  echo "ARM64 Folder name: $arm64FolderName"
+#
+#                  m1Arm64FolderName=$(find unzipped_m1_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64*")
+#                  echo "ARM64 M1 Folder name: $m1Arm64FolderName"
+#
+#                  # Check if there is exactly one matching directory for amd64
+#                  if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
+#                      echo "Found matching AMD64 directory: $amd64FolderName"
+#                      cd "$amd64FolderName"
+#                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_amd64
+#                  else
+#                      echo "Error: Expected exactly one matching AMD64 directory, found $(echo "$amd64FolderName" | wc -l)."
+#                      exit 1
+#                  fi
+#
+#                  cd $(Build.ArtifactStagingDirectory)
+#
+#                  # Check if there is exactly one matching directory for arm64
+#                  if [ $(echo "$arm64FolderName" | wc -l) -eq 1 ]; then
+#                      echo "Found matching ARM64 directory: $arm64FolderName"
+#                      cd "$arm64FolderName"
+#                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_arm64
+#                  else
+#                      echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
+#                      exit 1
+#                  fi
+#
+#                  cd $(Build.ArtifactStagingDirectory)
+#
+#                  # Check if there is exactly one matching directory for arm64
+#                  if [ $(echo "$m1Arm64FolderName" | wc -l) -eq 1 ]; then
+#                      echo "Found matching ARM64 M1 directory: $m1Arm64FolderName"
+#                      cd "$m1Arm64FolderName"
+#                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_m1_arm64
+#                  else
+#                      echo "Error: Expected exactly one matching ARM64 M1 directory, found $(echo "$m1Arm64FolderName" | wc -l)."
+#                      exit 1
+#                  fi
+#
+#                  rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
+#                  rm -rf $(Build.ArtifactStagingDirectory)/*.zip
+#                  sudo ls -ltR $(System.DefaultWorkingDirectory)/binaries
+#                displayName:  'Copy and list signed mac binary to staging directory'
+#                workingDirectory: '$(Build.ArtifactStagingDirectory)'
+#
+#      # SignArtifacts end here
+#
+#      - stage: TestArtifacts
+#        dependsOn: SignArtifacts
+#        condition: succeeded('SignArtifacts')
+#        jobs:
+#          - job: Set_1
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#            steps:
+#              - checkout: none
+#
+#              - template: setup/test_artifacts.yml@self
+#                parameters:
+#                  artifact_name: 'azCopy-binaries-linux-amd64'
+#                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-binaries'
+#                  item_pattern: 'azcopy_linux*amd64'
+#
+#              - script: |
+#                  ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries/
+#                  chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries/*
+#                  $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_amd64 --version
+#                  $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_se_amd64 --version
+#                  rm -rf /usr/local/bin/azcopy
+#                  rm -rf /usr/bin/azcopy
+#                displayName: 'Test signed linux binaries'
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Build Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-linux-signed'
+#                  downloadPath: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
+#                  itemPattern: 'azcopy-*x86_64.deb'
+#
+#              - script: |
+#                  sudo dpkg --info azcopy-*x86_64.deb
+#                  sudo dpkg -i azcopy-*x86_64.deb
+#                  sudo apt-get install build-essential -y
+#                displayName: 'Install deb Package'
+#                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+#
+#              - script: |
+#                  azcopy --version
+#                  azcopy --help
+#                displayName: 'Check Version and Help'
+#
+#          - job: Set_2
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: ubuntu22-1espt
+#              os: linux
+#            steps:
+#              - checkout: none
+#
+#              - template: setup/test_artifacts.yml@self
+#                parameters:
+#                  artifact_name: 'azCopy-linux-signed'
+#                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
+#                  item_pattern: 'azcopy_linux_*amd64*.tar.gz'
+#
+#              - script: |
+#                  TAR_GZ_FILE=$(ls azcopy_linux_amd64*.tar.gz)
+#                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
+#
+#                  # Create extraction directory
+#                  mkdir -p "$EXTRACT_DIR"
+#
+#                  # Extract the .tar.gz file
+#                  tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
+#                  if [ $? -ne 0 ]; then
+#                      echo "Error: Failed to extract $TAR_GZ_FILE"
+#                      exit 1
+#                  fi
+#
+#                  # Find the directory matching the pattern
+#                  matching_dirs=("$EXTRACT_DIR"/azcopy_linux_amd64*)
+#
+#                  # Check if there is exactly one matching directory
+#                  if [ ${#matching_dirs[@]} -eq 1 ]; then
+#                      echo "Found matching directory: ${matching_dirs[0]}"
+#                      cd "${matching_dirs[0]}"
+#                  else
+#                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+#                      exit 1
+#                  fi
+#
+#                  # Run azcopy commands
+#                  ./azcopy --version
+#                  ./azcopy --help
+#                displayName: 'Check Version and Help'
+#                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+#
+#              - script: |
+#                  sudo apt-get clean
+#                  sudo apt-get update --fix-missing
+#                  sudo apt-get install libsecret-1-dev -y
+#                displayName: "Installing Dependencies"
+#
+#              - script: |
+#                  TAR_GZ_FILE=$(ls azcopy_linux_se_amd64*.tar.gz)
+#                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_se"
+#
+#                  # Create extraction directory
+#                  mkdir -p "$EXTRACT_DIR"
+#
+#                  # Extract the .tar.gz file
+#                  tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
+#                  if [ $? -ne 0 ]; then
+#                      echo "Error: Failed to extract $TAR_GZ_FILE"
+#                      exit 1
+#                  fi
+#
+#                  # Find the directory matching the pattern
+#                  matching_dirs=("$EXTRACT_DIR"/azcopy_linux_se_amd64*)
+#
+#                  # Check if there is exactly one matching directory
+#                  if [ ${#matching_dirs[@]} -eq 1 ]; then
+#                      echo "Found matching directory: ${matching_dirs[0]}"
+#                      cd "${matching_dirs[0]}"
+#                  else
+#                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+#                      exit 1
+#                  fi
+#
+#                  # Run azcopy commands
+#                  ./azcopy --version
+#                  ./azcopy --help
+#                displayName: 'Check Version and Help'
+#                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+#
+#          - job: Set_3
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-arm-pool
+#              image: ubuntu22arm-custom1espt
+#              os: linux
+#              hostArchitecture: Arm64
+#            steps:
+#              - checkout: none
+#
+#              - script: |
+#                  sudo apt update
+#                  sudo apt-get install libsecret-1-dev -y
+#                  sudo apt --fix-broken install
+#                  ldd --version
+#                displayName: "Libsecret Install"
+#
+#              - template: setup/test_artifacts.yml@self
+#                parameters:
+#                  artifact_name: 'azCopy-linux-signed'
+#                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
+#                  item_pattern: 'azcopy_linux_*arm64*.tar.gz'
+#
+#              - script: |
+#                  TAR_GZ_FILE=$(ls azcopy_linux_arm64*.tar.gz)
+#                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
+#
+#                  # Create extraction directory
+#                  mkdir -p "$EXTRACT_DIR"
+#
+#                  # Extract the .tar.gz file
+#                  tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
+#                  if [ $? -ne 0 ]; then
+#                      echo "Error: Failed to extract $TAR_GZ_FILE"
+#                      exit 1
+#                  fi
+#
+#                  # Find the directory matching the pattern
+#                  matching_dirs=("$EXTRACT_DIR"/azcopy_linux_arm64*)
+#
+#                  # Check if there is exactly one matching directory
+#                  if [ ${#matching_dirs[@]} -eq 1 ]; then
+#                      echo "Found matching directory: ${matching_dirs[0]}"
+#                      cd "${matching_dirs[0]}"
+#                  else
+#                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+#                      exit 1
+#                  fi
+#
+#                  # Run azcopy commands
+#                  ./azcopy --version
+#                  ./azcopy --help
+#
+#                displayName: 'Check Version and Help for arm64 tar.gz'
+#                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+#
+#              - script: |
+#                  TAR_GZ_FILE=$(ls azcopy_linux_se_arm64*.tar.gz)
+#                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted_se"
+#
+#                  # Create extraction directory
+#                  mkdir -p "$EXTRACT_DIR"
+#
+#                  # Extract the .tar.gz file
+#                  tar -xzvf "$TAR_GZ_FILE" -C "$EXTRACT_DIR"
+#                  if [ $? -ne 0 ]; then
+#                      echo "Error: Failed to extract $TAR_GZ_FILE"
+#                      exit 1
+#                  fi
+#
+#                  # Find the directory matching the pattern
+#                  matching_dirs=("$EXTRACT_DIR"/azcopy_linux_se_arm64*)
+#
+#                  # Check if there is exactly one matching directory
+#                  if [ ${#matching_dirs[@]} -eq 1 ]; then
+#                      echo "Found matching directory: ${matching_dirs[0]}"
+#                      cd "${matching_dirs[0]}"
+#                  else
+#                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+#                      exit 1
+#                  fi
+#
+#                  # Run azcopy commands
+#                  ./azcopy --version
+#                  ./azcopy --help
+#
+#                displayName: 'Check Version and Help for SE arm64 tar.gz'
+#                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+#
+#          - job: Set_4
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-arm-pool
+#              image: ubuntu22arm-custom1espt
+#              os: linux
+#              hostArchitecture: Arm64
+#
+#            steps:
+#              - checkout: none
+#
+#              - script: |
+#                  sudo apt update
+#                  sudo apt-get install libsecret-1-dev -y
+#                  sudo apt --fix-broken install
+#                  ldd --version
+#                displayName: "Libsecret Install"
+#
+#              - template: setup/test_artifacts.yml@self
+#                parameters:
+#                  artifact_name: 'azCopy-binaries-linux-arm64'
+#                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-binaries'
+#                  item_pattern: 'azcopy_linux*arm64'
+#
+#              - script: |
+#                  ls -ltR $(System.DefaultWorkingDirectory)/azCopy-binaries
+#                  chmod 755 $(System.DefaultWorkingDirectory)/azCopy-binaries/*
+#                  $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_arm64 --version
+#                  $(System.DefaultWorkingDirectory)/azCopy-binaries/azcopy_linux_se_arm64 --version
+#                displayName: 'Test signed linux binaries'
+#
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Build Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-linux-signed'
+#                  downloadPath: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
+#                  itemPattern: 'azcopy-*arm64.deb'
+#
+#              - script: |
+#                  rm -rf /usr/bin/azcopy
+#                  rm -rf /usr/local/bin/azcopy
+#                  sudo dpkg --info azcopy-*arm64.deb
+#                  sudo dpkg -i azcopy-*arm64.deb
+#                displayName: 'Install Package'
+#                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed
+#
+#              - script: |
+#                  azcopy --version
+#                  azcopy --help
+#                displayName: 'Check Version and Help'
+#
+#          - job: Set_5
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: mariner2-1espt
+#              os: linux
+#            steps:
+#              - checkout: none
+#
+#              - template: setup/test_artifacts.yml@self
+#                parameters:
+#                  artifact_name: 'azCopy-linux-signed'
+#                  download_path: '$(System.DefaultWorkingDirectory)/azCopy-linux-signed'
+#                  item_pattern: 'mariner/azcopy-*x86_64.rpm'
+#
+#              - script: |
+#                  sudo rpm -qip azcopy*x86_64.rpm
+#                  sudo rpm -i azcopy*x86_64.rpm
+#                displayName: 'Install Package'
+#                workingDirectory: $(System.DefaultWorkingDirectory)/azCopy-linux-signed/mariner
+#
+#              - script: |
+#                  azcopy --version
+#                  azcopy --help
+#                displayName: 'Check Version and Help command'
+#
+#          - job: Set_6
+#            timeoutInMinutes: 360
+#            pool:
+#              name: Azure Pipelines
+#              image: macos-latest
+#              os: macOS
+#
+#            variables:
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#              - name: work_dir
+#                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+#
+#            steps:
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Build Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-mac-signed'
+#                  downloadPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-signed
+#                  itemPattern: 'azcopy*amd64*.zip'
+#
+#              - script: |
+#                  # Install Homebrew if not already installed
+#                  if ! command -v brew &> /dev/null
+#                  then
+#                    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+#                    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/$(whoami)/.zprofile
+#                    eval "$(/opt/homebrew/bin/brew shellenv)"
+#                  fi
+#
+#                  # Define variables
+#                  ZIP_FILE_PATH=$(ls $(Build.ArtifactStagingDirectory)/azCopy-mac-signed/azcopy*amd64*.zip)
+#                  EXTRACT_DIR="$(Build.ArtifactStagingDirectory)/extracted"
+#
+#                  # Create extraction directory
+#                  mkdir -p $EXTRACT_DIR
+#
+#                  # Extract the zip file
+#                  unzip $ZIP_FILE_PATH -d $EXTRACT_DIR
+#
+#                  # Find the directory matching the pattern
+#                  matching_dirs=($EXTRACT_DIR/azcopy_darwin_amd64*)
+#
+#                  # Check if there is exactly one matching directory
+#                  if [ ${#matching_dirs[@]} -eq 1 ]; then
+#                      cd "${matching_dirs[0]}"
+#                  else
+#                      echo "Error: Expected exactly one matching directory, found ${#matching_dirs[@]}."
+#                      exit 1
+#                  fi
+#
+#                  # Run the azcopy version command
+#                  ./azcopy --version
+#                  ./azcopy --help
+#                displayName: 'Install Zip, Extract Files, and Run Version and Help Command'
+#
+#          - job: Set_7
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-pool
+#              image: windows2022-1espt
+#              os: windows
+#
+#            variables:
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#
+#            steps:
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Build Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-windows-signed'
+#                  downloadPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-signed
+#                  itemPattern: 'azcopy*amd64*.zip'
+#
+#              - task: PowerShell@2
+#                inputs:
+#                  targetType: 'inline'
+#                  script: |
+#                    $artifactDir = "$(Build.ArtifactStagingDirectory)\azCopy-windows-signed"
+#                    $extractDir = "$(Build.ArtifactStagingDirectory)\extracted"
+#
+#                    # Find the zip file matching the pattern
+#                    $zipFile = Get-ChildItem -Path $artifactDir -Filter "azcopy*amd64*.zip" | Select-Object -First 1
+#
+#                    if ($null -eq $zipFile) {
+#                      Write-Error "No zip file found matching pattern 'azcopy*amd64*.zip' in directory: $artifactDir"
+#                      exit 1
+#                    }
+#
+#                    $zipFilePath = $zipFile.FullName
+#
+#                    # Create extraction directory
+#                    New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+#
+#                    # Extract the zip file
+#                    try {
+#                      Add-Type -AssemblyName System.IO.Compression.FileSystem
+#                      [System.IO.Compression.ZipFile]::ExtractToDirectory($zipFilePath, $extractDir)
+#                    } catch {
+#                      Write-Error "Failed to extract zip file: $_"
+#                      exit 1
+#                    }
+#
+#                    # Change to the directory containing azcopy
+#                    Set-Location -Path $extractDir
+#
+#                    # Find directories matching the pattern
+#                    $matchingDirs = Get-ChildItem -Directory -Path .\azcopy_windows_amd64* | Select-Object -First 1
+#
+#                    # Check if there is exactly one matching directory
+#                    if ($matchingDirs.Count -eq 0) {
+#                        Write-Error "No directories found matching the pattern: .\azcopy_windows_amd64*"
+#                        exit 1
+#                    } elseif ($matchingDirs.Count -gt 1) {
+#                        Write-Error "Multiple directories found matching the pattern: .\azcopy_windows_amd64*"
+#                        exit 1
+#                    }
+#
+#                    # Check if the azcopy executable exists in the matching directory
+#                    $azcopyPath = Join-Path -Path $matchingDirs.FullName -ChildPath "azcopy.exe"
+#                    if (-Not (Test-Path -Path $azcopyPath)) {
+#                        Write-Error "azcopy not found in extraction directory: $($matchingDirs.FullName)"
+#                        exit 1
+#                    } else {
+#                        Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
+#                        # Ensure the azcopy executable has the correct permissions
+#                        icacls $azcopyPath
+#
+#                        # Run azcopy --version and capture output
+#                        try {
+#                            $versionOutput = & $azcopyPath --version 2>&1
+#                            Write-Output "azcopy version output: $versionOutput"
+#                        } catch {
+#                            Write-Error "Failed to run azcopy --version: $_"
+#                        }
+#
+#                        # Run azcopy --help and capture output
+#                        try {
+#                            $helpOutput = & $azcopyPath --help 2>&1
+#                            Write-Output "azcopy help output: $helpOutput"
+#                        } catch {
+#                            Write-Error "Failed to run azcopy --help: $_"
+#                        }
+#                    }
+#                displayName: 'Extract Files and Run Version and Help Command on Windows'
+#
+#          - job: Set_8
+#            timeoutInMinutes: 120
+#            pool:
+#              name: azcopy-arm-pool
+#              image: windows2022arm-1espt
+#              os: windows
+#              hostArchitecture: Arm64
+#
+#            variables:
+#              - name: root_dir
+#                value: '$(System.DefaultWorkingDirectory)'
+#
+#            steps:
+#              - task: DownloadPipelineArtifact@2
+#                displayName: 'Download Build Artifacts'
+#                inputs:
+#                  artifactName: 'azCopy-windows-signed'
+#                  downloadPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-signed
+#                  itemPattern: 'azcopy_windows_se_arm64*.zip'
+#
+#              - task: PowerShell@2
+#                inputs:
+#                  targetType: 'inline'
+#                  script: |
+#                    $artifactDir = "$(Build.ArtifactStagingDirectory)\azCopy-windows-signed"
+#                    $extractDir = "$(Build.ArtifactStagingDirectory)\extracted"
+#
+#                    # Find the zip file matching the pattern
+#                    $zipFile = Get-ChildItem -Path $artifactDir -Filter "azcopy*se_arm64*.zip" | Select-Object -First 1
+#
+#                    if ($null -eq $zipFile) {
+#                      Write-Error "No zip file found matching pattern 'azcopy*se_arm64*.zip' in directory: $artifactDir"
+#                      exit 1
+#                    }
+#
+#                    $zipFilePath = $zipFile.FullName
+#
+#                    # Create extraction directory
+#                    New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+#
+#                    # Extract the zip file
+#                    try {
+#                      Add-Type -AssemblyName System.IO.Compression.FileSystem
+#                      [System.IO.Compression.ZipFile]::ExtractToDirectory($zipFilePath, $extractDir)
+#                    } catch {
+#                      Write-Error "Failed to extract zip file: $_"
+#                      exit 1
+#                    }
+#
+#                    # Change to the directory containing azcopy
+#                    Set-Location -Path $extractDir
+#
+#                    # Find directories matching the pattern
+#                    $matchingDirs = Get-ChildItem -Directory -Path .\azcopy_windows_se_arm64* | Select-Object -First 1
+#
+#                    # Check if there is exactly one matching directory
+#                    if ($matchingDirs.Count -eq 0) {
+#                        Write-Error "No directories found matching the pattern: .\azcopy_windows_se_arm64*"
+#                        exit 1
+#                    } elseif ($matchingDirs.Count -gt 1) {
+#                        Write-Error "Multiple directories found matching the pattern: .\azcopy_windows_se_arm64*"
+#                        exit 1
+#                    }
+#
+#                    # Check if the azcopy executable exists in the matching directory
+#                    $azcopyPath = Join-Path -Path $matchingDirs.FullName -ChildPath "azcopy.exe"
+#                    if (-Not (Test-Path -Path $azcopyPath)) {
+#                        Write-Error "azcopy not found in extraction directory: $($matchingDirs.FullName)"
+#                        exit 1
+#                    } else {
+#                        Write-Output "azcopy found in extraction directory: $($matchingDirs.FullName)"
+#                        # Ensure the azcopy executable has the correct permissions
+#                        icacls $azcopyPath
+#
+#                        # Run azcopy --version and capture output
+#                        try {
+#                            $versionOutput = & $azcopyPath --version 2>&1
+#                            Write-Output "azcopy version output: $versionOutput"
+#                        } catch {
+#                            Write-Error "Failed to run azcopy --version: $_"
+#                        }
+#
+#                        # Run azcopy --help and capture output
+#                        try {
+#                            $helpOutput = & $azcopyPath --help 2>&1
+#                            Write-Output "azcopy help output: $helpOutput"
+#                        } catch {
+#                            Write-Error "Failed to run azcopy --help: $_"
+#                        }
+#                    }
+#                displayName: 'Extract Files and Run Version and Help Command on Windows Arm64'
 
       # TestArtifacts ends here
       - stage: BuildDockerImage
-        dependsOn: TestArtifacts
-        condition: succeeded('TestArtifacts')
+#        dependsOn: TestArtifacts
+#        condition: succeeded('TestArtifacts')
         jobs:
           - job: Set_1_Ubuntu_Mariner_AMD64
             pool:
@@ -1573,7 +1573,7 @@ extends:
               - name: root_dir
                 value: '$(System.DefaultWorkingDirectory)'
               - name: work_dir
-                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+                value: '$(Build.SourcesDirectory)'
 
             steps:
               - checkout: self
@@ -1605,7 +1605,7 @@ extends:
               - name: root_dir
                 value: '$(System.DefaultWorkingDirectory)'
               - name: work_dir
-                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
+                value: '$(Build.SourcesDirectory)'
 
             steps:
               - checkout: self
