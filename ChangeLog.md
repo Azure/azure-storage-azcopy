@@ -1,10 +1,16 @@
 
 # Change Log
 
+## Version 10.27.2
+
+### Dependency updates
+1. Upgrade go/net to address CVE-2024-45337 ([#2890](https://github.com/Azure/azure-storage-azcopy/pull/2890))
+2. Upgrade go/crypto to address CVE-2024-45338 ([#2899](https://github.com/Azure/azure-storage-azcopy/pull/2899))
+
 ## Version 10.27.1
 
 ### Bug Fixes
-1. Reverted a change that resulted in breaking file service transfers and a larger memory footprint. ([#2858](https://github.com/Azure/azure-storage-azcopy/issues/2858)[#2855](https://github.com/Azure/azure-storage-azcopy/issues/2855))
+1. Reverted a change that resulted in breaking file service transfers and a larger memory footprint. ([#2858](https://github.com/Azure/azure-storage-azcopy/issues/2858))
 
 ### Dependency updates
 1. github.com/golang-jwt/jwt/v4 v4.5.0 -> v4.5.1 ([#2861](https://github.com/Azure/azure-storage-azcopy/issues/2861))
