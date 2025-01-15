@@ -53,6 +53,7 @@ steps:
           
           mkdir -p linux_dir
           mkdir -p linux_se_dir
+          mkdir -p $(archives)
           mkdir -p pkgDir/usr/bin/
       displayName: 'Create archive directories'
 
@@ -92,13 +93,15 @@ steps:
       inputs:
           rootFolderOrFile: '$(linux_dir)'
           archiveType: tar
-          archiveFile: '$(temp)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
-      continueOnError: true
+          archiveFile: '$(archives)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
 
     - task: ArchiveFiles@2
       displayName: 'Archive Partner(SE) Linux Build'
       inputs:
           rootFolderOrFile: '$(linux_se_dir)'
           archiveType: tar
-          archiveFile: '$(temp)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
-      continueOnError: true
+          archiveFile: '$(archives)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
+
+    - script: |
+          cp -r $(archives)/* $(System.DefaultWorkingDirectory)/temp
+      displayName: 'Add tar.gz to signing stage'

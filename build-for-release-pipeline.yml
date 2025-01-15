@@ -101,6 +101,8 @@ extends:
                   artifactName: 'azCopy-binaries-linux-amd64'
 
             variables:
+              - name: archives
+                value: $(System.DefaultWorkingDirectory)/archives
               - name: temp
                 value: $(System.DefaultWorkingDirectory)/temp
               - name: binaries
@@ -131,6 +133,8 @@ extends:
                   artifactName: 'azCopy-binaries-linux-arm64'
 
             variables:
+              - name: archives
+                value: $(System.DefaultWorkingDirectory)/archives
               - name: temp
                 value: $(System.DefaultWorkingDirectory)/temp
               - name: binaries
