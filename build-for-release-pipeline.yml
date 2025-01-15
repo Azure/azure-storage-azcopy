@@ -151,10 +151,6 @@ extends:
                   targetPath: $(Build.ArtifactStagingDirectory)\binaries
                   artifactName: 'azCopy-windows-temp'
 
-            variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-
             steps:
               - task: GoTool@0
                 env:
@@ -167,7 +163,6 @@ extends:
                   go vet
                   mkdir "$(Build.ArtifactStagingDirectory)\binaries"
                 displayName: 'Golang Vet - Windows'
-                workingDirectory: $(root_dir)
 
               - script: |
                   go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_amd64.exe"

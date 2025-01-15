@@ -97,7 +97,7 @@ steps:
       displayName: 'Make ${{ parameters.host_architecture }} rpm Package'
 
     - task: ArchiveFiles@2
-      displayName: 'Archive Amd Linux Build'
+      displayName: 'Archive Linux Build'
       inputs:
           rootFolderOrFile: '$(linux_dir)'
           archiveType: tar
