@@ -37,7 +37,7 @@ extends:
               outputs:
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/releasehelper
-                  artifactName: 'AzCopy-ReleaseHelper'
+                  artifactName: 'azcopy-releasehelper'
             variables:
               - name: output_path
                 value: '$(System.DefaultWorkingDirectory)/releasehelper'
@@ -95,10 +95,10 @@ extends:
               outputs:
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/unsigned
-                  artifactName: 'azCopy-linux-amd64-unsigned'
+                  artifactName: 'azcopy-linux-amd64-unsigned'
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  artifactName: 'azCopy-binaries-linux-amd64'
+                  artifactName: 'azcopy-binaries-linux-amd64'
 
             variables:
               - name: archives
@@ -127,10 +127,10 @@ extends:
               outputs:
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/unsigned
-                  artifactName: 'azCopy-linux-arm64-unsigned'
+                  artifactName: 'azcopy-linux-arm64-unsigned'
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
-                  artifactName: 'azCopy-binaries-linux-arm64'
+                  artifactName: 'azcopy-binaries-linux-arm64'
 
             variables:
               - name: archives
@@ -148,226 +148,198 @@ extends:
                   host_architecture: 'arm64'
                   host_suffix: 'arm64'
 
-#          - job: Windows
-#            timeoutInMinutes: 120
-#            pool:
-#              name: azcopy-pool
-#              image: windows2022-1espt
-#              os: windows
-#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)\binaries
-#                  artifactName: 'azCopy-windows-temp'
-#            variables:
-#              - name: binaries
-#                value: '$(System.DefaultWorkingDirectory)\binaries'
-#            steps:
-#              - task: GoTool@0
-#                env:
-#                  GO111MODULE: 'on'
-#                inputs:
-#                  version: $(AZCOPY_GOLANG_VERSION)
-#
-#              - script: |
-#                  echo 'Running GO Vet'
-#                  go vet
-#                displayName: 'Golang Vet - Windows'
-#
-#              - script: |
-#                  mkdir -p $(binaries)
-#                displayName: 'Create binaries path'
-#
-#              - script: |
-#                  go build -o "$(binaries)\azcopy_windows_amd64.exe"
-#                displayName: 'Generate Windows AMD64'
-#                env:
-#                  GOARCH: amd64
-#                  GOOS: windows
-#                  CGO_ENABLED: 0
-#
-#              - script: |
-#                  go build -o "$(binaries)\azcopy_windows_386.exe"
-#                displayName: 'Generate Windows i386'
-#                env:
-#                  GOARCH: 386
-#                  GOOS: windows
-#                  CGO_ENABLED: 0
-#
-#              - script: |
-#                  go build -o "$(binaries)\azcopy_windows_v7_arm.exe"
-#                displayName: 'Generate Windows ARM'
-#                env:
-#                  GOARCH: arm
-#                  GOARM: 7
-#                  GOOS: windows
-#                  CGO_ENABLED: 0
-#
-#              - script: |
-#                  go build -o "$(binaries)\azcopy_windows_arm64.exe"
-#                displayName: 'Generate Windows ARM'
-#                env:
-#                  GOARCH: arm64
-#                  GOOS: windows
-#                  CGO_ENABLED: 0
-#
-#          - job: MacOS
-#            timeoutInMinutes: 360
-#            pool:
-#              name: Azure Pipelines
-#              image: macos-latest
-#              os: macOS
-#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(Build.ArtifactStagingDirectory)/temp
-#                  artifactName: 'azCopy-mac-temp'
-#
-#            variables:
-#              - name: root_dir
-#                value: '$(System.DefaultWorkingDirectory)'
-#              - name: work_dir
-#                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-#              - name: archives
-#                value: $(root_dir)/archives
-#              - name: azcopy_version
-#                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-#
-#            steps:
-#              - task: GoTool@0
-#                env:
-#                  GO111MODULE: 'on'
-#                inputs:
-#                  version: $(AZCOPY_GOLANG_VERSION)
-#
-#              - script: |
-#                  echo 'Running GO Vet'
-#                  go vet
-#                displayName: 'Golang Vet - Mac'
-#                workingDirectory: $(System.DefaultWorkingDirectory)
-#
-#              - script: |
-#                  CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_amd64"
-#                displayName: 'Generate MacOS Build with AMD64'
-#
-#              - script: |
-#                  GOARCH=arm64 CGO_ENABLED=1 go build -o "$(root_dir)/azcopy_darwin_arm64"
-#                displayName: 'Test Cross-compiled MacOS Build with ARM64'
-#
-#              - script: |
-#                  darwin_amd_dir="$(work_dir)/azcopy_darwin_amd64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
-#
-#                  darwin_arm_dir="$(work_dir)/azcopy_darwin_arm64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
-#
-#                  mkdir -p $darwin_amd_dir
-#                  mkdir -p $darwin_arm_dir
-#                  mkdir -p $(archives)
-#                displayName: 'Create required directories'
-#
-#              - script: |
-#                  cp NOTICE.txt $(darwin_amd_dir)
-#                  cp NOTICE.txt $(darwin_arm_dir)
-#                  mv $(root_dir)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
-#                  mv $(root_dir)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
-#                displayName: 'Copy required files for packaging'
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
-#                inputs:
-#                  rootFolderOrFile: '$(darwin_amd_dir)'
-#                  archiveFile: '$(archives)/azcopy_darwin_amd64_$(azcopy_version).zip'
-#                continueOnError: true
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
-#                inputs:
-#                  rootFolderOrFile: '$(darwin_arm_dir)'
-#                  archiveFile: '$(archives)/azcopy_darwin_arm64_$(azcopy_version).zip'
-#                continueOnError: true
-#
-#              - script: |
-#                  mkdir $(Build.ArtifactStagingDirectory)/temp
-#                  cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)/temp
-#                displayName: 'Copy zip to staging directory'
-#
-#          - job: MacOS_M1
-#            timeoutInMinutes: 360
-#            pool:
-#              name: azcopy-pool
-#              image: ubuntu22-1espt
-#              os: linux
-#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(Build.ArtifactStagingDirectory)/temp
-#                  artifactName: 'azCopy-mac-temp-m1'
-#
-#            variables:
-#              - group: AZCOPY_TESTS_VAR
-#              - name: root_dir
-#                value: '$(System.DefaultWorkingDirectory)'
-#              - name: work_dir
-#                value: '$(Build.SourcesDirectory)'
-#              - name: archives
-#                value: $(root_dir)/archives
-#              - name: azcopy_version
-#                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-#
-#            steps:
-#              - task: GoTool@0
-#                env:
-#                  GO111MODULE: 'on'
-#                inputs:
-#                  version: $(AZCOPY_GOLANG_VERSION)
-#
-#              - script: |
-#                  sudo apt-get clean
-#                  sudo apt-get update --fix-missing
-#                  sudo apt-get install -y zip unzip
-#                displayName: "Installing Dependencies"
-#
-#              - script: |
-#                  echo 'Running GO Vet'
-#                  go vet
-#                displayName: 'Golang Vet'
-#                workingDirectory: $(System.DefaultWorkingDirectory)
-#
-#              - template: setup/trigger_m1_build.yml@self
-#
-#              - script: |
-#                  mkdir -p $(archives)
-#                  darwin_arm64_m1_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"
-#
-#                  echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
-#                  mkdir -p $darwin_arm64_m1_dir
-#
-#                  cp NOTICE.txt $darwin_arm64_m1_dir
-#                  cp $(Build.ArtifactStagingDirectory)/azcopy  $darwin_arm64_m1_dir
-#                displayName: 'Copy required files for packaging'
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
-#                inputs:
-#                  rootFolderOrFile: '$(darwin_arm64_m1_dir)'
-#                  archiveFile: '$(archives)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
-#                continueOnError: true
-#
-#              - script: |
-#                  rm -rf $(Build.ArtifactStagingDirectory)/azcopy
-#                  mkdir -p $(Build.ArtifactStagingDirectory)/temp
-#                  cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)/temp
-#                displayName: 'Copy zip to staging directory'
-#
-#        # BuildArtifacts end here
-#
+          - job: Windows
+            timeoutInMinutes: 120
+            pool:
+              name: azcopy-pool
+              image: windows2022-1espt
+              os: windows
+            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)\binaries
+                  artifactName: 'azcopy-windows-temp'
+            variables:
+              - name: binaries
+                value: '$(System.DefaultWorkingDirectory)\binaries'
+            steps:
+              - task: GoTool@0
+                env:
+                  GO111MODULE: 'on'
+                inputs:
+                  version: $(AZCOPY_GOLANG_VERSION)
+
+              - script: |
+                  go vet
+                displayName: 'Golang Vet - Windows'
+
+              - script: |
+                  mkdir -p $(binaries)
+                displayName: 'Create output path'
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_amd64.exe"
+                displayName: 'Generate Windows AMD64'
+                env:
+                  GOARCH: amd64
+                  GOOS: windows
+                  CGO_ENABLED: 0
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_386.exe"
+                displayName: 'Generate Windows i386'
+                env:
+                  GOARCH: 386
+                  GOOS: windows
+                  CGO_ENABLED: 0
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_v7_arm.exe"
+                displayName: 'Generate Windows ARM'
+                env:
+                  GOARCH: arm
+                  GOARM: 7
+                  GOOS: windows
+                  CGO_ENABLED: 0
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_arm64.exe"
+                displayName: 'Generate Windows ARM'
+                env:
+                  GOARCH: arm64
+                  GOOS: windows
+                  CGO_ENABLED: 0
+
+          - job: MacOS
+            timeoutInMinutes: 360
+            pool:
+              name: Azure Pipelines
+              image: macos-latest
+              os: macOS
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/unsigned
+                  artifactName: 'azcopy-mac-unsigned'
+
+            variables:
+              - name: unsigned
+                value: $(System.DefaultWorkingDirectory)/unsigned
+              - name: azcopy_version
+                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+
+            steps:
+              - task: GoTool@0
+                env:
+                  GO111MODULE: 'on'
+                inputs:
+                  version: $(AZCOPY_GOLANG_VERSION)
+
+              - script: |
+                  go vet
+                displayName: 'Golang Vet - Mac'
+                workingDirectory: $(System.DefaultWorkingDirectory)
+
+              - script: |
+                  CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64"
+                displayName: 'Generate MacOS Build with AMD64'
+
+              - script: |
+                  GOARCH=arm64 CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64"
+                displayName: 'Test Cross-compiled MacOS Build with ARM64'
+
+              - script: |
+                  darwin_amd_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
+
+                  darwin_arm_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
+
+                  mkdir -p $darwin_amd_dir
+                  mkdir -p $darwin_arm_dir
+                  mkdir -p $(unsigned)
+                displayName: 'Create archive directories'
+
+              - script: |
+                  mv $(System.DefaultWorkingDirectory)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
+                  cp NOTICE.txt $(darwin_amd_dir)
+                  
+                  mv $(System.DefaultWorkingDirectory)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
+                  cp NOTICE.txt $(darwin_arm_dir)
+                displayName: 'Copy required files for packaging'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
+                inputs:
+                  rootFolderOrFile: '$(darwin_amd_dir)'
+                  archiveFile: '$(unsigned)/azcopy_darwin_amd64_$(azcopy_version).zip'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
+                inputs:
+                  rootFolderOrFile: '$(darwin_arm_dir)'
+                  archiveFile: '$(unsigned)/azcopy_darwin_arm64_$(azcopy_version).zip'
+
+          - job: MacOS_M1
+            timeoutInMinutes: 360
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(Build.ArtifactStagingDirectory)/unsigned
+                  artifactName: 'azcopy-mac-m1-unsigned'
+
+            variables:
+              - group: AZCOPY_TESTS_VAR
+              - name: unsigned
+                value: $(System.DefaultWorkingDirectory)/unsigned
+              - name: azcopy_version
+                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+
+            steps:
+              - task: GoTool@0
+                env:
+                  GO111MODULE: 'on'
+                inputs:
+                  version: $(AZCOPY_GOLANG_VERSION)
+
+              - script: |
+                  sudo apt-get clean
+                  sudo apt-get update --fix-missing
+                  sudo apt-get install -y zip unzip
+                displayName: "Installing Dependencies"
+
+              - script: |
+                  go vet
+                displayName: 'Golang Vet'
+                workingDirectory: $(System.DefaultWorkingDirectory)
+
+              - template: setup/trigger_m1_build.yml@self
+
+              - script: |
+                  mkdir -p $(unsigned)
+                  darwin_arm64_m1_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"
+
+                  echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
+                  mkdir -p $darwin_arm64_m1_dir
+
+                  cp $(System.DefaultWorkingDirectory)/azcopy  $darwin_arm64_m1_dir
+                  cp NOTICE.txt $darwin_arm64_m1_dir
+                displayName: 'Copy required files for packaging'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
+                inputs:
+                  rootFolderOrFile: '$(darwin_arm64_m1_dir)'
+                  archiveFile: '$(unsigned)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
+
+        # BuildArtifacts end here
+
 #      - stage: SignArtifacts
 #        dependsOn: BuildArtifacts
 #        condition: succeeded('BuildArtifacts')

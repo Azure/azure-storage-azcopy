@@ -40,10 +40,6 @@ steps:
       displayName: 'Build SE Integration'
 
     - script: |
-          ls -ltR $(binaries)
-      displayName: 'List the binaries'
-
-    - script: |
           linux_dir="$(System.DefaultWorkingDirectory)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version)"
           echo "##vso[task.setvariable variable=linux_dir]linux_dir"
           
