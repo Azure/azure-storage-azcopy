@@ -9,66 +9,61 @@ steps:
     # Custom script to install Go-lang
     - task: ShellScript@2
       inputs:
-          scriptPath: "$(work_dir)/go_installer.sh"
-          args: "$(root_dir)/ $(AZCOPY_GOLANG_VERSION)"
+          scriptPath: "$(System.DefaultWorkingDirectory)/go_installer.sh"
+          args: "$(System.DefaultWorkingDirectory)/ $(AZCOPY_GOLANG_VERSION)"
       displayName: "Installing Go tools"
 
     - script: |
           echo 'Running GO Vet'
           go vet
       displayName: 'Golang Vet - Linux'
-      workingDirectory: $(root_dir)
 
     # install dependencies required for compiling azcopy
     - script: |
           sudo apt-get clean
           sudo apt-get update --fix-missing
-          sudo apt-get install pkg-config libsecret-1-dev -y
-          sudo apt-get install ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
+          sudo apt-get install pkg-config libsecret-1-dev ruby ruby-dev rubygems libglib2.0-dev build-essential rpm -y
           sudo gem install dotenv -v 2.8.1
           sudo gem install fpm -V
       displayName: "Installing Dependencies"
 
-    # get glibc version with which build is done
     - script: |
-          ldd --version
-      displayName: "GLIBC Version"
+          mkdir -p $(binaries)
+          mkdir -p $(temp)
+      displayName: 'Create output paths'
 
     - script: |
-          GOARCH=${{ parameters.host_architecture }} GOOS=linux go build -tags "netgo" -o "$(root_dir)/azcopy_linux_${{ parameters.host_architecture }}"
-      displayName: 'Build ${{ parameters.host_architecture }}'
+          GOARCH=${{ parameters.host_architecture }} GOOS=linux go build -tags "netgo" -o "$(binaries)/azcopy_linux_${{ parameters.host_architecture }}"
+      displayName: 'Build'
 
     - script: |
-          GOARCH=${{ parameters.host_architecture }} GOOS=linux go build -tags "netgo,se_integration" -o "$(root_dir)/azcopy_linux_se_${{ parameters.host_architecture }}"
-      displayName: 'Build ${{ parameters.host_architecture }} SE Integration '
+          GOARCH=${{ parameters.host_architecture }} GOOS=linux go build -tags "netgo,se_integration" -o "$(binaries)/azcopy_linux_se_${{ parameters.host_architecture }}"
+      displayName: 'Build SE Integration'
 
     - script: |
-          sudo ls -lRt $(root_dir)/
-          mkdir -p $(Build.ArtifactStagingDirectory)/binaries
-          mkdir -p $(Build.ArtifactStagingDirectory)/temp
-          cp $(root_dir)/azcopy_linux* $(Build.ArtifactStagingDirectory)/binaries
-      displayName: 'List the binaries and add to staging directory'
+          ls -ltR $(binaries)
+      displayName: 'List the binaries'
 
     - script: |
-          linux_dir="$(work_dir)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version)"
+          linux_dir="$(System.DefaultWorkingDirectory)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version)"
           echo "##vso[task.setvariable variable=linux_dir]linux_dir"
           
-          linux_se_dir="$(work_dir)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version)"
+          linux_se_dir="$(System.DefaultWorkingDirectory)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version)"
           echo "##vso[task.setvariable variable=linux_se_dir]linux_se_dir"
           
           mkdir -p linux_dir
           mkdir -p linux_se_dir
-          mkdir -p $(archives)
-          ls -ltR $(work_dir)
-      displayName: 'Create required directories'
+          mkdir -p pkgDir/usr/bin/
+      displayName: 'Create archive directories'
 
     - script: |
-          mkdir -p pkgDir/usr/bin/
-          mv $(root_dir)/azcopy_linux_${{ parameters.host_architecture }} $(linux_dir)/azcopy
-          mv $(root_dir)/azcopy_linux_se_${{ parameters.host_architecture }} $(linux_se_dir)/azcopy
-          cp $(linux_dir)/azcopy pkgDir/usr/bin/
+          cp $(binaries)/azcopy_linux_${{ parameters.host_architecture }} $(linux_dir)/azcopy
           cp NOTICE.txt $(linux_dir)/
+        
+          cp $(binaries)/azcopy_linux_se_${{ parameters.host_architecture }} $(linux_se_dir)/azcopy
           cp NOTICE.txt $(linux_se_dir)/
+        
+          cp $(linux_dir)/azcopy pkgDir/usr/bin/
           cp NOTICE.txt pkgDir/usr/bin/
       displayName: 'Copy required files for packaging'
 
@@ -80,10 +75,8 @@ steps:
           --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
           --url "https://github.com/Azure/azure-storage-azcopy" \
           --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
-          mv ./azcopy*.deb ./azcopy-$(azcopy_version).${{ parameters.host_suffix }}.deb
-          cp ./azcopy*.deb $(Build.ArtifactStagingDirectory)/temp
-      workingDirectory: $(root_dir)
-      displayName: 'Make ${{ parameters.host_architecture }} deb Package'
+          mv ./azcopy*.deb $(temp)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.deb
+      displayName: 'Make deb Package'
 
     - script: |
           fpm -s dir -t rpm -n azcopy --rpm-digest sha256 -C pkgDir/ \
@@ -91,17 +84,15 @@ steps:
           --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
           --url "https://github.com/Azure/azure-storage-azcopy" \
           --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
-          mv ./azcopy*.rpm ./azcopy-$(azcopy_version).${{ parameters.host_suffix }}.rpm
-          cp ./azcopy*.rpm $(Build.ArtifactStagingDirectory)/temp
-      workingDirectory: $(root_dir)
-      displayName: 'Make ${{ parameters.host_architecture }} rpm Package'
+          mv ./azcopy*.rpm $(temp)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.rpm
+      displayName: 'Make rpm Package'
 
     - task: ArchiveFiles@2
       displayName: 'Archive Linux Build'
       inputs:
           rootFolderOrFile: '$(linux_dir)'
           archiveType: tar
-          archiveFile: '$(archives)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
+          archiveFile: '$(temp)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
       continueOnError: true
 
     - task: ArchiveFiles@2
@@ -109,16 +100,5 @@ steps:
       inputs:
           rootFolderOrFile: '$(linux_se_dir)'
           archiveType: tar
-          archiveFile: '$(archives)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
+          archiveFile: '$(temp)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
       continueOnError: true
-
-    - script: |
-          cp -r $(archives)/* $(Build.ArtifactStagingDirectory)/temp
-      workingDirectory: $(root_dir)
-      displayName: 'Add tar.gz to signing stage'
-
-    - task: ComponentGovernanceComponentDetection@0
-      inputs:
-          scanType: 'Register'
-          verbosity: 'Verbose'
-          alertWarningLevel: 'High'

@@ -85,30 +85,26 @@ extends:
       - stage: BuildArtifacts
         dependsOn: AzCopyVersion
         jobs:
-          - job: Set_1
+          - job: Linux_Amd64
             timeoutInMinutes: 120
             pool:
               name: azcopy-pool
               image: ubuntu22-1espt
               os: linux
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
             templateContext:
               outputs:
                 - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  targetPath: $(System.DefaultWorkingDirectory)/temp
                   artifactName: 'azCopy-linux-temp-amd64'
                 - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+                  targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azCopy-binaries-linux-amd64'
 
             variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(Build.SourcesDirectory)'
-              - name: archives
-                value: $(root_dir)/archives
+              - name: temp
+                value: $(System.DefaultWorkingDirectory)/temp
+              - name: binaries
+                value: $(System.DefaultWorkingDirectory)/binaries
               - name: azcopy_version
                 value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
@@ -118,31 +114,27 @@ extends:
                   host_architecture: 'amd64'
                   host_suffix: 'x86_64'
 
-          - job: Set_2
+          - job: Linux_Arm64
             timeoutInMinutes: 120
             pool:
               name: azcopy-arm-pool
               image: ubuntu22arm-custom1espt
               os: linux
               hostArchitecture: Arm64
-            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
             templateContext:
               outputs:
                 - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/temp
+                  targetPath: $(System.DefaultWorkingDirectory)/temp
                   artifactName: 'azCopy-linux-temp-arm64'
                 - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/binaries
+                  targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azCopy-binaries-linux-arm64'
 
             variables:
-              - name: root_dir
-                value: '$(System.DefaultWorkingDirectory)'
-              - name: work_dir
-                value: '$(Build.SourcesDirectory)'
-              - name: archives
-                value: $(root_dir)/archives
+              - name: temp
+                value: $(System.DefaultWorkingDirectory)/temp
+              - name: binaries
+                value: $(System.DefaultWorkingDirectory)/binaries
               - name: azcopy_version
                 value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
@@ -152,7 +144,7 @@ extends:
                   host_architecture: 'arm64'
                   host_suffix: 'arm64'
 
-          - job: Set_3
+          - job: Windows
             timeoutInMinutes: 120
             pool:
               name: azcopy-pool
@@ -163,9 +155,11 @@ extends:
             templateContext:
               outputs:
                 - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)\binaries
+                  targetPath: $(System.DefaultWorkingDirectory)\binaries
                   artifactName: 'azCopy-windows-temp'
-
+            variables:
+              - name: binaries
+                value: '$(System.DefaultWorkingDirectory)\binaries'
             steps:
               - task: GoTool@0
                 env:
@@ -176,11 +170,14 @@ extends:
               - script: |
                   echo 'Running GO Vet'
                   go vet
-                  mkdir "$(Build.ArtifactStagingDirectory)\binaries"
                 displayName: 'Golang Vet - Windows'
 
               - script: |
-                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_amd64.exe"
+                  mkdir -p $(binaries)
+                displayName: 'Create binaries path'
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_amd64.exe"
                 displayName: 'Generate Windows AMD64'
                 env:
                   GOARCH: amd64
@@ -188,7 +185,7 @@ extends:
                   CGO_ENABLED: 0
 
               - script: |
-                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_386.exe"
+                  go build -o "$(binaries)\azcopy_windows_386.exe"
                 displayName: 'Generate Windows i386'
                 env:
                   GOARCH: 386
@@ -196,7 +193,7 @@ extends:
                   CGO_ENABLED: 0
 
               - script: |
-                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_v7_arm.exe"
+                  go build -o "$(binaries)\azcopy_windows_v7_arm.exe"
                 displayName: 'Generate Windows ARM'
                 env:
                   GOARCH: arm
@@ -205,28 +202,14 @@ extends:
                   CGO_ENABLED: 0
 
               - script: |
-                  go build -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_arm64.exe"
+                  go build -o "$(binaries)\azcopy_windows_arm64.exe"
                 displayName: 'Generate Windows ARM'
                 env:
                   GOARCH: arm64
                   GOOS: windows
                   CGO_ENABLED: 0
 
-              - script: |
-                  go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)\binaries\azcopy_windows_se_arm64.exe"
-                displayName: 'Generate Windows ARM'
-                env:
-                  GOARCH: arm64
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - task: ComponentGovernanceComponentDetection@0
-                inputs:
-                  scanType: 'Register'
-                  verbosity: 'Verbose'
-                  alertWarningLevel: 'High'
-
-          - job: Set_4
+          - job: MacOS
             timeoutInMinutes: 360
             pool:
               name: Azure Pipelines
@@ -309,13 +292,7 @@ extends:
                   cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)/temp
                 displayName: 'Copy zip to staging directory'
 
-              - task: ComponentGovernanceComponentDetection@0
-                inputs:
-                  scanType: 'Register'
-                  verbosity: 'Verbose'
-                  alertWarningLevel: 'High'
-
-          - job: Set_5
+          - job: MacOS_M1
             timeoutInMinutes: 360
             pool:
               name: azcopy-pool
@@ -384,12 +361,6 @@ extends:
                   mkdir -p $(Build.ArtifactStagingDirectory)/temp
                   cp $(archives)/azcopy_darwin* $(Build.ArtifactStagingDirectory)/temp
                 displayName: 'Copy zip to staging directory'
-
-              - task: ComponentGovernanceComponentDetection@0
-                inputs:
-                  scanType: 'Register'
-                  verbosity: 'Verbose'
-                  alertWarningLevel: 'High'
 
         # BuildArtifacts end here
 
