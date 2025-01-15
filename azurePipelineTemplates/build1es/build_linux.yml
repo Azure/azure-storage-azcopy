@@ -14,7 +14,6 @@ steps:
       displayName: "Installing Go tools"
 
     - script: |
-          echo 'Running GO Vet'
           go vet
       displayName: 'Golang Vet - Linux'
 
@@ -29,7 +28,7 @@ steps:
 
     - script: |
           mkdir -p $(binaries)
-          mkdir -p $(temp)
+          mkdir -p $(unsigned)
       displayName: 'Create output paths'
 
     - script: |
@@ -76,7 +75,7 @@ steps:
           --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
           --url "https://github.com/Azure/azure-storage-azcopy" \
           --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
-          mv ./azcopy*.deb $(temp)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.deb
+          mv ./azcopy*.deb $(unsigned)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.deb
       displayName: 'Make deb Package'
 
     - script: |
@@ -85,7 +84,7 @@ steps:
           --maintainer "Azcopy v-Team <azcopyvteam@microsoft.com>" \
           --url "https://github.com/Azure/azure-storage-azcopy" \
           --description "A command-line utility that is used to copy data to and from containers and file shares in Azure Storage accounts"
-          mv ./azcopy*.rpm $(temp)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.rpm
+          mv ./azcopy*.rpm $(unsigned)/azcopy-$(azcopy_version).${{ parameters.host_suffix }}.rpm
       displayName: 'Make rpm Package'
 
     - task: ArchiveFiles@2
@@ -93,15 +92,11 @@ steps:
       inputs:
           rootFolderOrFile: '$(linux_dir)'
           archiveType: tar
-          archiveFile: '$(archives)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
+          archiveFile: '$(unsigned)/azcopy_linux_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
 
     - task: ArchiveFiles@2
       displayName: 'Archive Partner(SE) Linux Build'
       inputs:
           rootFolderOrFile: '$(linux_se_dir)'
           archiveType: tar
-          archiveFile: '$(archives)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
-
-    - script: |
-          cp -r $(archives)/* $(System.DefaultWorkingDirectory)/temp
-      displayName: 'Add tar.gz to signing stage'
+          archiveFile: '$(unsigned)/azcopy_linux_se_${{ parameters.host_architecture }}_$(azcopy_version).tar.gz'
