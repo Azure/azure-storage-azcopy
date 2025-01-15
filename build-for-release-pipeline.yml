@@ -221,7 +221,7 @@ extends:
             templateContext:
               outputs:
                 - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/unsigned
+                  targetPath: $(System.DefaultWorkingDirectory)/unsigned
                   artifactName: 'azcopy-mac-unsigned'
 
             variables:
@@ -240,7 +240,6 @@ extends:
               - script: |
                   go vet
                 displayName: 'Golang Vet - Mac'
-                workingDirectory: $(System.DefaultWorkingDirectory)
 
               - script: |
                   CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64"
@@ -291,7 +290,7 @@ extends:
             templateContext:
               outputs:
                 - output: pipelineArtifact
-                  targetPath: $(Build.ArtifactStagingDirectory)/unsigned
+                  targetPath: $(System.DefaultWorkingDirectory)/unsigned
                   artifactName: 'azcopy-mac-m1-unsigned'
 
             variables:
@@ -317,13 +316,12 @@ extends:
               - script: |
                   go vet
                 displayName: 'Golang Vet'
-                workingDirectory: $(System.DefaultWorkingDirectory)
 
               - template: setup/trigger_m1_build.yml@self
 
               - script: |
                   mkdir -p $(unsigned)
-                  darwin_arm64_m1_dir="$(work_dir)/azcopy_darwin_m1_arm64_$(azcopy_version)"
+                  darwin_arm64_m1_dir="$(System.DefaultWorkingDirectory)azcopy_darwin_m1_arm64_$(azcopy_version)"
 
                   echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
                   mkdir -p $darwin_arm64_m1_dir
