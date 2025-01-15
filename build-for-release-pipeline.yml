@@ -318,10 +318,12 @@ extends:
                 displayName: 'Golang Vet'
 
               - template: setup/trigger_m1_build.yml@self
+                parameters:
+                  download_path: '$(System.DefaultWorkingDirectory)'
 
               - script: |
                   mkdir -p $(unsigned)
-                  darwin_arm64_m1_dir="$(System.DefaultWorkingDirectory)azcopy_darwin_m1_arm64_$(azcopy_version)"
+                  darwin_arm64_m1_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64_$(azcopy_version)"
 
                   echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
                   mkdir -p $darwin_arm64_m1_dir
