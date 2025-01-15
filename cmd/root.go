@@ -81,8 +81,9 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if glcm.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout()) != "" {
-			timeout, err := time.ParseDuration(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout()) + "m")
+		requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
+		if requestTryTimeout != "" {
+			timeout, err := time.ParseDuration(requestTryTimeout + "m")
 			if err == nil {
 				ste.UploadTryTimeout = timeout
 			}

@@ -59,8 +59,7 @@ func newGCPSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, er
 	if err != nil {
 		return nil, err
 	}
-	glcm := common.GetLifecycleMgr()
-	jsonKey, err = os.ReadFile(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials()))
+	jsonKey, err = os.ReadFile(common.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("Cannot read JSON key file. Please verify you have correctly set GOOGLE_APPLICATION_CREDENTIALS environment variable")
 	}
