@@ -31,7 +31,16 @@ extends:
               name: azcopy-pool
               image: ubuntu22-1espt
               os: linux
-
+            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)/releasehelper
+                  artifactName: 'AzCopy-ReleaseHelper'
+            variables:
+              - name: output_path
+                value: '$(System.DefaultWorkingDirectory)/releasehelper'
             steps:
               - checkout: self
                 displayName: 'Checkout repository'
@@ -66,6 +75,12 @@ extends:
                   fi
                 displayName: 'Verify and extract the generated build version'
                 name: SetAzCopyVersion
+
+              - script: |
+                  mkdir -p $(output_path)
+                  cp docker/Dockerfile* $(output_path)
+                  echo $(azcopy_version) > $(output_path)/azcopy_version.txt
+                displayName: 'Release Helper Files'
 
       - stage: BuildArtifacts
         dependsOn: AzCopyVersion
