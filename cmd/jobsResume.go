@@ -299,11 +299,30 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
+	jobID, err := common.ParseJobID(rca.jobID)
+	if err != nil {
+		// Error for invalid JobId format
+		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+	}
 
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
+	var getJobDetailsResponse common.GetJobDetailsResponse
+	// Get job details from the STE
+	Rpc(common.ERpcCmd.GetJobDetails(),
+		&common.GetJobDetailsRequest{JobID: jobID},
+		&getJobDetailsResponse)
+	if getJobDetailsResponse.ErrorMsg != "" {
+		glcm.Error(getJobDetailsResponse.ErrorMsg)
+	}
 
-	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, nil)
+	var fileSrcClientOptions any
+	if fromTo.From() == common.ELocation.File() {
+		fileSrcClientOptions = &common.FileClientOptions{
+			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
+		}
+	}
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -313,11 +332,17 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
-	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, nil)
+	var fileClientOptions any
+	if fromTo.To() == common.ELocation.File() {
+		fileClientOptions = &common.FileClientOptions{
+			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
+		}
+	}
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return srcServiceClient, dstServiceClient, nil
 }
 
@@ -364,9 +389,9 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
-	var getJobFromToResponse common.GetJobFromToResponse
-	Rpc(common.ERpcCmd.GetJobFromTo(),
-		&common.GetJobFromToRequest{JobID: jobID},
+	var getJobFromToResponse common.GetJobDetailsResponse
+	Rpc(common.ERpcCmd.GetJobDetails(),
+		&common.GetJobDetailsRequest{JobID: jobID},
 		&getJobFromToResponse)
 	if getJobFromToResponse.ErrorMsg != "" {
 		glcm.Error(getJobFromToResponse.ErrorMsg)
