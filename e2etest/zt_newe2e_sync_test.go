@@ -326,7 +326,8 @@ func (s *SyncTestSuite) Scenario_TestSyncHashTypeSourceHash(svm *ScenarioVariati
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
 				},
-				CompareHash: pointerTo(common.ESyncHashType.MD5()),
+				CompareHash:          pointerTo(common.ESyncHashType.MD5()),
+				LocalHashStorageMode: pointerTo(common.EHashStorageMode.HiddenFiles()), // This is OS agnostic (ADO does not support xattr so Linux test fails without this).
 			},
 		})
 
