@@ -286,7 +286,7 @@ func (t *testJobPartTransferManager) S2SSourceClientOptions() azcore.ClientOptio
 	} else if t.fromTo.From() == common.ELocation.Benchmark() || t.fromTo.To() == common.ELocation.Benchmark() {
 		userAgent = common.BenchmarkUserAgent
 	} else {
-		userAgent = common.GetLifecycleMgr().AddUserAgentPrefix(common.UserAgent)
+		userAgent = common.AddUserAgentPrefix(common.UserAgent)
 	}
 	telemetryOptions := policy.TelemetryOptions{ApplicationID: userAgent}
 
