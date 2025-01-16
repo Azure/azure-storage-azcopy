@@ -445,7 +445,7 @@ extends:
                   mv $(mariner)/* $(signed)/mariner
                 displayName: 'Make Artifacts executable'
 
-          - job: Set_2
+          - job: Windows
             timeoutInMinutes: 120
             pool:
               name: azcopy-pool
@@ -465,6 +465,7 @@ extends:
                   displayName: 'Upload Windows Signed'
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
+                  artifactName: 'azcopy-binaries-windows'
                   displayName: 'Upload Windows Binaries'
 
             variables:
@@ -552,7 +553,7 @@ extends:
                   rootFolderOrFile: '$(windows_386)'
                   archiveFile: '$(signed)/azcopy_windows_386_$(azcopy_version).zip'
 
-          - job: Set_3
+          - job: Mac
             timeoutInMinutes: 120
             pool:
               name: azcopy-pool
