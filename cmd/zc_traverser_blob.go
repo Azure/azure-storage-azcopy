@@ -90,6 +90,12 @@ func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error)
 			containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
 			p := containerClient.NewListBlobsFlatPager(nil)
 			_, err = p.NextPage(t.ctx)
+
+			if bloberror.HasCode(err, bloberror.AuthorizationPermissionMismatch) {
+				// Maybe we don't have the ability to list? Can we get container properties as a fallback?
+				_, propErr := containerClient.GetProperties(t.ctx, nil)
+				err = common.Iff(propErr == nil, nil, err)
+			}
 		}
 
 		return true, err
