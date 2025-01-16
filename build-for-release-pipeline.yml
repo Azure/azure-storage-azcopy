@@ -763,8 +763,8 @@ extends:
               - checkout: none
 
               - script: |
-                  sudo rpm -qip $(mariner)/azcopy*x86_64.rpm
-                  sudo rpm -i $(mariner)/azcopy*x86_64.rpm
+                  sudo rpm -qip $(signed)/azcopy*x86_64.rpm
+                  sudo rpm -i $(signed)/azcopy*x86_64.rpm
                   azcopy --version
                 displayName: 'Verify rpm'
 
@@ -801,7 +801,7 @@ extends:
                   destinationFolder: $(extracted)
 
               - script: |
-                  $(extracted)/azcopy --version
+                  $(extracted)/azcopy*amd64*/azcopy --version
                 displayName: 'Verify binary in zip'
 
           - job: Windows_Amd64
@@ -837,7 +837,7 @@ extends:
                   destinationFolder: $(extracted)
 
               - script: |
-                  $(extracted)/azcopy --version
+                  $(extracted)/azcopy*amd64*/azcopy --version
                 displayName: 'Verify exe in zip'
 
           - job: Windows_Arm64
@@ -874,7 +874,7 @@ extends:
                   destinationFolder: $(extracted)
 
               - script: |
-                  $(extracted)/azcopy --version
+                  $(extracted)/azcopy*arm64*/azcopy --version
                 displayName: 'Verify exe in zip'
 
       # TestArtifacts ends here
