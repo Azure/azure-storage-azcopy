@@ -279,6 +279,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		azcopyScanningLogger.CloseLog()
 	})
 
+	// if no logging, set this empty so that we don't display the log location
+	if azcopyLogVerbosity == common.LogNone {
+		azcopyLogPathFolder = ""
+	}
+
 	fromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
 		return cooked, err
@@ -549,7 +554,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
-		glcm.Info("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
+		glcm.Warn("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
 	}
 	cooked.metadata = raw.metadata
 	if err = validateMetadataString(cooked.metadata); err != nil {
@@ -573,7 +578,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
-		glcm.Info("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
+		glcm.Warn("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
 	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
 	err = validateBlobTagsKeyValue(blobTags)
@@ -901,7 +906,7 @@ var includeWarningOncer = &sync.Once{}
 func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
 	if strings.Contains(value, "*") || strings.Contains(value, "?") {
 		oncer.Do(func() {
-			glcm.Info(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
+			glcm.Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
 				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
 				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
 		})
@@ -1689,11 +1694,13 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	// if on dry run mode do not want to print message since no  job is being done
 	if !cca.dryrunMode {
+		// Output the log location if log-level is set to other then NONE
+		var logPathFolder string
+		if azcopyLogPathFolder != "" {
+			logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+		}
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
-			fmt.Sprintf("%s%s%s.log",
-				azcopyLogPathFolder,
-				common.OS_PATH_SEPARATOR,
-				cca.jobID),
+			logPathFolder,
 			cca.isCleanupJob,
 			cca.cleanupJobMessage))
 	}
