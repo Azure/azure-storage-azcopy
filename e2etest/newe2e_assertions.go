@@ -41,7 +41,6 @@ func (n NoError) MinArgs() int {
 func (n NoError) Assert(items ...any) bool {
 	for _, v := range items {
 		if v != nil {
-			fmt.Sprintf("%v in %v is not Nil", v, items)
 			return false
 		}
 	}

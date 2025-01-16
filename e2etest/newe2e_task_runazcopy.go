@@ -53,14 +53,13 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy       AzCopyVerb = "copy"
-	AzCopyVerbSync       AzCopyVerb = "sync"
-	AzCopyVerbRemove     AzCopyVerb = "remove"
-	AzCopyVerbList       AzCopyVerb = "list"
-	AzCopyVerbLogin      AzCopyVerb = "login"
-	AzCopyVerbLogout     AzCopyVerb = "logout"
-	AzCopyVerbJobs       AzCopyVerb = "jobs"
-	AzCopyVerbJobsResume AzCopyVerb = "resume"
+	AzCopyVerbCopy   AzCopyVerb = "copy"
+	AzCopyVerbSync   AzCopyVerb = "sync"
+	AzCopyVerbRemove AzCopyVerb = "remove"
+	AzCopyVerbList   AzCopyVerb = "list"
+	AzCopyVerbLogin  AzCopyVerb = "login"
+	AzCopyVerbLogout AzCopyVerb = "logout"
+	AzCopyVerbJobs   AzCopyVerb = "jobs"
 )
 
 type AzCopyTarget struct {
