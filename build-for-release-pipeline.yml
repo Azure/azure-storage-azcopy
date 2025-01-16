@@ -38,6 +38,7 @@ extends:
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/releasehelper
                   artifactName: 'azcopy-releasehelper'
+                  displayName: 'Upload Release Helper Files'
             variables:
               - name: output_path
                 value: '$(System.DefaultWorkingDirectory)/releasehelper'
@@ -96,9 +97,11 @@ extends:
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/unsigned
                   artifactName: 'azcopy-linux-amd64-unsigned'
+                  displayName: 'Upload Linux Amd64 Unsigned'
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-linux-amd64'
+                  displayName: 'Upload Linux Amd64 Binaries'
 
             variables:
               - name: archives
@@ -128,9 +131,11 @@ extends:
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/unsigned
                   artifactName: 'azcopy-linux-arm64-unsigned'
+                  displayName: 'Upload Linux Arm64 Unsigned'
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/binaries
                   artifactName: 'azcopy-binaries-linux-arm64'
+                  displayName: 'Upload Linux Arm64 Binaries'
 
             variables:
               - name: archives
@@ -148,195 +153,198 @@ extends:
                   host_architecture: 'arm64'
                   host_suffix: 'arm64'
 
-#          - job: Windows
-#            timeoutInMinutes: 120
-#            pool:
-#              name: azcopy-pool
-#              image: windows2022-1espt
-#              os: windows
-#            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
-#            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)\binaries
-#                  artifactName: 'azcopy-windows-temp'
-#            variables:
-#              - name: binaries
-#                value: '$(System.DefaultWorkingDirectory)\binaries'
-#            steps:
-#              - task: GoTool@0
-#                env:
-#                  GO111MODULE: 'on'
-#                inputs:
-#                  version: $(AZCOPY_GOLANG_VERSION)
-#
-#              - script: |
-#                  go vet
-#                displayName: 'Golang Vet - Windows'
-#
-#              - script: |
-#                  mkdir -p $(binaries)
-#                displayName: 'Create output path'
-#
-#              - script: |
-#                  go build -o "$(binaries)\azcopy_windows_amd64.exe"
-#                displayName: 'Generate Windows AMD64'
-#                env:
-#                  GOARCH: amd64
-#                  GOOS: windows
-#                  CGO_ENABLED: 0
-#
-#              - script: |
-#                  go build -o "$(binaries)\azcopy_windows_386.exe"
-#                displayName: 'Generate Windows i386'
-#                env:
-#                  GOARCH: 386
-#                  GOOS: windows
-#                  CGO_ENABLED: 0
-#
-#              - script: |
-#                  go build -o "$(binaries)\azcopy_windows_v7_arm.exe"
-#                displayName: 'Generate Windows ARM'
-#                env:
-#                  GOARCH: arm
-#                  GOARM: 7
-#                  GOOS: windows
-#                  CGO_ENABLED: 0
-#
-#              - script: |
-#                  go build -o "$(binaries)\azcopy_windows_arm64.exe"
-#                displayName: 'Generate Windows ARM'
-#                env:
-#                  GOARCH: arm64
-#                  GOOS: windows
-#                  CGO_ENABLED: 0
-#
-#          - job: MacOS
-#            timeoutInMinutes: 360
-#            pool:
-#              name: Azure Pipelines
-#              image: macos-latest
-#              os: macOS
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)/unsigned
-#                  artifactName: 'azcopy-mac-unsigned'
-#
-#            variables:
-#              - name: unsigned
-#                value: $(System.DefaultWorkingDirectory)/unsigned
-#              - name: azcopy_version
-#                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-#
-#            steps:
-#              - task: GoTool@0
-#                env:
-#                  GO111MODULE: 'on'
-#                inputs:
-#                  version: $(AZCOPY_GOLANG_VERSION)
-#
-#              - script: |
-#                  go vet
-#                displayName: 'Golang Vet - Mac'
-#
-#              - script: |
-#                  CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64"
-#                displayName: 'Generate MacOS Build with AMD64'
-#
-#              - script: |
-#                  GOARCH=arm64 CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64"
-#                displayName: 'Test Cross-compiled MacOS Build with ARM64'
-#
-#              - script: |
-#                  darwin_amd_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
-#
-#                  darwin_arm_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
-#
-#                  mkdir -p $darwin_amd_dir
-#                  mkdir -p $darwin_arm_dir
-#                  mkdir -p $(unsigned)
-#                displayName: 'Create archive directories'
-#
-#              - script: |
-#                  mv $(System.DefaultWorkingDirectory)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
-#                  cp NOTICE.txt $(darwin_amd_dir)
-#
-#                  mv $(System.DefaultWorkingDirectory)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
-#                  cp NOTICE.txt $(darwin_arm_dir)
-#                displayName: 'Copy required files for packaging'
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
-#                inputs:
-#                  rootFolderOrFile: '$(darwin_amd_dir)'
-#                  archiveFile: '$(unsigned)/azcopy_darwin_amd64_$(azcopy_version).zip'
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
-#                inputs:
-#                  rootFolderOrFile: '$(darwin_arm_dir)'
-#                  archiveFile: '$(unsigned)/azcopy_darwin_arm64_$(azcopy_version).zip'
-#
-#          - job: MacOS_M1
-#            timeoutInMinutes: 360
-#            pool:
-#              name: azcopy-pool
-#              image: ubuntu22-1espt
-#              os: linux
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)/unsigned
-#                  artifactName: 'azcopy-mac-m1-unsigned'
-#
-#            variables:
-#              - group: AZCOPY_TESTS_VAR
-#              - name: unsigned
-#                value: $(System.DefaultWorkingDirectory)/unsigned
-#              - name: azcopy_version
-#                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-#
-#            steps:
-#              - task: GoTool@0
-#                env:
-#                  GO111MODULE: 'on'
-#                inputs:
-#                  version: $(AZCOPY_GOLANG_VERSION)
-#
-#              - script: |
-#                  sudo apt-get clean
-#                  sudo apt-get update --fix-missing
-#                  sudo apt-get install -y zip unzip
-#                displayName: "Installing Dependencies"
-#
-#              - script: |
-#                  go vet
-#                displayName: 'Golang Vet'
-#
-#              - template: setup/trigger_m1_build.yml@self
-#                parameters:
-#                  download_path: '$(System.DefaultWorkingDirectory)'
-#
-#              - script: |
-#                  mkdir -p $(unsigned)
-#                  darwin_arm64_m1_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64_$(azcopy_version)"
-#
-#                  echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
-#                  mkdir -p $darwin_arm64_m1_dir
-#
-#                  cp $(System.DefaultWorkingDirectory)/azcopy  $darwin_arm64_m1_dir
-#                  cp NOTICE.txt $darwin_arm64_m1_dir
-#                displayName: 'Copy required files for packaging'
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
-#                inputs:
-#                  rootFolderOrFile: '$(darwin_arm64_m1_dir)'
-#                  archiveFile: '$(unsigned)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
+          - job: Windows
+            timeoutInMinutes: 120
+            pool:
+              name: azcopy-pool
+              image: windows2022-1espt
+              os: windows
+            # If the pipeline publishes artifacts, use `templateContext` to define the artifacts.
+            # This will enable 1ES PT to run SDL analysis tools on the artifacts and then upload them.
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)\binaries
+                  artifactName: 'azcopy-windows-unsigned'
+                  displayName: 'Upload Windows Unsigned'
+            variables:
+              - name: binaries
+                value: '$(System.DefaultWorkingDirectory)\binaries'
+            steps:
+              - task: GoTool@0
+                env:
+                  GO111MODULE: 'on'
+                inputs:
+                  version: $(AZCOPY_GOLANG_VERSION)
+
+              - script: |
+                  go vet
+                displayName: 'Golang Vet - Windows'
+
+              - script: |
+                  mkdir -p $(binaries)
+                displayName: 'Create output path'
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_amd64.exe"
+                displayName: 'Generate Windows AMD64'
+                env:
+                  GOARCH: amd64
+                  GOOS: windows
+                  CGO_ENABLED: 0
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_386.exe"
+                displayName: 'Generate Windows i386'
+                env:
+                  GOARCH: 386
+                  GOOS: windows
+                  CGO_ENABLED: 0
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_v7_arm.exe"
+                displayName: 'Generate Windows ARM'
+                env:
+                  GOARCH: arm
+                  GOARM: 7
+                  GOOS: windows
+                  CGO_ENABLED: 0
+
+              - script: |
+                  go build -o "$(binaries)\azcopy_windows_arm64.exe"
+                displayName: 'Generate Windows ARM'
+                env:
+                  GOARCH: arm64
+                  GOOS: windows
+                  CGO_ENABLED: 0
+
+          - job: MacOS
+            timeoutInMinutes: 360
+            pool:
+              name: Azure Pipelines
+              image: macos-latest
+              os: macOS
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)/unsigned
+                  artifactName: 'azcopy-mac-unsigned'
+                  displayName: 'Upload Mac Unsigned'
+
+            variables:
+              - name: unsigned
+                value: $(System.DefaultWorkingDirectory)/unsigned
+              - name: azcopy_version
+                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+
+            steps:
+              - task: GoTool@0
+                env:
+                  GO111MODULE: 'on'
+                inputs:
+                  version: $(AZCOPY_GOLANG_VERSION)
+
+              - script: |
+                  go vet
+                displayName: 'Golang Vet - Mac'
+
+              - script: |
+                  CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64"
+                displayName: 'Generate MacOS Build with AMD64'
+
+              - script: |
+                  GOARCH=arm64 CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64"
+                displayName: 'Test Cross-compiled MacOS Build with ARM64'
+
+              - script: |
+                  darwin_amd_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
+
+                  darwin_arm_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
+
+                  mkdir -p $darwin_amd_dir
+                  mkdir -p $darwin_arm_dir
+                  mkdir -p $(unsigned)
+                displayName: 'Create archive directories'
+
+              - script: |
+                  mv $(System.DefaultWorkingDirectory)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
+                  cp NOTICE.txt $(darwin_amd_dir)
+
+                  mv $(System.DefaultWorkingDirectory)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
+                  cp NOTICE.txt $(darwin_arm_dir)
+                displayName: 'Copy required files for packaging'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
+                inputs:
+                  rootFolderOrFile: '$(darwin_amd_dir)'
+                  archiveFile: '$(unsigned)/azcopy_darwin_amd64_$(azcopy_version).zip'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
+                inputs:
+                  rootFolderOrFile: '$(darwin_arm_dir)'
+                  archiveFile: '$(unsigned)/azcopy_darwin_arm64_$(azcopy_version).zip'
+
+          - job: MacOS_M1
+            timeoutInMinutes: 360
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)/unsigned
+                  artifactName: 'azcopy-mac-m1-unsigned'
+                  displayName: 'Upload Mac M1 Unsigned'
+
+            variables:
+              - group: AZCOPY_TESTS_VAR
+              - name: unsigned
+                value: $(System.DefaultWorkingDirectory)/unsigned
+              - name: azcopy_version
+                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+
+            steps:
+              - task: GoTool@0
+                env:
+                  GO111MODULE: 'on'
+                inputs:
+                  version: $(AZCOPY_GOLANG_VERSION)
+
+              - script: |
+                  sudo apt-get clean
+                  sudo apt-get update --fix-missing
+                  sudo apt-get install -y zip unzip
+                displayName: "Installing Dependencies"
+
+              - script: |
+                  go vet
+                displayName: 'Golang Vet'
+
+              - template: setup/trigger_m1_build.yml@self
+                parameters:
+                  download_path: '$(System.DefaultWorkingDirectory)'
+
+              - script: |
+                  mkdir -p $(unsigned)
+                  darwin_arm64_m1_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64_$(azcopy_version)"
+
+                  echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
+                  mkdir -p $darwin_arm64_m1_dir
+
+                  cp $(System.DefaultWorkingDirectory)/azcopy  $darwin_arm64_m1_dir
+                  cp NOTICE.txt $darwin_arm64_m1_dir
+                displayName: 'Copy required files for packaging'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
+                inputs:
+                  rootFolderOrFile: '$(darwin_arm64_m1_dir)'
+                  archiveFile: '$(unsigned)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
 
         # BuildArtifacts end here
 
@@ -344,7 +352,7 @@ extends:
         dependsOn: BuildArtifacts
         condition: succeeded('BuildArtifacts')
         jobs:
-          - job: Set_1
+          - job: Linux
             timeoutInMinutes: 120
             pool:
               name: azcopy-pool
@@ -356,16 +364,16 @@ extends:
                 - input: pipelineArtifact
                   artifactName: azcopy-linux-amd64-unsigned
                   targetPath: $(System.DefaultWorkingDirectory)/amd64
-                  displayName: 'Download unsigned amd64'
+                  displayName: 'Download Linux Amd64 Unsigned'
                 - input: pipelineArtifact
                   artifactName: azcopy-linux-arm64-unsigned
                   targetPath: $(System.DefaultWorkingDirectory)/arm64
-                  displayName: 'Download unsigned arm64'
+                  displayName: 'Download Linux Arm64 Unsigned'
               outputs:
                 - output: pipelineArtifact
                   targetPath: $(System.DefaultWorkingDirectory)/signed
                   artifactName: 'azcopy-linux-signed'
-                  displayName: 'Upload signed linux'
+                  displayName: 'Upload Linux Signed'
 
             variables:
               - group: AZCOPY_SECRET_VAULT
@@ -425,303 +433,248 @@ extends:
                   mkdir -p $(signed)/mariner
                   
                   chmod 755 $(amd64)/*
+                  rm -rf $(amd64)/*.md 
                   mv $(amd64)/* $(signed)
                   
                   chmod 755 $(arm64)/*
+                  rm -rf $(amd64)/*.md
                   mv $(arm64)/* $(signed)
                   
                   chmod 755 $(mariner)/*
+                  rm -rf $(mariner)/*.md
                   mv $(mariner)/* $(signed)/mariner
                 displayName: 'Make Artifacts executable'
 
-#          - job: Set_2
-#            timeoutInMinutes: 120
-#            pool:
-#              name: azcopy-pool
-#              image: ubuntu22-1espt
-#              os: linux
-#
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)/signed
-#                  artifactName: 'azCopy-windows-signed'
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)/binaries
-#                  artifactName: 'azCopy-binaries-windows'
-#
-#            variables:
-#              - group: AZCOPY_SECRET_VAULT
-#              - name: work_dir
-#                value: '$(System.DefaultWorkingDirectory)/azure-storage-azcopy'
-#              - name: archives
-#                value: '$(work_dir)/archives'
-#              - name: azcopy_version
-#                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
-#
-#            steps:
-#
-#              - task: DownloadPipelineArtifact@2
-#                displayName: 'Download Pipeline Artifacts'
-#                inputs:
-#                  artifactName: 'azCopy-windows-temp'
-#                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-#
-#              - script: |
-#                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-#                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*
-#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/*.md
-#                displayName: 'List Artifacts'
-#
-#              - script: |
-#                  sudo apt-get clean
-#                  sudo apt-get update
-#                  sudo apt-get upgrade -y
-#                  sudo apt-get install -f --fix-missing
-#                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-#                  sudo dpkg -i packages-microsoft-prod.deb
-#                  sudo apt install apt-transport-https -y
-#                  sudo apt install dotnet-sdk-6.0 -y
-#                  sudo apt-get install -y zip
-#                displayName: "Update dependencies"
-#
-#              - template: setup/esrp_sign_windows.yml@self
-#                parameters:
-#                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-#                  ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
-#                  Pattern: 'azcopy_windows*'
-#
-#              - script: |
-#                  mkdir $(System.DefaultWorkingDirectory)/binaries
-#                  mkdir $(System.DefaultWorkingDirectory)/signed
-#                  rm -rf azCopy-windows-temp/*.md
-#                  cp azCopy-windows-temp/* $(System.DefaultWorkingDirectory)/binaries
-#                displayName: 'Add signed windows binary to staging directory'
-#                workingDirectory: '$(Build.ArtifactStagingDirectory)'
-#
-#              # Validate signed images have md5sum changed
-#              - script: |
-#                  rm -rf azCopy-windows-temp/azcopy_windows_v7_arm.exe
-#                  chmod 755 azCopy-windows-temp/*
-#                  rm -rf azCopy-windows-temp/*.md
-#                displayName: 'Make Artifacts executable'
-#                workingDirectory: '$(Build.ArtifactStagingDirectory)'
-#
-#              - script: |
-#                  windows_amd64="$(work_dir)/azcopy_windows_amd64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
-#
-#                  windows_arm64="$(work_dir)/azcopy_windows_arm64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
-#
-#                  windows_se_arm64="$(work_dir)/azcopy_windows_se_arm64_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=windows_se_arm64]$windows_se_arm64"
-#
-#                  windows_386="$(work_dir)/azcopy_windows_386_$(azcopy_version)"
-#                  echo "##vso[task.setvariable variable=windows_386]$windows_386"
-#
-#                  mkdir -p $windows_amd64
-#                  mkdir -p $windows_arm64
-#                  mkdir -p $windows_se_arm64
-#                  mkdir -p $windows_386
-#                  mkdir -p $(archives)
-#                displayName: 'Create required directories'
-#
-#              - script: |
-#                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
-#                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
-#                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_386.exe $(windows_386)/azcopy.exe
-#                  mv $(Build.ArtifactStagingDirectory)/azCopy-windows-temp/azcopy_windows_se_arm64.exe $(windows_se_arm64)/azcopy.exe
-#                  cp NOTICE.txt $(windows_amd64)
-#                  cp NOTICE.txt $(windows_arm64)
-#                  cp NOTICE.txt $(windows_386)
-#                  cp NOTICE.txt $(windows_se_arm64)
-#                  zip -r $(archives)/azcopy_windows_amd64_$(azcopy_version).zip .
-#                  zip -r $(archives)/azcopy_windows_arm64_$(azcopy_version).zip .
-#                  zip -r $(archives)/azcopy_windows_386_$(azcopy_version).zip .
-#                  zip -r $(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip .
-#                displayName: 'Copy required files'
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive Windows 64 bit AMD Build'
-#                inputs:
-#                  rootFolderOrFile: '$(windows_amd64)'
-#                  archiveFile: '$(archives)/azcopy_windows_amd64_$(azcopy_version).zip'
-#                continueOnError: true
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive Windows 64 bit ARM Build'
-#                inputs:
-#                  rootFolderOrFile: '$(windows_arm64)'
-#                  archiveFile: '$(archives)/azcopy_windows_arm64_$(azcopy_version).zip'
-#                continueOnError: true
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive Windows 32 bit Build'
-#                inputs:
-#                  rootFolderOrFile: '$(windows_386)'
-#                  archiveFile: '$(archives)/azcopy_windows_386_$(azcopy_version).zip'
-#                continueOnError: true
-#
-#              - task: ArchiveFiles@2
-#                displayName: 'Archive Windows SE 64 bit ARM Build'
-#                inputs:
-#                  rootFolderOrFile: '$(windows_se_arm64)'
-#                  archiveFile: '$(archives)/azcopy_windows_se_arm64_$(azcopy_version).zip'
-#                continueOnError: true
-#
-#              - script: |
-#                  cp $(archives)/azcopy_windows* $(System.DefaultWorkingDirectory)/signed
-#                displayName: 'Copy zip to staging directory'
-#
-#              - script: |
-#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-windows-temp
-#                  sudo ls -lRt $(System.DefaultWorkingDirectory)/signed
-#                  md5sum $(System.DefaultWorkingDirectory)/signed/*
-#                  rm -rf $(System.DefaultWorkingDirectory)/signed/*.md
-#                displayName: 'List Signed Artifacts'
-#
-#          - job: Set_3
-#            timeoutInMinutes: 120
-#            pool:
-#              name: azcopy-pool
-#              image: ubuntu22-1espt
-#              os: linux
-#
-#            templateContext:
-#              outputs:
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)/signed
-#                  artifactName: 'azCopy-mac-signed'
-#                - output: pipelineArtifact
-#                  targetPath: $(System.DefaultWorkingDirectory)/binaries
-#                  artifactName: 'azCopy-binaries-mac'
-#
-#            variables:
-#              - group: AZCOPY_SECRET_VAULT
-#
-#            steps:
-#              - checkout: none
-#
-#              - task: DownloadPipelineArtifact@2
-#                displayName: 'Download Pipeline Artifacts'
-#                inputs:
-#                  artifactName: 'azCopy-mac-temp'
-#                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-#
-#              - task: DownloadPipelineArtifact@2
-#                displayName: 'Download Pipeline Artifacts'
-#                inputs:
-#                  artifactName: 'azCopy-mac-temp-m1'
-#                  targetPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
-#
-#              - script: |
-#                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-#                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
-#                  sudo ls -lRt $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
-#                  md5sum $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*
-#                displayName: 'List Artifacts'
-#
-#              - script: |
-#                  sudo apt-get clean
-#                  sudo apt-get update
-#                  sudo apt-get upgrade -y
-#                  sudo apt-get install unzip -y
-#                  sudo apt-get install -f --fix-missing
-#                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-#                  sudo dpkg -i packages-microsoft-prod.deb
-#                  sudo apt install apt-transport-https -y
-#                  sudo apt install dotnet-sdk-6.0 -y
-#                displayName: "Update dependencies"
-#
-#              - template: setup/esrp_sign_notarize_macos.yml@self
-#                parameters:
-#                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp
-#                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-#                  Pattern: '*.zip'
-#
-#              - template: setup/esrp_sign_notarize_macos.yml@self
-#                parameters:
-#                  FolderPath: $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1
-#                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
-#                  Pattern: '*.zip'
-#
-#              # Validate signed images have md5sum changed
-#              - script: |
-#                  mkdir $(System.DefaultWorkingDirectory)/signed
-#                  mkdir $(System.DefaultWorkingDirectory)/binaries
-#                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*
-#                  chmod 755 $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*
-#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/*.md
-#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/*.md
-#                  mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/* $(System.DefaultWorkingDirectory)/signed/
-#                  mv $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/* $(System.DefaultWorkingDirectory)/signed/
-#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp/
-#                  rm -rf $(Build.ArtifactStagingDirectory)/azCopy-mac-temp-m1/
-#                displayName: 'Make Artifacts executable'
-#
-#              - script: |
-#                  sudo ls -lRt $(System.DefaultWorkingDirectory)/signed
-#                  md5sum $(System.DefaultWorkingDirectory)/signed/*
-#                displayName: 'List Signed Artifacts'
-#
-#              - script: |
-#                  mkdir -p unzipped_amd64
-#                  mkdir -p unzipped_arm64
-#                  mkdir -p unzipped_m1_arm64
-#                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy*amd64*.zip -d unzipped_amd64
-#                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_arm64*.zip -d unzipped_arm64
-#                  unzip -o $(System.DefaultWorkingDirectory)/signed/azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
-#
-#                  # Use find to retrieve the folder name
-#                  amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
-#                  echo "AMD64 Folder name: $amd64FolderName"
-#
-#                  arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
-#                  echo "ARM64 Folder name: $arm64FolderName"
-#
-#                  m1Arm64FolderName=$(find unzipped_m1_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64*")
-#                  echo "ARM64 M1 Folder name: $m1Arm64FolderName"
-#
-#                  # Check if there is exactly one matching directory for amd64
-#                  if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
-#                      echo "Found matching AMD64 directory: $amd64FolderName"
-#                      cd "$amd64FolderName"
-#                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_amd64
-#                  else
-#                      echo "Error: Expected exactly one matching AMD64 directory, found $(echo "$amd64FolderName" | wc -l)."
-#                      exit 1
-#                  fi
-#
-#                  cd $(Build.ArtifactStagingDirectory)
-#
-#                  # Check if there is exactly one matching directory for arm64
-#                  if [ $(echo "$arm64FolderName" | wc -l) -eq 1 ]; then
-#                      echo "Found matching ARM64 directory: $arm64FolderName"
-#                      cd "$arm64FolderName"
-#                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_arm64
-#                  else
-#                      echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
-#                      exit 1
-#                  fi
-#
-#                  cd $(Build.ArtifactStagingDirectory)
-#
-#                  # Check if there is exactly one matching directory for arm64
-#                  if [ $(echo "$m1Arm64FolderName" | wc -l) -eq 1 ]; then
-#                      echo "Found matching ARM64 M1 directory: $m1Arm64FolderName"
-#                      cd "$m1Arm64FolderName"
-#                      mv azcopy $(System.DefaultWorkingDirectory)/binaries/azcopy_darwin_m1_arm64
-#                  else
-#                      echo "Error: Expected exactly one matching ARM64 M1 directory, found $(echo "$m1Arm64FolderName" | wc -l)."
-#                      exit 1
-#                  fi
-#
-#                  rm -rf $(Build.ArtifactStagingDirectory)/unzipped*
-#                  rm -rf $(Build.ArtifactStagingDirectory)/*.zip
-#                  sudo ls -ltR $(System.DefaultWorkingDirectory)/binaries
-#                displayName:  'Copy and list signed mac binary to staging directory'
-#                workingDirectory: '$(Build.ArtifactStagingDirectory)'
+          - job: Set_2
+            timeoutInMinutes: 120
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+
+            templateContext:
+              inputs:
+                - input: pipelineArtifact
+                  artifactName: azcopy-windows-unsigned
+                  targetPath: $(System.DefaultWorkingDirectory)/windows
+                  displayName: 'Download Windows Unsigned'
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)/signed
+                  artifactName: 'azcopy-windows-signed'
+                  displayName: 'Upload Windows Signed'
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)/binaries
+                  displayName: 'Upload Windows Binaries'
+
+            variables:
+              - group: AZCOPY_SECRET_VAULT
+              - name: windows
+                value: '$(System.DefaultWorkingDirectory)/windows'
+              - name: signed
+                value: '$(System.DefaultWorkingDirectory)/signed'
+              - name: binaries
+                value: '$(System.DefaultWorkingDirectory)/binaries'
+              - name: azcopy_version
+                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+
+            steps:
+              - script: |
+                  sudo apt-get clean
+                  sudo apt-get update
+                  sudo apt-get upgrade -y
+                  sudo apt-get install -f --fix-missing
+                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+                  sudo dpkg -i packages-microsoft-prod.deb
+                  sudo apt install apt-transport-https -y
+                  sudo apt install dotnet-sdk-6.0 -y
+                  sudo apt-get install -y zip
+                displayName: "Update dependencies"
+
+              - template: setup/esrp_sign_windows.yml@self
+                parameters:
+                  FolderPath: $(windows)
+                  ESRP_AZCOPY_WIN_KEY_CODE: $(ESRP_AZCOPY_WIN_KEY_CODE)
+                  Pattern: 'azcopy_windows*'
+
+              - script: |
+                  mkdir -p $(binaries)
+                  mkdir -p $(signed)
+                  
+                  chmod 755 $(windows)/*
+                  rm -rf $(windows)/*.md
+                displayName: 'Make Artifacts executable'
+
+              - script: |
+                  windows_amd64="$(System.DefaultWorkingDirectory)/azcopy_windows_amd64_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=windows_amd64]$windows_amd64"
+
+                  windows_arm64="$(System.DefaultWorkingDirectory)/azcopy_windows_arm64_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=windows_arm64]$windows_arm64"
+
+                  windows_386="$(System.DefaultWorkingDirectory)/azcopy_windows_386_$(azcopy_version)"
+                  echo "##vso[task.setvariable variable=windows_386]$windows_386"
+
+                  mkdir -p $windows_amd64
+                  mkdir -p $windows_arm64
+                  mkdir -p $windows_386
+                displayName: 'Create required directories'
+
+              - script: |
+                  cp $(windows)/* $(System.DefaultWorkingDirectory)/binaries
+                  rm -rf $(windows)/azcopy_windows_v7_arm.exe
+                  
+                  mv $(windows)/azcopy_windows_amd64.exe $(windows_amd64)/azcopy.exe
+                  cp NOTICE.txt $(windows_amd64)
+                  
+                  mv $(windows)/azcopy_windows_arm64.exe $(windows_arm64)/azcopy.exe
+                  cp NOTICE.txt $(windows_arm64)
+                  
+                  mv $(windows)/azcopy_windows_386.exe $(windows_386)/azcopy.exe
+                  cp NOTICE.txt $(windows_386)
+                displayName: 'Copy required files'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive Windows 64 bit AMD Build'
+                inputs:
+                  rootFolderOrFile: '$(windows_amd64)'
+                  archiveFile: '$(signed)/azcopy_windows_amd64_$(azcopy_version).zip'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive Windows 64 bit ARM Build'
+                inputs:
+                  rootFolderOrFile: '$(windows_arm64)'
+                  archiveFile: '$(signed)/azcopy_windows_arm64_$(azcopy_version).zip'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive Windows 32 bit Build'
+                inputs:
+                  rootFolderOrFile: '$(windows_386)'
+                  archiveFile: '$(signed)/azcopy_windows_386_$(azcopy_version).zip'
+
+          - job: Set_3
+            timeoutInMinutes: 120
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+
+            templateContext:
+              inputs:
+                - input: pipelineArtifact
+                  artifactName: azcopy-mac-unsigned
+                  targetPath: $(System.DefaultWorkingDirectory)/mac
+                  displayName: 'Download Mac Unsigned'
+                - input: pipelineArtifact
+                  artifactName: azcopy-mac-m1-unsigned
+                  targetPath: $(System.DefaultWorkingDirectory)/mac-m1
+                  displayName: 'Download Mac M1 Unsigned'
+              outputs:
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)/signed
+                  artifactName: 'azcopy-mac-signed'
+                  displayName: 'Upload Mac Signed'
+                - output: pipelineArtifact
+                  targetPath: $(System.DefaultWorkingDirectory)/binaries
+                  artifactName: 'azcopy-binaries-mac'
+                  displayName: 'Upload Mac Binaries'
+
+            variables:
+              - group: AZCOPY_SECRET_VAULT
+              - name: mac
+                value: '$(System.DefaultWorkingDirectory)/mac'
+              - name: mac-m1
+                value: '$(System.DefaultWorkingDirectory)/mac-m1'
+              - name: signed
+                value: '$(System.DefaultWorkingDirectory)/signed'
+              - name: binaries
+                value: '$(System.DefaultWorkingDirectory)/binaries'
+
+            steps:
+              - checkout: none
+
+              - script: |
+                  sudo apt-get clean
+                  sudo apt-get update
+                  sudo apt-get upgrade -y
+                  sudo apt-get install unzip -y
+                  sudo apt-get install -f --fix-missing
+                  wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+                  sudo dpkg -i packages-microsoft-prod.deb
+                  sudo apt install apt-transport-https -y
+                  sudo apt install dotnet-sdk-6.0 -y
+                displayName: "Update dependencies"
+
+              - template: setup/esrp_sign_notarize_macos.yml@self
+                parameters:
+                  FolderPath: $(mac)
+                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+                  Pattern: '*.zip'
+
+              - template: setup/esrp_sign_notarize_macos.yml@self
+                parameters:
+                  FolderPath: $(mac-m1)
+                  ESRP_AZCOPY_MAC_KEY_CODE: $(ESRP_AZCOPY_MAC_KEY_CODE)
+                  Pattern: '*.zip'
+
+              # Validate signed images have md5sum changed
+              - script: |
+                  mkdir -p $(binaries)
+                  mkdir -p $(signed)
+                  
+                  chmod 755 $(mac)/*
+                  rm -rf $(mac)/*.md
+                  
+                  chmod 755 $(mac-m1)/*
+                  rm -rf $(mac-m1)/*.md
+                displayName: 'Make Artifacts executable'
+
+              - script: |
+                  mv $(mac)/* $(signed)/
+                  mv $(mac-m1)/* $(signed)/
+                displayName: 'Copy required files'
+
+              - script: |
+                  mkdir -p unzipped_amd64
+                  unzip -o $(signed)/azcopy*amd64*.zip -d unzipped_amd64
+                  # Use find to retrieve the folder name
+                  amd64FolderName=$(find unzipped_amd64 -maxdepth 1 -type d -name "azcopy_darwin_amd64*")
+                  echo "AMD64 Folder name: $amd64FolderName"
+                  # Check if there is exactly one matching directory for amd64
+                  if [ $(echo "$amd64FolderName" | wc -l) -eq 1 ]; then
+                      echo "Found matching AMD64 directory: $amd64FolderName"
+                      mv $amd64FolderName/azcopy $(binaries)/azcopy_darwin_amd64
+                  else
+                      echo "Error: Expected exactly one matching AMD64 directory, found $(echo "$amd64FolderName" | wc -l)."
+                      exit 1
+                  fi
+                  
+                  mkdir -p unzipped_arm64
+                  unzip -o $(signed)/azcopy_darwin_arm64*.zip -d unzipped_arm64
+                  arm64FolderName=$(find unzipped_arm64 -maxdepth 1 -type d -name "azcopy_darwin_arm64*")
+                  echo "ARM64 Folder name: $arm64FolderName"
+                  # Check if there is exactly one matching directory for arm64
+                  if [ $(echo "$arm64FolderName" | wc -l) -eq 1 ]; then
+                      echo "Found matching ARM64 directory: $arm64FolderName"
+                      mv $arm64FolderName/azcopy $(binaries)/azcopy_darwin_arm64
+                  else
+                      echo "Error: Expected exactly one matching ARM64 directory, found $(echo "$arm64FolderName" | wc -l)."
+                      exit 1
+                  fi
+
+                  mkdir -p unzipped_m1_arm64
+                  unzip -o $(signed)/azcopy_darwin_m1_arm64*.zip -d unzipped_m1_arm64
+                  m1Arm64FolderName=$(find unzipped_m1_arm64 -maxdepth 1 -type d -name "azcopy_darwin_m1_arm64*")
+                  echo "ARM64 M1 Folder name: $m1Arm64FolderName"
+                  # Check if there is exactly one matching directory for arm64
+                  if [ $(echo "$m1Arm64FolderName" | wc -l) -eq 1 ]; then
+                      echo "Found matching ARM64 M1 directory: $m1Arm64FolderName"
+                      mv $m1Arm64FolderName/azcopy $(binaries)/azcopy_darwin_m1_arm64
+                  else
+                      echo "Error: Expected exactly one matching ARM64 M1 directory, found $(echo "$m1Arm64FolderName" | wc -l)."
+                      exit 1
+                  fi
+                displayName:  'Copy signed mac binaries'
 
       # SignArtifacts end here
 #
