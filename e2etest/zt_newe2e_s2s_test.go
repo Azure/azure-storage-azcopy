@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -625,20 +624,14 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirNonRecursive
 func (s *S2STestSuite) Scenario_SystemContainerCopy(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Scale up from service to object
-	containerName := "$blobchangefeed"
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob()})), ResourceDefinitionContainer{
-		ContainerName: &containerName,
-	}).GetObject(svm, "test", common.EEntityType.File())
+	containerName := "$logs"
+	acct := GetAccount(svm, PrimaryStandardAcct)
+	dstService := acct.GetService(svm, common.ELocation.Blob())
 
-	// The object must exist already if we're syncing.
-	if azCopyVerb == AzCopyVerbSync {
-		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
-
-		if !svm.Dryrun() {
-			// Make sure the LMT is in the past
-			time.Sleep(time.Second * 10)
-		}
-	}
+	svm.InsertVariationSeparator(":")
+	dstObj := CreateResource[ContainerResourceManager](svm, dstService, ResourceDefinitionContainer{
+		ContainerName: pointerTo(containerName),
+	})
 
 	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
