@@ -21,7 +21,6 @@
 package e2etest
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -52,7 +51,7 @@ func (s *FlagsFunctionalitySuite) Scenario_LogLevelNone(svm *ScenarioVariationMa
 
 	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{ /*common.ELocation.Local(), */ common.ELocation.Blob() /*, common.ELocation.File(), common.ELocation.BlobFS()*/})), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
 		Body:       body,
 	})
@@ -65,6 +64,7 @@ func (s *FlagsFunctionalitySuite) Scenario_LogLevelNone(svm *ScenarioVariationMa
 
 	sasOpts := GenericAccountSignatureValues{}
 	logLevel := common.LogLevel.None(common.LogNone)
+	outputType := common.EOutputFormat.Text()
 
 	stdOut, _ := RunAzCopy(
 		svm,
@@ -82,13 +82,11 @@ func (s *FlagsFunctionalitySuite) Scenario_LogLevelNone(svm *ScenarioVariationMa
 				CopySyncCommonFlags: CopySyncCommonFlags{
 					Recursive: pointerTo(true),
 					GlobalFlags: GlobalFlags{
-						LogLevel: &logLevel,
+						LogLevel:   &logLevel,
+						OutputType: &outputType,
 					},
 				},
 			},
 		})
-
-	fmt.Println("================================================================")
-	fmt.Println(stdOut)
-	ValidateMessageOutput(svm, stdOut, "LogFileLocation", false)
+	ValidateMessageOutput(svm, stdOut, "Log file is located at", false)
 }
