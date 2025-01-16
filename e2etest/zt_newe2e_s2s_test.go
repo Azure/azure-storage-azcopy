@@ -622,13 +622,13 @@ func (s *S2STestSuite) Scenario_S2SDirectoryMultipleFilesStripTopDirNonRecursive
 }
 
 func (s *S2STestSuite) Scenario_SystemContainerCopy(svm *ScenarioVariationManager) {
-	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy /*, AzCopyVerbSync*/}) // Calculate verb early to create the destination object early
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
 	dstObj := GetAccount(svm, PrimaryStandardAcct).GetService(svm, common.ELocation.Blob()).GetContainer("$logs")
 
 	body := NewRandomObjectContentContainer(SizeFromString("10K"))
 	// Scale up from service to object
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionObject{
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob()})), ResourceDefinitionObject{
 		ObjectName: pointerTo("test"),
 		Body:       body,
 	})
