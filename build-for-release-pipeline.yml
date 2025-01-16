@@ -837,7 +837,7 @@ extends:
                   destinationFolder: $(extracted)
 
               - script: |
-                  $(extracted)\azcopy*amd64*\azcopy --version
+                  $(extracted)\azcopy*amd64*\azcopy.exe --version
                 displayName: 'Verify exe in zip'
 
           - job: Windows_Arm64
@@ -874,7 +874,7 @@ extends:
                   destinationFolder: $(extracted)
 
               - script: |
-                  $(extracted)\azcopy*arm64*\azcopy --version
+                  $(extracted)\azcopy*arm64*\azcopy.exe --version
                 displayName: 'Verify exe in zip'
 
       # TestArtifacts ends here
