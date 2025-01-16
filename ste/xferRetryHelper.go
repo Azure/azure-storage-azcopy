@@ -30,6 +30,8 @@ import (
 
 var RetryStatusCodes RetryCodes
 
+var platformRetryPolicy func(response *http.Response, err error) bool
+
 func getShouldRetry() func(*http.Response, error) bool {
 	if len(RetryStatusCodes) == 0 {
 		return nil
@@ -49,13 +51,12 @@ func getShouldRetry() func(*http.Response, error) bool {
 			}
 		}
 
-		// This is probably something in between us and azure storage dropping our traffic.
-		// Should be retryable, since it's possibly a one-off network error.
-		if strings.Contains(err.Error(), "wsarecv: An existing connection was forcibly closed by the remote host.") {
-			return true
+		// fall back to our platform retry policy
+		if platformRetryPolicy != nil {
+			return platformRetryPolicy(resp, err)
+		} else {
+			return false // If we have none, don't retry.
 		}
-
-		return false
 	}
 }
 
