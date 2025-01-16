@@ -547,26 +547,30 @@ func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioV
 	}, false)
 }
 
-// Test empty files are not uploaded when File share quota is hit
+// Test:
+// - correct number of non-empty files are uploaded when file share quota is hit
+// - transfers complete successfully with resume command after increasing quota
 func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationManager) {
-	quotaMB := int32(10) // 10 MB quota
-	shareName := "testsharewithquota"
+	quotaGB := int32(1) // 1 GB quota
 	shareResource := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{
-		ContainerName: &shareName,
+		//ContainerName: &shareName,
 		Properties: ContainerProperties{
 			FileContainerProperties: FileContainerProperties{
-				Quota: &quotaMB},
+				Quota: &quotaGB},
 		},
 	})
+	svm.Assert("Quota is 1GB", Equal{Deep: true},
+		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota), int32(1))
 
-	fileSizeMB := int64(6)
-	fileNames := []string{"file_1.txt", "file_2.txt", "file_3.txt"}
+	fileSizeGB := int64(1) // Fits one file
+	fileNames := []string{"file_1.txt", "file_2.txt"}
 
 	// Create src obj mapping
 	srcObjs := make(ObjectResourceMappingFlat)
-	// Creat source files
+
+	// Create source files
 	for _, fileName := range fileNames {
-		body := NewRandomObjectContentContainer(fileSizeMB * common.MegaByte)
+		body := NewRandomObjectContentContainer(fileSizeGB * common.GigaByte)
 		obj := ResourceDefinitionObject{
 			ObjectName: &fileName,
 			Body:       body,
@@ -574,25 +578,66 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		srcObjs[fileName] = obj
 	}
 
-	for _, fileName := range fileNames {
-		srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), srcObjs[fileName])
-		dstObj := shareResource.GetObject(svm, fileName, common.EEntityType.File())
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()),
+		ResourceDefinitionContainer{Objects: srcObjs})
 
-		// Upload all files
-		RunAzCopy(svm, AzCopyCommand{
-			Verb:    AzCopyVerbCopy,
-			Targets: []ResourceManager{srcObj, dstObj},
-			Flags: CopyFlags{
-				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive:   pointerTo(true),
-					BlockSizeMB: pointerTo(4.0),
-				},
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{srcContainer, shareResource},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
 			},
-		})
-	}
+		},
+		ShouldFail: true,
+	})
 
-	// Validate uploaded files are not empty
+	// Error catchers for full file share
+	ValidateContainsError(svm, stdOut, []string{"Increase the file share quota and call Resume command."})
+	ValidateMessageOutput(svm, stdOut, "Increase the file share quota and call Resume command.")
+
+	// Validate single uploaded file is not empty
 	ValidateResource[ContainerResourceManager](svm, shareResource, ResourceDefinitionContainer{
 		Objects: srcObjs,
 	}, true)
+
+	fileMap := shareResource.ListObjects(svm, "", true)
+	svm.Assert("Only one file should upload within the quota", Equal{}, len(fileMap)-1, 1)
+
+	// Increase quota to fit all files
+	newQuota := int32(2)
+	if resourceManager, ok := shareResource.(*FileShareResourceManager); ok {
+		resourceManager.SetProperties(svm, &ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				Quota: &newQuota}})
+	}
+
+	// Validate correctly SetProperties updates quota. Prevent nil deref in dry runs
+	svm.Assert("Quota should be updated", Equal{},
+		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota),
+		newQuota)
+
+	var jobId string
+	if parsedOut, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout); ok {
+		if parsedOut.InitMsg.JobID != "" {
+			jobId = parsedOut.InitMsg.JobID
+		}
+	} else {
+		// Will enter during dry runs
+		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
+	}
+
+	RunAzCopy(svm, AzCopyCommand{ // Resume job with same source and dest targets
+		Verb:           AzCopyVerbJobs,
+		PositionalArgs: []string{"resume", jobId},
+		ShouldFail:     false,
+	})
+
+	// Validate all files are uploaded
+	fileMapResume := shareResource.ListObjects(svm, "", true)
+	svm.Assert("All files should be successfully uploaded after quota increase",
+		Equal{}, len(fileMapResume), 2)
+
+	// Validate uploaded files are not empty
+	ValidateResource[ContainerResourceManager](svm, shareResource, ResourceDefinitionContainer{}, true)
 }

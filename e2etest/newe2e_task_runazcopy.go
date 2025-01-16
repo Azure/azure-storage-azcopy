@@ -53,13 +53,14 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy   AzCopyVerb = "copy"
-	AzCopyVerbSync   AzCopyVerb = "sync"
-	AzCopyVerbRemove AzCopyVerb = "remove"
-	AzCopyVerbList   AzCopyVerb = "list"
-	AzCopyVerbLogin  AzCopyVerb = "login"
-	AzCopyVerbLogout AzCopyVerb = "logout"
-	AzCopyVerbJobs   AzCopyVerb = "jobs"
+	AzCopyVerbCopy       AzCopyVerb = "copy"
+	AzCopyVerbSync       AzCopyVerb = "sync"
+	AzCopyVerbRemove     AzCopyVerb = "remove"
+	AzCopyVerbList       AzCopyVerb = "list"
+	AzCopyVerbLogin      AzCopyVerb = "login"
+	AzCopyVerbLogout     AzCopyVerb = "logout"
+	AzCopyVerbJobs       AzCopyVerb = "jobs"
+	AzCopyVerbJobsResume AzCopyVerb = "resume"
 )
 
 type AzCopyTarget struct {
@@ -321,6 +322,12 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyParsedListStdout{}
 		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "list":
 			out = &AzCopyParsedJobsListStdout{}
+		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "resume":
+			out = &AzCopyParsedCopySyncRemoveStdout{ // Resume command treated the same as copy/sync/remove
+				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
+				LogFolder:     *commandSpec.Environment.LogLocation,
+			}
+
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}
 		}
@@ -346,10 +353,18 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	err = command.Wait()
+
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
+
+	if err != nil {
+		a.Log("ShouldFail: Command execution failed with error: %v", err)
+	} else {
+		a.Log("ShouldFail: Command executed successfully")
+	}
+	a.Log("ShouldFail: Expected exit code: %d, Actual exit code: %d", 0, command.ProcessState.ExitCode())
 
 	// validate log file retention for jobs clean command before the job logs are cleaned up and uploaded
 	if !a.Failed() && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "clean" {

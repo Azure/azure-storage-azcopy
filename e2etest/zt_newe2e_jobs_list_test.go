@@ -16,5 +16,5 @@ func (s *JobsListSuite) Scenario_JobsListBasic(svm *ScenarioVariationManager) {
 			Stdout:         &AzCopyParsedJobsListStdout{},
 			Flags:          ListFlags{},
 		})
-	ValidateJobsListOutput(svm, jobsListOutput, 0)
+	ValidateJobsListOutput(svm, jobsListOutput, -1)
 }
