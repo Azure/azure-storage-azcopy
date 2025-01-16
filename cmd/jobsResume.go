@@ -59,7 +59,12 @@ type resumeJobController struct {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
+	// Output the log location if log-level is set to other then NONE
+	var logPathFolder string
+	if azcopyLogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+	}
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -348,6 +353,11 @@ func (rca resumeCmdArgs) process() error {
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
 		return fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+	}
+
+	// if no logging, set this empty so that we don't display the log location
+	if azcopyLogVerbosity == common.LogNone {
+		azcopyLogPathFolder = ""
 	}
 
 	includeTransfer := make(map[string]int)
