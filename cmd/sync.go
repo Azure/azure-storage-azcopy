@@ -752,7 +752,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	}
 
 	// Check if destination is system container
-	if cca.fromTo.IsUpload() {
+	if cca.fromTo.IsS2S() || cca.fromTo.IsUpload() {
 		dstContainerName, err := GetContainerName(cca.destination.Value, cca.fromTo.To())
 		if err != nil {
 			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
