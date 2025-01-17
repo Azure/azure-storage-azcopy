@@ -321,6 +321,12 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyParsedListStdout{}
 		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "list":
 			out = &AzCopyParsedJobsListStdout{}
+		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "resume":
+			out = &AzCopyParsedCopySyncRemoveStdout{ // Resume command treated the same as copy/sync/remove
+				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
+				LogFolder:     *commandSpec.Environment.LogLocation,
+			}
+
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}
 		}
@@ -346,6 +352,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	err = command.Wait()
+
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),

@@ -208,6 +208,19 @@ func (s *FileShareResourceManager) GetProperties(a Asserter) ContainerProperties
 	}
 }
 
+// SetProperties Sets the quota of a file share
+func (s *FileShareResourceManager) SetProperties(a Asserter, properties *ContainerProperties) {
+	a.HelperMarker().Helper()
+	props := DerefOrZero(properties)
+
+	_, err := s.internalClient.SetProperties(ctx, &share.SetPropertiesOptions{
+		Quota: props.FileContainerProperties.Quota})
+
+	a.NoError("set share properties", err)
+
+	return
+}
+
 func (s *FileShareResourceManager) Create(a Asserter, props ContainerProperties) {
 	a.HelperMarker().Helper()
 	s.CreateWithOptions(a, &FileShareCreateOptions{
