@@ -179,7 +179,13 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var srcReauthTok *common.ScopedAuthenticator
+	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
 
 	// Create Source Client.
 	var azureFileSpecificOptions any
@@ -209,12 +215,18 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	}
 
-	var srcTokenCred *common.ScopedCredential
+	var dstReauthTok *common.ScopedAuthenticator
+	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	var srcTokenCred *common.ScopedToken
 	if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
 
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred)
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
 		cca.destination,
