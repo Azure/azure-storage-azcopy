@@ -32,12 +32,14 @@ func NewDestReauthPolicy(cred *common.ScopedAuthenticator) policy.Policy {
 	return &destReauthPolicy{cred}
 }
 
-const (
-	destReauthDebugExecuted                       = "destReauthExec"
-	destReauthDebugNoPrompt                       = "destReauthNoPrompt"
-	destReauthDebugCause                          = "destReauthCause"
-	destReauthDebugCauseAuthenticationRequired    = "AuthenticationRequiredError"
-	destReauthDebugCauseInvalidAuthenticationInfo = "InvalidAuthenticationInfoError"
+type destReauthDebug string
+
+var (
+	destReauthDebugExecuted                       destReauthDebug = "executed"
+	destReauthDebugNoPrompt                       destReauthDebug = "destReauthNoPrompt"
+	destReauthDebugCause                          destReauthDebug = "destReauthCause"
+	destReauthDebugCauseAuthenticationRequired    destReauthDebug = "AuthenticationRequiredError"
+	destReauthDebugCauseInvalidAuthenticationInfo destReauthDebug = "InvalidAuthenticationInfoError"
 )
 
 func (d *destReauthPolicy) Do(req *policy.Request) (*http.Response, error) {
