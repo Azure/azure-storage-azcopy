@@ -218,7 +218,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	var dstReauthTok *common.ScopedAuthenticator
 	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-		srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
 	var srcTokenCred *common.ScopedToken
