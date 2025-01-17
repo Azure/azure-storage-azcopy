@@ -69,6 +69,7 @@ func RunAzCopyLoginLogout(a Asserter, verb AzCopyVerb) AzCopyStdout {
 	}
 
 	err = command.Wait()
+
 	a.Assert("wait for finalize", IsNil{}, err)
 	a.Assert("expected exit code", Equal{}, 0, command.ProcessState.ExitCode())
 

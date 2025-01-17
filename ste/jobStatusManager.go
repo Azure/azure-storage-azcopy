@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -44,6 +45,7 @@ type jobStatusManager struct {
 	xferDone        chan xferDoneMsg
 	xferDoneDrained chan struct{} // To signal that all xferDone have been processed
 	statusMgrDone   chan struct{} // To signal statusManager has closed
+	once            sync.Once     // Ensure xferDoneDrained is closed once
 }
 
 func (jm *jobMgr) waitToDrainXferDone() {
@@ -134,10 +136,9 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 		case msg, ok := <-jstm.xferDone:
 			if !ok { // Channel is closed, all transfers have been attended.
 				jstm.xferDone = nil
-
 				// close drainXferDone so that other components can know no further updates happen
 				allXferDoneHandled = true
-				close(jstm.xferDoneDrained)
+				jstm.once.Do(func() { close(jstm.xferDoneDrained) })
 				continue
 			}
 
