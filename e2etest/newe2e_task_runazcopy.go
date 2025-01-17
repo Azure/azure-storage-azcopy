@@ -358,13 +358,6 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
 		0, command.ProcessState.ExitCode())
 
-	if err != nil {
-		a.Log("ShouldFail: Command execution failed with error: %v", err)
-	} else {
-		a.Log("ShouldFail: Command executed successfully")
-	}
-	a.Log("ShouldFail: Expected exit code: %d, Actual exit code: %d", 0, command.ProcessState.ExitCode())
-
 	// validate log file retention for jobs clean command before the job logs are cleaned up and uploaded
 	if !a.Failed() && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "clean" {
 		ValidateLogFileRetention(a, *commandSpec.Environment.LogLocation, 1)
