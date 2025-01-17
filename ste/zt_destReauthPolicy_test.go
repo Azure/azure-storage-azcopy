@@ -80,15 +80,15 @@ func (r *ReauthTestCred) Authenticate(ctx context.Context, opts *policy.TokenReq
 
 // This is not an end-to-end test. But it is an instantaneous validation of the logic.
 func TestDestReauthPolicy(t *testing.T) {
-	rootctx := context.WithValue(context.Background(), "noPrompt", true)
+	rootctx := context.WithValue(context.Background(), destReauthDebugNoPrompt, true)
 	ctx, cancel := context.WithCancel(rootctx)
 
 	reauthed := false
 	cred := &ReauthTestCred{
 		ReauthCallback: func(ctx context.Context) {
 			reauthed = true
-			assert.Equal(t, ctx.Value("destAuthDebug"), true, "Expected reauth to occur via the policy")
-			assert.Equal(t, ctx.Value("destAuthDebug"), true, "Expected reauth to occur via the AuthenticationRequired mechanism")
+			assert.Equal(t, ctx.Value(destReauthDebugExecuted), true, "Expected reauth to occur via the policy")
+			assert.Equal(t, ctx.Value(destReauthDebugCause), destReauthDebugCauseAuthenticationRequired, "Expected reauth to occur via the AuthenticationRequired mechanism")
 			cancel()
 		},
 	}
@@ -113,23 +113,25 @@ func TestDestReauthPolicy(t *testing.T) {
 
 	// Reset the context
 	ctx, cancel = context.WithCancel(rootctx)
-	ctx = context.WithValue(ctx, "noPrompt", true)
+	ctx = context.WithValue(ctx, destReauthDebugNoPrompt, true)
 	reauthed = false
 
-	// Set the cred & request to require a reauth on round trip
+	// =========== InvalidAuthenticationInfo ============
+
+	// Set the cred & request to require a reauth on round trip, rather than up front, triggering the alternative activation method
 	cred.ImmediateReauth = false
 	transport.RequireAuth = true
 
-	// Turning RequireAuth is probably not necessary since the context is cancelled but...
+	// reset callback
 	cred.ReauthCallback = func(ctx context.Context) {
 		reauthed = true
-		assert.Equal(t, ctx.Value("destAuthDebug"), true, "Expected reauth to occur via the policy")
+		assert.Equal(t, ctx.Value(destReauthDebugExecuted), true, "Expected reauth to occur via the policy")
+		assert.Equal(t, ctx.Value(destReauthDebugCause), destReauthDebugCauseInvalidAuthenticationInfo, "Expected reauth to occur via the InvalidAuthenticationInfo mechanism")
 		cancel()
 		transport.RequireAuth = false
 	}
 
-	// Initially, fire off a request that will get slapped with an AuthenticationRequired.
-	cred.ImmediateReauth = true
+	// Initially, fire off a request that will get slapped with an InvalidAuthenticationMethod
 	_, err = c.GetProperties(ctx, nil)
 	assert.Equal(t, reauthed, true, "Expected reauthentication attempt in request")
 }

@@ -32,10 +32,18 @@ func NewDestReauthPolicy(cred *common.ScopedAuthenticator) policy.Policy {
 	return &destReauthPolicy{cred}
 }
 
+const (
+	destReauthDebugExecuted                       = "destReauthExec"
+	destReauthDebugNoPrompt                       = "destReauthNoPrompt"
+	destReauthDebugCause                          = "destReauthCause"
+	destReauthDebugCauseAuthenticationRequired    = "AuthenticationRequiredError"
+	destReauthDebugCauseInvalidAuthenticationInfo = "InvalidAuthenticationInfoError"
+)
+
 func (d *destReauthPolicy) Do(req *policy.Request) (*http.Response, error) {
 retry:
 	ctx := req.Raw().Context()
-	debugCtx := context.WithValue(ctx, "destAuthDebug", true)
+	debugCtx := context.WithValue(ctx, destReauthDebugExecuted, true)
 
 	clone := req.Clone(ctx)
 	resp, err := clone.Next() // Initially attempt the request.
@@ -49,14 +57,14 @@ retry:
 		switch { // Is it an error we can resolve by re-authing?
 		case errors.As(err, &authReq):
 			reauth = true
-			debugCtx = context.WithValue(debugCtx, "reauthSrc", "AuthenticationRequiredError")
+			debugCtx = context.WithValue(debugCtx, destReauthDebugCause, destReauthDebugCauseAuthenticationRequired)
 		case resp.StatusCode == http.StatusUnauthorized:
 			errors.As(runtime.NewResponseError(resp), &respErr)
 			reauth = err == nil &&
 				bloberror.HasCode(respErr, bloberror.InvalidAuthenticationInfo) &&
 				len(respErr.RawResponse.Header.Values("WWW-Authenticate")) != 0
 			if reauth {
-				debugCtx = context.WithValue(debugCtx, "reauthSrc", "InvalidAuthenticationInfo")
+				debugCtx = context.WithValue(debugCtx, destReauthDebugCause, destReauthDebugCauseInvalidAuthenticationInfo)
 			}
 		}
 
@@ -65,7 +73,7 @@ retry:
 
 			if m.TryLock() { // Fetch the lock and try until we get auth.
 				for {
-					if ctx.Value("noPrompt") == nil {
+					if ctx.Value(destReauthDebugNoPrompt) == nil {
 						_ = common.GetLifecycleMgr().Prompt("Authentication is required to continue the job. Reauthorize and continue?", common.PromptDetails{
 							PromptType: common.EPromptType.Reauth(),
 							ResponseOptions: []common.ResponseOption{
