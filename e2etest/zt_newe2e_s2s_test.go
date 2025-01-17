@@ -654,5 +654,5 @@ func (s *S2STestSuite) Scenario_SystemContainerCopy(svm *ScenarioVariationManage
 			},
 			ShouldFail: true,
 		})
-	ValidateMessageOutput(svm, stdOut, "cannot copy to system container")
+	ValidateMessageOutput(svm, stdOut, "cannot copy to system container", true)
 }
