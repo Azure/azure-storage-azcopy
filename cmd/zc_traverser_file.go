@@ -81,7 +81,16 @@ func createFileClientFromServiceClient(fileURLParts file.URLParts, client *servi
 func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 	// Azure file share case
 	if gCopyUtil.urlIsContainerOrVirtualDirectory(t.rawURL) {
-		return true, nil
+		// Let's at least test if it exists, that way we toss an error.
+		fileURLParts, err := file.ParseURL(t.rawURL)
+		if err != nil {
+			return true, err
+		}
+		directoryClient := t.serviceClient.NewShareClient(fileURLParts.ShareName)
+		p := directoryClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
+		_, err = p.NextPage(t.ctx)
+
+		return true, err
 	}
 
 	// Need make request to ensure if it's directory
@@ -95,7 +104,7 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 		if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf("Failed to check if the destination is a folder or a file (Azure Files). Assuming the destination is a file: %s", err))
 		}
-		return false, nil
+		return false, err
 	}
 
 	return true, nil
@@ -284,7 +293,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		for pager.More() {
 			lResp, err := pager.NextPage(t.ctx)
 			if err != nil {
-				return fmt.Errorf("cannot list files due to reason %s", err)
+				return fmt.Errorf("cannot list files due to reason %w", err)
 			}
 			for _, fileInfo := range lResp.Segment.Files {
 				if invalidBlobOrWindowsName(*fileInfo.Name) {

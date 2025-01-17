@@ -35,7 +35,7 @@ func (t *gcpTraverser) IsDirectory(isSource bool) (bool, error) {
 	//Directories do not have attributes and hence throw error
 	_, err := obj.Attrs(t.ctx)
 	if err == gcpUtils.ErrObjectNotExist {
-		return true, nil
+		return true, err
 	}
 	return false, nil
 }
