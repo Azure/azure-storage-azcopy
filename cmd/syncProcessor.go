@@ -44,7 +44,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs,
 
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
+	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
 		reportFirstPart, reportFinalPart, cca.preserveAccessTier, cca.dryrunMode)
 }
 
@@ -175,8 +175,8 @@ func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination co
 const LocalFileObjectType = "local file"
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption) *interactiveDeleteProcessor {
-	localDeleter := localFileDeleter{rootPath: cca.destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, azcopyScanningLogger)}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.destination, cca.incrementDeletionCount, cca.dryrunMode)
+	localDeleter := localFileDeleter{rootPath: cca.Destination.ValueLocal(), fpo: fpo, folderManager: common.NewFolderDeletionManager(context.Background(), fpo, azcopyScanningLogger)}
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, LocalFileObjectType, cca.Destination, cca.incrementDeletionCount, cca.dryrunMode)
 }
 
 type localFileDeleter struct {
@@ -221,7 +221,7 @@ func (l *localFileDeleter) deleteFile(object StoredObject) error {
 }
 
 func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOption, dstClient *common.ServiceClient) (*interactiveDeleteProcessor, error) {
-	rawURL, err := cca.destination.FullURL()
+	rawURL, err := cca.Destination.FullURL()
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
+	return newInteractiveDeleteProcessor(deleter.delete, cca.deleteDestination, cca.fromTo.To().String(), cca.Destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 
 type remoteResourceDeleter struct {

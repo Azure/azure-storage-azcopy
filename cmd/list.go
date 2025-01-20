@@ -26,12 +26,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/lease"
 
 	"github.com/spf13/cobra"
 
@@ -114,7 +115,7 @@ func (raw rawListCmdArgs) parseProperties() []validProperty {
 
 func (raw rawListCmdArgs) cook() (cookedListCmdArgs, error) {
 	// set up the front end scanning logger
-	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
+	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, AzcopyLogVerbosity, AzcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
@@ -190,7 +191,7 @@ func init() {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 				return
 			}
-			err = cooked.handleListContainerCommand()
+			err = cooked.HandleListContainerCommand()
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -214,7 +215,7 @@ func init() {
 }
 
 // handleListContainerCommand handles the list container command
-func (cooked cookedListCmdArgs) handleListContainerCommand() (err error) {
+func (cooked cookedListCmdArgs) HandleListContainerCommand() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	var credentialInfo common.CredentialInfo

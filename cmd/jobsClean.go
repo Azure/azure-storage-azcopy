@@ -125,7 +125,7 @@ func blindDeleteAllJobFiles() (int, error) {
 		return numPlanFilesRemoved, err
 	}
 	// get rid of the logs
-	numLogFilesRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
+	numLogFilesRemoved, err := removeFilesWithPredicate(AzcopyLogPathFolder, func(s string) bool {
 		// Do not remove the current job's log file this will cause the cleanup job to fail.
 		if strings.Contains(s, azcopyCurrentJobID.String()) {
 			return false

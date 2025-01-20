@@ -730,7 +730,7 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, i
 	}
 }
 
-func (e *syncEnumerator) enumerate() (err error) {
+func (e *syncEnumerator) Enumerate() (err error) {
 	// enumerate the primary resource and build lookup map
 	err = e.primaryTraverser.Traverse(noPreProccessor, e.objectIndexer.store, e.filters)
 	if err != nil {

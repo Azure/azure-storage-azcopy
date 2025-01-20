@@ -23,6 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -39,14 +48,6 @@ import (
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"net/url"
-	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"time"
 
 	gcpUtils "cloud.google.com/go/storage"
 	"github.com/minio/minio-go"
@@ -851,9 +852,9 @@ func (scenarioHelper) containerExists(containerClient *container.Client) bool {
 	return false
 }
 
-func runSyncAndVerify(a *assert.Assertions, raw rawSyncCmdArgs, verifier func(err error)) {
+func runSyncAndVerify(a *assert.Assertions, raw RawSyncCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
-	cooked, err := raw.cook()
+	cooked, err := raw.Cook()
 	a.Nil(err)
 
 	// the enumeration ends when process() returns
@@ -959,15 +960,15 @@ func validateRemoveTransfersAreScheduled(a *assert.Assertions, isSrcEncoded bool
 	// }
 }
 
-func getDefaultSyncRawInput(sra, dst string) rawSyncCmdArgs {
+func getDefaultSyncRawInput(sra, dst string) RawSyncCmdArgs {
 	deleteDestination := common.EDeleteDestination.True()
 
-	return rawSyncCmdArgs{
-		src:                  sra,
-		dst:                  dst,
-		recursive:            true,
-		deleteDestination:    deleteDestination.String(),
-		md5ValidationOption:  common.DefaultHashValidationOption.String(),
+	return RawSyncCmdArgs{
+		Src:                  sra,
+		Dst:                  dst,
+		Recursive:            true,
+		DeleteDestination:    deleteDestination.String(),
+		Md5ValidationOption:  common.DefaultHashValidationOption.String(),
 		compareHash:          common.ESyncHashType.None().String(),
 		localHashStorageMode: common.EHashStorageMode.Default().String(),
 	}

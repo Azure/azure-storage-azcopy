@@ -21,12 +21,13 @@
 package cmd
 
 import (
-	"github.com/stretchr/testify/assert"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
@@ -55,7 +56,7 @@ func TestSyncUploadWithExcludeAttrFlag(t *testing.T) {
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
-	raw.excludeFileAttributes = excludeAttrsStr
+	raw.ExcludeFileAttributes = excludeAttrsStr
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -89,7 +90,7 @@ func TestSyncUploadWithIncludeAttrFlag(t *testing.T) {
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
-	raw.includeFileAttributes = includeAttrsStr
+	raw.IncludeFileAttributes = includeAttrsStr
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -126,8 +127,8 @@ func TestSyncUploadWithIncludeAndIncludeAttrFlags(t *testing.T) {
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
-	raw.includeFileAttributes = includeAttrsStr
-	raw.include = includeString
+	raw.IncludeFileAttributes = includeAttrsStr
+	raw.Include = includeString
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -164,8 +165,8 @@ func TestSyncUploadWithExcludeAndExcludeAttrFlags(t *testing.T) {
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
-	raw.excludeFileAttributes = excludeAttrsStr
-	raw.exclude = excludeString
+	raw.ExcludeFileAttributes = excludeAttrsStr
+	raw.Exclude = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -198,8 +199,8 @@ func TestSyncDownloadWithDeleteDestinationOnCaseInsensitiveFS(t *testing.T) {
 
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.recursive = true
-	raw.deleteDestination = "true"
+	raw.Recursive = true
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
 		// It should not have deleted them

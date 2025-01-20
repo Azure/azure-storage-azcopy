@@ -41,7 +41,7 @@ import (
 )
 
 var AzcopyAppPathFolder string
-var azcopyLogPathFolder string
+var AzcopyLogPathFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var outputVerbosityRaw string
@@ -49,7 +49,7 @@ var logVerbosityRaw string
 var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var azcopyOutputVerbosity common.OutputVerbosity
-var azcopyLogVerbosity common.LogLevel
+var AzcopyLogVerbosity common.LogLevel
 var loggerInfo jobLoggerInfo
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
@@ -116,7 +116,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		err = azcopyLogVerbosity.Parse(logVerbosityRaw)
+		err = AzcopyLogVerbosity.Parse(logVerbosityRaw)
 		if err != nil {
 			return err
 		}
@@ -149,7 +149,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, AzcopyLogVerbosity, loggerInfo.logFileFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
 
 		glcm.SetForceLogging()
@@ -176,7 +176,7 @@ var rootCmd = &cobra.Command{
 
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-		err = jobsAdmin.MainSTE(concurrencySettings, float64(cmdLineCapMegaBitsPerSecond), common.AzcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
+		err = jobsAdmin.MainSTE(concurrencySettings, float64(cmdLineCapMegaBitsPerSecond), common.AzcopyJobPlanFolder, AzcopyLogPathFolder, providePerformanceAdvice)
 		if err != nil {
 			return err
 		}
@@ -224,7 +224,7 @@ var glcmSwapOnce = &sync.Once{}
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 
 func Execute(logPathFolder, jobPlanFolder string, maxFileAndSocketHandles int, jobID common.JobID) {
-	azcopyLogPathFolder = logPathFolder
+	AzcopyLogPathFolder = logPathFolder
 	common.AzcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
 	azcopyCurrentJobID = jobID
@@ -304,7 +304,7 @@ func beginDetectNewVersion() chan struct{} {
 		}
 
 		// step 1: fetch & validate cached version and if it is updated, return without making API calls
-		filePath := filepath.Join(azcopyLogPathFolder, "latest_version.txt")
+		filePath := filepath.Join(AzcopyLogPathFolder, "latest_version.txt")
 		cachedVersion, err := ValidateCachedVersion(filePath) // same as the remote version
 		if err == nil {
 			PrintOlderVersion(*cachedVersion, *localVersion)

@@ -35,9 +35,9 @@ import (
 
 // -------------------------------------- Implemented Enumerators -------------------------------------- \\
 
-func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
+func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context) (enumerator *syncEnumerator, err error) {
 
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, true, cca.cpkOptions)
+	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.Source, true, cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -62,18 +62,18 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := cca.fromTo.To()
-	sourceTraverser, err := InitResourceTraverser(cca.source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
+	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false)
 
 	if err != nil {
 		return nil, err
 	}
 
 	// Because we can't trust cca.credinfo, given that it's for the overall job, not the individual traversers, we get cred info again here.
-	dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, false, cca.cpkOptions)
+	dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.Destination, false, cca.cpkOptions)
 
 	if err != nil {
 		return nil, err
@@ -82,11 +82,11 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
-	destinationTraverser, err := InitResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
+	destinationTraverser, err := InitResourceTraverser(cca.Destination, cca.fromTo.To(), &ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, nil, false)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -106,14 +106,14 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	// Same rule applies to excludeFilters and excludeAttrFilters
 	filters := buildIncludeFilters(cca.includePatterns)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, cca.source.ValueLocal(), true)
+		includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, cca.Source.ValueLocal(), true)
 		filters = append(filters, includeAttrFilters...)
 	}
 
 	filters = append(filters, buildExcludeFilters(cca.excludePatterns, false)...)
 	filters = append(filters, buildExcludeFilters(cca.excludePaths, true)...)
 	if cca.fromTo.From() == common.ELocation.Local() {
-		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.source.ValueLocal(), false)
+		excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, cca.Source.ValueLocal(), false)
 		filters = append(filters, excludeAttrFilters...)
 	}
 
@@ -129,7 +129,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs) // sync always acts like stripTopDir=true
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.includeDirectoryStubs) // sync always acts like stripTopDir=true
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -147,8 +147,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		FromTo:              cca.fromTo,
 		Fpo:                 fpo,
 		SymlinkHandlingType: cca.symlinkHandling,
-		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
-		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
+		SourceRoot:          cca.Source.CloneWithConsolidatedSeparators(),
+		DestinationRoot:     cca.Destination.CloneWithConsolidatedSeparators(),
 		CredentialInfo:      cca.credentialInfo,
 
 		// flags
@@ -162,7 +162,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
-		LogLevel:                       azcopyLogVerbosity,
+		LogLevel:                       AzcopyLogVerbosity,
 		PreserveSMBPermissions:         cca.preservePermissions,
 		PreserveSMBInfo:                cca.preserveSMBInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
@@ -191,7 +191,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.From(),
-		cca.source,
+		cca.Source,
 		srcCredInfo.CredentialType,
 		srcCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -217,7 +217,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	options = createClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred)
 	copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.fromTo.To(),
-		cca.destination,
+		cca.Destination,
 		dstCredInfo.CredentialType,
 		dstCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -260,7 +260,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				return err
 			}
 
-			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
+			quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
 			cca.setScanningComplete()
 			return nil
 		}
@@ -301,7 +301,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 				return err
 			}
 
-			quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
+			quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
 			cca.setScanningComplete()
 			return nil
 		}

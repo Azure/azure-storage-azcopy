@@ -23,15 +23,16 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -128,7 +129,7 @@ func TestSyncDownloadWithEmptyDestination(t *testing.T) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
@@ -260,7 +261,7 @@ func TestSyncDownloadWithIncludePatternFlag(t *testing.T) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.include = includeString
+	raw.Include = includeString
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -297,7 +298,7 @@ func TestSyncDownloadWithExcludePatternFlag(t *testing.T) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.exclude = excludeString
+	raw.Exclude = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -340,8 +341,8 @@ func TestSyncDownloadWithIncludeAndExcludePatternFlag(t *testing.T) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.include = includeString
-	raw.exclude = excludeString
+	raw.Include = includeString
+	raw.Exclude = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -379,7 +380,7 @@ func TestSyncDownloadWithExcludePathFlag(t *testing.T) {
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
-	raw.excludePath = excludeString
+	raw.ExcludePath = excludeString
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -625,7 +626,7 @@ func TestSyncDownloadWithADLSDirectory(t *testing.T) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {

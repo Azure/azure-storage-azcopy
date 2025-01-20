@@ -87,7 +87,7 @@ func handleRemoveSingleJob(jobID common.JobID) error {
 	// get rid of the logs
 	// even though we only have 1 file right now, still scan the directory since we may change the
 	// way we name the logs in the future (with suffix or whatnot)
-	numLogFileRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
+	numLogFileRemoved, err := removeFilesWithPredicate(AzcopyLogPathFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.HasSuffix(s, ".log") {
 			return true
 		}

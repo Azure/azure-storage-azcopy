@@ -52,10 +52,10 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		TrailingDot: cca.trailingDot,
 	}
 	jobPartOrder.CpkOptions = cca.CpkOptions
-	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
-	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
+	jobPartOrder.PreserveSMBPermissions = cca.PreservePermissions
+	jobPartOrder.PreserveSMBInfo = cca.PreserveSMBInfo
 	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
-	jobPartOrder.PreservePOSIXProperties = cca.preservePOSIXProperties || (cca.ForceWrite == common.EOverwriteOption.PosixProperties())
+	jobPartOrder.PreservePOSIXProperties = cca.PreservePOSIXProperties || (cca.ForceWrite == common.EOverwriteOption.PosixProperties())
 
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
@@ -72,7 +72,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, &dest, cca.excludeContainer, false)
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.PreservePermissions, AzcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, &dest, cca.excludeContainer, false)
 
 	if err != nil {
 		return nil, err
@@ -114,16 +114,16 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
 
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && !cca.asSubdir {
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Service() && !cca.AsSubdir {
 		return nil, errors.New("cannot use --as-subdir=false with a service level destination")
 	}
 
 	// When copying a container directly to a container, strip the top directory, unless we're attempting to persist permissions.
 	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() {
-		if cca.preservePermissions.IsTruthy() {
+		if cca.PreservePermissions.IsTruthy() {
 			// if we're preserving permissions, we need to keep the top directory, but with container->container, we don't need to add the container name to the path.
 			// asSubdir is a better option than stripTopDir as stripTopDir disincludes the root.
-			cca.asSubdir = false
+			cca.AsSubdir = false
 		} else {
 			cca.StripTopDir = true
 		}
@@ -230,7 +230,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// decide our folder transfer strategy
 	var message string
-	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), cca.preservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
+	jobPartOrder.Fpo, message = NewFolderPropertyOption(cca.FromTo, cca.Recursive, cca.StripTopDir, filters, cca.PreserveSMBInfo, cca.PreservePermissions.IsTruthy(), cca.PreservePOSIXProperties, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.IncludeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(message)
 	}
@@ -269,8 +269,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			}
 		}
 
-		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.asSubdir, object)
-		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.asSubdir, object)
+		srcRelPath := cca.MakeEscapedRelativePath(true, isDestDir, cca.AsSubdir, object)
+		dstRelPath := cca.MakeEscapedRelativePath(false, isDestDir, cca.AsSubdir, object)
 
 		transfer, shouldSendToSte := object.ToNewCopyTransfer(cca.autoDecompress && cca.FromTo.IsDownload(), srcRelPath, dstRelPath, cca.s2sPreserveAccessTier, jobPartOrder.Fpo, cca.SymlinkHandling)
 		if !cca.S2sPreserveBlobTags {
@@ -328,7 +328,7 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, common.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, cca.excludeContainer, false)
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.PreservePermissions, common.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, cca.excludeContainer, false)
 
 	if err != nil {
 		return false
@@ -402,7 +402,7 @@ func (cca *CookedCopyCmdArgs) InitModularFilters() []ObjectFilter {
 		}
 	}
 
-	switch cca.permanentDeleteOption {
+	switch cca.PermanentDeleteOption {
 	case common.EPermanentDeleteOption.Snapshots():
 		filters = append(filters, &permDeleteFilter{deleteSnapshots: true})
 	case common.EPermanentDeleteOption.Versions():
@@ -564,7 +564,7 @@ func pathEncodeRules(path string, fromTo common.FromTo, disableAutoDecoding bool
 	return path
 }
 
-func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, asSubdir bool, object StoredObject) (relativePath string) {
+func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool, AsSubdir bool, object StoredObject) (relativePath string) {
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
@@ -607,7 +607,7 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 
 	if common.Iff(source, object.ContainerName, object.DstContainerName) != "" {
 		relativePath = `/` + common.Iff(source, object.ContainerName, object.DstContainerName) + relativePath
-	} else if !source && !cca.StripTopDir && cca.asSubdir { // Avoid doing this where the root is shared or renamed.
+	} else if !source && !cca.StripTopDir && cca.AsSubdir { // Avoid doing this where the root is shared or renamed.
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory
