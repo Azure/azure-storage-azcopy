@@ -1639,6 +1639,17 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
 	}
 
+	// Check if destination is system container
+	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
+		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		if err != nil {
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
+		}
+		if common.IsSystemContainer(dstContainerName) {
+			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
+		}
+	}
+
 	switch {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
