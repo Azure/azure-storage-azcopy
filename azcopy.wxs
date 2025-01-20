@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="azcopy" Language="1033" Version="10.28.0" Manufacturer="Microsoft" UpgradeCode="abeee33a-0cca-4060-89d7-0687f7374f7a">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+    <Media Id="1" Cabinet="azcopy.cab" EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLDIR" Name="azcopy">
+          <Component Id="azcopy.exe" Guid="abeee33a-0cca-4060-89d7-0687f7374f7a">
+            <File Id="azcopy.exe" Source="azcopy_executable_path" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="ProductFeature" Title="AzCopy" Level="1">
+      <ComponentRef Id="azcopy.exe" />
+    </Feature>
+  </Product>
+</Wix>
