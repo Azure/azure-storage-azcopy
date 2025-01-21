@@ -140,6 +140,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		azcopyScanningLogger.CloseLog()
 	})
 
+	// if no logging, set this empty so that we don't display the log location
+	if azcopyLogVerbosity == common.LogNone {
+		azcopyLogPathFolder = ""
+	}
+
 	// this if statement ladder remains instead of being separated to help determine valid combinations for sync
 	// consider making a map of valid source/dest combos and consolidating this to generic source/dest setups, akin to the lower if statement
 	// TODO: if expand the set of source/dest combos supported by sync, update this method the declarative test framework:
@@ -505,7 +510,12 @@ func (cca *cookedSyncCmdArgs) scanningComplete() bool {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
+	// Output the log location if log-level is set to other then NONE
+	var logPathFolder string
+	if azcopyLogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+	}
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -739,6 +749,17 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	// TODO: Remove this check when FileBlob w/ File OAuth works.
 	if cca.fromTo.IsS2S() && cca.fromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.fromTo.To() != common.ELocation.File() {
 		return fmt.Errorf("S2S sync from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
+	}
+
+	// Check if destination is system container
+	if cca.fromTo.IsS2S() || cca.fromTo.IsUpload() {
+		dstContainerName, err := GetContainerName(cca.destination.Value, cca.fromTo.To())
+		if err != nil {
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?)")
+		}
+		if common.IsSystemContainer(dstContainerName) {
+			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
+		}
 	}
 
 	enumerator, err := cca.initEnumerator(ctx)

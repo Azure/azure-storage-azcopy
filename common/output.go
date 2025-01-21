@@ -119,7 +119,9 @@ func GetStandardInitOutputBuilder(jobID string, logFileLocation string, isCleanu
 			sb.WriteString(cleanupHeader)
 		} else {
 			sb.WriteString("\nJob " + jobID + " has started\n")
-			sb.WriteString("Log file is located at: " + logFileLocation)
+			if logFileLocation != "" {
+				sb.WriteString("Log file is located at: " + logFileLocation)
+			}
 			sb.WriteString("\n")
 		}
 		return sb.String()
