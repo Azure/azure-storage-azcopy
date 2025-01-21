@@ -112,7 +112,7 @@ type AzCopyCommand struct {
 }
 
 type AzCopyEnvironment struct {
-	// `env:"XYZ"` is re-used but does not inherit the traits of config's env trait. Merely used for low-code mapping.
+	// `env:"XYZ"` is reused but does not inherit the traits of config's env trait. Merely used for low-code mapping.
 
 	LogLocation                  *string `env:"AZCOPY_LOG_LOCATION,defaultfunc:DefaultLogLoc"`
 	JobPlanLocation              *string `env:"AZCOPY_JOB_PLAN_LOCATION,defaultfunc:DefaultPlanLoc"`
