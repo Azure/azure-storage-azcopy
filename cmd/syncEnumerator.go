@@ -126,7 +126,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			bUrlParts, _ := blob.ParseURL(bt.rawURL)                                 // it should totally have succeeded by now anyway
 			_, err = sc.NewContainerClient(bUrlParts.ContainerName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
 			if err != nil {
-				glcm.Info(fmt.Sprintf("Failed to create the missing destination container: %v", err))
+				glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
 			}
 			// At this point, we'll let the destination be written to with the original resource type.
 		}
@@ -136,7 +136,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		fUrlParts, _ := file.ParseURL(ft.rawURL)                         // this should have succeeded by now.
 		_, err = sc.NewShareClient(fUrlParts.ShareName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
 		if err != nil {
-			glcm.Info(fmt.Sprintf("Failed to create the missing destination container: %v", err))
+			glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
 		}
 		// At this point, we'll let the destination be written to with the original resource type, as it will get created in this transfer.
 	} else if err == nil && sourceIsDir != destIsDir {

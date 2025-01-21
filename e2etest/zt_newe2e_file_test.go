@@ -561,28 +561,22 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 	svm.Assert("Quota is 1GB", Equal{Deep: true},
 		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota), int32(1))
 
-	fileNames := []string{"file_1.txt", "file_2.txt"}
-
-	// Create src obj mapping
-	srcObjs := make(ObjectResourceMappingFlat)
-
-	// Create source files
-	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()),
-		ResourceDefinitionContainer{Objects: srcObjs})
-	for _, fileName := range fileNames {
-		body := NewRandomObjectContentContainer(int64(1) * common.GigaByte)
-		obj := ResourceDefinitionObject{
-			ObjectName: &fileName,
-			Body:       body,
-			Size:       "1.00 GiB",
-		}
-		srcObjs[fileName] = obj
-		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	// Fill the share up
+	if !svm.Dryrun() {
+		shareClient := shareResource.(*FileShareResourceManager).internalClient
+		fileClient := shareClient.NewRootDirectoryClient().NewFileClient("big.txt")
+		_, err := fileClient.Create(ctx, 990*common.MegaByte, nil)
+		svm.NoError("Create large file", err)
 	}
+
+	srcOverflowObject := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, common.ELocation.Local()),
+		ResourceDefinitionObject{
+			Body: NewRandomObjectContentContainer(common.GigaByte),
+		})
 
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
-		Targets: []ResourceManager{srcContainer, shareResource},
+		Targets: []ResourceManager{srcOverflowObject, shareResource},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive: pointerTo(true),
@@ -595,7 +589,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 	ValidateContainsError(svm, stdOut, []string{"Increase the file share quota and call Resume command."})
 
 	fileMap := shareResource.ListObjects(svm, "", true)
-	svm.Assert("One file should be uploaded within the quota", Equal{}, len(fileMap)-1, 1) // -1 to Account for root dir in fileMap
+	svm.Assert("One file should be uploaded within the quota", Equal{}, len(fileMap), 1) // -1 to Account for root dir in fileMap
 
 	// Increase quota to fit all files
 	newQuota := int32(2)
@@ -609,5 +603,4 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 	svm.Assert("Quota should be updated", Equal{},
 		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota),
 		newQuota)
-
 }

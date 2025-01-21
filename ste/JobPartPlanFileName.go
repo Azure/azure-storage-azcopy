@@ -47,7 +47,7 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 	jobId, err := common.ParseJobID(jpfnSplit[0])
 	if err != nil {
 		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %w", string(jpfn), err) //nolint:staticcheck
-		// TODO: return here on error? or ignore
+		common.GetLifecycleMgr().Warn(err.Error())
 	}
 	jobID = jobId
 	n, err := fmt.Sscanf(jpfnSplit[1], "%05d.steV%d", &partNumber, &dataSchemaVersion)
