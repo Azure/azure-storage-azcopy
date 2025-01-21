@@ -450,6 +450,7 @@ stages:
 
               # Get AzCopy version
               $azcopyVersionOutput = & "$(work_dir)\azcopy.exe" --version
+              Write-Host "Raw AzCopy version output: $azcopyVersionOutput"
               $azcopyVersion = ($azcopyVersionOutput -match '(\d+\.\d+\.\d+)$') | Out-Null; $matches[1]
               Write-Host "AzCopy version: $azcopyVersion"
 
