@@ -451,6 +451,15 @@ stages:
               # Get AzCopy version
               $azcopyVersionOutput = & "$(work_dir)\azcopy.exe" --version
               Write-Host "Raw AzCopy version output: $azcopyVersionOutput"
+
+              # Extract the version using regex
+              if ($azcopyVersionOutput -match '(\d+\.\d+\.\d+)$') {
+                  $azcopyVersion = $matches[1]  # Access the first capture group
+                  Write-Host "AzCopy version: $azcopyVersion"
+              } else {
+                  Write-Host "Failed to extract AzCopy version. Raw output: $azcopyVersionOutput"
+              }
+
               $azcopyVersion = ($azcopyVersionOutput -match '(\d+\.\d+\.\d+)$') | Out-Null; $matches[1]
               Write-Host "AzCopy version: $azcopyVersion"
 
