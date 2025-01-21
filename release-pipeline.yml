@@ -460,9 +460,6 @@ stages:
                   Write-Host "Failed to extract AzCopy version. Raw output: $azcopyVersionOutput"
               }
 
-              $azcopyVersion = ($azcopyVersionOutput -match '(\d+\.\d+\.\d+)$') | Out-Null; $matches[1]
-              Write-Host "AzCopy version: $azcopyVersion"
-
               # Output the version to be captured as a pipeline variable
               Write-Host "##vso[task.setvariable variable=azcopyVersion]$azcopyVersion"
             displayName: 'Copy required files for packaging'
