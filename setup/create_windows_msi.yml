@@ -22,7 +22,7 @@ steps:
   displayName: 'Install Chocolatey and WiX Toolset'
 
 - powershell: |
-    # PowerShell Script to create MSI in an Azure Pipeline
+    # Script to create MSI in an Azure Pipeline
 
     # Step 1: Set Variables
     $workDir = "${{ parameters.working_dir }}"
@@ -45,7 +45,7 @@ steps:
     # Update fields using the namespace
     $productNode = $wixXml.SelectSingleNode("//wix:Product", $namespaceManager)
     $productNode.Name = "azcopy"
-    $productNode.Version = "${{ parameters.build_dir }}"
+    $productNode.Version = "${{ parameters.azcopy_version }}"
     $productNode.Manufacturer = "Updated Manufacturer"
     $productNode.UpgradeCode = $uuid
 
