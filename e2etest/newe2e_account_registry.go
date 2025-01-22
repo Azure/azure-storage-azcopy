@@ -2,15 +2,16 @@ package e2etest
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/google/uuid"
-	"strings"
 )
 
 // AccountRegistry is a set of accounts that are intended to be initialized when the tests start running.
 // Suites and tests should not add to this pool.
 // todo: long-term, support flexible static configuration of accounts.
-var AccountRegistry = map[string]AccountResourceManager{} // For re-using accounts across testing
+var AccountRegistry = map[string]AccountResourceManager{} // For reusing accounts across testing
 
 func GetAccount(a Asserter, AccountName string) AccountResourceManager {
 	targetAccount, ok := AccountRegistry[AccountName]
@@ -111,7 +112,7 @@ func DeleteAccount(a Asserter, arm AccountResourceManager) {
 		EAccountType.PremiumBlockBlobs(), EAccountType.PremiumHNSEnabled(), EAccountType.HierarchicalNamespaceEnabled():
 		azureAcct, ok := arm.(*AzureAccountResourceManager)
 		a.Assert("account manager must be azure account", Equal{}, ok, true)
-
+		e2etest/newe2e_task_runazcopy.go:115
 		armAcct := azureAcct.ManagementClient()
 		a.Assert("cannot delete an account that does not have a management client associated", Not{IsNil{}}, armAcct)
 

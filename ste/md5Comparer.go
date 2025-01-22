@@ -23,6 +23,7 @@ package ste
 import (
 	"bytes"
 	"errors"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -64,7 +65,7 @@ func (c *md5Comparer) Check() error {
 		switch c.validationOption {
 		// This code would never be triggered anymore due to the early check that now occurs in xfer-remoteToLocal.go
 		case common.EHashValidationOption.FailIfDifferentOrMissing():
-			panic("Transfer should've pre-emptively failed with a missing MD5.")
+			panic("Transfer should've preemptively failed with a missing MD5.")
 		case common.EHashValidationOption.FailIfDifferent(),
 			common.EHashValidationOption.LogOnly():
 			c.logAsMissing()

@@ -314,7 +314,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	return NewCopyEnumerator(traverser, filters, processor, finalizer), nil
 }
 
-// This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
+// This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
 func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
 	var err error
