@@ -24,7 +24,8 @@
 9. Correctly target objects in `copy/sync/delete` with names ending in `/`. ([#2847](https://github.com/Azure/azure-storage-azcopy/pull/2847))
 
 ### Dependency updates
-1. Golang 1.22.5 -> 1.23.1 ([#2911](https://github.com/Azure/azure-storage-azcopy/pull/2911))
+1. Golang 1.23.1 -> 1.22.7 ([#2911](https://github.com/Azure/azure-storage-azcopy/pull/2911))
+
 2. golang.org/x/crypto v0.28.0 -> v0.31.0 (CVE-2024-45337)([#2890](https://github.com/Azure/azure-storage-azcopy/pull/2890))
 3. golang.org/x/net v0.30.0 -> v0.33.0 (CVE-2024-45338)([#2899](https://github.com/Azure/azure-storage-azcopy/pull/2899))
 
