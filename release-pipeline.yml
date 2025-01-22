@@ -1952,6 +1952,12 @@ stages:
 
   - ${{ if eq(parameters.post_release, true) }}:
     - stage: ReleaseToGithub
+      dependsOn: TestArtifacts
+      condition: succeeded('TestArtifacts')
+      jobs:  
+        - job: ReleaseToGithub
+          timeoutInMinutes: 120
+          strategy:
             matrix:
               Ubuntu-22:
                 vmImage: 'Ubuntu-20.04'
