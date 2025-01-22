@@ -100,3 +100,12 @@ steps:
     } else {
         Write-Host "Installation failed with exit code $LASTEXITCODE."
     }
+    azcopy.exe --version
+
+    # Check if azcopy.exe exists in the expected installation directory
+    $azcopyPath = "C:\Program Files\AzCopy\azcopy.exe"
+    if (Test-Path $azcopyPath) {
+        & $azcopyPath --version
+    } else {
+        Write-Host "AzCopy executable not found in the expected directory."
+    }
