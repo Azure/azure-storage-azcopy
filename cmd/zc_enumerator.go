@@ -742,7 +742,7 @@ func (e *syncEnumerator) enumerate() (err error) {
 			datalakeerror.HasCode(err, datalakeerror.ResourceNotFound),
 			bloberror.HasCode(err, bloberror.BlobNotFound),
 			strings.Contains(err.Error(), "The system cannot find the"),
-			os.IsNotExist(err):
+			errors.Is(err, os.ErrNotExist):
 			err = nil // Oh no! Oh well. We'll create it later.
 		}
 	}
