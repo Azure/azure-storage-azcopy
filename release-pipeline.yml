@@ -387,8 +387,6 @@ stages:
         variables:
           - name: root_dir
             value: '$(System.DefaultWorkingDirectory)'
-          - name: msi_dir
-            value: '$(System.DefaultWorkingDirectory)/msi'
           - name: work_dir
             value: '$(Build.SourcesDirectory)'
           
@@ -447,9 +445,6 @@ stages:
               CGO_ENABLED: 0
 
           - powershell: |
-              # Create the working directory if it doesn't exist
-              New-Item -ItemType Directory -Force -Path $(msi_dir)
-              
               # Copy the azcopy executable to the working directory with a new name
               Copy-Item -Path "$(Build.ArtifactStagingDirectory)\azcopy_windows_amd64.exe" -Destination "$(work_dir)\azcopy.exe" -Force
 
@@ -467,13 +462,29 @@ stages:
 
               # Output the version to be captured as a pipeline variable
               Write-Host "##vso[task.setvariable variable=azcopyVersion]$azcopyVersion"
-            displayName: 'Copy required files for packaging'
+            displayName: 'Copy Windows Amd64 required files for packaging'
 
           - template: setup/create_windows_msi.yml
             parameters:
               working_dir: $(work_dir)
               build_dir: $(Build.ArtifactStagingDirectory)
               azcopy_version: $(azcopyVersion)
+              azcopy_msi_name: 'azcopy_windows_amd64.msi'
+
+          - powershell: |
+              # Remove all contents of the directory, but keep the directory itself
+              Get-ChildItem -Path $work_dir -Recurse | Remove-Item -Recurse -Force
+              
+              # Copy the azcopy executable to the working directory with a new name
+              Copy-Item -Path "$(Build.ArtifactStagingDirectory)\azcopy_windows_arm64.exe" -Destination "$(work_dir)\azcopy.exe" -Force
+            displayName: 'Copy Windows Arm64 required files for packaging'
+
+          - template: setup/create_windows_msi.yml
+            parameters:
+              working_dir: $(work_dir)
+              build_dir: $(Build.ArtifactStagingDirectory)
+              azcopy_version: $(azcopyVersion)
+              azcopy_msi_name: 'azcopy_windows_arm64.msi'
 
           - task: PublishBuildArtifacts@1
             inputs:
@@ -823,6 +834,7 @@ stages:
           - script: |
               rm -rf azCopy-windows-temp/*.md
               cp azCopy-windows-temp/* .
+              rm -rf *.msi
               mv azCopy-windows-temp $(work_dir)
             displayName: 'Add signed windows binary to staging directory'
             workingDirectory: '$(Build.ArtifactStagingDirectory)'
@@ -831,6 +843,18 @@ stages:
           - task: PublishBuildArtifacts@1
             inputs:
               artifactName: 'azCopy-binaries'
+            displayName: 'Publish Signed Artifacts'
+          
+          - script: |
+              rm -rf  $(Build.ArtifactStagingDirectory)/*
+              mv $(work_dir)/azCopy-windows-temp/*.msi .
+            displayName: 'Add signed windows binary to staging directory'
+            workingDirectory: '$(Build.ArtifactStagingDirectory)'
+
+          # Push signed msi to artifact directory
+          - task: PublishBuildArtifacts@1
+            inputs:
+              artifactName: 'azCopy-windows-signed'
             displayName: 'Publish Signed Artifacts'
 
           # Validate signed images have md5sum changed
