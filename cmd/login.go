@@ -40,8 +40,8 @@ var lgCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		loginCmdArg.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-		loginCmdArg.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+		loginCmdArg.certPass = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+		loginCmdArg.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 		loginCmdArg.persistToken = true
 
 		if loginCmdArg.certPass != "" || loginCmdArg.clientSecret != "" {

@@ -249,7 +249,7 @@ type ScopedCredential struct {
 }
 
 func (s *ScopedCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes})
+	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
 }
 
 type ServiceClient struct {
@@ -381,4 +381,22 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 	// retry the action
 	_, err = action()
 	return err
+}
+
+// @brief Checks if the container name provided is a system container or not
+func IsSystemContainer(containerName string) bool {
+	// Decode the container name in case it's URL-encoded
+	decodedName, err := url.QueryUnescape(containerName)
+	if err != nil {
+		// If decoding fails, it's unlikely the name matches a system container
+		return false
+	}
+	// define the system variables for the system containers
+	systemContainers := []string{"$blobchangefeed", "$logs"}
+	for _, sys := range systemContainers {
+		if decodedName == sys {
+			return true
+		}
+	}
+	return false
 }

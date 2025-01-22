@@ -3,6 +3,7 @@ package e2etest
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"math"
 	"strconv"
@@ -509,4 +510,104 @@ func (s *FileTestSuite) Scenario_SeveralFileDownloadWildcard(svm *ScenarioVariat
 	ValidateResource[ObjectResourceManager](svm, dstContainer.GetObject(svm, srcContainer.ContainerName()+"/"+fileName, common.EEntityType.File()), ResourceDefinitionObject{
 		Body: body,
 	}, true)
+}
+
+// Test copy with AllowToUnsafeDestination option
+func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(0)
+
+	name := "test."
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File(), common.ELocation.Local()})),
+		ResourceDefinitionObject{ObjectName: pointerTo(name), Body: body})
+	dstObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.File()})),
+		ResourceDefinitionObject{ObjectName: pointerTo("test"), Body: body})
+
+	if srcObj.Location() == dstObj.Location() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: AzCopyVerbCopy,
+			Targets: []ResourceManager{TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{})},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					BlockSizeMB: pointerTo(4.0),
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()),
+				},
+				ListOfFiles: []string{"lof"},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, false)
+}
+
+// Test:
+// - correct number of non-empty files are uploaded when file share quota is hit
+// - TODO 10.29.0 release: transfers complete successfully with resume command
+func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationManager) {
+	quotaGB := int32(1) // 1 GB quota
+	shareResource := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				Quota: &quotaGB},
+		},
+	})
+	svm.Assert("Quota is 1GB", Equal{Deep: true},
+		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota), int32(1))
+
+	fileNames := []string{"file_1.txt", "file_2.txt"}
+
+	// Create src obj mapping
+	srcObjs := make(ObjectResourceMappingFlat)
+
+	// Create source files
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()),
+		ResourceDefinitionContainer{Objects: srcObjs})
+	for _, fileName := range fileNames {
+		body := NewRandomObjectContentContainer(int64(1) * common.GigaByte)
+		obj := ResourceDefinitionObject{
+			ObjectName: &fileName,
+			Body:       body,
+			Size:       "1.00 GiB",
+		}
+		srcObjs[fileName] = obj
+		CreateResource[ObjectResourceManager](svm, srcContainer, obj)
+	}
+
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:    AzCopyVerbCopy,
+		Targets: []ResourceManager{srcContainer, shareResource},
+		Flags: CopyFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive: pointerTo(true),
+			},
+		},
+		ShouldFail: true,
+	})
+
+	// Error catchers for full file share
+	ValidateContainsError(svm, stdOut, []string{"Increase the file share quota and call Resume command."})
+
+	fileMap := shareResource.ListObjects(svm, "", true)
+	svm.Assert("One file should be uploaded within the quota", Equal{}, len(fileMap)-1, 1) // -1 to Account for root dir in fileMap
+
+	// Increase quota to fit all files
+	newQuota := int32(2)
+	if resourceManager, ok := shareResource.(*FileShareResourceManager); ok {
+		resourceManager.SetProperties(svm, &ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				Quota: &newQuota}})
+	}
+
+	// Validate correctly SetProperties updates quota. Prevent nil deref in dry runs
+	svm.Assert("Quota should be updated", Equal{},
+		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota),
+		newQuota)
+
 }
