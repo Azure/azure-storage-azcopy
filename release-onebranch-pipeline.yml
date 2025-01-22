@@ -12,6 +12,41 @@ parameters:
     type: boolean
     default: false
 
+  - name: publish_docker_image
+    displayName: 'Build and Publish Docker Image'
+    type: boolean
+    default: false
+
+  - name: post_release
+    displayName: 'Post Release on Github'
+    type: boolean
+    default: false
+
+  - name: draft
+    displayName: 'Post as Draft Release'
+    type: boolean
+    default: false
+
+  - name: prerelease
+    displayName: 'Post as PreRelease'
+    type: boolean
+    default: false
+
+  - name: tag
+    displayName: 'New Release Tag'
+    type: string
+    default: 'v10.'
+
+  - name: publish_artifacts
+    displayName: 'Publish Artifacts to Linux Repos'
+    type: boolean
+    default: false
+
+  - name: update_version
+    displayName: 'Update Version'
+    type: boolean
+    default: false
+
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -26,121 +61,437 @@ resources:
   pipelines:
     - pipeline: Build
       source: Build for Release
-# ReleaseToContainer -> Supported as our ServiceTree External metadata is False
-# PublishDockerImage -> Has examples
-# Release to Github -> GithubRelease is supported by OneBranch too
-# Publish Artifacts -> May or may not Just Work
-# Update Latest Version -> Supported as our ServiceTree External metadata is False
 
 extends: # Governed template expands from here which defines over all pipeline orchestration with OneBranch security, Compliance & Governance enabled
   template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
   parameters:
+    release:
+      category: InternalService
     stages:
-    - stage: ReleaseToContainer
-    jobs:
-      - job: ReleaseToContainer
-        templateContext:
-          inputs:
-            - input: pipelineArtifact
-              pipeline: Build
-              artifactName: azCopy-linux-signed
-            - input: pipelineArtifact
-              pipeline: Build
-              artifactName: azCopy-windows-signed
-            - input: pipelineArtifact
-              pipeline: Build
-              artifactName: azCopy-mac-signed
-            - input: pipelineArtifact
-              pipeline: Build
-              artifactName: azCopy-binaries-linux-amd64
-            - input: pipelineArtifact
-              pipeline: Build
-              artifactName: azCopy-binaries-linux-arm64
-            - input: pipelineArtifact
-              pipeline: Build
-              artifactName: azCopy-binaries-windows
-            - input: pipelineArtifact
-              pipeline: Build
-              artifactName: azCopy-binaries-mac
-        pool:
-          type: release
-          os: linux
-        variables:
-          - name: Test_Release_Account_Name
-            value: 'azcopyprivatedrops'
-          - name: Release_Account_Name
-            value: 'azcopyvnextrelease'
-          - name: Publish_To_Container
-            value: ${{ parameters.publish_to_container }}
-          - name: Publish_To_M1_Container
-            value: ${{ parameters.publish_to_m1_container }}
-          - name: work_dir
-            value: '$(Build.SourcesDirectory)'
-
-        steps:
-          - script: |
-              sudo apt-get install -y zip
-              cp $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/azcopy-*x86_64.deb .
-              rm -rf /usr/local/bin/azcopy
-              rm -rf /usr/bin/azcopy
-              sudo dpkg --info azcopy-*x86_64.deb
-              sudo dpkg -i azcopy-*x86_64.deb
-              sudo apt-get install build-essential -y
-            displayName: 'Create drop.zip file and install azcopy deb package'
-
-          - script: |
-              cp $(work_dir)/NOTICE.txt $(Build.ArtifactStagingDirectory)/azCopy-binaries
-              cd $(Build.ArtifactStagingDirectory)/azCopy-binaries
-              echo "Contents of $(Build.ArtifactStagingDirectory)/azCopy-binaries:"
-              ls -l
-              
-              # Create the zip archive with all files inside azCopy-binaries
-              zip -r $(Build.ArtifactStagingDirectory)/drop.zip .
-              cd $(Build.ArtifactStagingDirectory)
-
-              # List the contents of the resulting zip file for verification
-              unzip -l $(Build.ArtifactStagingDirectory)/drop.zip
-
-              mv $(Build.ArtifactStagingDirectory)/azCopy-linux-signed/mariner .
-            displayName: 'Archive all binaries to drop.zip'
-            workingDirectory: '$(Build.ArtifactStagingDirectory)'
-
-          - task: Bash@3
-            displayName: 'Install Azure CLI'
+      - stage: ReleaseToContainer
+        jobs:
+        - job: ReleaseToContainer
+          templateContext:
             inputs:
-              targetType: 'inline'
-              script: |
-                curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+              - input: pipelineArtifact
+                pipeline: Build
+                artifactName: azcopy-releasehelper
+              - input: pipelineArtifact
+                pipeline: Build
+                artifactName: azcopy-linux-signed
+              - input: pipelineArtifact
+                pipeline: Build
+                artifactName: azcopy-windows-signed
+              - input: pipelineArtifact
+                pipeline: Build
+                artifactName: azcopy-mac-signed
+              - input: pipelineArtifact
+                pipeline: Build
+                artifactName: azcopy-binaries-linux-amd64
+              - input: pipelineArtifact
+                pipeline: Build
+                artifactName: azcopy-binaries-linux-arm64
+              - input: pipelineArtifact
+                pipeline: Build
+                artifactName: azcopy-binaries-windows
+              - input: pipelineArtifact
+                pipeline: Build
+                artifactName: azcopy-binaries-mac
+          pool:
+            type: release
+            os: linux
+          variables:
+            - name: test_release_account_name
+              value: 'azcopyprivatedrops'
+            - name: release_account_name
+              value: 'azcopyvnextrelease'
+            - name: publish_container
+              value: ${{ parameters.publish_to_container }}
+            - name: publish_m1_container
+              value: ${{ parameters.publish_to_m1_container }}
+            - name: input_path
+              value: $(Pipeline.Workspace)/Build
+            - name: drop
+              value: $(Pipeline.Workspace)/drop
+            - name: release
+              value: $(Pipeline.Workspace)/release
 
-          - task: AzureCLI@2
-            displayName: 'Azure CLI'
-            inputs:
-              azureSubscription: 'ESRP KeyVault identity'
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                # Find the current version
-                raw_version_output=$(azcopy --version)
-                azcopy_version=$(echo $raw_version_output | awk '{print $3}')
+          steps:
+            - script: |
+                sudo apt-get install build-essential -y
+                rm -rf /usr/local/bin/azcopy
+                rm -rf /usr/bin/azcopy
+                sudo dpkg -i $(input_path)/azcopy-linux-signed/azcopy-*x86_64.deb
+              displayName: 'Install azcopy'
 
-                today=$(date +"%Y%m%d")
-                
-                if [ $(Publish_To_Container) = "True" ]; then
-                  container_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
-                else
-                  container_url="https://$(Test_Release_Account_Name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
-                fi
-                echo "Artifacts will be uploaded to: $container_url"
-                
-                executable_name=azcopy
-                
-                # Upload the archived builds
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-windows-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-linux-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-mac-signed/*" "$container_url" --recursive --put-md5=true
-                AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/*.zip" "$container_url" --put-md5=true
+            - script : |
+                mkdir -p $(release)
+                rm -rf $(input_path)/azcopy-linux-signed/mariner
+                cp $(input_path)/azcopy-linux-signed/* $(release)
+                cp $(input_path)/azcopy-windows-signed/* $(release)
+                cp $(input_path)/azcopy-mac-signed/* $(release)
+              displayName: 'Prepare release folder'
 
-                if [ $(Publish_To_M1_Container) = "True" ]; then
-                  m1_container_url="https://$(Release_Account_Name).blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$azcopy_version-$today"
-                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI $executable_name cp "$(Build.ArtifactStagingDirectory)/azCopy-binaries/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
-                fi
+            - script : |
+                mkdir -p $(drop)
+                cp $(input_path)/azcopy-binaries-linux-amd64/* $(drop)
+                cp $(input_path)/azcopy-binaries-linux-arm64/* $(drop)
+                cp $(input_path)/azcopy-binaries-windows/* $(drop)
+                cp $(input_path)/azcopy-binaries-mac/* $(drop)
+                cp $(input_path)/azcopy-releasehelper/NOTICE.txt $(drop)
+              displayName: 'Prepare drop.zip folder'
+
+            - task: ArchiveFiles@2
+              displayName: 'Archive drop.zip'
+              inputs:
+                rootFolderOrFile: '$(drop)'
+                archiveFile: '$(release)/drop.zip'
+
+            - task: AzureCLI@2
+              displayName: 'Azure CLI'
+              inputs:
+                azureSubscription: 'ESRP KeyVault identity'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  today=$(date +"%Y%m%d")
+                  azcopy_version=$(cat $(input_path)/azcopy-releasehelper/latest_version.txt)
+                  
+                  if [ $(publish_container) = "True" ]; then
+                    container_url="https://$(release_account_name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
+                  else
+                    container_url="https://$(test_release_account_name).blob.core.windows.net/%24web/releases/release-$azcopy_version-$today"
+                  fi
+                  echo "Artifacts will be uploaded to: $container_url"
+                  
+                  # Upload the archived builds
+                  AZCOPY_AUTO_LOGIN_TYPE=AzCLI azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
+  
+                  if [ $(publish_m1_container) = "True" ]; then
+                    m1_container_url="https://$(release_account_name).blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$azcopy_version-$today"
+                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI azcopy cp "$(input_path)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
+                  fi
+
+      - ${{ if eq(parameters.publish_docker_image, true) }}:
+        - stage: BuildAndPublishDockerImage
+          dependsOn: ReleaseToContainer
+          condition: succeeded('ReleaseToContainer')
+          jobs:
+            - job: Ubuntu_Mariner_AMD64
+              templateContext:
+                inputs:
+                  - input: pipelineArtifact
+                    pipeline: Build
+                    artifactName: azcopy-releasehelper
+                  - input: pipelineArtifact
+                    pipeline: Build
+                    artifactName: azcopy-binaries-linux-amd64
+              pool:
+                type: release
+                os: linux
+              variables:
+                - name: azcopy_binary
+                  value: $(Pipeline.Workspace)/Build/azcopy-binaries-linux-amd64/azcopy_linux_amd64
+                - name: azcopy-releasehelper
+                  value: $(Pipeline.Workspace)/Build/azcopy-releasehelper
+                - name: service_connection
+                  value: 'AzCopyContainers_ACR'
+
+              steps:
+                - script : |
+                    mv $(azcopy_binary) $(Pipeline.Workspace)/azcopy
+                    azcopy_version=$(cat $(azcopy-releasehelper)/latest_version.txt)
+                    echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
+                  displayName: 'Set up azcopy in expected location'
+
+                - task: Docker@2
+                  displayName: "Build and Push Container Image Ubuntu"
+                  inputs:
+                    command: buildAndPush
+                    repository: 'azure-azcopy-ubuntu-x86_64'
+                    dockerfile: $(azcopy-releasehelper)/Dockerfile
+                    containerRegistry: $(service_connection)
+                    buildContext: $(Pipeline.Workspace)
+                    tags: latest,$(azcopy_version)
+
+                - task: Docker@2
+                  displayName: "Build and Push Container Image Mariner"
+                  inputs:
+                    command: buildAndPush
+                    repository: 'azure-azcopy-mariner-x86_64'
+                    dockerfile: $(azcopy-releasehelper)/DockerfileMariner
+                    containerRegistry: $(service_connection)
+                    buildContext: $(Pipeline.Workspace)
+                    tags: latest,$(azcopy_version)
+
+            - job: Ubuntu_ARM64
+              templateContext:
+                inputs:
+                  - input: pipelineArtifact
+                    pipeline: Build
+                    artifactName: azcopy-releasehelper
+                  - input: pipelineArtifact
+                    pipeline: Build
+                    artifactName: azcopy-binaries-linux-arm64
+              pool:
+                type: release
+                os: linux
+                hostArchitecture: arm64
+              variables:
+                - name: azcopy_binary
+                  value: $(Pipeline.Workspace)/Build/azcopy-binaries-linux-arm64/azcopy_linux_arm64
+                - name: azcopy-releasehelper
+                  value: $(Pipeline.Workspace)/Build/azcopy-releasehelper
+                - name: service_connection
+                  value: 'AzCopyContainers_ACR'
+
+              steps:
+                - script : |
+                    mv $(azcopy_binary) $(Pipeline.Workspace)/azcopy
+                    azcopy_version=$(cat $(azcopy-releasehelper)/latest_version.txt)
+                    echo "##vso[task.setvariable variable=azcopy_version]$azcopy_version"
+                  displayName: 'Set up azcopy in expected location'
+
+                - task: Docker@2
+                  displayName: "Build and Push Container Image Ubuntu"
+                  inputs:
+                    command: buildAndPush
+                    repository: 'azure-azcopy-ubuntu-arm64'
+                    dockerfile: $(azcopy-releasehelper)/DockerfileArm64
+                    containerRegistry: $(service_connection)
+                    buildContext: $(Pipeline.Workspace)
+                    tags: latest,$(azcopy_version)
+
+      - ${{ if eq(parameters.post_release, true) }}:
+        - stage: ReleaseToGithub
+          dependsOn: TestArtifacts
+          condition: succeeded('TestArtifacts')
+          jobs:
+            - job: ReleaseToGithub
+              timeoutInMinutes: 120
+              pool:
+                type: release
+                os: linux
+
+              steps:
+                - task: GithubRelease@1
+                  inputs:
+                    githubConnection: 'azcopy-github-connection'
+                    repositoryName: 'Azure/azure-storage-azcopy'
+                    action: 'edit'
+                    target: '$(Build.SourceVersion)'
+                    tagSource: 'userSpecifiedTag'
+                    title: ${{ parameters.tag }}
+                    tag: ${{ parameters.tag }}
+                    changeLogCompareToRelease: 'lastFullRelease'
+                    changeLogType: 'commitBased'
+                    isDraft: ${{ parameters.draft }}
+                    isPreRelease: ${{ parameters.prerelease }}
+                    assetUploadMode: replace
+
+      - ${{ if eq(parameters.publish_artifacts, true) }}:
+        - stage: PublishArtifacts
+          dependsOn: ReleaseToContainer
+          condition: succeeded('ReleaseToContainer')
+          jobs:
+            - job: PublishArtifacts
+              timeoutInMinutes: 120
+              pool:
+                type: release
+                os: linux
+              templateContext:
+                inputs:
+                  - input: pipelineArtifact
+                    pipeline: Build
+                    artifactName: azcopy-releasehelper
+                  - input: pipelineArtifact
+                    pipeline: Build
+                    artifactName: azcopy-linux-signed
+              variables:
+                - group: AZCOPY_SECRET_VAULT
+                - name: linux-signed
+                  value: $(Pipeline.Workspace)/Build/azcopy-linux-signed
+                - name: build
+                  value: $(Pipeline.Workspace)/Build
+                - name: packages
+                  value: $(Pipeline.Workspace)/Build/azcopy-releasehelper/packages.csv
+
+              steps:
+                - task: PipAuthenticate@1
+                  inputs:
+                    artifactFeeds: 'DevExGlobalFeed'
+                  displayName: 'Connect to PMC artifact'
+
+                - script: |
+                    pip install pmc-cli
+                  displayName: 'Install pmc-cli'
+
+                - task: DownloadSecureFile@1
+                  name: pmcCertificate
+                  displayName: 'Download pmc pem file'
+                  inputs:
+                    secureFile: 'blobfusebuildvault-blobfuse-release-pmc1-20230911.pem'
+
+                - task: DownloadSecureFile@1
+                  name: settings
+                  displayName: 'Download settings.toml file'
+                  inputs:
+                    secureFile: 'settings.toml'
+
+                - script: |
+                    pmc --version
+                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
+                    if [ $? -ne 0 ]; then
+                      exit 1
+                    fi
+                  displayName: 'Test PMC installation'
+
+                - script: |
+                    cd mariner
+                    arm64file=$(ls azcopy*.arm64.rpm)
+                    amd64file=$(ls azcopy*.x86_64.rpm)
+                    marinerArmFileName="${arm64file/.arm64.rpm/-cm2.arm64.rpm}"
+                    marinerAmdFileName="${amd64file/.x86_64.rpm/-cm2.x86_64.rpm}"
+                    mv -v ./azcopy*.arm64.rpm "$marinerArmFileName"
+                    mv -v ./azcopy*.x86_64.rpm "$marinerAmdFileName"
+                    sudo ls -lRt
+                    mv azcopy*.rpm ..
+                    cd ..
+                    rm -r mariner/
+                  displayName: 'Rename Mariner binaries'
+                  workingDirectory: $(linux-signed)
+
+                - script: |
+                    sudo ls -lRt $(linux-signed)
+                  displayName: 'List Artifacts'
+
+                - script: |
+                    mv $(linux-signed)/*tar.gz .
+                    pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-linux-signed
+                  displayName: 'Upload files'
+                  workingDirectory: $(build)
+
+                - script: |
+                    azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
+                    echo "Azcopy AMD DEB ID: $azcopyAmdDeb"
+    
+                    azcopyAmdRpmFile=$(ls azcopy-* | grep -vE 'cm2\.x86_64\.rpm|arm64\.deb|x86_64\.deb|arm64\.rpm')
+                    azcopyAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyAmdRpmFile)
+                    echo "Azcopy AMD RPM ID: $azcopyAmdRpm"
+                    
+                    azcopyArmDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.arm64.deb`
+                    echo "Azcopy ARM DEB ID: $azcopyArmDeb"
+    
+                    azcopyArmRpmFile=$(ls azcopy* | grep -vE 'cm2\.arm64\.rpm|arm64\.deb|x86_64\.deb|x86_64\.rpm')
+                    azcopyArmRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $azcopyArmRpmFile)
+                    echo "Azcopy ARM RPM $azcopyArmRpmFile"
+                    echo "Azcopy ARM RPM ID: $azcopyArmRpm"
+    
+                    # Find the Mariner RPM file and upload
+                    marinerAmdRpmFile=$(ls azcopy-* | grep 'cm2\.x86_64\.rpm')
+                    marinerAmdRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAmdRpmFile)
+                    echo "Azcopy mariner AMD RPM $marinerAmdRpmFile"
+                    echo "Azcopy mariner AMD RPM ID: $marinerAmdRpm"
+    
+                    marinerAarchRpmFile=$(ls azcopy-* | grep 'cm2\.arm64\.rpm')
+                    marinerAarchRpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload $marinerAarchRpmFile)
+                    echo "Azcopy mariner ARM RPM: $marinerAarchRpmFile"
+                    echo "Azcopy mariner ARM RPM ID: $marinerAarchRpm"
+                    
+                    is_preview="false"
+                    echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                    if [[ $marinerAmdRpmFile == *"preview"* ]]; then
+                      is_preview="true"
+                      echo "##vso[task.setvariable variable=is_preview]$is_preview"
+                    fi
+    
+                    while IFS=, read -r distro archetype repoName releaseName; do
+    
+                      # If the package is preview, publish to mariner preview package
+                      if [[ $distro == *"Mariner-"* ]]; then
+                        if [ $is_preview = "true" ]; then
+                          repoName=$(echo $repoName | sed 's/prod/preview/')
+                        fi
+                      fi
+    
+                      echo "Uploading packages for $distro"
+                      echo "Repo Name: $repoName"
+                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --add-packages ${!archetype} $repoName $releaseName
+                    done < <(tail -n +3 $(packages))
+                  displayName: 'Add uploaded packages to repository'
+                  workingDirectory: $(linux-signed)
+
+                - script: |
+                    while IFS=, read -r distro archetype repoName releaseName; do
+                      if [[ $archetype == *"Arm"* ]]; then
+                        echo "Skipping for ARM type on $distro"
+                      else
+                        if [[ $distro == *"Mariner-"* ]]; then
+                          if [ "$(is_preview)" = "true" ]; then
+                            repoName=$(echo $repoName | sed 's/prod/preview/')
+                          fi
+                        fi
+                        echo "Repo Name: $repoName"
+                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $repoName
+                      fi
+                    done < <(tail -n +3 $(packages))
+                  displayName: 'Publish the repository'
+                  workingDirectory: $(linux-signed)
+
+      - ${{ if eq(parameters.update_version, true) }}:
+        - stage: UpdateLatestVersion
+          dependsOn: ReleaseToContainer
+          condition: succeeded('ReleaseToContainer')
+          jobs:
+            - job: UpdateVersion
+              pool:
+                type: release
+                os: linux
+              templateContext:
+                inputs:
+                  - input: pipelineArtifact
+                    pipeline: Build
+                    artifactName: azcopy-releasehelper
+                  - input: pipelineArtifact
+                    pipeline: Build
+                    artifactName: azcopy-linux-signed
+              variables:
+                - group: AZCOPY_TESTS_VAR
+                - name: linux-signed
+                  value: $(Pipeline.Workspace)/Build/azcopy-linux-signed
+                - name: version
+                  value: $(Pipeline.Workspace)/Build/azcopy-releasehelper/latest_version.txt
+                - name: release_account_name
+                  value: 'azcopyvnextrelease'
+
+              steps:
+                # install azcopy
+                - script: |
+                    sudo apt-get install build-essential -y
+                    rm -rf /usr/local/bin/azcopy
+                    rm -rf /usr/bin/azcopy
+                    sudo dpkg -i $(linux-signed)/azcopy-*x86_64.deb
+                  displayName: 'Install azcopy'
+
+                - task: AzureCLI@2
+                  displayName: 'Updating version number with Azure CLI'
+                  inputs:
+                    azureSubscription: 'ESRP KeyVault identity'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      export AZCOPY_AUTO_LOGIN_TYPE=AzCLI
+                      
+                      #Upload to release version blob file
+                      upload_url="https://$(release_account_name).blob.core.windows.net/%24web/releasemetadata/latest_version.txt"
+                      azcopy copy $(version) "$upload_url" --from-to=PipeBlob --log-level=DEBUG --output-type=text > azcopy_output.txt
+                      
+                      # Handle errors 
+                      if [ $? -eq 0 ]; then
+                        echo "Release version file successfully uploaded." 
+                      else
+                        echo "File failed to upload: " 
+                        cat azcopy_output.txt
+                        exit 1
+                      fi
+                    displayName: "Updating version number"

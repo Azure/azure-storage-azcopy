@@ -80,7 +80,9 @@ extends:
               - script: |
                   mkdir -p $(output_path)
                   cp docker/Dockerfile* $(output_path)
-                  echo $(azcopy_version) > $(output_path)/azcopy_version.txt
+                  echo $(azcopy_version) > $(output_path)/latest_version.txt
+                  cp NOTICE.txt $(output_path)
+                  cp packages.csv $(output_path)
                 displayName: 'Release Helper Files'
 
       - stage: BuildArtifacts
@@ -437,7 +439,7 @@ extends:
                   mv $(amd64)/* $(signed)
                   
                   chmod 755 $(arm64)/*
-                  rm -rf $(amd64)/*.md
+                  rm -rf $(arm64)/*.md
                   mv $(arm64)/* $(signed)
                   
                   chmod 755 $(mariner)/*
@@ -878,53 +880,3 @@ extends:
                   cd $(extracted)\azcopy*arm64*
                   azcopy.exe --version
                 displayName: 'Verify exe in zip'
-
-      # TestArtifacts ends here
-#      - stage: BuildDockerImage
-#        dependsOn: TestArtifacts
-#        condition: succeeded('TestArtifacts')
-#        jobs:
-#          - job: Set_1_Ubuntu_Mariner_AMD64
-#            pool:
-#              name: azcopy-pool
-#              image: ubuntu22-1espt
-#              os: linux
-#
-#            templateContext:
-#              authenticatedContainerRegistries:
-#              - serviceConnection: AzCopyContainers_ACR
-#              outputs:
-#                - output: containerImage
-#                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
-#                  remoteImage:
-#                    - azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:latest
-#                    - azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
-#
-#            variables:
-#              - group: AZCOPY_SECRET_VAULT
-#              - name: root_dir
-#                value: '$(System.DefaultWorkingDirectory)'
-#              - name: work_dir
-#                value: '$(Build.SourcesDirectory)'
-#
-#            steps:
-#              - checkout: self
-#                displayName: 'Checkout repository'
-#
-#              - task: DownloadPipelineArtifact@2
-#                displayName: 'Download Pipeline Artifacts'
-#                inputs:
-#                  artifactName: 'azCopy-binaries-linux-amd64'
-#                  targetPath: '$(Build.SourcesDirectory)'
-#                  itemPattern: 'azcopy_linux_amd64'
-#
-#              - script: |
-#                  mv azcopy_linux_amd64 azcopy
-#                displayName: 'Set up azcopy in expected location'
-#                workingDirectory: '$(Build.SourcesDirectory)'
-#
-#              - task: 1ES.BuildContainerImage@1
-#                inputs:
-#                  image: azcopycontainers.azurecr.io/azure-azcopy-ubuntu-x86_64:${{ parameters.azcopy_version }}
-#                  path: '$(Build.SourcesDirectory)'
-#                  dockerfile: docker/Dockerfile
