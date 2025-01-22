@@ -433,10 +433,10 @@ func TestSyncDownloadWithMissingDestination(t *testing.T) {
 
 	runSyncAndVerify(a, raw, func(err error) {
 		// error should not be nil, but the app should not crash either
-		a.NotNil(err)
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		a.Zero(len(mockedRPC.transfers))
+		a.Equal(len(mockedRPC.transfers), len(blobList), "Expected to transfer the container's worth of blobs")
 	})
 }
 
