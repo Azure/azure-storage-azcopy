@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -864,7 +865,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 				common.GetLifecycleMgr().Info(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
 			}
 
-			if serviceCode == "ShareSizeLimitReached" {
+			if fileerror.HasCode(err, "ShareSizeLimitReached") {
 				common.GetLifecycleMgr().Error("Increase the file share quota and call Resume command.")
 			}
 

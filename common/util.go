@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"net"
 	"net/url"
 	"strings"
@@ -231,7 +232,7 @@ func GetServiceClientForLocation(loc Location,
 // NewScopedCredential takes in a credInfo object and returns ScopedCredential
 // if credentialType is either MDOAuth or oAuth. For anything else,
 // nil is returned
-func NewScopedCredential(cred azcore.TokenCredential, credType CredentialType) *ScopedCredential {
+func NewScopedCredential[T azcore.TokenCredential](cred T, credType CredentialType) *ScopedCredential[T] {
 	var scope string
 	if !credType.IsAzureOAuth() {
 		return nil
@@ -240,16 +241,27 @@ func NewScopedCredential(cred azcore.TokenCredential, credType CredentialType) *
 	} else if credType == ECredentialType.OAuthToken() {
 		scope = StorageScope
 	}
-	return &ScopedCredential{cred: cred, scopes: []string{scope}}
+	return &ScopedCredential[T]{cred: cred, scopes: []string{scope}}
 }
 
-type ScopedCredential struct {
-	cred   azcore.TokenCredential
+type ScopedCredential[T azcore.TokenCredential] struct {
+	cred   T
 	scopes []string
 }
 
-func (s *ScopedCredential) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+func (s *ScopedCredential[T]) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
 	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
+}
+
+type ScopedToken = ScopedCredential[azcore.TokenCredential]
+type ScopedAuthenticator ScopedCredential[AuthenticateToken]
+
+func (s *ScopedAuthenticator) GetToken(ctx context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return s.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
+}
+
+func (s *ScopedAuthenticator) Authenticate(ctx context.Context, _ *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error) {
+	return s.cred.Authenticate(ctx, &policy.TokenRequestOptions{Scopes: s.scopes, EnableCAE: true})
 }
 
 type ServiceClient struct {

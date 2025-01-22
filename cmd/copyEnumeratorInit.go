@@ -314,7 +314,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	return NewCopyEnumerator(traverser, filters, processor, finalizer), nil
 }
 
-// This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
+// This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
 func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
 	var err error
@@ -428,7 +428,13 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),

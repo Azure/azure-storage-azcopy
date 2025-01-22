@@ -381,7 +381,15 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		return output, nil
 	}
 
-	options := createClientOptions(azcopyScanningLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if credential != nil {
+		if at, ok := credential.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+			reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		}
+	}
+
+	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
 
 	switch location {
 	case common.ELocation.Local():
