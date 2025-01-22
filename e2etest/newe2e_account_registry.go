@@ -112,7 +112,7 @@ func DeleteAccount(a Asserter, arm AccountResourceManager) {
 		EAccountType.PremiumBlockBlobs(), EAccountType.PremiumHNSEnabled(), EAccountType.HierarchicalNamespaceEnabled():
 		azureAcct, ok := arm.(*AzureAccountResourceManager)
 		a.Assert("account manager must be azure account", Equal{}, ok, true)
-
+		e2etest/newe2e_task_runazcopy.go:115
 		armAcct := azureAcct.ManagementClient()
 		a.Assert("cannot delete an account that does not have a management client associated", Not{IsNil{}}, armAcct)
 

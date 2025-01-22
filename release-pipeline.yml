@@ -472,9 +472,6 @@ stages:
               azcopy_msi_name: 'azcopy_windows_amd64.msi'
 
           - powershell: |
-              # Remove all contents of the directory, but keep the directory itself
-              Get-ChildItem -Path $work_dir -Recurse | Remove-Item -Recurse -Force
-              
               # Copy the azcopy executable to the working directory with a new name
               Copy-Item -Path "$(Build.ArtifactStagingDirectory)\azcopy_windows_arm64.exe" -Destination "$(work_dir)\azcopy.exe" -Force
             displayName: 'Copy Windows Arm64 required files for packaging'
