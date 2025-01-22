@@ -21,9 +21,10 @@
 package cmd
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	chk "gopkg.in/check.v1"
-	"testing"
 )
 
 type parseSizeSuite struct{}
@@ -55,7 +56,7 @@ func TestParseSize(t *testing.T) {
 	_, err = ParseSizeString("123T", "foo-bar") // we don't support terabytes
 	a.Equal(expectedError, err.Error())
 
-	_, err = ParseSizeString("abcK", "foo-bar")
+	_, err = ParseSizeString("abck", "foo-bar")
 	a.Equal(expectedError, err.Error())
 
 }
