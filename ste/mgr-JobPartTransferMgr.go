@@ -866,7 +866,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 			}
 
 			if fileerror.HasCode(err, "ShareSizeLimitReached") {
-				common.GetLifecycleMgr().Info("Increase the file share quota and call Resume command.")
+				common.GetLifecycleMgr().Error("Increase the file share quota and call Resume command.")
 			}
 
 			// and use the normal cancelling mechanism so that we can exit in a clean and controlled way
