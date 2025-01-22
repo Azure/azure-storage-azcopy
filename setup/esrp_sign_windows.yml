@@ -1,7 +1,7 @@
 parameters:
   FolderPath: ''
   ESRP_AZCOPY_WIN_KEY_CODE: ''
-  Pattern: '*.exe'
+  Pattern: ''
 
 steps:
 - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
