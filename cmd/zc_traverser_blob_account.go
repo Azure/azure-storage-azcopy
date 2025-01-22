@@ -49,7 +49,7 @@ type blobAccountTraverser struct {
 	excludeContainerName []ObjectFilter
 }
 
-func (t *blobAccountTraverser) IsDirectory(_ bool) (bool, error) {
+func (t *blobAccountTraverser) IsDirectory(isSource bool) (bool, error) {
 	return true, nil // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 

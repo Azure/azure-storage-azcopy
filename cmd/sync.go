@@ -71,6 +71,7 @@ type rawSyncCmdArgs struct {
 	backupMode              bool
 	putMd5                  bool
 	md5ValidationOption     string
+	includeRoot             bool
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
@@ -385,6 +386,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.deleteDestinationFileIfNecessary = raw.deleteDestinationFileIfNecessary
 
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
+	cooked.includeRoot = raw.includeRoot
 
 	return cooked, nil
 }
@@ -436,6 +438,7 @@ type cookedSyncCmdArgs struct {
 	forceIfReadOnly         bool
 	backupMode              bool
 	includeDirectoryStubs   bool
+	includeRoot             bool
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -870,6 +873,7 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
 		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
+	syncCmd.PersistentFlags().BoolVar(&raw.includeRoot, "include-root", false, "Disabled by default. Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "", "When using `--local-hash-storage-mode=HiddenFiles` you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")

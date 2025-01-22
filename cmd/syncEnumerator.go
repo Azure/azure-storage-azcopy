@@ -24,6 +24,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -93,11 +97,51 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// verify that the traversers are targeting the same type of resources
 	sourceIsDir, _ := sourceTraverser.IsDirectory(true)
-	destIsDir, _ := destinationTraverser.IsDirectory(true)
-	if sourceIsDir != destIsDir {
-		return nil, errors.New("trying to sync between different resource types (either file <-> directory or directory <-> file) which is not allowed." +
-			"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory." +
-			"To make sure target is handled as a directory, add a trailing '/' to the target.")
+	destIsDir, err := destinationTraverser.IsDirectory(true)
+
+	var resourceMismatchError = errors.New("trying to sync between different resource types (either file <-> directory or directory <-> file) which is not allowed." +
+		"sync must happen between source and destination of the same type, e.g. either file <-> file or directory <-> directory." +
+		"To make sure target is handled as a directory, add a trailing '/' to the target.")
+
+	if cca.fromTo.To() == common.ELocation.Blob() || cca.fromTo.To() == common.ELocation.BlobFS() {
+
+		/*
+			This is an "opinionated" choice. Blob has no formal understanding of directories. As such, we don't care about if it's a directory.
+
+			If they sync a lone blob, they sync a lone blob.
+			If it lands on a directory stub, FNS is OK with this, but HNS isn't. It'll fail in that case. This is still semantically valid in FNS.
+			If they sync a prefix of blobs, they sync a prefix of blobs. This will always succeed, and won't break any semantics about FNS.
+
+			So my (Adele's) opinion moving forward is:
+			- Hierarchies don't exist in flat namespaces.
+			- Instead, there are objects and prefixes.
+			- Stubs exist to clarify prefixes.
+			- Stubs do not exist to enforce naming conventions.
+			- We are a tool, tools can be misused. It is up to the customer to validate everything they intend to do.
+		*/
+
+		if bloberror.HasCode(err, bloberror.ContainerNotFound) { // We can resolve a missing container. Let's create it.
+			bt := destinationTraverser.(*blobTraverser)
+			sc := bt.serviceClient                                                   // it being a blob traverser is a relatively safe assumption, because
+			bUrlParts, _ := blob.ParseURL(bt.rawURL)                                 // it should totally have succeeded by now anyway
+			_, err = sc.NewContainerClient(bUrlParts.ContainerName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
+			if err != nil {
+				glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
+			}
+			// At this point, we'll let the destination be written to with the original resource type.
+		}
+	} else if err != nil && fileerror.HasCode(err, fileerror.ShareNotFound) { // We can resolve a missing share. Let's create it.
+		ft := destinationTraverser.(*fileTraverser)
+		sc := ft.serviceClient
+		fUrlParts, _ := file.ParseURL(ft.rawURL)                         // this should have succeeded by now.
+		_, err = sc.NewShareClient(fUrlParts.ShareName).Create(ctx, nil) // If it doesn't work out, this will surely bubble up later anyway. It won't be long.
+		if err != nil {
+			glcm.Warn(fmt.Sprintf("Failed to create the missing destination container: %v", err))
+		}
+		// At this point, we'll let the destination be written to with the original resource type, as it will get created in this transfer.
+	} else if err == nil && sourceIsDir != destIsDir {
+		// If the destination exists, and isn't blob though, we have to match resource types.
+		return nil, resourceMismatchError
 	}
 
 	// set up the filters in the right order
@@ -129,7 +173,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 	}
 
 	// decide our folder transfer strategy
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, true, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs) // sync always acts like stripTopDir=true
+	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -328,6 +373,7 @@ func IsDestinationCaseInsensitive(fromTo common.FromTo) bool {
 	} else {
 		return false
 	}
+
 }
 
 func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {

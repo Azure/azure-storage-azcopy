@@ -24,7 +24,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -291,7 +295,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 // pass each StoredObject to the given objectProcessor if it passes all the filters
 type ResourceTraverser interface {
 	Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error
-	IsDirectory(isSource bool) (bool, error)
+	IsDirectory(isSource bool) (isDirectory bool, err error)
 	// isDirectory has an isSource flag for a single exception to blob.
 	// Blob should ONLY check remote if it's a source.
 	// On destinations, because blobs and virtual directories can share names, we should support placing in both ways.
@@ -739,10 +743,23 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, i
 }
 
 func (e *syncEnumerator) enumerate() (err error) {
+	handleAcceptableErrors := func() {
+		switch {
+		case err == nil: // don't do any error checking
+		case fileerror.HasCode(err, fileerror.ResourceNotFound),
+			datalakeerror.HasCode(err, datalakeerror.ResourceNotFound),
+			bloberror.HasCode(err, bloberror.BlobNotFound),
+			strings.Contains(err.Error(), "The system cannot find the"),
+			errors.Is(err, os.ErrNotExist):
+			err = nil // Oh no! Oh well. We'll create it later.
+		}
+	}
+
 	// enumerate the primary resource and build lookup map
 	err = e.primaryTraverser.Traverse(noPreProccessor, e.objectIndexer.store, e.filters)
+	handleAcceptableErrors()
 	if err != nil {
-		return
+		return err
 	}
 
 	// enumerate the secondary resource and as the objects pass the filters
@@ -750,6 +767,7 @@ func (e *syncEnumerator) enumerate() (err error) {
 	// which can process given objects based on what's already indexed
 	// note: transferring can start while scanning is ongoing
 	err = e.secondaryTraverser.Traverse(noPreProccessor, e.objectComparator, e.filters)
+	handleAcceptableErrors()
 	if err != nil {
 		return
 	}
