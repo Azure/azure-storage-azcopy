@@ -517,6 +517,13 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 			FilePermissions: perms,
 			Metadata:        props.Metadata,
 		})
+		// This is fine. Instead let's set properties.
+		if fileerror.HasCode(err, fileerror.ResourceAlreadyExists) {
+			err = nil
+
+			f.SetObjectProperties(a, props)
+		}
+
 		a.NoError("Create directory", err)
 	default:
 		a.Error("File Objects only support Files and Folders")
