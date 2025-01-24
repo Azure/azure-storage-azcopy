@@ -290,6 +290,20 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 						FromTo:      cca.FromTo,
 						Source:      src,
 						Destination: dst,
+						SourceSize:  &transfer.SourceSize,
+						HttpHeaders: blob.HTTPHeaders{
+							BlobCacheControl:       &transfer.CacheControl,
+							BlobContentDisposition: &transfer.ContentDisposition,
+							BlobContentEncoding:    &transfer.ContentEncoding,
+							BlobContentLanguage:    &transfer.ContentLanguage,
+							BlobContentMD5:         transfer.ContentMD5,
+							BlobContentType:        &transfer.ContentType,
+						},
+						Metadata:     transfer.Metadata,
+						BlobTier:     &transfer.BlobTier,
+						BlobVersion:  &transfer.BlobVersionID,
+						BlobTags:     transfer.BlobTags,
+						BlobSnapshot: &transfer.BlobSnapshotID,
 					}
 
 					buf, _ := json.Marshal(tx)

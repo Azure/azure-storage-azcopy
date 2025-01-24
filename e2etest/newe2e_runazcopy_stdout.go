@@ -211,6 +211,8 @@ func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
 			if err != nil {
 				continue
 			}
+
+			d.Transfers = append(d.Transfers, tx)
 		}
 	}
 
