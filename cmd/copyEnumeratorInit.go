@@ -168,7 +168,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				containers, err := acctTraverser.listContainers()
 
 				if err != nil {
-					return nil, fmt.Errorf("failed to list containers: %s", err)
+					return nil, fmt.Errorf("failed to list containers: %w", err)
 				}
 
 				// Resolve all container names up front.

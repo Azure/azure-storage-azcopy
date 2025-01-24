@@ -234,7 +234,7 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
 
 	if err != nil {
-		err = fmt.Errorf("failed to parse url %s; %s", result, err)
+		err = fmt.Errorf("failed to parse url %s; %w", result, err)
 		return
 	}
 

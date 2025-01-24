@@ -160,3 +160,15 @@ func ClonePointer[T any](in *T) *T {
 
 	return &out
 }
+
+func JoinMap[K comparable, V any](in ...map[K]V) map[K]V {
+	out := map[K]V{}
+
+	for _, dict := range in {
+		for k, v := range dict {
+			out[k] = v
+		}
+	}
+
+	return out
+}
