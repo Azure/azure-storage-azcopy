@@ -23,6 +23,7 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -35,6 +36,20 @@ type EnvironmentVariable struct {
 	DefaultValue string
 	Description  string
 	Hidden       bool
+}
+
+// GetEnvironmentVariable gets the environment variable or its default value
+func GetEnvironmentVariable(env EnvironmentVariable) string {
+	value := os.Getenv(env.Name)
+	if value == "" {
+		return env.DefaultValue
+	}
+	return value
+}
+
+// ClearEnvironmentVariable clears the environment variable
+func ClearEnvironmentVariable(variable EnvironmentVariable) {
+	_ = os.Setenv(variable.Name, "")
 }
 
 // This array needs to be updated when a new public environment variable is added
