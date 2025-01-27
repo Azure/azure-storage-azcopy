@@ -24,12 +24,13 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"io"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
@@ -191,9 +192,12 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
 	// so we must use the latest SDK version to stay safe
 	//TODO: Should we do that?
+	ctx := jptm.Context()
+	ctx = withPipelineNetworkStats(ctx, nil)
+
 	return &fileSourceInfoProvider{
 		defaultRemoteSourceInfoProvider: *base,
-		ctx:                             jptm.Context(),
+		ctx:                             ctx,
 		cacheOnce:                       &sync.Once{},
 		srcShareClient:                  s.NewShareClient(jptm.Info().SrcContainer),
 		sourceURL:                       source.URL()}, nil
@@ -337,11 +341,11 @@ func (p *fileSourceInfoProvider) GetMD5(offset, count int64) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
+		if len(response.ContentMD5) > 0 {
 			return response.ContentMD5, nil
 		} else {
 			// compute md5
-			body := response.NewRetryReader(p.jptm.Context(), &file.RetryReaderOptions{MaxRetries: MaxRetryPerDownloadBody})
+			body := response.NewRetryReader(p.ctx, &file.RetryReaderOptions{MaxRetries: MaxRetryPerDownloadBody})
 			defer body.Close()
 			h := md5.New()
 			if _, err = io.Copy(h, body); err != nil {

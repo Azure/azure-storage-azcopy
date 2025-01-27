@@ -1,0 +1,21 @@
+parameters:
+  - name: artifact_name
+    type: string
+  - name: download_path
+    type: string
+  - name: item_pattern
+    type: string
+
+steps:
+
+  - task: DownloadBuildArtifacts@0
+    displayName: 'Download Build Artifacts'
+    inputs:
+      artifactName: ${{ parameters.artifact_name }}
+      downloadPath: ${{ parameters.download_path }}
+      itemPattern: ${{ parameters.item_pattern }}
+
+  - script: |
+      ls -l
+    displayName: 'List Downloaded Package'
+    workingDirectory: ${{ parameters.download_path }}/${{ parameters.artifact_name }}

@@ -14,7 +14,7 @@ type HiddenFileDataAdapter struct {
 }
 
 func (a *HiddenFileDataAdapter) GetMode() HashStorageMode {
-	return EHashStorageMode.Default()
+	return EHashStorageMode.HiddenFiles()
 }
 
 func (a *HiddenFileDataAdapter) getHashPath(relativePath string) string {
@@ -26,12 +26,19 @@ func (a *HiddenFileDataAdapter) getHashPath(relativePath string) string {
 	dir, fName := filepath.Split(relativePath)
 	fName = fmt.Sprintf(".%s%s", fName, AzCopyHashDataStream)
 
+	// Try to create the directory
+	err := os.Mkdir(filepath.Join(basePath, dir), 0775)
+	if err != nil && !os.IsExist(err) {
+		lcm.Warn("Failed to create hash data directory")
+	}
+
 	return filepath.Join(basePath, dir, fName)
 }
 
-func (a *HiddenFileDataAdapter) getDataPath(relativePath string) string {
-	return filepath.Join(a.dataBasePath, relativePath)
-}
+// Commenting out this function as it is not used in the codebase
+// func (a *HiddenFileDataAdapter) getDataPath(relativePath string) string {
+// 	return filepath.Join(a.dataBasePath, relativePath)
+// }
 
 func (a *HiddenFileDataAdapter) GetHashData(relativePath string) (*SyncHashData, error) {
 	metaFile := a.getHashPath(relativePath)
@@ -60,9 +67,20 @@ func (a *HiddenFileDataAdapter) SetHashData(relativePath string, data *SyncHashD
 
 	metaFile := a.getHashPath(relativePath)
 
-	f, err := os.OpenFile(metaFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open hash meta file: %w", err)
+	var f *os.File
+	_, err := os.Stat(metaFile)
+	// In windows os.OpenFile function uses the Windows API to manage files, and the combination of O_CREATE, O_TRUNC, and O_RDWR
+	// flags which results in a system call that might not handle hidden files opening operations as expected with this combination of flags.
+	if os.IsNotExist(err) {
+		f, err = os.OpenFile(metaFile, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to create hash meta file: %w", err)
+		}
+	} else {
+		f, err = os.OpenFile(metaFile, os.O_TRUNC|os.O_RDWR, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open hash meta file: %w", err)
+		}
 	}
 
 	buf, err := json.Marshal(data)
@@ -76,10 +94,10 @@ func (a *HiddenFileDataAdapter) SetHashData(relativePath string, data *SyncHashD
 	}
 
 	// Push types around to check for OS-specific hide file method
-	if adapter, canHide := any(a).(interface{HideFile(string) error}); canHide {
-		dataFile := a.getDataPath(relativePath)
-
-		err := adapter.HideFile(dataFile)
+	if adapter, canHide := any(a).(interface{ HideFile(string) error }); canHide {
+		// if --local-hash-storage-mode HiddenFiles is used, hide the hash file
+		metaFile := a.getHashPath(relativePath)
+		err := adapter.HideFile(metaFile)
 		if err != nil {
 			return fmt.Errorf("failed to hide file: %w", err)
 		}

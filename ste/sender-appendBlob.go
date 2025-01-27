@@ -25,12 +25,13 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"io"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
-	"io"
-	"time"
 
 	"golang.org/x/sync/semaphore"
 
@@ -71,7 +72,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 		chunkSize)
 
 	srcSize := transferInfo.SourceSize
-	numChunks := getNumChunks(srcSize, chunkSize)
+	numChunks := getNumChunks(srcSize, chunkSize, chunkSize)
 
 	bsc, err := jptm.DstServiceClient().BlobServiceClient()
 	if err != nil {
@@ -163,7 +164,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 		CPKScopeInfo: s.jptm.CpkScopeInfo(),
 	})
 	if err != nil {
-		s.jptm.FailActiveSend("Creating blob", err)
+		s.jptm.FailActiveSend(common.Iff(len(blobTags) > 0, "Creating blob (with tags)", "Creating blob"), err)
 		return
 	}
 	destinationModified = true
@@ -171,7 +172,7 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) (destinationMod
 	if setTags {
 		_, err = s.destAppendBlobClient.SetTags(s.jptm.Context(), s.blobTagsToApply, nil)
 		if err != nil {
-			s.jptm.Log(common.LogWarning, err.Error())
+			s.jptm.FailActiveSend("Set blob tags", err)
 		}
 	}
 	return
@@ -228,7 +229,7 @@ func (s *appendBlobSenderBase) GetMD5(offset, count int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if response.ContentMD5 != nil && len(response.ContentMD5) > 0 {
+	if len(response.ContentMD5) > 0 {
 		return response.ContentMD5, nil
 	} else {
 		// compute md5

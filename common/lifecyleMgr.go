@@ -53,25 +53,23 @@ type LifecycleMgr interface {
 	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
 	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                                 // simple print, allowed to float up
+	Warn(string)                                                 // simple print, allowed to float up
 	Dryrun(OutputBuilder)                                        // print files for dry run mode
+	Output(OutputBuilder, OutputMessageType)                     // print output for list
 	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
 	SurrenderControl()                                           // give up control, this should never return
 	InitiateProgressReporting(WorkController)                    // start writing progress with another routine
 	AllowReinitiateProgressReporting()                           // allow re-initiation of progress reporting for followup job
-	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
-	ClearEnvironmentVariable(EnvironmentVariable)                // clears the environment variable
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
 	EnableInputWatcher()                                         // depending on the command, we may allow user to give input through Stdin
 	EnableCancelFromStdIn()                                      // allow user to send in `cancel` to stop the job
-	AddUserAgentPrefix(string) string                            // append the global user agent prefix, if applicable
 	E2EAwaitContinue()                                           // used by E2E tests
 	E2EAwaitAllowOpenFiles()                                     // used by E2E tests
 	E2EEnableAwaitAllowOpenFiles(enable bool)                    // used by E2E tests
 	RegisterCloseFunc(func())
 	SetForceLogging()
 	IsForceLoggingDisabled() bool
-	DownloadToTempPath() bool
 	MsgHandlerChannel() <-chan *LCMMsg
 	ReportAllJobPartsDone()
 	SetOutputVerbosity(mode OutputVerbosity)
@@ -204,10 +202,6 @@ func (lcm *lifecycleMgr) EnableCancelFromStdIn() {
 	lcm.allowCancelFromStdIn = true
 }
 
-func (lcm *lifecycleMgr) ClearEnvironmentVariable(variable EnvironmentVariable) {
-	_ = os.Setenv(variable.Name, "")
-}
-
 func (lcm *lifecycleMgr) SetOutputFormat(format OutputFormat) {
 	lcm.outputFormat = format
 }
@@ -217,7 +211,7 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 	// the value AZCOPY_PROFILE_CPU indicates the path to save CPU profiling data.
 	// e.g. export AZCOPY_PROFILE_CPU="cpu.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	cpuProfilePath := lcm.GetEnvironmentVariable(EEnvironmentVariable.ProfileCPU())
+	cpuProfilePath := GetEnvironmentVariable(EEnvironmentVariable.ProfileCPU())
 	if cpuProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
@@ -240,7 +234,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	// the value AZCOPY_PROFILE_MEM indicates the path to save memory profiling data.
 	// e.g. export AZCOPY_PROFILE_MEM="mem.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	memProfilePath := lcm.GetEnvironmentVariable(EEnvironmentVariable.ProfileMemory())
+	memProfilePath := GetEnvironmentVariable(EEnvironmentVariable.ProfileMemory())
 	if memProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)
@@ -260,7 +254,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 func (lcm *lifecycleMgr) Init(o OutputBuilder) {
 	lcm.msgQueue <- outputMessage{
 		msgContent: o(lcm.outputFormat),
-		msgType:    eOutputMessageType.Init(),
+		msgType:    EOutputMessageType.Init(),
 	}
 }
 
@@ -272,7 +266,7 @@ func (lcm *lifecycleMgr) Progress(o OutputBuilder) {
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: messageContent,
-		msgType:    eOutputMessageType.Progress(),
+		msgType:    EOutputMessageType.Progress(),
 	}
 }
 
@@ -284,7 +278,19 @@ func (lcm *lifecycleMgr) Info(msg string) {
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: infoMsg,
-		msgType:    eOutputMessageType.Info(),
+		msgType:    EOutputMessageType.Info(),
+	}
+}
+
+func (lcm *lifecycleMgr) Warn(msg string) {
+
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through Info, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
+
+	infoMsg := fmt.Sprintf("WARN: %v", msg)
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: infoMsg,
+		msgType:    EOutputMessageType.Info(),
 	}
 }
 
@@ -293,7 +299,7 @@ func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseO
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
 		msgContent:    message,
-		msgType:       eOutputMessageType.Prompt(),
+		msgType:       EOutputMessageType.Prompt(),
 		inputChannel:  expectedInputChannel,
 		promptDetails: details,
 	}
@@ -327,7 +333,19 @@ func (lcm *lifecycleMgr) Dryrun(o OutputBuilder) {
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: dryrunMessage,
-		msgType:    eOutputMessageType.Dryrun(),
+		msgType:    EOutputMessageType.Dryrun(),
+	}
+}
+
+func (lcm *lifecycleMgr) Output(o OutputBuilder, msgType OutputMessageType) {
+	om := ""
+	if o != nil {
+		om = o(lcm.outputFormat)
+	}
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: om,
+		msgType:    msgType,
 	}
 }
 
@@ -344,7 +362,7 @@ func (lcm *lifecycleMgr) Error(msg string) {
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
-		msgType:    eOutputMessageType.Error(),
+		msgType:    EOutputMessageType.Error(),
 		exitCode:   EExitCode.Error(),
 	}
 
@@ -368,7 +386,7 @@ func (lcm *lifecycleMgr) Exit(o OutputBuilder, applicationExitCode ExitCode) {
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: messageContent,
-		msgType:    eOutputMessageType.EndOfJob(),
+		msgType:    EOutputMessageType.EndOfJob(),
 		exitCode:   applicationExitCode,
 	}
 
@@ -398,7 +416,7 @@ func (lcm *lifecycleMgr) Response(resp LCMMsgResp) {
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: respMsg,
-		msgType:    eOutputMessageType.Response(),
+		msgType:    EOutputMessageType.Response(),
 	}
 }
 
@@ -436,7 +454,7 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 }
 
 func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
-	if msgToOutput.msgType == eOutputMessageType.Error() {
+	if msgToOutput.msgType == EOutputMessageType.Error() {
 		lcm.closeFunc()
 		os.Exit(int(EExitCode.Error()))
 	} else if msgToOutput.shouldExitProcess() {
@@ -459,7 +477,7 @@ func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 	if msgToOutput.shouldExitProcess() {
 		lcm.closeFunc()
 		os.Exit(int(msgToOutput.exitCode))
-	} else if msgType == eOutputMessageType.Prompt() {
+	} else if msgType == EOutputMessageType.Prompt() {
 		// read the response to the prompt and send it back through the channel
 		msgToOutput.inputChannel <- lcm.getInputAfterTime(questionTime)
 	}
@@ -477,7 +495,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 	}
 
 	switch msgToOutput.msgType {
-	case eOutputMessageType.Error(), eOutputMessageType.EndOfJob():
+	case EOutputMessageType.Error(), EOutputMessageType.EndOfJob():
 		// simply print and quit
 		// if no message is intended, avoid adding new lines
 		if msgToOutput.msgContent != "" {
@@ -488,7 +506,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 			os.Exit(int(msgToOutput.exitCode))
 		}
 
-	case eOutputMessageType.Progress():
+	case EOutputMessageType.Progress():
 		fmt.Print("\r")                   // return carriage back to start
 		fmt.Print(msgToOutput.msgContent) // print new progress
 
@@ -497,24 +515,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 		matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
 
 		lcm.progressCache = msgToOutput.msgContent
-
-	case eOutputMessageType.Init(), eOutputMessageType.Info(), eOutputMessageType.Dryrun(), eOutputMessageType.Response():
-		if lcm.progressCache != "" { // a progress status is already on the last line
-			// print the info from the beginning on current line
-			fmt.Print("\r")
-			fmt.Print(msgToOutput.msgContent)
-
-			// it is possible that the info is shorter than the progress status
-			// in this case we must erase the left over characters from the progress status
-			matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
-
-			// print the previous progress status again, so that it's on the last line
-			fmt.Print("\n")
-			fmt.Print(lcm.progressCache)
-		} else {
-			fmt.Println(msgToOutput.msgContent)
-		}
-	case eOutputMessageType.Prompt():
+	case EOutputMessageType.Prompt():
 		questionTime := time.Now()
 
 		if lcm.progressCache != "" { // a progress status is already on the last line
@@ -538,6 +539,23 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 
 		// read the response to the prompt and send it back through the channel
 		msgToOutput.inputChannel <- lcm.getInputAfterTime(questionTime)
+	default:
+		// Init, Info, Dryrun, Response, ListSummary, ListObject, and any other new message types will use default
+		if lcm.progressCache != "" { // a progress status is already on the last line
+			// print the info from the beginning on current line
+			fmt.Print("\r")
+			fmt.Print(msgToOutput.msgContent)
+
+			// it is possible that the info is shorter than the progress status
+			// in this case we must erase the left over characters from the progress status
+			matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
+
+			// print the previous progress status again, so that it's on the last line
+			fmt.Print("\n")
+			fmt.Print(lcm.progressCache)
+		} else {
+			fmt.Println(msgToOutput.msgContent)
+		}
 	}
 }
 
@@ -608,23 +626,6 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	}()
 }
 
-func (lcm *lifecycleMgr) GetEnvironmentVariable(env EnvironmentVariable) string {
-	value := os.Getenv(env.Name)
-	if value == "" {
-		return env.DefaultValue
-	}
-	return value
-}
-
-func (lcm *lifecycleMgr) AddUserAgentPrefix(userAgent string) string {
-	prefix := lcm.GetEnvironmentVariable(EEnvironmentVariable.UserAgentPrefix())
-	if len(prefix) > 0 {
-		userAgent = prefix + " " + userAgent
-	}
-
-	return userAgent
-}
-
 func (_ *lifecycleMgr) awaitChannel(ch chan struct{}, timeout time.Duration) {
 	select {
 	case <-ch:
@@ -659,7 +660,7 @@ func (lcm *lifecycleMgr) E2EEnableAwaitAllowOpenFiles(enable bool) {
 // Fetching `AZCOPY_DISABLE_SYSLOG` from the environment variables and
 // setting `disableSyslog` flag in LifeCycleManager to avoid Env Vars Lookup redundantly
 func (lcm *lifecycleMgr) SetForceLogging() {
-	disableSyslog, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
+	disableSyslog, err := strconv.ParseBool(GetEnvironmentVariable(EEnvironmentVariable.DisableSyslog()))
 	if err != nil {
 		// By default, we'll retain the current behaviour. i.e. To log in Syslog/WindowsEventLog if not specified by the user
 		disableSyslog = false
@@ -669,15 +670,6 @@ func (lcm *lifecycleMgr) SetForceLogging() {
 
 func (lcm *lifecycleMgr) IsForceLoggingDisabled() bool {
 	return lcm.disableSyslog
-}
-
-func (lcm *lifecycleMgr) DownloadToTempPath() bool {
-	ret, err := strconv.ParseBool(lcm.GetEnvironmentVariable(EEnvironmentVariable.DownloadToTempPath()))
-	if err != nil {
-		// By default we'll download to temp path
-		ret = true
-	}
-	return ret
 }
 
 func (lcm *lifecycleMgr) MsgHandlerChannel() <-chan *LCMMsg {
@@ -706,7 +698,7 @@ func shouldQuietMessage(msgToOutput outputMessage, quietMode OutputVerbosity) bo
 	case EOutputVerbosity.Default():
 		return false
 	case EOutputVerbosity.Essential():
-		return messageType == eOutputMessageType.Progress() || messageType == eOutputMessageType.Info() || messageType == eOutputMessageType.Prompt()
+		return messageType == EOutputMessageType.Progress() || messageType == EOutputMessageType.Info() || messageType == EOutputMessageType.Prompt()
 	case EOutputVerbosity.Quiet():
 		return true
 	default:

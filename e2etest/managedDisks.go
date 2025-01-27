@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,7 +18,12 @@ func (config *ManagedDiskConfig) GetMDURL() (*url.URL, error) {
 		return nil, fmt.Errorf("one or more important details are missing in the config")
 	}
 
-	uri := fmt.Sprintf("https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/disks/%s?api-version=2022-03-02", config.SubscriptionID, config.ResourceGroupName, config.DiskName)
+	// the API is the same, but the provider is different
+	uriFormat := common.Iff(config.isSnapshot,
+		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/snapshots/%s?api-version=2023-04-02",
+		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/disks/%s?api-version=2023-04-02")
+
+	uri := fmt.Sprintf(uriFormat, config.SubscriptionID, config.ResourceGroupName, config.DiskName)
 	out, err := url.Parse(uri)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URI (maybe some detail of the config was formatted invalid?)")
@@ -55,7 +61,11 @@ func (config *ManagedDiskConfig) GetAccess() (*url.URL, error) {
 		return nil, fmt.Errorf("failed to initialize request: %w", err)
 	}
 
-	req.Header["Authorization"] = []string{"Bearer " + config.oauth.Token}
+	oauthToken, err := config.oauth.FreshToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get fresh OAuth token: %w", err)
+	}
+	req.Header["Authorization"] = []string{"Bearer " + oauthToken}
 	req.Header["Content-Type"] = []string{"application/json; charset=utf-8"}
 	req.Header["Accept"] = []string{"application/json; charset=utf-8"}
 
@@ -117,7 +127,11 @@ func (config *ManagedDiskConfig) RevokeAccess() error {
 		return fmt.Errorf("failed to initialize request: %w", err)
 	}
 
-	req.Header["Authorization"] = []string{"Bearer " + config.oauth.Token}
+	tok, err := config.oauth.FreshToken()
+	if err != nil {
+		return fmt.Errorf("failed to ensure OAuth token is fresh: %w", err)
+	}
+	req.Header["Authorization"] = []string{"Bearer " + tok}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -127,7 +141,7 @@ func (config *ManagedDiskConfig) RevokeAccess() error {
 	if resp.StatusCode != 200 {
 		if resp.StatusCode == 202 {
 			newTarget := resp.Header.Get("Azure-Asyncoperation")
-			_, err := ResolveAzureAsyncOperation(config.oauth, newTarget, nil)
+			_, err := ResolveAzureAsyncOperation[any](config.oauth, newTarget, nil)
 
 			return err
 		}

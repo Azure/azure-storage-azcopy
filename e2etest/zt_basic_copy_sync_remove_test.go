@@ -22,14 +22,9 @@ package e2etest
 
 import (
 	"crypto/md5"
+	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -37,6 +32,14 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/stretchr/testify/assert"
 )
 
 // ================================  Copy And Sync: Upload, Download, and S2S  =========================================
@@ -368,7 +371,7 @@ func TestBasic_CopyRemoveFolderHNS(t *testing.T) {
 		desc:      "AllRemove",
 		useAllTos: true,
 		froms: []common.Location{
-			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
@@ -419,8 +422,19 @@ func TestBasic_CopyRemoveFolderHNS(t *testing.T) {
 }
 
 func TestBasic_CopyRemoveContainer(t *testing.T) {
+	allButBfsRemove := TestFromTo{
+		desc:      "AllRemove",
+		useAllTos: true,
+		froms: []common.Location{
+			common.ELocation.Blob(), // If you have a container-level SAS and a HNS account, you can't delete the container. HNS should not be included here.
+			common.ELocation.File(),
+		},
+		tos: []common.Location{
+			common.ELocation.Unknown(),
+		},
+	}
 
-	RunScenarios(t, eOperation.Remove(), eTestFromTo.AllRemove(), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+	RunScenarios(t, eOperation.Remove(), allButBfsRemove, eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
 		recursive:          true,
 		relativeSourcePath: "",
 	}, nil, testFiles{
@@ -438,7 +452,7 @@ func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
 		desc:      "AllRemove",
 		useAllTos: true,
 		froms: []common.Location{
-			common.ELocation.Blob(), // blobfs isn't technically supported; todo: support it properly rather than jank through Blob
+			common.ELocation.BlobFS(),
 		},
 		tos: []common.Location{
 			common.ELocation.Unknown(),
@@ -472,7 +486,6 @@ func TestBasic_CopyRemoveContainerHNS(t *testing.T) {
 				_, err = fsURL.GetAccessControl(ctx, nil)
 				a.Assert(err, notEquals(), nil)
 				a.Assert(datalakeerror.HasCode(err, "FilesystemNotFound"), equals(), true)
-
 			},
 		},
 		testFiles{
@@ -836,7 +849,7 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 					a.Error(fmt.Sprintf("Could not create hash adapter: %s", err))
 					return
 				}
-				a.Assert(hashAdapter.GetMode(), equals(), common.HashStorageMode(11)) // 1 is currently either XAttr or ADS; both are the intent of this test.
+				a.Assert(hashAdapter.GetMode(), equals(), common.EHashStorageMode.HiddenFiles())
 
 				hashData, err := hashAdapter.GetHashData("asdf.txt")
 				if err != nil || hashData == nil {
@@ -850,6 +863,13 @@ func TestBasic_HashBasedSync_HashDir(t *testing.T) {
 				hashFile := filepath.Join(hashStorageDir, ".asdf.txt"+common.AzCopyHashDataStream)
 				_, err = os.Stat(hashFile)
 				a.AssertNoErr(err)
+
+				isHidden := osScenarioHelper{}.IsFileHidden(a, hashFile)
+				assert.True(t, isHidden, "The metadata file should be hidden")
+
+				originalFile := filepath.Join(dataPath, "asdf.txt")
+				isHidden = osScenarioHelper{}.IsFileHidden(a, originalFile)
+				assert.True(t, !isHidden, "The original file should not be hidden")
 			},
 		},
 		testFiles{
@@ -869,7 +889,7 @@ func TestBasic_OverwriteHNSDirWithChildren(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Copy(),
-		eTestFromTo.Other(common.EFromTo.LocalBlobFS()),
+		eTestFromTo.Other(common.EFromTo.BlobFSBlobFS()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -1066,7 +1086,7 @@ func TestBasic_SyncRemoveFoldersHNS(t *testing.T) {
 	RunScenarios(
 		t,
 		eOperation.Sync(),
-		eTestFromTo.Other(common.EFromTo.BlobBlob()),
+		eTestFromTo.Other(common.EFromTo.BlobFSBlobFS()),
 		eValidate.Auto(),
 		anonymousAuthOnly,
 		anonymousAuthOnly,
@@ -1109,20 +1129,8 @@ func TestCopySync_DeleteDestinationFileFlag(t *testing.T) {
 		&hooks{
 			beforeRunJob: func(h hookHelper) {
 				blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient("filea")
-				// initial stage block
-				id := []string{BlockIDIntToBase64(1)}
-				_, err := blobClient.StageBlock(ctx, id[0], streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
-				if err != nil {
-					t.Errorf("error staging block %s", err)
-				}
-
-				_, err = blobClient.CommitBlockList(ctx, id, nil)
-				if err != nil {
-					t.Errorf("error committing block %s", err)
-				}
-
-				// second stage block
-				_, err = blobClient.StageBlock(ctx, id[0], streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
+				// initial stage block, with block id incompatible with us
+				_, err := blobClient.StageBlock(ctx, base64.StdEncoding.EncodeToString([]byte("foobar")), streaming.NopCloser(strings.NewReader(blockBlobDefaultData)), nil)
 				if err != nil {
 					t.Errorf("error staging block %s", err)
 				}
@@ -1148,4 +1156,191 @@ func TestCopySync_DeleteDestinationFileFlag(t *testing.T) {
 		EAccountType.Standard(),
 		"",
 	)
+}
+
+func TestBasic_PutBlobSizeSingleShot(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:     true,
+		putBlobSizeMB: 256, // 256 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for key, _ := range props {
+				// we try to match the test.txt substring because local test files have randomizing prefix to file names
+				if strings.Contains(key, "test.txt") {
+					client := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(key)
+					list, err := client.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					if err != nil {
+						t.Errorf("error getting block list %s", err)
+					}
+					if len(list.CommittedBlocks) != 0 {
+						t.Errorf("expected 0 committed blocks, got %d", len(list.CommittedBlocks))
+					}
+					if len(list.UncommittedBlocks) != 0 {
+						t.Errorf("expected 0 uncommitted blocks, got %d", len(list.UncommittedBlocks))
+					}
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "101M",
+
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("test.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_PutBlobSizeMultiPart(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:     true,
+		putBlobSizeMB: 50, // 50 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for key, _ := range props {
+				// we try to match the test.txt substring because local test files have randomizing prefix to file names
+				if strings.Contains(key, "test.txt") {
+					client := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(key)
+					list, err := client.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					if err != nil {
+						t.Errorf("error getting block list %s", err)
+					}
+					// default block size is 8mb
+					if len(list.CommittedBlocks) != 13 {
+						t.Errorf("expected 13 committed blocks, got %d", len(list.CommittedBlocks))
+					}
+					if len(list.UncommittedBlocks) != 0 {
+						t.Errorf("expected 0 uncommitted blocks, got %d", len(list.UncommittedBlocks))
+					}
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "101M",
+
+		shouldTransfer: []interface{}{
+			folder(""),
+			f("test.txt"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_MaxSingleChunkUpload(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		blockSizeMB: 300, // 300 MB, bigger than the default of 8 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for blob, _ := range props {
+				if strings.Contains(blob, "filea") {
+					blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(blob)
+
+					// attempt to "get blocks" but we actually won't get blocks because the blob is uploaded using put blob, not put block
+					resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					h.GetAsserter().Assert(err, equals(), nil)
+					h.GetAsserter().Assert(len(resp.CommittedBlocks), equals(), 0)
+					h.GetAsserter().Assert(len(resp.UncommittedBlocks), equals(), 0)
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "100M",
+
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_MaxSingleChunkUploadNoFlag(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+		// 8 MB would be the default block size
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for blob, _ := range props {
+				if strings.Contains(blob, "filea") {
+					blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(blob)
+
+					// attempt to "get blocks" but we actually won't get blocks because the blob is uploaded using put blob, not put block
+					resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					h.GetAsserter().Assert(err, equals(), nil)
+					h.GetAsserter().Assert(len(resp.CommittedBlocks), equals(), 0)
+					h.GetAsserter().Assert(len(resp.UncommittedBlocks), equals(), 0)
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "8M",
+
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_MaxMultiChunkUpload(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive:   true,
+		blockSizeMB: 50, // 50 MB
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for blob, _ := range props {
+				if strings.Contains(blob, "filea") {
+					blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(blob)
+
+					// attempt to "get blocks" and get 2 committed blocks
+					resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					h.GetAsserter().Assert(err, equals(), nil)
+					h.GetAsserter().Assert(len(resp.CommittedBlocks), equals(), 2)
+					h.GetAsserter().Assert(len(resp.UncommittedBlocks), equals(), 0)
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "100M",
+
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
+}
+
+func TestBasic_MaxMultiChunkUploadNoFlag(t *testing.T) {
+	RunScenarios(t, eOperation.CopyAndSync(), eTestFromTo.Other(common.EFromTo.LocalBlob(), common.EFromTo.BlobBlob()), eValidate.Auto(), anonymousAuthOnly, anonymousAuthOnly, params{
+		recursive: true,
+		// 8 MB would be the default block size
+	}, &hooks{
+		afterValidation: func(h hookHelper) {
+			props := h.GetDestination().getAllProperties(h.GetAsserter())
+			h.GetAsserter().Assert(len(props), equals(), 1)
+			for blob, _ := range props {
+				if strings.Contains(blob, "filea") {
+					blobClient := h.GetDestination().(*resourceBlobContainer).containerClient.NewBlockBlobClient(blob)
+
+					// attempt to "get blocks" and get 13 committed blocks
+					resp, err := blobClient.GetBlockList(ctx, blockblob.BlockListTypeAll, nil)
+					h.GetAsserter().Assert(err, equals(), nil)
+					h.GetAsserter().Assert(len(resp.CommittedBlocks), equals(), 13)
+					h.GetAsserter().Assert(len(resp.UncommittedBlocks), equals(), 0)
+				}
+			}
+		},
+	}, testFiles{
+		defaultSize: "100M",
+
+		shouldTransfer: []interface{}{
+			f("filea"),
+		},
+	}, EAccountType.Standard(), EAccountType.Standard(), "")
 }

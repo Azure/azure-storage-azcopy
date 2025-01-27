@@ -2,10 +2,10 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"reflect"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -13,7 +13,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 18
+const DataSchemaVersion common.Version = 19
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -28,7 +28,8 @@ type JobPartPlanMMF common.MMF
 func (mmf *JobPartPlanMMF) Plan() *JobPartPlanHeader {
 	// getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
 	// casting the mmf slice's address  to JobPartPlanHeader Pointer
-	return (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(mmf)).Data))
+	slice := (*common.MMF)(mmf).Slice()
+	return (*JobPartPlanHeader)(unsafe.Pointer(&slice[0]))
 }
 func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 
@@ -36,7 +37,6 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 
 type IJobPartPlanHeader interface {
 	CommandString() string
-	GetRelativeSrcDstStrings(transferIndex uint32) (source string, destination string)
 	JobPartStatus() common.JobStatus
 	JobStatus() common.JobStatus
 	SetJobPartStatus(newJobStatus common.JobStatus)
@@ -46,6 +46,7 @@ type IJobPartPlanHeader interface {
 	TransferSrcDstStrings(transferIndex uint32) (source string, destination string, isFolder bool)
 	TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType blob.BlobType, blobTier blob.AccessTier, s2sGetPropertiesInBackend bool, DestLengthValidation bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption, entityType common.EntityType, blobVersionID string, blobSnapshotID string, blobTags common.BlobTags)
 }
+
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
@@ -142,52 +143,21 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 
 // CommandString returns the command string given by user when job was created
 func (jpph *JobPartPlanHeader) CommandString() string {
-	commandSlice := []byte{}
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&commandSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(unsafe.Sizeof(*jpph)) // Address of Job Part Plan + Command String Length
-	sh.Len = int(jpph.CommandStringLength)
-	sh.Cap = sh.Len
+	// Calculate the start address of the command string
+	start := uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph)
+
+	// Create a slice from the calculated start address
+	commandSlice := unsafe.Slice((*byte)(unsafe.Pointer(start)), int(jpph.CommandStringLength))
 	return string(commandSlice)
 }
 
 func (jpph *JobPartPlanHeader) TransferSrcDstRelatives(transferIndex uint32) (relSource, relDest string) {
 	jppt := jpph.Transfer(transferIndex)
 
-	srcSlice := []byte{}
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
-	sh.Len = int(jppt.SrcLength)
-	sh.Cap = sh.Len
-	srcRelative := string(srcSlice)
+	srcData := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset))                           // Address of Job Part Plan + this transfer's src string offset
+	dstData := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength)) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
 
-	dstSlice := []byte{}
-	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
-	sh.Len = int(jppt.DstLength)
-	sh.Cap = sh.Len
-	dstRelative := string(dstSlice)
-
-	return srcRelative, dstRelative
-}
-
-func (jpph *JobPartPlanHeader) GetRelativeSrcDstStrings(transferIndex uint32) (source, destination string) {
-	jppt := jpph.Transfer(transferIndex)
-
-	srcSlice := []byte{}
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
-	sh.Len = int(jppt.SrcLength)
-	sh.Cap = sh.Len
-	srcRelative := string(srcSlice)
-
-	dstSlice := []byte{}
-	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
-	sh.Len = int(jppt.DstLength)
-	sh.Cap = sh.Len
-	dstRelative := string(dstSlice)
-
-	return srcRelative, dstRelative
+	return unsafe.String((*byte)(srcData), int(jppt.SrcLength)), unsafe.String((*byte)(dstData), int(jppt.DstLength))
 }
 
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
@@ -201,7 +171,7 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	jppt := jpph.Transfer(transferIndex)
 	isFolder = jppt.EntityType == common.EEntityType.Folder()
 
-	srcRelative, dstRelative := jpph.GetRelativeSrcDstStrings(transferIndex)
+	srcRelative, dstRelative := jpph.TransferSrcDstRelatives(transferIndex)
 
 	return common.GenerateFullPathWithQuery(srcRoot, srcRelative, srcExtraQuery),
 		common.GenerateFullPathWithQuery(dstRoot, dstRelative, dstExtraQuery),
@@ -209,13 +179,8 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 }
 
 func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
-	tempSlice := []byte{}
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&tempSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(offset) // Address of Job Part Plan + this string's offset
-	sh.Len = int(length)
-	sh.Cap = sh.Len
-
-	return string(tempSlice)
+	data := unsafe.Pointer(uintptr(unsafe.Pointer(jpph)) + uintptr(offset)) // Address of Job Part Plan + this string's offset
+	return unsafe.String((*byte)(data), int(length))
 }
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
@@ -350,6 +315,9 @@ type JobPartPlanDstBlob struct {
 
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize int64
+
+	// Specifies the maximum size of a blob which can be uploaded by a single PUT request.
+	PutBlobSize int64
 
 	SetPropertiesFlags common.SetPropertiesFlags
 

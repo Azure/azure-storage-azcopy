@@ -151,13 +151,14 @@ Job %s summary
 Number of File Transfers: %v
 Number of Folder Property Transfers: %v
 Number of Symlink Transfers: %v
-Total Number Of Transfers: %v
+Total Number of Transfers: %v
 Number of File Transfers Completed: %v
 Number of Folder Transfers Completed: %v
 Number of File Transfers Failed: %v
 Number of Folder Transfers Failed: %v
 Number of File Transfers Skipped: %v
 Number of Folder Transfers Skipped: %v
+Total Number of Bytes Transferred: %v
 Percent Complete (approx): %.1f
 Final Job Status: %v
 `,
@@ -172,6 +173,7 @@ Final Job Status: %v
 			summary.FoldersFailed,
 			summary.TransfersSkipped-summary.FoldersSkipped,
 			summary.FoldersSkipped,
+			summary.TotalBytesTransferred,
 			summary.PercentComplete, // noted as approx in the format string because won't include in-flight files if this Show command is run from a different process
 			summary.JobStatus,
 		)

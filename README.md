@@ -1,5 +1,4 @@
 # AzCopy v10
-
 AzCopy v10 is a command-line utility that you can use to copy data to and from containers and file shares in Azure Storage accounts.
 AzCopy V10 presents easy-to-use commands that are optimized for high performance and throughput.
 
@@ -65,19 +64,19 @@ The general format of the AzCopy commands is: `azcopy [command] [arguments] --[f
 
 * `copy` - Copies source data to a destination location. The supported directions are:
     - Local File System <-> Azure Blob (SAS or OAuth authentication)
-    - Local File System <-> Azure Files (Share/directory SAS authentication)
+    - Local File System <-> Azure Files (Share/directory SAS or OAuth authentication)
     - Local File System <-> Azure Data Lake Storage (ADLS Gen2) (SAS, OAuth, or SharedKey authentication)
-    - Azure Blob (SAS or public) -> Azure Blob (SAS or OAuth authentication)
-    - Azure Blob (SAS or public) -> Azure Files (SAS)
-    - Azure Files (SAS) -> Azure Files (SAS)
-    - Azure Files (SAS) -> Azure Blob (SAS or OAuth authentication)
+    - Azure Blob (SAS, OAuth or public authentication) -> Azure Blob (SAS or OAuth authentication)
+    - Azure Blob (SAS, OAuth or public authentication) -> Azure Files (SAS or OAuth authentication)
+    - Azure Files (SAS or OAuth authentication) -> Azure Files (SAS or OAuth authentication)
+    - Azure Files (SAS or OAuth authentication) -> Azure Blob (SAS or OAuth authentication)
     - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
     - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication) [Preview]
 
 * `sync` - Replicate source to the destination location. The supported directions are:
     - Local File System <-> Azure Blob (SAS or OAuth authentication)
-    - Local File System <-> Azure Files (Share/directory SAS authentication)
-    - Azure Blob (SAS or public) -> Azure Files (SAS)
+    - Local File System <-> Azure Files (Share/directory SAS or OAuth authentication)
+    - Azure Blob (SAS, OAuth or public authentication) -> Azure Files (SAS or OAuth authentication)
 
 * `login` - Log in to Azure Active Directory (AD) to access Azure Storage resources.
 

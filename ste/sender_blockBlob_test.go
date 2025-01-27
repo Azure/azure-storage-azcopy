@@ -21,13 +21,14 @@
 package ste
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/stretchr/testify/assert"
-	"strings"
-	"testing"
 )
 
 func TestGetVerifiedChunkParams(t *testing.T) {
@@ -50,6 +51,12 @@ func TestGetVerifiedChunkParams(t *testing.T) {
 	expectedErr = "block size of 3.91GiB for file tmpSrc of size 7.81GiB exceeds maximum allowed block size for a BlockBlob"
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
 	a.Equal(expectedErr, err.Error())
+
+	// Verify max block size, should pass with 3 chunks
+	transferInfo.BlockSize = 4194304000 // 4000MiB
+	_, numChunks, err := getVerifiedChunkParams(transferInfo, memLimit, memLimit)
+	a.NoError(err)
+	a.Equal(numChunks, uint32(3))
 
 	// High block count
 	transferInfo.SourceSize = 2147483648 //16GiB

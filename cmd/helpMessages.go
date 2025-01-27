@@ -21,21 +21,21 @@ const copyCmdShortDescription = "Copies source data to a destination location"
 const copyCmdLongDescription = `
 Copies source data to a destination location. The supported directions and forms of authorization are:
   - local <-> Azure Blob (Microsoft Entra ID or Shared access signature (SAS))
-  - local <-> Azure Files (Share/directory SAS)
+  - local <-> Azure Files (Microsoft Entra ID or Share/directory SAS)
   - local <-> Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key)
-  - Azure Blob (SAS or public) -> Azure Blob (Microsoft Entra ID or SAS)
-  - Data Lake Storage (SAS or public) -> Data Lake Storage (Microsoft Entra ID or SAS)
+  - Azure Blob (Microsoft Entra ID, SAS, public) -> Azure Blob (Microsoft Entra ID or SAS)
   - Data Lake Storage (Microsoft Entra ID or SAS) <-> Data Lake Storage (Microsoft Entra ID or SAS)
   - Data Lake Storage (Microsoft Entra ID or SAS) <-> Azure Blob (Microsoft Entra ID or SAS)
-  - Azure Blob (SAS or public) -> Azure Files (SAS)
-  - Azure Files (SAS) -> Azure Files (SAS)
-  - Azure Files (SAS) -> Azure Blob (Microsoft Entra ID or SAS)
-  - Amazon Web Services (AWS) S3 (Access Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
+  - Azure Blob (Microsoft Entra ID, SAS or public) -> Azure Files (Microsoft Entra ID or SAS)
+  - Azure Files (Microsoft Entra ID or SAS) -> Azure Files (Microsoft Entra ID or SAS)
+  - Azure Files (Microsoft Entra ID or SAS) -> Azure Blob (Microsoft Entra ID or SAS)
+  - AWS S3 (Access Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
   - Google Cloud Storage (Service Account Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
 
 Please refer to the examples for more information.
 
 Advanced:
+AzCopy does not support modifications to the source or destination during a transfer. 
 
 When you upload files from a local disk, AzCopy automatically detects the content type of the files based on the file extension or content (if no extension is specified).
 
@@ -129,7 +129,7 @@ Download a subset of containers within a storage account by using a wildcard sym
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container*name]" "/path/to/dir" --recursive
 
-Download all the versions of a blob from Azure Storage to local directory. Ensure that the source is a valid blob, the destination is a local folder, and a versionidsFile which takes in a path to the file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
+Download all the versions of a blob from Azure Storage listed in a text file (i.e, versionidsFile) to local directory. Ensure that source is a valid blob, destination is a local folder and versionidsFile is a text file where each version is written on a separate line. All the specified versions will get downloaded in the destination folder specified.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/another/path/to/dir/[versionidsFile]"
 
@@ -206,6 +206,16 @@ Copy all buckets to Blob Storage from GCS by using a service account key and a S
 Copy a subset of buckets by using a wildcard symbol (*) in the bucket name from GCS by using a service account key and a SAS token for destination. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
  
   - azcopy cp "https://storage.cloud.google.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
+
+To copy files changed before or after the AzCopy job has started, AzCopy provides date/time in the job log in ISO8601 format (search for 'ISO 8601 START TIME' in the job log) that can be used with the --include-after and --include-before flags, see examples below. This is helpful for incremental copies.
+
+Copy a subset of files modified on or after the given date/time (in ISO8601 format) in a container by using the include-after flag.
+
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]?[SAS]" "https://[dstaccount].blob.core.windows.net/[containername]?[SAS]" --include-after='2020-08-19T15:04:00Z''"
+
+Copy a subset of files modified on or before the given date/time (in ISO8601 format) in a container by using the include-before flag.
+
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[containername]?[SAS]" "https://[dstaccount].blob.core.windows.net/[containername]?[SAS]" --include-before='2020-08-19T15:04:00Z'"
 `
 
 // ===================================== ENV COMMAND ===================================== //
@@ -258,7 +268,7 @@ const cleanJobsCmdExample = "  azcopy jobs clean --with-status=completed"
 // ===================================== LIST COMMAND ===================================== //
 const listCmdShortDescription = "List the entities in a given resource"
 
-const listCmdLongDescription = `List the entities in a given resource. Blob, Files, and Data Lake Storage containers, folders, and accounts are supported.`
+const listCmdLongDescription = `This command lists accounts, containers, and directories. Blob Storage, Azure Data Lake Storage, and File Storage are supported. Microsoft Entra ID authorization for Files is currently not supported; please use SAS to authenticate for Files.`
 
 const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) separated list of attributes " +
 	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, ContentMD5, LeaseState, LeaseDuration, LeaseStatus) " +
@@ -313,6 +323,20 @@ Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's passw
    Please treat /path/to/my/cert as a path to a PEM or PKCS12 file-- AzCopy does not reach into the system cert store to obtain your certificate.
    --certificate-path is mandatory when doing cert-based service principal auth.
 
+Log in using a Device:
+    Set the environment variable AZCOPY_AUTO_LOGIN_TYPE=DEVICE to initiate Device login.
+      - azcopy login
+      Please note that you will be provided with a code to authenticate via a web browser. For example, you may see a message like this:
+      To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code ABCD12345.
+
+Log in using Managed Identity
+    Set the environment variable AZCOPY_AUTO_LOGIN_TYPE to MSI.
+    Set additional parameters based on your identity type:
+    To use Client ID, set AZCOPY_MSI_CLIENT_ID.
+    To use Resource string, set AZCOPY_MSI_RESOURCE_STRING.
+      - azcopy login
+      Upon successful authentication, you will see messages indicating login with identity succeeded and authenticating to the destination using Microsoft Entra ID.
+
 Subcommand for login to check the login status of your current session.
 	- azcopy login status 
 `
@@ -365,7 +389,9 @@ Remove specified version ids of a blob from Azure Storage. Ensure that source is
 
   - azcopy rm "https://[srcaccount].blob.core.windows.net/[containername]/[blobname]" "/path/to/dir" --list-of-versions="/path/to/dir/[versionidsfile]"
 
-Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
+Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a text file (i.e., list.txt) using the --list-of-files flag. In the text file, each blob and virtual directory is written on a separate line, see file contents below.
+The --list-of-files flag may incur performance costs due to additional transactions to retrieve object properties. For more details on the APIs AzCopy uses and performing cost estimations, visit
+https://aka.ms/AzCopyCostEstimation.
 
    - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/parent/dir]" --recursive=true --list-of-files=/usr/bar/list.txt
    - file content:
@@ -401,6 +427,7 @@ The sync command differs from the copy command in several ways:
   3. If the 'deleteDestination' flag is set to true or prompt, then sync will delete files and blobs at the destination that are not present at the source.
 
 Advanced:
+AzCopy does not support modifications to the source or destination during a transfer. 
 
 Please note that if you don't specify a file extension, AzCopy automatically detects the content type of the files when uploading from the local disk, based on the file extension or content.
 
@@ -515,6 +542,14 @@ const benchCmdExample = `Run an upload benchmark with default parameters (suitab
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]"
 
+Run an upload benchmark with a specified block size of 2 MiB and check the length of files after transfer:
+
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --block-size-mb 2 --check-length
+
+Run a benchmark test that uploads 500 files, each 500 MiB in size, with a log level set to only display errors:
+
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 500 --size-per-file 500M --log-level ERROR
+
 Run a benchmark test that uploads 100 files, each 2 GiB in size: (suitable for benchmarking on a fast network, e.g. 10 Gbps):'
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 100 --size-per-file 2G
@@ -525,21 +560,29 @@ selected file count and size:
 
    - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 50000 --size-per-file 8M --put-md5
 
-Run a benchmark test that downloads existing files from a target.
+Run a benchmark test that uploads 1000 files, each 100 KiB in size, and creates folders to divide up the data:
+
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 1000 --size-per-file 100K --number-of-folders 5
+ 
+Run a benchmark test that downloads existing files from a target
 
    - azcopy bench --mode='Download' "https://[account].blob.core.windows.net/[container]?[SAS]"
 
-Run an upload that does not delete the transferred files. These files can then serve as the payload for a download test.
+Run a download benchmark with the default parameters and cap the transfer rate at 500 Mbps:
+
+   - azcopy bench --mode=Download "https://[account].blob.core.windows.net/[container]?<SAS>" --cap-mbps 500
+
+Run an upload that does not delete the transferred files. (These files can then serve as the payload for a download test)
 
    - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 100 --delete-test-data=false
 `
 
 // ===================================== SET-PROPERTIES COMMAND ===================================== //
 
-const setPropertiesCmdShortDescription = "(Preview) Given a location, change all the valid system properties of that storage (blob or file)"
+const setPropertiesCmdShortDescription = "Given a location, change all the valid system properties of that storage (blob or file)"
 
 const setPropertiesCmdLongDescription = `
-(Preview) Sets properties of Blob Storage, Data Lake Storage, and File storage. The properties currently supported by this command are:
+Sets properties of Blob, Data Lake Storage, and File storage. The properties currently supported by this command are:
 
 	Blobs -> Tier, Metadata, Tags
 	Data Lake Storage -> Tier, Metadata, Tags
@@ -555,11 +598,20 @@ Change tier of blob to hot:
 Change tier of blob to cold:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cold
 
+Change tier of blob from hot to Archive:
+ - azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=archive
+
 Change tier of blob from archive to cool with rehydrate priority set to high:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cool --rehydrate-priority=high
 
+Change tier of blob from cool to hot with rehydrate priority set to standard: 
+  - azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=hot --rehydrate-priority=standard
+ 
 Change tier of all files in a directory to archive:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --block-blob-tier=archive --recursive=true
+
+Change tier of a page blob:
+ - azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --page-blob-tier=[P10/P15/P20/P30/P4/P40/P50/P6]--rehydrate-priority=[Standard/High]
 
 Change metadata of blob to {key = "abc", val = "def"} and {key = "ghi", val = "jkl"}:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --metadata=abc=def;ghi=jkl
@@ -569,6 +621,9 @@ Change metadata of all files in a directory to {key = "abc", val = "def"} and {k
 
 Clear all existing metadata of blob:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --metadata=clear
+
+Clear all existing metadata from all files:
+ - azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --recursive --metadata=clear
 
 Change blob-tags of blob to {key = "abc", val = "def"} and {key = "ghi", val = "jkl"}:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --blob-tags=abc=def&ghi=jkl

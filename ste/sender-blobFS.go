@@ -23,7 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
-	"net/url"
+	datalakesas "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/sas"
 	"strings"
 	"time"
 
@@ -47,15 +47,16 @@ type DatalakeClientStub interface {
 
 type blobFSSenderBase struct {
 	jptm                IJobPartTransferMgr
-	sip             ISourceInfoProvider
-	blobClient		blockblob.Client
-	fileOrDirClient DatalakeClientStub
-	parentDirClient *directory.Client
-	chunkSize       int64
+	sip                 ISourceInfoProvider
+	blobClient          blockblob.Client
+	fileOrDirClient     DatalakeClientStub
+	parentDirClient     *directory.Client
+	chunkSize           int64
 	numChunks           uint32
 	pacer               pacer
 	creationTimeHeaders *file.HTTPHeaders
 	flushThreshold      int64
+	metadataToSet       common.Metadata
 }
 
 func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*blobFSSenderBase, error) {
@@ -63,7 +64,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 
 	// compute chunk size and number of chunks
 	chunkSize := info.BlockSize
-	numChunks := getNumChunks(info.SourceSize, chunkSize)
+	numChunks := getNumChunks(info.SourceSize, chunkSize, chunkSize)
 
 	props, err := sip.Properties()
 	if err != nil {
@@ -99,7 +100,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 	return &blobFSSenderBase{
 		jptm:                jptm,
 		sip:                 sip,
-		blobClient: *bsc.NewContainerClient(info.DstContainer).NewBlockBlobClient(info.DstFilePath),
+		blobClient:          *bsc.NewContainerClient(info.DstContainer).NewBlockBlobClient(info.DstFilePath),
 		fileOrDirClient:     destClient,
 		parentDirClient:     fsc.NewDirectoryClient(parentPath),
 		chunkSize:           chunkSize,
@@ -107,6 +108,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, pacer pac
 		pacer:               pacer,
 		creationTimeHeaders: &headers,
 		flushThreshold:      chunkSize * int64(ADLSFlushThreshold),
+		metadataToSet:       props.SrcMetadata,
 	}, nil
 }
 
@@ -218,9 +220,7 @@ func (u *blobFSSenderBase) doEnsureDirExists(directoryClient *directory.Client) 
 	// or a folder-centric one, since with the parallelism we use, we don't actually
 	// know which will happen first
 	err = u.jptm.GetFolderCreationTracker().CreateFolder(directoryClient.DFSURL(), func() error {
-		_, err := directoryClient.Create(u.jptm.Context(), &directory.CreateOptions{AccessConditions:
-			&directory.AccessConditions{ModifiedAccessConditions:
-				&directory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+		_, err := directoryClient.Create(u.jptm.Context(), &directory.CreateOptions{AccessConditions: &directory.AccessConditions{ModifiedAccessConditions: &directory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 		return err
 	})
 	if datalakeerror.HasCode(err, datalakeerror.PathAlreadyExists) {
@@ -245,12 +245,12 @@ func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, e
 func (u *blobFSSenderBase) SetPOSIXProperties() error {
 	adapter, err := u.GetSourcePOSIXProperties()
 	if err != nil {
-		return fmt.Errorf("failed to get POSIX properties")
+		return fmt.Errorf("failed to get POSIX properties: %w", err)
 	} else if adapter == nil {
 		return nil
 	}
 
-	meta := common.Metadata{}
+	meta := u.metadataToSet
 	common.AddStatToBlobMetadata(adapter, meta)
 	delete(meta, common.POSIXFolderMeta) // Can't be set on HNS accounts.
 
@@ -259,18 +259,32 @@ func (u *blobFSSenderBase) SetPOSIXProperties() error {
 }
 
 func (u *blobFSSenderBase) SetFolderProperties() error {
-	return u.SetPOSIXProperties()
+	if u.jptm.Info().PreservePOSIXProperties {
+		return u.SetPOSIXProperties()
+	} else if len(u.metadataToSet) > 0 {
+		_, err := u.blobClient.SetMetadata(u.jptm.Context(), u.metadataToSet, nil)
+		if err != nil {
+			return fmt.Errorf("failed to set metadata: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (u *blobFSSenderBase) DirUrlToString() string {
 	directoryURL := u.getDirectoryClient().DFSURL()
-	rawURL, err := url.Parse(directoryURL)
+
+	parts, err := datalakesas.ParseURL(directoryURL)
 	common.PanicIfErr(err)
-	// To avoid encoding/decoding
-	rawURL.RawPath = ""
-	// To avoid SAS token
-	rawURL.RawQuery = ""
-	return rawURL.String()
+
+	parts.SAS = datalakesas.QueryParameters{}
+	parts.UnparsedParams = ""
+
+	if parts.PathName == "/" {
+		parts.PathName = ""
+	}
+
+	return parts.String()
 }
 
 func (u *blobFSSenderBase) SendSymlink(linkData string) error {
@@ -284,20 +298,20 @@ func (u *blobFSSenderBase) SendSymlink(linkData string) error {
 
 	common.AddStatToBlobMetadata(adapter, meta)
 	meta[common.POSIXSymlinkMeta] = to.Ptr("true") // just in case there isn't any metadata
-	blobHeaders := blob.HTTPHeaders{ // translate headers, since those still apply
-		BlobContentType: u.creationTimeHeaders.ContentType,
-		BlobContentEncoding: u.creationTimeHeaders.ContentEncoding,
-		BlobContentLanguage: u.creationTimeHeaders.ContentLanguage,
+	blobHeaders := blob.HTTPHeaders{               // translate headers, since those still apply
+		BlobContentType:        u.creationTimeHeaders.ContentType,
+		BlobContentEncoding:    u.creationTimeHeaders.ContentEncoding,
+		BlobContentLanguage:    u.creationTimeHeaders.ContentLanguage,
 		BlobContentDisposition: u.creationTimeHeaders.ContentDisposition,
-		BlobCacheControl: u.creationTimeHeaders.CacheControl,
-		BlobContentMD5: u.creationTimeHeaders.ContentMD5,
+		BlobCacheControl:       u.creationTimeHeaders.CacheControl,
+		BlobContentMD5:         u.creationTimeHeaders.ContentMD5,
 	}
 	_, err = u.blobClient.Upload(
 		u.jptm.Context(),
 		streaming.NopCloser(strings.NewReader(linkData)),
 		&blockblob.UploadOptions{
 			HTTPHeaders: &blobHeaders,
-			Metadata: meta,
+			Metadata:    meta,
 		})
 
 	return err

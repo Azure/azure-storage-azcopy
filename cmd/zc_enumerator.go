@@ -24,7 +24,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -234,6 +238,8 @@ type blobPropsProvider interface {
 	LeaseDuration() lease.DurationType
 	LeaseState() lease.StateType
 	ArchiveStatus() blob.ArchiveStatus
+	LastModified() time.Time
+	ContentLength() int64
 }
 type filePropsProvider interface {
 	contentPropsProvider
@@ -289,7 +295,7 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 // pass each StoredObject to the given objectProcessor if it passes all the filters
 type ResourceTraverser interface {
 	Traverse(preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error
-	IsDirectory(isSource bool) (bool, error)
+	IsDirectory(isSource bool) (isDirectory bool, err error)
 	// isDirectory has an isSource flag for a single exception to blob.
 	// Blob should ONLY check remote if it's a source.
 	// On destinations, because blobs and virtual directories can share names, we should support placing in both ways.
@@ -334,7 +340,7 @@ type enumerationCounterFunc func(entityType common.EntityType)
 // errorOnDirWOutRecursive is used by copy.
 // If errorChannel is non-nil, all errors encountered during enumeration will be conveyed through this channel.
 // To avoid slowdowns, use a buffered channel of enough capacity.
-func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel common.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, destination *common.Location, excludeContainerNames []string) (ResourceTraverser, error) {
+func InitResourceTraverser(resource common.ResourceString, location common.Location, ctx *context.Context, credential *common.CredentialInfo, symlinkHandling common.SymlinkHandlingType, listOfFilesChannel chan string, recursive, getProperties, includeDirectoryStubs bool, permanentDeleteOption common.PermanentDeleteOption, incrementEnumerationCounter enumerationCounterFunc, listOfVersionIds chan string, s2sPreserveBlobTags bool, syncHashType common.SyncHashType, preservePermissions common.PreservePermissionsOption, logLevel common.LogLevel, cpkOptions common.CpkOptions, errorChannel chan ErrorFileInfo, stripTopDir bool, trailingDot common.TrailingDotOption, destination *common.Location, excludeContainerNames []string, includeVersionsList bool) (ResourceTraverser, error) {
 	var output ResourceTraverser
 
 	var includeDeleted bool
@@ -353,6 +359,10 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		includeVersion = true
 	}
 
+	// print out version id when using azcopy list
+	if includeVersionsList {
+		includeVersion = true
+	}
 	// Clean up the resource if it's a local path
 	if location == common.ELocation.Local() {
 		resource = common.ResourceString{Value: cleanLocalPath(resource.ValueLocal())}
@@ -375,7 +385,15 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		return output, nil
 	}
 
-	options := createClientOptions(azcopyScanningLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if credential != nil {
+		if at, ok := credential.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+			reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		}
+	}
+
+	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
 
 	switch location {
 	case common.ELocation.Local():
@@ -440,7 +458,13 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.BlobName = ""
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
+
+		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		if err != nil {
+			return nil, err
+		}
+
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -483,9 +507,15 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		fileURLParts.ShareSnapshot = ""
 		fileURLParts.DirectoryOrFilePath = ""
 		fileOptions := &common.FileClientOptions{
-			AllowTrailingDot: trailingDot == common.ETrailingDotOption.Enable(),
+			AllowTrailingDot: trailingDot.IsEnabled(),
 		}
-		c, err := common.GetServiceClientForLocation(common.ELocation.File(), fileURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
+
+		res, err := SplitResourceString(fileURLParts.String(), common.ELocation.File())
+		if err != nil {
+			return nil, err
+		}
+
+		c, err := common.GetServiceClientForLocation(common.ELocation.File(), res, credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, fileOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -526,7 +556,12 @@ func InitResourceTraverser(resource common.ResourceString, location common.Locat
 		blobURLParts.Snapshot = ""
 		blobURLParts.VersionID = ""
 
-		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), blobURLParts.String(), credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
+		res, err := SplitResourceString(blobURLParts.String(), common.ELocation.Blob())
+		if err != nil {
+			return nil, err
+		}
+
+		c, err := common.GetServiceClientForLocation(common.ELocation.Blob(), res, credential.CredentialType, credential.OAuthTokenInfo.TokenCredential, &options, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -708,10 +743,23 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, i
 }
 
 func (e *syncEnumerator) enumerate() (err error) {
+	handleAcceptableErrors := func() {
+		switch {
+		case err == nil: // don't do any error checking
+		case fileerror.HasCode(err, fileerror.ResourceNotFound),
+			datalakeerror.HasCode(err, datalakeerror.ResourceNotFound),
+			bloberror.HasCode(err, bloberror.BlobNotFound),
+			strings.Contains(err.Error(), "The system cannot find the"),
+			errors.Is(err, os.ErrNotExist):
+			err = nil // Oh no! Oh well. We'll create it later.
+		}
+	}
+
 	// enumerate the primary resource and build lookup map
 	err = e.primaryTraverser.Traverse(noPreProccessor, e.objectIndexer.store, e.filters)
+	handleAcceptableErrors()
 	if err != nil {
-		return
+		return err
 	}
 
 	// enumerate the secondary resource and as the objects pass the filters
@@ -719,6 +767,7 @@ func (e *syncEnumerator) enumerate() (err error) {
 	// which can process given objects based on what's already indexed
 	// note: transferring can start while scanning is ongoing
 	err = e.secondaryTraverser.Traverse(noPreProccessor, e.objectComparator, e.filters)
+	handleAcceptableErrors()
 	if err != nil {
 		return
 	}

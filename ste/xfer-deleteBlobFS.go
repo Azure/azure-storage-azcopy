@@ -1,9 +1,10 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 
 	"net/http"
@@ -14,6 +15,7 @@ import (
 )
 
 var logBlobFSDeleteWarnOnce = &sync.Once{}
+
 const blobFSDeleteWarning = "Displayed file count will be either 1 or based upon list-of-files entries, and thus inaccurate, as deletes are performed recursively service-side."
 
 func DeleteHNSResource(jptm IJobPartTransferMgr, pacer pacer) {
@@ -51,7 +53,23 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 	transferDone := func(err error) {
 		status := common.ETransferStatus.Success()
 		if err != nil {
-			status = common.ETransferStatus.Failed()
+			var respErr *azcore.ResponseError
+			if errors.As(err, &respErr) {
+				if respErr.StatusCode == http.StatusNotFound {
+					// if the delete failed with err 404, i.e resource not found, then mark the transfer as success.
+					status = common.ETransferStatus.Success()
+				}
+				// If the status code was 403, it means there was an authentication error and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if respErr.StatusCode == http.StatusForbidden {
+					errMsg := fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error())
+					jptm.Log(common.LogError, errMsg)
+					common.GetLifecycleMgr().Error(errMsg)
+				} else {
+					// in all other cases, make the transfer as failed
+					status = common.ETransferStatus.Failed()
+				}
+			}
 		}
 
 		if status == common.ETransferStatus.Failed() {
@@ -70,7 +88,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 		transferDone(err)
 		return
 	}
-	
+
 	c := s.NewFileSystemClient(jptm.Info().SrcContainer)
 
 	// Deleting a filesystem
@@ -82,15 +100,13 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 
 	// Check if the source is a file or directory
 	directoryClient := c.NewDirectoryClient(info.SrcFilePath)
-	var respFromCtx *http.Response
-	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
-	_, err = directoryClient.GetProperties(ctxWithResp, nil)
+	props, err := directoryClient.GetProperties(ctx, nil)
 	if err != nil {
 		transferDone(err)
 		return
 	}
 
-	resourceType := respFromCtx.Header.Get("x-ms-resource-type")
+	resourceType := common.IffNotNil(props.ResourceType, "")
 	if strings.EqualFold(resourceType, "file") {
 		fileClient := c.NewFileClient(info.SrcFilePath)
 

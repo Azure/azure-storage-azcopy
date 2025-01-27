@@ -30,6 +30,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+var JobsCleanupSuccessMsg = "Successfully removed all jobs."
+
 func init() {
 	type JobsCleanReq struct {
 		withStatus string
@@ -122,10 +124,12 @@ func blindDeleteAllJobFiles() (int, error) {
 	if err != nil {
 		return numPlanFilesRemoved, err
 	}
-
 	// get rid of the logs
 	numLogFilesRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
-		if strings.HasSuffix(s, ".log") {
+		// Do not remove the current job's log file this will cause the cleanup job to fail.
+		if strings.Contains(s, azcopyCurrentJobID.String()) {
+			return false
+		} else if strings.HasSuffix(s, ".log") {
 			return true
 		}
 		return false

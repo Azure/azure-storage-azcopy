@@ -27,7 +27,7 @@ func (RpcCmd) ListJobTransfers() RpcCmd   { return RpcCmd("ListJobTransfers") }
 func (RpcCmd) CancelJob() RpcCmd          { return RpcCmd("Cancel") }
 func (RpcCmd) PauseJob() RpcCmd           { return RpcCmd("PauseJob") }
 func (RpcCmd) ResumeJob() RpcCmd          { return RpcCmd("ResumeJob") }
-func (RpcCmd) GetJobFromTo() RpcCmd       { return RpcCmd("GetJobFromTo") }
+func (RpcCmd) GetJobDetails() RpcCmd      { return RpcCmd("GetJobDetails") }
 
 func (c RpcCmd) String() string {
 	return enum.String(c, reflect.TypeOf(c))
@@ -98,6 +98,9 @@ func (r ResourceString) ValueLocal() string {
 
 func (r ResourceString) addParamsToUrl(u *url.URL, sas, extraQuery string) {
 	for _, p := range []string{sas, extraQuery} {
+		// Sanity check: trim ? from the start
+		p = strings.TrimPrefix(p, "?")
+
 		if p == "" {
 			continue
 		}
@@ -181,10 +184,10 @@ type CopyJobPartOrderRequest struct {
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType           CredentialType
-	OAuthTokenInfo           OAuthTokenInfo
-	S3CredentialInfo         S3CredentialInfo
-	GCPCredentialInfo        GCPCredentialInfo
+	CredentialType    CredentialType
+	OAuthTokenInfo    OAuthTokenInfo
+	S3CredentialInfo  S3CredentialInfo
+	GCPCredentialInfo GCPCredentialInfo
 }
 
 func (c CredentialInfo) WithType(credentialType CredentialType) CredentialInfo {
@@ -238,6 +241,7 @@ type BlobTransferAttributes struct {
 	PutMd5                           bool                  // when uploading, should we create and PUT Content-MD5 hashes
 	MD5ValidationOption              HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
 	BlockSizeInBytes                 int64                 // when uploading/downloading/copying, specify the size of each chunk
+	PutBlobSizeInBytes               int64                 // when uploading, specify the threshold to determine if the blob should be uploaded in a single PUT request
 	DeleteSnapshotsOption            DeleteSnapshotsOption // when deleting, specify what to do with the snapshots
 	BlobTagsString                   string                // when user explicitly provides blob tags
 	PermanentDeleteOption            PermanentDeleteOption // Permanently deletes soft-deleted snapshots when indicated by user
@@ -371,15 +375,16 @@ type ListJobTransfersResponse struct {
 	Details  []TransferDetail
 }
 
-// GetJobFromToRequest indicates request to get job's FromTo info from job part plan header
-type GetJobFromToRequest struct {
+// GetJobDetailsRequest indicates request to get job's FromTo and TrailingDot info from job part plan header
+type GetJobDetailsRequest struct {
 	JobID JobID
 }
 
-// GetJobFromToResponse indicates response to get job's FromTo info.
-type GetJobFromToResponse struct {
+// GetJobDetailsResponse indicates response to get job's FromTo and TrailingDot info.
+type GetJobDetailsResponse struct {
 	ErrorMsg    string
 	FromTo      FromTo
 	Source      string
 	Destination string
+	TrailingDot TrailingDotOption
 }

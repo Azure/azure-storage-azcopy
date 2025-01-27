@@ -72,7 +72,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, &dest, cca.excludeContainer)
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.permanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.preservePermissions, azcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, &dest, cca.excludeContainer, false)
 
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 				logDstContainerCreateFailureOnce.Do(func() {
-					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+					glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
 				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to create destination container %s. The transfer will continue if the container exists", dstContainerName), common.LogWarning)
 				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
@@ -168,7 +168,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				containers, err := acctTraverser.listContainers()
 
 				if err != nil {
-					return nil, fmt.Errorf("failed to list containers: %s", err)
+					return nil, fmt.Errorf("failed to list containers: %w", err)
 				}
 
 				// Resolve all container names up front.
@@ -194,7 +194,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 					if _, ok := seenFailedContainers[bucketName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+							glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", bucketName), common.LogWarning)
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
@@ -215,7 +215,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+							glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", resName), common.LogWarning)
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
@@ -279,39 +279,24 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 		if cca.dryrunMode && shouldSendToSte {
 			glcm.Dryrun(func(format common.OutputFormat) string {
-				if format == common.EOutputFormat.Json() {
-					jsonOutput, err := json.Marshal(transfer)
-					common.PanicIfErr(err)
-					return string(jsonOutput)
-				} else {
-					if cca.FromTo.From() == common.ELocation.Local() {
-						// formatting from local source
-						dryrunValue := fmt.Sprintf("DRYRUN: copy %v", common.ToShortPath(cca.Source.Value))
-						if runtime.GOOS == "windows" {
-							dryrunValue += strings.ReplaceAll(srcRelPath, "/", "\\")
-						} else { // linux and mac
-							dryrunValue += srcRelPath
-						}
-						dryrunValue += fmt.Sprintf(" to %v%v", strings.Trim(cca.Destination.Value, "/"), dstRelPath)
-						return dryrunValue
-					} else if cca.FromTo.To() == common.ELocation.Local() {
-						// formatting to local source
-						dryrunValue := fmt.Sprintf("DRYRUN: copy %v%v to %v",
-							strings.Trim(cca.Source.Value, "/"), srcRelPath,
-							common.ToShortPath(cca.Destination.Value))
-						if runtime.GOOS == "windows" {
-							dryrunValue += strings.ReplaceAll(dstRelPath, "/", "\\")
-						} else { // linux and mac
-							dryrunValue += dstRelPath
-						}
-						return dryrunValue
-					} else {
-						return fmt.Sprintf("DRYRUN: copy %v%v to %v%v",
-							cca.Source.Value,
-							srcRelPath,
-							cca.Destination.Value,
-							dstRelPath)
+				src := common.GenerateFullPath(cca.Source.Value, srcRelPath)
+				dst := common.GenerateFullPath(cca.Destination.Value, dstRelPath)
+
+				switch format {
+				case common.EOutputFormat.Json():
+					tx := DryrunTransfer{
+						EntityType:  transfer.EntityType,
+						BlobType:    common.FromBlobType(transfer.BlobType),
+						FromTo:      cca.FromTo,
+						Source:      src,
+						Destination: dst,
 					}
+
+					buf, _ := json.Marshal(tx)
+					return string(buf)
+				default:
+					return fmt.Sprintf("DRYRUN: copy %v to %v",
+						src, dst)
 				}
 			})
 			return nil
@@ -329,7 +314,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	return NewCopyEnumerator(traverser, filters, processor, finalizer), nil
 }
 
-// This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
+// This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
 func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
 	var err error
@@ -339,11 +324,11 @@ func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *co
 		return false
 	}
 
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(*ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
+	if dstCredInfo, _, err = GetCredentialInfoForLocation(*ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
 		return false
 	}
 
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, common.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, cca.excludeContainer)
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, common.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil, cca.excludeContainer, false)
 
 	if err != nil {
 		return false
@@ -436,23 +421,24 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	existingContainers[containerName] = true
 
 	var dstCredInfo common.CredentialInfo
-	dstURL, err := dstWithSAS.String()
-	if err != nil {
-		return err
-	}
-
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
 	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
 	defer cancel()
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
+	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination, false, cca.CpkOptions); err != nil {
 		return err
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),
-		dstURL,
+		dstWithSAS,
 		dstCredInfo.CredentialType,
 		dstCredInfo.OAuthTokenInfo.TokenCredential,
 		&options,
@@ -588,6 +574,10 @@ func (cca *CookedCopyCmdArgs) MakeEscapedRelativePath(source bool, dstIsDir bool
 	// write straight to /dev/null, do not determine a indirect path
 	if !source && cca.Destination.Value == common.Dev_Null {
 		return "" // ignore path encode rules
+	}
+
+	if object.relativePath == "\x00" { // Short circuit, our relative path is requesting root/
+		return "\x00"
 	}
 
 	// source is a EXACT path to the file

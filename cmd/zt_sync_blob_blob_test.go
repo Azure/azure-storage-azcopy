@@ -457,23 +457,23 @@ func TestSyncS2SMismatchContainerAndBlob(t *testing.T) {
 	dstBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(a, dstContainerName, singleBlobName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstBlobURLWithSAS.String())
 
-	// type mismatch, we should get an error
+	// type mismatch, we should not get an error
 	runSyncAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		a.Zero(len(mockedRPC.transfers))
+		a.Equal(len(mockedRPC.transfers), len(blobList))
 	})
 
 	// reverse the source and destination
 	raw = getDefaultSyncRawInput(dstBlobURLWithSAS.String(), srcContainerURLWithSAS.String())
 
-	// type mismatch again, we should also get an error
+	// type mismatch again, we should also not get an error
 	runSyncAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
+		a.Nil(err)
 
 		// validate that the right number of transfers were scheduled
-		a.Zero(len(mockedRPC.transfers))
+		a.Equal(len(mockedRPC.transfers), len(blobList))
 	})
 }
 
@@ -926,12 +926,12 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 		validateS2SSyncTransfersAreScheduled(a, []string{}, mockedRPC)
 
 		msg := <-mockedLcm.dryrunLog
-		syncMessage := common.CopyTransfer{}
+		syncMessage := DryrunTransfer{}
 		errMarshal := json.Unmarshal([]byte(msg), &syncMessage)
 		a.Nil(errMarshal)
 		a.True(strings.Contains(syncMessage.Source, blobsToDelete[0]))
-		a.Equal("File", syncMessage.EntityType.String())
-		a.Equal("BlockBlob", string(syncMessage.BlobType))
+		a.Equal(common.EEntityType.File(), syncMessage.EntityType)
+		a.Equal(common.EBlobType.BlockBlob(), syncMessage.BlobType)
 
 	})
 }

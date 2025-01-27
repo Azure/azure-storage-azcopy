@@ -21,25 +21,20 @@
 package main
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"log"
-	"math/rand"
 	"os"
 	"path"
 	"runtime"
-	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // get the lifecycle manager to print messages
 var glcm = common.GetLifecycleMgr()
 
 func main() {
-	rand.Seed(time.Now().UnixNano()) // make sure our random numbers actually are random (but remember, use crypto/rand for anything where strong/reliable randomness is required
-
-	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
-	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
+	azcopyLogPathFolder := common.GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())     // user specified location for log files
+	azcopyJobPlanFolder := common.GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation()) // user specified location for plan files
 
 	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
 	// but all the above can be put elsewhere as they can become very large

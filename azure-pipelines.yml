@@ -1,33 +1,28 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.19.12'
-  AZCOPY_GOLANG_VERSION_COVERAGE: '1.20.2'
+  AZCOPY_GOLANG_VERSION: '1.22.7'
+  AZCOPY_GOLANG_VERSION_COVERAGE: '1.22.7'
 
 trigger:
   branches:
-    include:
-      - dev
-      - main
+    include: [ 'main' ]
 
 pr:
   branches:
-    include:
-      - dev
-      - main
-
+    include: [ '*' ]
+     
 jobs:
-
   - job: Build
     timeoutInMinutes: 360
     strategy:
       matrix:
         Ubuntu-20:
-          imageName: 'ubuntu-20.04'
+          imageName: 'ubuntu-latest'
           type: 'linux'
         MacOS:
-          imageName: 'macos-11'
+          imageName: 'macos-latest'
           type: 'mac-os'
         Windows:
-          imageName: 'windows-2019'
+          imageName: 'windows-latest'
           type: 'windows'
     pool:
       vmImage: $(imageName)
@@ -45,17 +40,17 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
         displayName: 'Generate Linux AMD64'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=arm64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
+          GOARCH=arm64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64"
         displayName: 'Generate Linux ARM64'
         condition: eq(variables.type, 'linux')
 
@@ -66,6 +61,7 @@ jobs:
         env:
           GOARCH: amd64
           GOOS: windows
+          CGO_ENABLED: 0
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
@@ -74,6 +70,7 @@ jobs:
         env:
           GOARCH: 386
           GOOS: windows
+          CGO_ENABLED: 0
 
       - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_v7_arm.exe"
@@ -83,6 +80,7 @@ jobs:
           GOARCH: arm
           GOARM: 7
           GOOS: windows
+          CGO_ENABLED: 0
 
       - script: |
           cp NOTICE.txt $(Build.ArtifactStagingDirectory)
@@ -90,7 +88,7 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+          CGO_ENABLED=1 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
 
@@ -116,119 +114,15 @@ jobs:
           verbosity: 'Verbose'
           alertWarningLevel: 'High'
 
-  - job: E2E_Test
-    timeoutInMinutes: 360
-    # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
-    strategy:
-      matrix:
-        Ubuntu-20:
-          imageName: 'ubuntu-20.04'
-          build_name: 'azcopy_linux_amd64'
-          display_name: "Linux"
-          go_path: '$(go env GOPATH)/bin/'
-          suffix: ''
-          run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
-          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-          return_exit_code: 'exit "$exit_code"'
-        Windows:
-          imageName: 'windows-2019'
-          build_name: 'azcopy_windows_amd64.exe'
-          display_name: "Windows"
-          type: 'windows'
-          go_path: 'C:\Users\VssAdministrator\go\bin\'
-          suffix: '.exe'
-          run_e2e: 'go test -timeout=1h -v ./e2etest > test.txt'
-          save_exit_code: 'set exit_code=%errorlevel%'
-          return_exit_code: 'exit %exit_code%'
-        MacOS:
-          imageName: 'macos-11'
-          build_name: 'azcopy_darwin_amd64'
-          display_name: "MacOS"
-          go_path: '$(go env GOPATH)/bin/'
-          suffix: ''
-          run_e2e: 'go test -timeout=1h -v ./e2etest | tee test.txt'
-          save_exit_code: 'exit_code=${PIPESTATUS[0]}'
-          return_exit_code: 'exit "$exit_code"'
-    pool:
-      vmImage: $(imageName)
+  - template: azurePipelineTemplates/run-e2e.yml
+    parameters:
+      name: 'Old_E2E'
+      test_cli_param: '-tags olde2etest'
 
-    steps:
-      - task: PowerShell@2
-        condition: eq(variables.type, 'windows' )
-        inputs: 
-          targetType: 'inline'
-          script: 'Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
-        displayName: 'Install Powershell Az Module'
-      - task: GoTool@0
-        inputs:
-          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
-      - script: |
-          go install github.com/jstemmer/go-junit-report@v0.9.1
-          go install github.com/axw/gocov/gocov@v1.1.0
-          go install github.com/AlekSi/gocov-xml@v1.0.0
-          go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
-        displayName: 'Installing dependencies'
-      - bash: |
-          npm install -g azurite
-          mkdir azurite
-          azurite --silent --location azurite --debug azurite\debug.log &
-        displayName: 'Install and Run Azurite'
-      # Running E2E Tests on AMD64
-      - script: |
-          mkdir coverage
-          echo 'Building executable'
-          go build -cover -o $(build_name)
-          echo 'Running tests'
-          $(run_e2e)
-          $(save_exit_code)
-          echo "Generating junit report"
-          cat test.txt | $(go_path)go-junit-report$(suffix) > $(display_name)_report.xml
-          echo 'Formatting coverage directory to legacy txt format'
-          go tool covdata textfmt -i=coverage -o $(display_name)_coverage.txt
-          echo 'Formatting coverage to json format'
-          $(go_path)gocov$(suffix) convert $(display_name)_coverage.txt > $(display_name)_coverage.json
-          echo 'Formatting coverage to xml format'
-          $(go_path)gocov-xml$(suffix) < $(display_name)_coverage.json > $(display_name)_coverage.xml
-          $(return_exit_code)
-        env:
-          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
-          AZCOPY_E2E_ACCOUNT_NAME: $(AZCOPY_E2E_ACCOUNT_NAME)
-          AZCOPY_E2E_ACCOUNT_KEY_HNS: $(AZCOPY_E2E_ACCOUNT_KEY_HNS)
-          AZCOPY_E2E_ACCOUNT_NAME_HNS: $(AZCOPY_E2E_ACCOUNT_NAME_HNS)
-          AZCOPY_E2E_TENANT_ID: $(OAUTH_TENANT_ID)
-          AZCOPY_E2E_APPLICATION_ID: $(ACTIVE_DIRECTORY_APPLICATION_ID)
-          AZCOPY_E2E_CLIENT_SECRET: $(AZCOPY_SPA_CLIENT_SECRET)
-          AZCOPY_E2E_CLASSIC_ACCOUNT_NAME: $(AZCOPY_E2E_CLASSIC_ACCOUNT_NAME)
-          AZCOPY_E2E_CLASSIC_ACCOUNT_KEY: $(AZCOPY_E2E_CLASSIC_ACCOUNT_KEY)
-          AZCOPY_E2E_LOG_OUTPUT: '$(System.DefaultWorkingDirectory)/logs'
-          AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG)
-          AZCOPY_E2E_STD_MANAGED_DISK_CONFIG: $(AZCOPY_E2E_STD_MANAGED_DISK_CONFIG)
-          CPK_ENCRYPTION_KEY: $(CPK_ENCRYPTION_KEY)
-          CPK_ENCRYPTION_KEY_SHA256: $(CPK_ENCRYPTION_KEY_SHA256)
-          AZCOPY_E2E_EXECUTABLE_PATH: $(System.DefaultWorkingDirectory)/$(build_name)
-          GOCOVERDIR: '$(System.DefaultWorkingDirectory)/coverage'
-        displayName: 'E2E Test $(display_name) - AMD64'
-
-      - task: PublishBuildArtifacts@1
-        displayName: 'Publish logs'
-        condition: succeededOrFailed()
-        inputs:
-          pathToPublish: '$(System.DefaultWorkingDirectory)/logs'
-          artifactName: logs
-
-      - task: PublishTestResults@2
-        condition: succeededOrFailed()
-        inputs:
-          testRunner: JUnit
-          testResultsFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_report.xml
-          testRunTitle: 'Go on $(display_name)'
-
-      - task: PublishCodeCoverageResults@1
-        condition: succeededOrFailed()
-        inputs:
-          codeCoverageTool: Cobertura
-          summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
-          additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
+  - template: azurePipelineTemplates/run-e2e.yml
+    parameters:
+      name: 'New_E2E'
+      test_cli_param: '-run "TestNewE2E/.*"'
 
   - job: Test_On_Ubuntu
     variables:
@@ -236,7 +130,7 @@ jobs:
     # allow maximum build time, in case we have build congestion
     timeoutInMinutes: 360
     pool:
-      vmImage: 'ubuntu-20.04'
+      vmImage: 'ubuntu-latest'
     steps:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
@@ -284,13 +178,14 @@ jobs:
         parameters:
           directory: 'ste'
           coverage_name: 'ste'
+          with_federated_credential: true
       - template: azurePipelineTemplates/run-ut.yml
         parameters:
           directory: 'sddl'
           coverage_name: 'sddl'
       - script: |
-          GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64 
-          go build -o test-validator ./testSuite/
+          GOARCH=amd64 GOOS=linux go build -cover -tags "netgo" -o azcopy_linux_amd64 
+          go build -tags "netgo" -o test-validator ./testSuite/
           mkdir test-temp
           mkdir coverage
           export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
@@ -343,3 +238,106 @@ jobs:
         name: 'Release_the_distributed_mutex'
         # this runs even if the job was canceled (only if the mutex was acquired by this job)
         condition: and(always(), eq(variables['isMutexSet'], 'true'))
+
+  - job: Additional_E2E_Test_Linux
+    timeoutInMinutes: 360
+    strategy:
+      matrix:
+        Linux:
+          AgentName: "blobfuse-ubuntu20"
+          build_name: 'azcopy_linux_amd64'
+          container_name: 'testcontainer1'
+          GOOS: 'linux'
+          GOARCH: 'amd64'
+          CGO_ENABLED: '0'
+    pool:
+      name: "blobfuse-ubuntu-pool"
+      demands:
+        - ImageOverride -equals $(AgentName)
+
+    steps:
+      - script: |
+          # Install Az.Accounts module using Bash script
+          sudo apt-get update
+          sudo apt-get install -y powershell
+          pwsh -Command "Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force"
+        displayName: 'Install PowerShell Az Module'
+
+      - task: GoTool@0
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+      
+      # Install azcli
+      - script: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+        displayName: 'Install Azure CLI'
+
+      - template: azurePipelineTemplates/run_scenarios.yml
+        parameters:
+          container_name: $(container_name)
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
+          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
+          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
+          destination_container_name: $(DESTINATION_CONTAINER_NAME)
+          GOOS: $(GOOS)
+          GOARCH: $(GOARCH)
+          CGO_ENABLED: $(CGO_ENABLED)
+          build_name: $(build_name)
+          azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
+          
+  - job: Additional_E2E_Test_Windows
+    timeoutInMinutes: 360
+    strategy:
+      matrix:
+        Windows:
+          AgentName: 'azcopy-windows-22'
+          build_name: 'azcopy_windows_amd64.exe'
+          container_name: 'testcontainer2'
+          GOOS: 'windows'
+          GOARCH: 'amd64'
+          CGO_ENABLED: '0'
+    pool:
+      name: "azcopy-windows-pool"
+      demands:
+        - ImageOverride -equals $(AgentName)
+
+    steps:
+      - task: PowerShell@2
+        inputs:
+          targetType: 'inline'
+          script: |
+            # Install Az.Accounts module using PowerShell
+            Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force
+          displayName: 'Install PowerShell Az Module'
+
+      - task: GoTool@0
+        inputs:
+          version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+
+      - task: PowerShell@2
+        displayName: 'Install Azure CLI'
+        inputs:
+          targetType: 'inline'
+          script: |
+            # Install Azure CLI using Chocolatey
+            choco install azure-cli -y
+            az --version
+          
+      - template: azurePipelineTemplates/run_scenarios.yml
+        parameters:
+          container_name: $(container_name)
+          storage_account_name: $(AZCOPY_E2E_ACCOUNT_NAME)
+          orp_source_account_name: $(ORP_SOURCE_ACCOUNT_NAME)
+          orp_destination_account_name: $(ORP_DESTINATION_ACCOUNT_NAME)
+          orp_source_container_name: $(ORP_SOURCE_CONTAINER_NAME)
+          destination_container_name: $(DESTINATION_CONTAINER_NAME)
+          GOOS: $(GOOS)
+          GOARCH: $(GOARCH)
+          CGO_ENABLED: $(CGO_ENABLED)
+          build_name: $(build_name)
+          azcopy_msi_app_id: $(AZCOPY_MSI_APP_ID)
+
+    #TODO: Add MacOS E2E tests after creating macos pool
+          

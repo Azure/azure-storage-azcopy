@@ -153,15 +153,22 @@ var ETrailingDotOption = TrailingDotOption(0)
 
 type TrailingDotOption uint8
 
-func (TrailingDotOption) Enable() TrailingDotOption  { return TrailingDotOption(0) }
-func (TrailingDotOption) Disable() TrailingDotOption { return TrailingDotOption(1) }
+func (TrailingDotOption) Enable() TrailingDotOption                   { return TrailingDotOption(0) }
+func (TrailingDotOption) Disable() TrailingDotOption                  { return TrailingDotOption(1) }
+func (TrailingDotOption) AllowToUnsafeDestination() TrailingDotOption { return TrailingDotOption(2) }
+
+// Trailing dots are supported in the Enable and AllowToUnsafeDestination options
+func (d TrailingDotOption) IsEnabled() bool {
+	return d == d.Enable() ||
+		d == d.AllowToUnsafeDestination()
+}
 
 func (d TrailingDotOption) String() string {
 	return enum.StringInt(d, reflect.TypeOf(d))
 }
 
 func (d *TrailingDotOption) Parse(s string) error {
-	// allow empty to mean "None"
+	// allow empty to mean "Enable"
 	if s == "" {
 		*d = ETrailingDotOption.Enable()
 		return nil
@@ -172,6 +179,14 @@ func (d *TrailingDotOption) Parse(s string) error {
 		*d = val.(TrailingDotOption)
 	}
 	return err
+}
+
+func ValidTrailingDotOptions() []string {
+	return []string{
+		ETrailingDotOption.Enable().String(),
+		ETrailingDotOption.Disable().String(),
+		ETrailingDotOption.AllowToUnsafeDestination().String(),
+	}
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -209,6 +224,15 @@ func (p PermanentDeleteOption) ToPermanentDeleteOptionType() *blob.DeleteType {
 		return nil
 	}
 	return to.Ptr(blob.DeleteTypePermanent)
+}
+
+func ValidPermanentDeleteOptions() []string {
+	return []string{
+		EPermanentDeleteOption.None().String(),
+		EPermanentDeleteOption.Snapshots().String(),
+		EPermanentDeleteOption.Versions().String(),
+		EPermanentDeleteOption.SnapshotsAndVersions().String(),
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -509,8 +533,17 @@ func (Location) Benchmark() Location { return Location(7) }
 func (Location) GCP() Location       { return Location(8) }
 func (Location) None() Location      { return Location(9) } // None is used in case we're transferring properties
 
+func (Location) AzureAccount() Location { return Location(100) } // AzureAccount is never used within AzCopy, and won't be detected, (for now)
+
 func (l Location) String() string {
 	return enum.StringInt(l, reflect.TypeOf(l))
+}
+func (l *Location) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(l), s, true, true)
+	if err == nil {
+		*l = val.(Location)
+	}
+	return err
 }
 
 // AllStandardLocations returns all locations that are "normal" for testing purposes. Excludes the likes of Unknown, Benchmark and Pipe
@@ -525,10 +558,10 @@ func (Location) AllStandardLocations() []Location {
 	}
 }
 
-// fromToValue returns the fromTo enum value for given
+// FromToValue returns the fromTo enum value for given
 // from / To location combination. In 16 bits fromTo
 // value, first 8 bits represents from location
-func fromToValue(from Location, to Location) FromTo {
+func FromToValue(from Location, to Location) FromTo {
 	return FromTo((FromTo(from) << 8) | FromTo(to))
 }
 
@@ -549,6 +582,11 @@ func (l Location) IsLocal() bool {
 	} else {
 		return !l.IsRemote()
 	}
+}
+
+// IsAzure checks if location is Azure (BlobFS, Blob, File)
+func (l Location) IsAzure() bool {
+	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File()
 }
 
 // IsFolderAware returns true if the location has real folders (e.g. there's such a thing as an empty folder,
@@ -590,43 +628,43 @@ var EFromTo = FromTo(0)
 type FromTo uint16
 
 func (FromTo) Unknown() FromTo      { return FromTo(0) }
-func (FromTo) LocalBlob() FromTo    { return fromToValue(ELocation.Local(), ELocation.Blob()) }
-func (FromTo) LocalFile() FromTo    { return fromToValue(ELocation.Local(), ELocation.File()) }
-func (FromTo) BlobLocal() FromTo    { return fromToValue(ELocation.Blob(), ELocation.Local()) }
-func (FromTo) FileLocal() FromTo    { return fromToValue(ELocation.File(), ELocation.Local()) }
-func (FromTo) BlobPipe() FromTo     { return fromToValue(ELocation.Blob(), ELocation.Pipe()) }
-func (FromTo) PipeBlob() FromTo     { return fromToValue(ELocation.Pipe(), ELocation.Blob()) }
-func (FromTo) FilePipe() FromTo     { return fromToValue(ELocation.File(), ELocation.Pipe()) }
-func (FromTo) PipeFile() FromTo     { return fromToValue(ELocation.Pipe(), ELocation.File()) }
-func (FromTo) BlobTrash() FromTo    { return fromToValue(ELocation.Blob(), ELocation.Unknown()) }
-func (FromTo) FileTrash() FromTo    { return fromToValue(ELocation.File(), ELocation.Unknown()) }
-func (FromTo) BlobFSTrash() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
-func (FromTo) LocalBlobFS() FromTo  { return fromToValue(ELocation.Local(), ELocation.BlobFS()) }
-func (FromTo) BlobFSLocal() FromTo  { return fromToValue(ELocation.BlobFS(), ELocation.Local()) }
-func (FromTo) BlobFSBlobFS() FromTo { return fromToValue(ELocation.BlobFS(), ELocation.BlobFS()) }
-func (FromTo) BlobFSBlob() FromTo   { return fromToValue(ELocation.BlobFS(), ELocation.Blob()) }
-func (FromTo) BlobFSFile() FromTo   { return fromToValue(ELocation.BlobFS(), ELocation.File()) }
-func (FromTo) BlobBlobFS() FromTo   { return fromToValue(ELocation.Blob(), ELocation.BlobFS()) }
-func (FromTo) FileBlobFS() FromTo   { return fromToValue(ELocation.File(), ELocation.BlobFS()) }
-func (FromTo) BlobBlob() FromTo     { return fromToValue(ELocation.Blob(), ELocation.Blob()) }
-func (FromTo) FileBlob() FromTo     { return fromToValue(ELocation.File(), ELocation.Blob()) }
-func (FromTo) BlobFile() FromTo     { return fromToValue(ELocation.Blob(), ELocation.File()) }
-func (FromTo) FileFile() FromTo     { return fromToValue(ELocation.File(), ELocation.File()) }
-func (FromTo) S3Blob() FromTo       { return fromToValue(ELocation.S3(), ELocation.Blob()) }
-func (FromTo) GCPBlob() FromTo      { return fromToValue(ELocation.GCP(), ELocation.Blob()) }
-func (FromTo) BlobNone() FromTo     { return fromToValue(ELocation.Blob(), ELocation.None()) }
-func (FromTo) BlobFSNone() FromTo   { return fromToValue(ELocation.BlobFS(), ELocation.None()) }
-func (FromTo) FileNone() FromTo     { return fromToValue(ELocation.File(), ELocation.None()) }
+func (FromTo) LocalBlob() FromTo    { return FromToValue(ELocation.Local(), ELocation.Blob()) }
+func (FromTo) LocalFile() FromTo    { return FromToValue(ELocation.Local(), ELocation.File()) }
+func (FromTo) BlobLocal() FromTo    { return FromToValue(ELocation.Blob(), ELocation.Local()) }
+func (FromTo) FileLocal() FromTo    { return FromToValue(ELocation.File(), ELocation.Local()) }
+func (FromTo) BlobPipe() FromTo     { return FromToValue(ELocation.Blob(), ELocation.Pipe()) }
+func (FromTo) PipeBlob() FromTo     { return FromToValue(ELocation.Pipe(), ELocation.Blob()) }
+func (FromTo) FilePipe() FromTo     { return FromToValue(ELocation.File(), ELocation.Pipe()) }
+func (FromTo) PipeFile() FromTo     { return FromToValue(ELocation.Pipe(), ELocation.File()) }
+func (FromTo) BlobTrash() FromTo    { return FromToValue(ELocation.Blob(), ELocation.Unknown()) }
+func (FromTo) FileTrash() FromTo    { return FromToValue(ELocation.File(), ELocation.Unknown()) }
+func (FromTo) BlobFSTrash() FromTo  { return FromToValue(ELocation.BlobFS(), ELocation.Unknown()) }
+func (FromTo) LocalBlobFS() FromTo  { return FromToValue(ELocation.Local(), ELocation.BlobFS()) }
+func (FromTo) BlobFSLocal() FromTo  { return FromToValue(ELocation.BlobFS(), ELocation.Local()) }
+func (FromTo) BlobFSBlobFS() FromTo { return FromToValue(ELocation.BlobFS(), ELocation.BlobFS()) }
+func (FromTo) BlobFSBlob() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.Blob()) }
+func (FromTo) BlobFSFile() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.File()) }
+func (FromTo) BlobBlobFS() FromTo   { return FromToValue(ELocation.Blob(), ELocation.BlobFS()) }
+func (FromTo) FileBlobFS() FromTo   { return FromToValue(ELocation.File(), ELocation.BlobFS()) }
+func (FromTo) BlobBlob() FromTo     { return FromToValue(ELocation.Blob(), ELocation.Blob()) }
+func (FromTo) FileBlob() FromTo     { return FromToValue(ELocation.File(), ELocation.Blob()) }
+func (FromTo) BlobFile() FromTo     { return FromToValue(ELocation.Blob(), ELocation.File()) }
+func (FromTo) FileFile() FromTo     { return FromToValue(ELocation.File(), ELocation.File()) }
+func (FromTo) S3Blob() FromTo       { return FromToValue(ELocation.S3(), ELocation.Blob()) }
+func (FromTo) GCPBlob() FromTo      { return FromToValue(ELocation.GCP(), ELocation.Blob()) }
+func (FromTo) BlobNone() FromTo     { return FromToValue(ELocation.Blob(), ELocation.None()) }
+func (FromTo) BlobFSNone() FromTo   { return FromToValue(ELocation.BlobFS(), ELocation.None()) }
+func (FromTo) FileNone() FromTo     { return FromToValue(ELocation.File(), ELocation.None()) }
 
 // todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
 func (FromTo) BenchmarkBlob() FromTo {
-	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.Blob()))
+	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.Blob()))
 }
 func (FromTo) BenchmarkFile() FromTo {
-	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.File()))
+	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.File()))
 }
 func (FromTo) BenchmarkBlobFS() FromTo {
-	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.BlobFS()))
+	return FromTo(FromToValue(ELocation.Benchmark(), ELocation.BlobFS()))
 }
 
 func (ft FromTo) String() string {
@@ -929,7 +967,7 @@ func (CredentialType) MDOAuthToken() CredentialType         { return CredentialT
 func (CredentialType) Anonymous() CredentialType            { return CredentialType(2) } // For Azure, SAS or public.
 func (CredentialType) SharedKey() CredentialType            { return CredentialType(3) } // For Azure, SharedKey
 func (CredentialType) S3AccessKey() CredentialType          { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
-func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) }
+func (CredentialType) GoogleAppCredentials() CredentialType { return CredentialType(5) } // For GCP, App Credentials
 func (CredentialType) S3PublicBucket() CredentialType       { return CredentialType(6) } // For S3, Anon Credentials & public bucket
 
 func (ct CredentialType) IsAzureOAuth() bool {
@@ -1073,6 +1111,7 @@ func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
 const (
 	DefaultBlockBlobBlockSize      = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize          = 4000 * 1024 * 1024
+	MaxPutBlobSize                 = 5000 * 1024 * 1024
 	MaxAppendBlobBlockSize         = 100 * 1024 * 1024
 	DefaultPageBlobChunkSize       = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize      = 4 * 1024 * 1024
@@ -1080,7 +1119,9 @@ const (
 	MaxNumberOfBlocksPerBlob       = 50000
 	BlockSizeThreshold             = 256 * 1024 * 1024
 	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */
+	GigaByte                       = 1024 * 1024 * 1024
 	MegaByte                       = 1024 * 1024
+	KiloByte                       = 1024
 )
 
 // This struct represent a single transfer entry with source and destination details
@@ -1541,6 +1582,14 @@ func (EntityType) FileProperties() EntityType { return EntityType(3) }
 
 func (e EntityType) String() string {
 	return enum.StringInt(e, reflect.TypeOf(e))
+}
+
+func (e *EntityType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(e), s, true, true)
+	if err == nil {
+		*e = val.(EntityType)
+	}
+	return err
 }
 
 ////////////////////////////////////////////////////////////////

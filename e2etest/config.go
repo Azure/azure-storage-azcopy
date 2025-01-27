@@ -21,12 +21,8 @@
 package e2etest
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
@@ -39,6 +35,22 @@ import (
 // it's ok to panic if the inputs are absolutely required
 // the general guidance is to take in as few parameters as possible
 type GlobalInputManager struct{}
+
+func (GlobalInputManager) GetWorkloadIdentity() (tenantID string, clientID string, token string) {
+	tenantID = os.Getenv("tenantId")
+	if tenantID == "" {
+		panic("tenantId must be specified to authenticate with workload identity")
+	}
+	clientID = os.Getenv("servicePrincipalId")
+	if clientID == "" {
+		panic("servicePrincipalId must be specified to authenticate with workload identity")
+	}
+	token = os.Getenv("idToken")
+	if token == "" {
+		panic("idToken must be specified to authenticate with workload identity")
+	}
+	return
+}
 
 func (GlobalInputManager) GetServicePrincipalAuth() (tenantID string, applicationID string, clientSecret string) {
 	tenantID = os.Getenv("AZCOPY_E2E_TENANT_ID")
@@ -112,19 +124,29 @@ var EAccountType = AccountType(0)
 type AccountType uint8
 
 func (AccountType) Standard() AccountType                     { return AccountType(0) }
-func (AccountType) Premium() AccountType                      { return AccountType(1) }
+func (AccountType) PremiumBlockBlobs() AccountType            { return AccountType(1) }
+func (AccountType) PremiumPageBlobs() AccountType             { return AccountType(8) }
+func (AccountType) PremiumFileShares() AccountType            { return AccountType(9) }
+func (AccountType) PremiumHNSEnabled() AccountType            { return AccountType(10) }
 func (AccountType) HierarchicalNamespaceEnabled() AccountType { return AccountType(2) }
 func (AccountType) Classic() AccountType                      { return AccountType(3) }
 func (AccountType) StdManagedDisk() AccountType               { return AccountType(4) }
 func (AccountType) OAuthManagedDisk() AccountType             { return AccountType(5) }
-func (AccountType) Azurite() AccountType                      { return AccountType(6) }
+func (AccountType) S3() AccountType                           { return AccountType(6) } // Stub, for future testing use
+func (AccountType) GCP() AccountType                          { return AccountType(7) } // Stub, for future testing use
+func (AccountType) Azurite() AccountType                      { return AccountType(8) }
+func (AccountType) ManagedDiskSnapshot() AccountType          { return AccountType(9) }
+func (AccountType) ManagedDiskSnapshotOAuth() AccountType     { return AccountType(10) }
+func (AccountType) LargeManagedDiskSnapshot() AccountType     { return AccountType(11) }
+func (AccountType) LargeManagedDisk() AccountType             { return AccountType(12) }
 
 func (o AccountType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }
 
 func (o AccountType) IsManagedDisk() bool {
-	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk()
+	return o == o.StdManagedDisk() || o == o.OAuthManagedDisk() || o == o.ManagedDiskSnapshot() || o == o.ManagedDiskSnapshotOAuth() ||
+		o == o.LargeManagedDiskSnapshot() || o == o.LargeManagedDisk()
 }
 
 func (o AccountType) IsBlobOnly() bool {
@@ -132,23 +154,39 @@ func (o AccountType) IsBlobOnly() bool {
 }
 
 /*
-	{"SubscriptionID":"","ResourceGroupName":"","DiskName":""}
+{"SubscriptionID":"","ResourceGroupName":"","DiskName":""}
 */
 type ManagedDiskConfig struct {
 	SubscriptionID    string
 	ResourceGroupName string
 	DiskName          string
-	oauth             *azcore.AccessToken
+
+	oauth      AccessToken
+	isSnapshot bool
 }
+
+var ClassicE2EOAuthCache *OAuthCache
 
 func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDiskConfig, error) {
 	var mdConfigVar string
+	var isSnapshot bool
 
 	switch accountType {
 	case EAccountType.StdManagedDisk():
 		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_CONFIG"
 	case EAccountType.OAuthManagedDisk():
 		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_CONFIG"
+	case EAccountType.LargeManagedDisk():
+		mdConfigVar = "AZCOPY_E2E_LARGE_MANAGED_DISK_CONFIG"
+	case EAccountType.ManagedDiskSnapshot():
+		mdConfigVar = "AZCOPY_E2E_STD_MANAGED_DISK_SNAPSHOT_CONFIG"
+		isSnapshot = true
+	case EAccountType.ManagedDiskSnapshotOAuth():
+		mdConfigVar = "AZCOPY_E2E_OAUTH_MANAGED_DISK_SNAPSHOT_CONFIG"
+		isSnapshot = true
+	case EAccountType.LargeManagedDiskSnapshot():
+		mdConfigVar = "AZCOPY_E2E_LARGE_MANAGED_DISK_SNAPSHOT_CONFIG"
+		isSnapshot = true
 	default:
 		return nil, fmt.Errorf("account type %s is invalid for GetMDConfig", accountType.String())
 	}
@@ -164,30 +202,30 @@ func (gim GlobalInputManager) GetMDConfig(accountType AccountType) (*ManagedDisk
 		return nil, fmt.Errorf("failed to parse config") // Outputting the error may reveal semi-sensitive info like subscription ID
 	}
 
-	out.oauth, err = gim.GetOAuthCredential("https://management.core.windows.net/.default")
+	// Attach additional details to the config
+	out.isSnapshot = isSnapshot
+	err = gim.SetupClassicOAuthCache()
 	if err != nil {
-		return nil, fmt.Errorf("failed to refresh oauth token: %w", err)
+		return nil, fmt.Errorf("failed to setup OAuth cache: %w", err)
+	}
+
+	out.oauth, err = ClassicE2EOAuthCache.GetAccessToken(AzureManagementResource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get access token: %w", err)
 	}
 
 	return &out, nil
 }
 
-func (gim GlobalInputManager) GetOAuthCredential(resource string) (*azcore.AccessToken, error) {
-	tenantID, applicationID, secret := gim.GetServicePrincipalAuth()
-	activeDirectoryEndpoint := "https://login.microsoftonline.com"
+func (gim GlobalInputManager) SetupClassicOAuthCache() error {
+	tenantId := os.Getenv("tenantId")
 
-	spn, err := azidentity.NewClientSecretCredential(tenantID, applicationID, secret, &azidentity.ClientSecretCredentialOptions{
-		ClientOptions: azcore.ClientOptions{
-			Cloud: cloud.Configuration{ActiveDirectoryAuthorityHost: activeDirectoryEndpoint},
-		},
-	})
+	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{TenantID: tenantId})
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to create credential: %w", err)
 	}
 
-	scopes := []string{resource}
+	ClassicE2EOAuthCache = NewOAuthCache(cred, tenantId)
 
-	accessToken, err := spn.GetToken(context.TODO(), policy.TokenRequestOptions{Scopes: scopes})
-
-	return &accessToken, nil
+	return nil
 }

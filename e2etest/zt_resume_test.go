@@ -1,9 +1,12 @@
 package e2etest
 
 import (
+	"os"
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
@@ -71,6 +74,7 @@ func TestResume_LargeGeneric(t *testing.T) {
 }
 
 func TestResume_PublicSource_BlobTarget(t *testing.T) {
+	t.Skip("Public access is sometimes turned off due to organization policy.")
 	RunScenarios(
 		t,
 		// copy only instead of sync because single file sync is not entirely compatible with the test suite
@@ -100,6 +104,7 @@ func TestResume_PublicSource_BlobTarget(t *testing.T) {
 }
 
 func TestResume_PublicSource_ContainerTarget(t *testing.T) {
+	t.Skip("Public access is sometimes turned off due to organization policy.")
 	RunScenarios(
 		t,
 		eOperation.CopyAndSync()|eOperation.Resume(),
@@ -120,6 +125,56 @@ func TestResume_PublicSource_ContainerTarget(t *testing.T) {
 				f("a.txt"),
 				folder("foo"),
 				f("foo/bar.txt"),
+			},
+		},
+		EAccountType.Standard(), EAccountType.Standard(), "",
+	)
+}
+
+// TestResume_ConsistentLogs_PublicSource_BlobTarget validates log file consistency for a job initially initiated as a copy operation and later resumed.
+// During the copy operation, a jobId is created and associated with its log file. If a resume operation follows, the same jobId from the copy is used for the log file, and the resumed logs are appended to it.
+// The test ensures that at most two log files are generated: one for scanning logs and one for normal logs.
+
+func TestResume_ConsistentLogs_PublicSource_BlobTarget(t *testing.T) {
+	t.Skip("Public access is sometimes turned off due to organization policy.")
+	RunScenarios(
+		t,
+		eOperation.Copy()|eOperation.Resume(),
+		eTestFromTo.Other(common.EFromTo.BlobBlob(), common.EFromTo.BlobLocal()),
+		eValidate.Auto(),
+		anonymousAuthOnly,
+		anonymousAuthOnly,
+		params{
+			recursive:      true,
+			debugSkipFiles: []string{";"}, // skip the only file is ;
+		},
+		&hooks{
+			afterValidation: func(h hookHelper) {
+				a := h.GetAsserter()
+				logDir := os.Getenv("AZCOPY_E2E_LOG_OUTPUT")
+				dir, err := os.Open(logDir)
+				a.Assert(err, equals(), nil)
+				defer dir.Close()
+
+				entries, err := dir.Readdir(-1)
+				a.Assert(err, equals(), nil)
+				var logFiles int
+				for _, entry := range entries {
+					if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".log") {
+						logFiles++
+					}
+				}
+				a.Assert(logFiles <= 2, equals(), true)
+
+			},
+		},
+		testFiles{
+			defaultSize:  "1K",
+			sourcePublic: to.Ptr(container.PublicAccessTypeBlob),
+			objectTarget: objectTarget{objectName: "xyz.txt"},
+
+			shouldTransfer: []interface{}{
+				f("xyz.txt"),
 			},
 		},
 		EAccountType.Standard(), EAccountType.Standard(), "",

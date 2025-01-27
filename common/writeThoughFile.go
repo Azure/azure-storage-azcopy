@@ -21,6 +21,7 @@
 package common
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -44,11 +45,10 @@ var RootShareRegex = regexp.MustCompile(`(^\/\/[^\/]*\/?$)`)
 
 func isRootPath(s string) bool {
 	shortParentDir := strings.ReplaceAll(ToShortPath(s), OS_PATH_SEPARATOR, AZCOPY_PATH_SEPARATOR_STRING)
-	return  RootDriveRegex.MatchString(shortParentDir)  ||
-		RootShareRegex.MatchString(shortParentDir)  ||
+	return RootDriveRegex.MatchString(shortParentDir) ||
+		RootShareRegex.MatchString(shortParentDir) ||
 		strings.EqualFold(shortParentDir, "/")
 }
-
 
 func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreationTracker) error {
 	// If we're pointing at the root of a drive, don't try because it won't work.
@@ -56,7 +56,15 @@ func CreateParentDirectoryIfNotExist(destinationPath string, tracker FolderCreat
 		return nil
 	}
 
-	lastIndex := strings.LastIndex(destinationPath, DeterminePathSeparator(destinationPath))
+	pathSeparator := DeterminePathSeparator(destinationPath)
+	lastIndex := strings.LastIndex(destinationPath, pathSeparator)
+
+	// LastIndex() will return -1 if path separator was not found, we should handle this gracefully
+	// instead of allowing AzCopy to crash with an out-of-bounds error.
+	if lastIndex == -1 {
+		return fmt.Errorf("error: Path separator (%s) not found in destination path. On Linux, this may occur if the destination is the root file, such as '/'. If this is the case, please consider changing your destination path.", pathSeparator)
+	}
+
 	directory := destinationPath[:lastIndex]
 	return CreateDirectoryIfNotExist(directory, tracker)
 }

@@ -22,8 +22,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -53,7 +51,7 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 	case common.ERpcCmd.PauseJob():
 	case common.ERpcCmd.CancelJob():
 	case common.ERpcCmd.ResumeJob():
-	case common.ERpcCmd.GetJobFromTo():
+	case common.ERpcCmd.GetJobDetails():
 		fallthrough
 	default:
 		panic("RPC mock not implemented")
@@ -75,15 +73,12 @@ func (i *interceptor) reset() {
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct {
 	infoLog      chan string
+	warnLog      chan string
 	errorLog     chan string
 	progressLog  chan string
 	exitLog      chan string
 	dryrunLog    chan string
 	outputFormat common.OutputFormat
-}
-
-func (m *mockedLifecycleManager) DownloadToTempPath() bool {
-	return false
 }
 
 func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
@@ -105,9 +100,21 @@ func (m *mockedLifecycleManager) Info(msg string) {
 	default:
 	}
 }
+func (m *mockedLifecycleManager) Warn(msg string) {
+	select {
+	case m.warnLog <- msg:
+	default:
+	}
+}
 func (m *mockedLifecycleManager) Dryrun(o common.OutputBuilder) {
 	select {
 	case m.dryrunLog <- o(m.outputFormat):
+	default:
+	}
+}
+func (m *mockedLifecycleManager) Output(o common.OutputBuilder, e common.OutputMessageType) {
+	select {
+	case m.infoLog <- o(m.outputFormat):
 	default:
 	}
 }
@@ -130,24 +137,11 @@ func (*mockedLifecycleManager) SurrenderControl()                               
 func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
 func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
-func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
-	_ = os.Setenv(env.Name, "")
-}
-func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVariable) string {
-	value := os.Getenv(env.Name)
-	if value == "" {
-		return env.DefaultValue
-	}
-	return value
-}
 func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
 	m.outputFormat = format
 }
 func (*mockedLifecycleManager) EnableInputWatcher()    {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn() {}
-func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
-	return userAgent
-}
 
 func (*mockedLifecycleManager) SetForceLogging() {}
 
