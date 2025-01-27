@@ -43,12 +43,12 @@ import (
 )
 
 var azcopyLogPathFolder string
-var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
 
+// rawRootArgs
 var azcopyOutputFormat common.OutputFormat
 var azcopyOutputVerbosity common.OutputVerbosity
 var azcopyLogVerbosity common.LogLevel
@@ -61,7 +61,6 @@ var azcopySkipVersionCheck bool
 // it as a global
 var cmdLineExtraSuffixesAAD string
 
-var loggerInfo jobLoggerInfo
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
@@ -132,7 +131,6 @@ var rootCmd = &cobra.Command{
 				if strings.HasPrefix(v, "/") {
 					v = strings.TrimPrefix(v, common.AZCOPY_PATH_SEPARATOR_STRING)
 				}
-
 				ste.DebugSkipFiles[v] = true
 			}
 		}
@@ -174,38 +172,18 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-type RootOptions struct {
-	OutputFormat     common.OutputFormat
-	OutputLevel      common.OutputVerbosity
-	LogLevel         common.LogLevel
-	CapMbps          float64
-	ExtraSuffixesAAD string
-	SkipVersionCheck bool
-}
-
-func SetRootOptions(options RootOptions) {
-	azcopyOutputFormat = options.OutputFormat
-	azcopyOutputVerbosity = options.OutputLevel
-	azcopyLogVerbosity = options.LogLevel
-	azcopySkipVersionCheck = options.SkipVersionCheck
-	cmdLineCapMegaBitsPerSecond = options.CapMbps
-	cmdLineExtraSuffixesAAD = options.ExtraSuffixesAAD
-}
-
 func Initialize(resumeJobID common.JobID, isBench bool) error {
 	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders()
-
-	jobID := common.NewJobID()
 	configureGoMaxProcs()
 
 	// Perform os specific initialization
-	var err error
-	azcopyMaxFileAndSocketHandles, err = processOSSpecificInitialization()
+	azcopyMaxFileAndSocketHandles, err := processOSSpecificInitialization()
 	if err != nil {
 		log.Fatalf("initialization failed: %v", err)
 	}
+	jobID := common.NewJobID()
 	azcopyCurrentJobID = jobID
-	loggerInfo = jobLoggerInfo{jobID, azcopyLogPathFolder}
+	loggerInfo := jobLoggerInfo{jobID, azcopyLogPathFolder}
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(azcopyOutputFormat)
