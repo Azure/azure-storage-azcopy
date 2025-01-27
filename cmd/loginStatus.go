@@ -33,9 +33,7 @@ type LoginStatusOptions struct {
 	AadEndpoint bool
 }
 
-var commandLineInput = LoginStatusOptions{}
-
-func RunLoginStatus(options LoginStatusOptions) {
+func (options LoginStatusOptions) process() error {
 	// getting current token info and refreshing it with GetTokenInfo()
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	uotm := GetUserOAuthTokenManagerInstance()
@@ -57,6 +55,13 @@ func RunLoginStatus(options LoginStatusOptions) {
 
 	glcm.Info("You are currently not logged in. Please login using 'azcopy login'")
 	glcm.Exit(nil, common.EExitCode.Error())
+	return nil
+}
+
+var commandLineInput = LoginStatusOptions{}
+
+func RunLoginStatus(options LoginStatusOptions) error {
+	return options.process()
 }
 
 func init() {
@@ -70,8 +75,8 @@ func init() {
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
-			RunLoginStatus(commandLineInput)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return RunLoginStatus(commandLineInput)
 		},
 	}
 
