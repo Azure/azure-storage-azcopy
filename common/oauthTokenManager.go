@@ -267,7 +267,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	hasToken, err := uotm.credCache.HasCachedToken()
 	if err != nil {
-		return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
+		return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %w", err)
 	}
 	if !hasToken {
 		return nil, errors.New("no cached token found, please log in with azcopy's login command")
@@ -275,12 +275,12 @@ func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAu
 
 	tokenInfo, err := uotm.credCache.LoadToken()
 	if err != nil {
-		return nil, fmt.Errorf("get cached token failed, %v", err)
+		return nil, fmt.Errorf("get cached token failed, %w", err)
 	}
 
 	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
+		return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %w", err)
 	}
 
 	// Update token cache, if token is updated.
@@ -352,13 +352,13 @@ func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (
 
 	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))
 	if err != nil {
-		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %v", err)
+		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %w", err)
 	}
 
 	if tokenInfo.LoginType != EAutoLoginType.TokenStore() {
 		refreshedToken, err := tokenInfo.Refresh(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %v", err)
+			return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %w", err)
 		}
 		tokenInfo.Token = *refreshedToken
 	}
@@ -541,12 +541,12 @@ func (tsc *TokenStoreCredential) GetToken(_ context.Context, _ policy.TokenReque
 	defer tsc.lock.Unlock()
 	hasToken, err := tokenStoreCredCache.HasCachedToken()
 	if err != nil || !hasToken {
-		return azcore.AccessToken{}, fmt.Errorf("no cached token found in Token Store Mode(SE), %v", err)
+		return azcore.AccessToken{}, fmt.Errorf("no cached token found in Token Store Mode(SE), %w", err)
 	}
 
 	tokenInfo, err := tokenStoreCredCache.LoadToken()
 	if err != nil {
-		return azcore.AccessToken{}, fmt.Errorf("get cached token failed in Token Store Mode(SE), %v", err)
+		return azcore.AccessToken{}, fmt.Errorf("get cached token failed in Token Store Mode(SE), %w", err)
 	}
 
 	tsc.token = &azcore.AccessToken{
@@ -701,6 +701,11 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
 			Transport: newAzcopyHTTPClient(),
 		},
+		UserPrompt: func(ctx context.Context, message azidentity.DeviceCodeMessage) error {
+			lcm.Info(fmt.Sprintf("Authentication is required. To sign in, open the webpage %s and enter the code %s to authenticate.",
+				Iff(message.VerificationURL != "", message.VerificationURL, "https://aka.ms/devicelogin"), message.UserCode))
+			return nil
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -725,6 +730,11 @@ func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredentia
 
 	credInfo.TokenCredential = tc
 	return tc, nil
+}
+
+type AuthenticateToken interface {
+	azcore.TokenCredential
+	Authenticate(ctx context.Context, opts *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error)
 }
 
 func (credInfo *OAuthTokenInfo) GetTokenCredential() (azcore.TokenCredential, error) {
