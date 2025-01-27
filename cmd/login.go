@@ -28,7 +28,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var loginCmdArg = loginCmdArgs{tenantId: common.DefaultTenantID}
+var loginCmdArg = loginCmdArgs{tenantID: common.DefaultTenantID}
 
 var lgCmd = &cobra.Command{
 	Use:        "login",
@@ -86,7 +86,7 @@ func init() {
 
 	rootCmd.AddCommand(lgCmd)
 
-	lgCmd.PersistentFlags().StringVar(&loginCmdArg.tenantId, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArg.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.aadEndpoint, "aad-endpoint", "", "The Azure Active Directory endpoint to use. The default ("+common.DefaultActiveDirectoryEndpoint+") is correct for the public Azure cloud. Set this parameter when authenticating in a national cloud. Not needed for Managed Service Identity")
 
 	lgCmd.PersistentFlags().BoolVar(&loginCmdArg.identity, "identity", false, "Deprecated. Please use --login-type=MSI. Log in using virtual machine's identity, also known as managed service identity (MSI).")
@@ -111,7 +111,7 @@ func init() {
 
 type loginCmdArgs struct {
 	// OAuth login arguments
-	tenantId    string
+	tenantID    string
 	aadEndpoint string
 
 	identity         bool // Whether to use MSI.
@@ -141,12 +141,12 @@ func (lca loginCmdArgs) process() error {
 	switch lca.loginType {
 	case common.EAutoLoginType.SPN().String():
 		if lca.certPath != "" {
-			if err := uotm.CertLogin(lca.tenantId, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
+			if err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
 			glcm.Info("SPN Auth via cert succeeded.")
 		} else {
-			if err := uotm.SecretLogin(lca.tenantId, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
+			if err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
 				return err
 			}
 			glcm.Info("SPN Auth via secret succeeded.")
@@ -162,12 +162,12 @@ func (lca loginCmdArgs) process() error {
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	case common.EAutoLoginType.AzCLI().String():
-		if err := uotm.AzCliLogin(lca.tenantId); err != nil {
+		if err := uotm.AzCliLogin(lca.tenantID); err != nil {
 			return err
 		}
 		glcm.Info("Login with AzCliCreds succeeded")
 	case common.EAutoLoginType.PsCred().String():
-		if err := uotm.PSContextToken(lca.tenantId); err != nil {
+		if err := uotm.PSContextToken(lca.tenantID); err != nil {
 			return err
 		}
 		glcm.Info("Login with Powershell context succeeded")
@@ -177,7 +177,7 @@ func (lca loginCmdArgs) process() error {
 		}
 		glcm.Info("Login with Workload Identity succeeded")
 	default:
-		if err := uotm.UserLogin(lca.tenantId, lca.aadEndpoint, lca.persistToken); err != nil {
+		if err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
 			return err
 		}
 		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.

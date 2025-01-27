@@ -64,7 +64,7 @@ const oauthLoginSessionCacheServiceName = "AzCopyV10"
 const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
 
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
-// Note: Currently, only support to have TokenManager for one user mapping to one tenantId.
+// Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	once.Do(func() {
 		if common.AzcopyJobPlanFolder == "" {
@@ -96,7 +96,7 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		}
 
 		if tenantID := common.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
-			lca.tenantId = tenantID
+			lca.tenantID = tenantID
 		}
 
 		if endpoint := common.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
