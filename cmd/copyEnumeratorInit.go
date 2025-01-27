@@ -157,7 +157,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 			if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 				logDstContainerCreateFailureOnce.Do(func() {
-					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+					glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
 				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Failed to create destination container %s. The transfer will continue if the container exists", dstContainerName), common.LogWarning)
 				jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
@@ -168,7 +168,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				containers, err := acctTraverser.listContainers()
 
 				if err != nil {
-					return nil, fmt.Errorf("failed to list containers: %s", err)
+					return nil, fmt.Errorf("failed to list containers: %w", err)
 				}
 
 				// Resolve all container names up front.
@@ -194,7 +194,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 					if _, ok := seenFailedContainers[bucketName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+							glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", bucketName), common.LogWarning)
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
@@ -215,7 +215,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 					if _, ok := seenFailedContainers[dstContainerName]; err != nil && jobsAdmin.JobsAdmin != nil && !ok {
 						logDstContainerCreateFailureOnce.Do(func() {
-							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+							glcm.Warn("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail).", resName), common.LogWarning)
 						jobsAdmin.JobsAdmin.LogToJobLog(fmt.Sprintf("Error %s", err), common.LogDebug)
@@ -314,7 +314,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	return NewCopyEnumerator(traverser, filters, processor, finalizer), nil
 }
 
-// This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
+// This is condensed down into an individual function as we don't end up reusing the destination traverser at all.
 // This is just for the directory check.
 func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
 	var err error
@@ -428,7 +428,13 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		return err
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := dstCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),

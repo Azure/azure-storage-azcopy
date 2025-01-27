@@ -43,12 +43,12 @@ import (
 )
 
 var azcopyLogPathFolder string
-var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var outputVerbosityRaw string
 var logVerbosityRaw string
 var cancelFromStdin bool
 
+// rawRootArgs
 var azcopyOutputFormat common.OutputFormat
 var azcopyOutputVerbosity common.OutputVerbosity
 var azcopyLogVerbosity common.LogLevel
@@ -61,7 +61,6 @@ var azcopySkipVersionCheck bool
 // it as a global
 var cmdLineExtraSuffixesAAD string
 
-var loggerInfo jobLoggerInfo
 var azcopyAwaitContinue bool
 var azcopyAwaitAllowOpenFiles bool
 var azcopyScanningLogger common.ILoggerResetable
@@ -132,7 +131,6 @@ var rootCmd = &cobra.Command{
 				if strings.HasPrefix(v, "/") {
 					v = strings.TrimPrefix(v, common.AZCOPY_PATH_SEPARATOR_STRING)
 				}
-
 				ste.DebugSkipFiles[v] = true
 			}
 		}
@@ -174,38 +172,18 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-type RootOptions struct {
-	OutputFormat     common.OutputFormat
-	OutputLevel      common.OutputVerbosity
-	LogLevel         common.LogLevel
-	CapMbps          float64
-	ExtraSuffixesAAD string
-	SkipVersionCheck bool
-}
-
-func SetRootOptions(options RootOptions) {
-	azcopyOutputFormat = options.OutputFormat
-	azcopyOutputVerbosity = options.OutputLevel
-	azcopyLogVerbosity = options.LogLevel
-	azcopySkipVersionCheck = options.SkipVersionCheck
-	cmdLineCapMegaBitsPerSecond = options.CapMbps
-	cmdLineExtraSuffixesAAD = options.ExtraSuffixesAAD
-}
-
 func Initialize(resumeJobID common.JobID, isBench bool) error {
 	azcopyLogPathFolder, common.AzcopyJobPlanFolder = initializeFolders()
-
-	jobID := common.NewJobID()
 	configureGoMaxProcs()
 
 	// Perform os specific initialization
-	var err error
-	azcopyMaxFileAndSocketHandles, err = processOSSpecificInitialization()
+	azcopyMaxFileAndSocketHandles, err := processOSSpecificInitialization()
 	if err != nil {
 		log.Fatalf("initialization failed: %v", err)
 	}
+	jobID := common.NewJobID()
 	azcopyCurrentJobID = jobID
-	loggerInfo = jobLoggerInfo{jobID, azcopyLogPathFolder}
+	loggerInfo := jobLoggerInfo{jobID, azcopyLogPathFolder}
 
 	timeAtPrestart := time.Now()
 	glcm.SetOutputFormat(azcopyOutputFormat)
@@ -330,7 +308,7 @@ func init() {
 	rootCmd.PersistentFlags().Float64Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
 	rootCmd.PersistentFlags().StringVar(&outputVerbosityRaw, "output-level", "default", "Define the output verbosity. Available levels: essential, quiet.")
-	rootCmd.PersistentFlags().StringVar(&logVerbosityRaw, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
+	rootCmd.PersistentFlags().StringVar(&logVerbosityRaw, "log-level", "INFO", "Define the log verbosity for the log file, available levels: DEBUG(detailed trace), INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 
 	rootCmd.PersistentFlags().StringVar(&cmdLineExtraSuffixesAAD, trustedSuffixesNameAAD, "", "Specifies additional domain suffixes where Azure Active Directory login tokens may be sent.  The default is '"+
 		trustedSuffixesAAD+"'. Any listed here are added to the default. For security, you should only put Microsoft Azure domains here. Separate multiple entries with semi-colons.")
@@ -382,7 +360,7 @@ func beginDetectNewVersion() chan struct{} {
 			PrintOlderVersion(*cachedVersion, *localVersion)
 		} else {
 			// step 2: initialize pipeline
-			options := createClientOptions(nil, nil)
+			options := createClientOptions(nil, nil, nil)
 
 			// step 3: start download
 			blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
