@@ -1,10 +1,37 @@
 
 # Change Log
 
-## Version 10.28.0-Preview
+## Version 10.28.0
+
+### New Features
+1. Added support for trailing dot transfers to destinations that do not support trailing dot files. ([#2827](https://github.com/Azure/azure-storage-azcopy/pull/2827))
+2. Added support to fall back to LMT on missing source hash when `--compare-hash` is set for `sync` commands. ([#2866](https://github.com/Azure/azure-storage-azcopy/pull/2866))
+3. When receiving a `ShareSizeLimitReached` error on transferring a file, AzCopy will now fail fast and suggest the customer increase file share quota and resume the command. ([#2895](https://github.com/Azure/azure-storage-azcopy/pull/2895))
+4. Added support to validate destination container name to fail fast if it is a system container. ([#2883](https://github.com/Azure/azure-storage-azcopy/pull/2883))
+5. Added support to allow customers to reauthorize credentials on token expiration. ([#2887](https://github.com/Azure/azure-storage-azcopy/pull/2887))
+6. Added support to always create missing destination resources in `azcopy sync`. ([#2894](https://github.com/Azure/azure-storage-azcopy/pull/2894))
+7. When targeting flat namespace accounts in `azcopy sync`,directory stubs can now be overwritten or overlapped. ([#2894](https://github.com/Azure/azure-storage-azcopy/pull/2894))
 
 ### Bug Fixes
-1. Fixed an issue where AzCopy would not persist tokens when logging in via Device Code. ([#2361](https://github.com/Azure/azure-storage-azcopy/issues/2361))
+1. Fixed an issue where AzCopy would not persist tokens when logging in via Device Code by migrating Device Code logic to azidentity Track 2 SDK. ([#2361](https://github.com/Azure/azure-storage-azcopy/issues/2361), [#2747](https://github.com/Azure/azure-storage-azcopy/pull/2747))
+2. Updated version check to hit updated AzCopy static website URL. The previous URL was taken down due to security requirements. ([#2852](https://github.com/Azure/azure-storage-azcopy/pull/2852))  
+3. Fixed an issue where `jobs clean` would be blocked due to trying to clean up its own log file. ([#2850](https://github.com/Azure/azure-storage-azcopy/pull/2850))
+4. Fixed an issue where a panic would sometimes be hit due to closing an nil channel. ([#2874](https://github.com/Azure/azure-storage-azcopy/pull/2874))
+5. Downgraded go version to 1.22.7 to temporarily resolve reported high memory issue. ([#2855](https://github.com/Azure/azure-storage-azcopy/issues/2855))
+6. Fixed an issue where `--log-level=NONE` would display a log file location. ([#2845](https://github.com/Azure/azure-storage-azcopy/pull/2845))
+7. Fixed the log levels of some messages. ([#2845](https://github.com/Azure/azure-storage-azcopy/pull/2845))
+8. Corrected the cleanup of files with names ending in `/` when using `--delete-destination-files` on `azcopy sync`. ([#2847](https://github.com/Azure/azure-storage-azcopy/pull/2847))
+9. Correctly target objects in `copy/sync/delete` with names ending in `/`. ([#2847](https://github.com/Azure/azure-storage-azcopy/pull/2847))
+
+### Dependency updates
+1. Golang 1.23.1 -> 1.22.7 ([#2911](https://github.com/Azure/azure-storage-azcopy/pull/2911))
+
+2. golang.org/x/crypto v0.28.0 -> v0.31.0 (CVE-2024-45337)([#2890](https://github.com/Azure/azure-storage-azcopy/pull/2890))
+3. golang.org/x/net v0.30.0 -> v0.33.0 (CVE-2024-45338)([#2899](https://github.com/Azure/azure-storage-azcopy/pull/2899))
+
+### Documentation
+1. Updated README and in line text help messages to clarify OAuth support as a source AuthN method in Blob <-> File transfers. ([#2838](https://github.com/Azure/azure-storage-azcopy/pull/2838))
+2. Added `--log-level=DEBUG` as a valid option in text help message. ([#2845](https://github.com/Azure/azure-storage-azcopy/pull/2845))
 
 ## Version 10.27.1
 

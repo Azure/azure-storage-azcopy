@@ -29,7 +29,7 @@ var envCmd = &cobra.Command{
 	Long:  envCmdLongDescription,
 	Run: func(cmd *cobra.Command, args []string) {
 		for _, env := range common.VisibleEnvironmentVariables {
-			val := glcm.GetEnvironmentVariable(env)
+			val := common.GetEnvironmentVariable(env)
 			if env.Hidden && !showSensitive {
 				val = "REDACTED"
 			}
