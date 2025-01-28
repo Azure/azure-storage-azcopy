@@ -1,10 +1,7 @@
 name: Update wiki docs
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
 
 concurrency:
   group: wiki
