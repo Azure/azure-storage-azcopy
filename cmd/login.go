@@ -29,16 +29,16 @@ import (
 )
 
 type LoginOptions struct {
-	TenantId    string
-	AadEndpoint string
+	TenantID                string
+	ActiveDirectoryEndpoint string
 
 	LoginType common.AutoLoginType
 
-	IdentityClientId   string
-	identityObjectId   string
-	IdentityResourceId string
+	IdentityClientID   string
+	identityObjectID   string
+	IdentityResourceID string
 
-	ApplicationId   string
+	ApplicationID   string
 	CertificatePath string
 
 	certificatePassword string
@@ -53,33 +53,33 @@ func (options LoginOptions) process() error {
 	switch options.LoginType {
 	case common.EAutoLoginType.SPN():
 		if options.CertificatePath != "" {
-			if err := uotm.CertLogin(options.TenantId, options.AadEndpoint, options.CertificatePath, options.certificatePassword, options.ApplicationId, options.persistToken); err != nil {
+			if err := uotm.CertLogin(options.TenantID, options.ActiveDirectoryEndpoint, options.CertificatePath, options.certificatePassword, options.ApplicationID, options.persistToken); err != nil {
 				return err
 			}
 			glcm.Info("SPN Auth via cert succeeded.")
 		} else {
-			if err := uotm.SecretLogin(options.TenantId, options.AadEndpoint, options.clientSecret, options.ApplicationId, options.persistToken); err != nil {
+			if err := uotm.SecretLogin(options.TenantID, options.ActiveDirectoryEndpoint, options.clientSecret, options.ApplicationID, options.persistToken); err != nil {
 				return err
 			}
 			glcm.Info("SPN Auth via secret succeeded.")
 		}
 	case common.EAutoLoginType.MSI():
 		if err := uotm.MSILogin(common.IdentityInfo{
-			ClientID: options.IdentityClientId,
-			ObjectID: options.identityObjectId,
-			MSIResID: options.IdentityResourceId,
+			ClientID: options.IdentityClientID,
+			ObjectID: options.identityObjectID,
+			MSIResID: options.IdentityResourceID,
 		}, options.persistToken); err != nil {
 			return err
 		}
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	case common.EAutoLoginType.AzCLI():
-		if err := uotm.AzCliLogin(options.TenantId); err != nil {
+		if err := uotm.AzCliLogin(options.TenantID); err != nil {
 			return err
 		}
 		glcm.Info("Login with AzCliCreds succeeded")
 	case common.EAutoLoginType.PsCred():
-		if err := uotm.PSContextToken(options.TenantId); err != nil {
+		if err := uotm.PSContextToken(options.TenantID); err != nil {
 			return err
 		}
 		glcm.Info("Login with Powershell context succeeded")
@@ -89,7 +89,7 @@ func (options LoginOptions) process() error {
 		}
 		glcm.Info("Login with Workload Identity succeeded")
 	default:
-		if err := uotm.UserLogin(options.TenantId, options.AadEndpoint, options.persistToken); err != nil {
+		if err := uotm.UserLogin(options.TenantID, options.ActiveDirectoryEndpoint, options.persistToken); err != nil {
 			return err
 		}
 		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
@@ -120,7 +120,7 @@ var lgCmd = &cobra.Command{
 			return errors.New("you cannot set --service-principal or --identity in conjunction with --login-type. please use --login-type only")
 		} else if loginCmdArg.servicePrincipal && loginCmdArg.identity {
 			// This isn't necessary, but stands as a sanity check. It will never be hit.
-			return errors.New("you can only log in with one type of auth at once")
+			return errors.New("you can only login using one authentication method at a time")
 		} else if loginCmdArg.servicePrincipal {
 			loginCmdArg.loginType = common.EAutoLoginType.SPN().String()
 		} else if loginCmdArg.identity {
@@ -212,13 +212,13 @@ func (args rawLoginArgs) toOptions() (LoginOptions, error) {
 		return LoginOptions{}, err
 	}
 	return LoginOptions{
-		TenantId:           args.tenantID,
-		AadEndpoint:        args.aadEndpoint,
-		LoginType:          loginType,
-		IdentityClientId:   args.identityClientID,
-		identityObjectId:   args.identityObjectID,
-		IdentityResourceId: args.identityResourceID,
-		ApplicationId:      args.applicationID,
-		CertificatePath:    args.certPath,
+		TenantID:                args.tenantID,
+		ActiveDirectoryEndpoint: args.aadEndpoint,
+		LoginType:               loginType,
+		IdentityClientID:        args.identityClientID,
+		identityObjectID:        args.identityObjectID,
+		IdentityResourceID:      args.identityResourceID,
+		ApplicationID:           args.applicationID,
+		CertificatePath:         args.certPath,
 	}, nil
 }

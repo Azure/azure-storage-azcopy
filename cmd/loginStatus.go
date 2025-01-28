@@ -29,7 +29,7 @@ import (
 )
 
 type LoginStatusOptions struct {
-	TenantId    bool
+	TenantID    bool
 	AadEndpoint bool
 }
 
@@ -42,7 +42,7 @@ func (options LoginStatusOptions) process() error {
 	if err == nil && !tokenInfo.IsExpired() {
 		glcm.Info("You have successfully refreshed your token. Your login session is still active")
 
-		if options.TenantId {
+		if options.TenantID {
 			glcm.Info(fmt.Sprintf("Tenant ID: %v", tokenInfo.Tenant))
 		}
 
@@ -81,6 +81,6 @@ func init() {
 	}
 
 	lgCmd.AddCommand(lgStatus)
-	lgStatus.PersistentFlags().BoolVar(&commandLineInput.TenantId, "tenant", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.TenantID, "tenant", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
 	lgStatus.PersistentFlags().BoolVar(&commandLineInput.AadEndpoint, "endpoint", false, "Prints the Azure Active Directory endpoint that is being used in the current session.")
 }

@@ -101,25 +101,25 @@ func GetOAuthTokenManagerInstance() (*common.UserOAuthTokenManager, error) {
 		}
 
 		if tenantID := common.GetEnvironmentVariable(common.EEnvironmentVariable.TenantID()); tenantID != "" {
-			options.TenantId = tenantID
+			options.TenantID = tenantID
 		}
 
 		if endpoint := common.GetEnvironmentVariable(common.EEnvironmentVariable.AADEndpoint()); endpoint != "" {
-			options.AadEndpoint = endpoint
+			options.ActiveDirectoryEndpoint = endpoint
 		}
 
 		// Fill up options
 		options.LoginType = loginType
 		switch options.LoginType {
 		case common.EAutoLoginType.SPN():
-			options.ApplicationId = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
+			options.ApplicationID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ApplicationID())
 			options.CertificatePath = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePath())
 			options.certificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
 			options.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 		case common.EAutoLoginType.MSI():
-			options.IdentityClientId = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
-			options.identityObjectId = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
-			options.IdentityResourceId = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
+			options.IdentityClientID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityClientID())
+			options.identityObjectID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityObjectID())
+			options.IdentityResourceID = common.GetEnvironmentVariable(common.EEnvironmentVariable.ManagedIdentityResourceString())
 		case common.EAutoLoginType.Device():
 		case common.EAutoLoginType.AzCLI():
 		case common.EAutoLoginType.PsCred():
