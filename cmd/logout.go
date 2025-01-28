@@ -22,12 +22,28 @@ package cmd
 
 import (
 	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
+type LogoutOptions struct{}
+
+func (options LogoutOptions) process() error {
+	uotm := GetUserOAuthTokenManagerInstance()
+	if err := uotm.RemoveCachedToken(); err != nil {
+		return fmt.Errorf("failed to logout, %v", err)
+	}
+
+	// For MSI login, info success message to user.
+	glcm.Info("Logout succeeded.")
+	return nil
+}
+
+func RunLogout(options LogoutOptions) error {
+	return options.process()
+}
+
 func init() {
-	logoutCmdArgs := logoutCmdArgs{}
+	logoutCmdArgs := LogoutOptions{}
 
 	// logoutCmd represents the logout command
 	logoutCmd := &cobra.Command{
@@ -39,27 +55,9 @@ func init() {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := logoutCmdArgs.process()
-			if err != nil {
-				return fmt.Errorf("failed to perform logout command, %v", err)
-			}
-			return nil
+			return RunLogout(logoutCmdArgs)
 		},
 	}
 
 	rootCmd.AddCommand(logoutCmd)
-}
-
-type logoutCmdArgs struct{}
-
-func (lca logoutCmdArgs) process() error {
-	uotm := GetUserOAuthTokenManagerInstance()
-	if err := uotm.RemoveCachedToken(); err != nil {
-		return err
-	}
-
-	// For MSI login, info success message to user.
-	glcm.Info("Logout succeeded.")
-
-	return nil
 }
