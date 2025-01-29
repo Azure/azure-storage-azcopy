@@ -114,6 +114,25 @@ type loginCmdArgs struct {
 	persistToken  bool
 }
 
+// loginWithSPNArgs is a type that holds the arguments for login with SPN so we don't need to use environment variables. It also uses certData rather than certPath
+type SPNArgs struct {
+	certData      string
+	applicationId string
+	certPass      string
+	tenantId      string
+	aadEndpoint   string
+}
+
+var loginWithSPNArgs SPNArgs = SPNArgs{}
+
+func setSPNArgs(certData string, certPass string, applicationId string, tenantId string, aadEndpoint string) {
+	loginWithSPNArgs.certData = certData
+	loginWithSPNArgs.applicationId = applicationId
+	loginWithSPNArgs.certPass = certPass
+	loginWithSPNArgs.tenantId = tenantId
+	loginWithSPNArgs.aadEndpoint = aadEndpoint
+}
+
 func (lca loginCmdArgs) process() error {
 	// Login type consolidation to allow backward compatibility.
 	// Commenting the warning message till we decide on when to deprecate these options
@@ -141,6 +160,13 @@ func (lca loginCmdArgs) process() error {
 				return err
 			}
 			glcm.Info("SPN Auth via cert succeeded.")
+
+		} else if lca.certPath == "" && loginWithSPNArgs.certData != "" {
+			if err := uotm.SpnArgsLogin(loginWithSPNArgs.tenantId, loginWithSPNArgs.aadEndpoint, loginWithSPNArgs.certData, loginWithSPNArgs.certPass, loginWithSPNArgs.applicationId, lca.persistToken); err != nil {
+				return err
+			}
+			glcm.Info("SPN Auth via cert succeeded.")
+
 		} else {
 			if err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
 				return err
