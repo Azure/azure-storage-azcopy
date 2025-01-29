@@ -626,8 +626,8 @@ extends:
                 displayName: 'Make Artifacts executable'
 
               - script: |
-                  mv $(mac)/* $(signed)/
-                  mv $(mac-m1)/* $(signed)/
+                  mv $(mac)/azcopy* $(signed)/
+                  mv $(mac-m1)/azcopy* $(signed)/
                 displayName: 'Copy required files'
 
               - script: |
