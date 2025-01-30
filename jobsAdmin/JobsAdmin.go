@@ -103,6 +103,8 @@ var JobsAdmin interface {
 	// JobMgrCleanUp do the JobMgr cleanup.
 	JobMgrCleanUp(jobId common.JobID)
 	ListJobs(givenStatus common.JobStatus) common.ListJobsResponse
+
+	SetTargetRateInMegaBitsPerSec(targetRateInMegaBitsPerSec int)
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
@@ -594,6 +596,13 @@ func (ja *jobsAdmin) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint3
 	isToAzureFiles := fromTo.To() == common.ELocation.File()
 	a := ste.NewPerformanceAdvisor(p, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile, isToAzureFiles)
 	return a.GetAdvice()
+}
+
+// NOTE: Change for Storage Mover Integration
+// This is needed for bandwidth management feature.
+func (ja *jobsAdmin) SetTargetRateInMegaBitsPerSec(targetRateInMegaBitsPerSec int) {
+	targetRateInBytesPerSec := int64(targetRateInMegaBitsPerSec * 1000 * 1000 / 8)
+	ja.pacer.UpdateTargetBytesPerSecond(targetRateInBytesPerSec)
 }
 
 func (ja *jobsAdmin) messageHandler(inputChan <-chan *common.LCMMsg) {
