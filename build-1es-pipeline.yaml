@@ -970,5 +970,5 @@ extends:
                   SourcePath: $(release)/*
                   Destination: AzureBlob
                   storage: $(test_release_account_name)
-                  ContainerName: %24web
-                  BlobPrefix: releases/release-$(azcopy_version)-$(today)
+                  ContainerName: '%24web'
+                  BlobPrefix: 'releases/release-$(azcopy_version)-$(today)'
