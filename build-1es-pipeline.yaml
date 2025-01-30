@@ -944,11 +944,11 @@ extends:
 
               - script : |
                   mkdir -p $(drop)
+                  cp $(System.DefaultWorkingDirectory)/NOTICE.txt $(drop)
 #                  cp $(input_path)/azcopy-binaries-linux-amd64/* $(drop)
 #                  cp $(input_path)/azcopy-binaries-linux-arm64/* $(drop)
 #                  cp $(input_path)/azcopy-binaries-windows/* $(drop)
 #                  cp $(input_path)/azcopy-binaries-mac/* $(drop)
-                  cp $(System.DefaultWorkingDirectory)/NOTICE.txt $(drop)
                 displayName: 'Prepare drop.zip folder'
 
               - script : |
