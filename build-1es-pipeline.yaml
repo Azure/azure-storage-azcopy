@@ -1,6 +1,17 @@
 variables:
   AZCOPY_GOLANG_VERSION: '1.21.8'
 
+parameters:
+  - name: publish_to_container
+    displayName: 'Publish To Container'
+    type: boolean
+    default: false
+
+  - name: publish_to_m1_container
+    displayName: 'Publish To M1 Container'
+    type: boolean
+    default: false
+
 # Do not trigger this pipeline automatically
 trigger: none
 pr: none
@@ -28,15 +39,6 @@ extends:
               name: azcopy-pool
               image: ubuntu22-1espt
               os: linux
-            templateContext:
-              outputs:
-                - output: pipelineArtifact
-                  targetPath: $(System.DefaultWorkingDirectory)/releasehelper
-                  artifactName: 'azcopy-releasehelper'
-                  displayName: 'Upload Release Helper Files'
-            variables:
-              - name: output_path
-                value: '$(System.DefaultWorkingDirectory)/releasehelper'
             steps:
               - checkout: self
                 displayName: 'Checkout repository'
@@ -71,14 +73,6 @@ extends:
                   fi
                 displayName: 'Verify and extract the generated build version'
                 name: SetAzCopyVersion
-
-              - script: |
-                  mkdir -p $(output_path)
-                  cp docker/Dockerfile* $(output_path)
-                  echo $(azcopy_version) > $(output_path)/latest_version.txt
-                  cp NOTICE.txt $(output_path)
-                  cp packages.csv $(output_path)
-                displayName: 'Release Helper Files'
 
       - stage: BuildArtifacts
         dependsOn: AzCopyVersion
@@ -873,3 +867,113 @@ extends:
                   cd $(extracted)\azcopy*arm64*
                   azcopy.exe --version
                 displayName: 'Verify exe in zip'
+
+      - stage: ReleaseToContainer
+        jobs:
+          - job: ReleaseToContainer
+            templateContext:
+              inputs:
+                - input: pipelineArtifact
+                  artifactName: azcopy-linux-signed
+                  targetPath: $(System.DefaultWorkingDirectory)/azcopy-linux-signed
+                  displayName: "Download Linux Signed"
+                - input: pipelineArtifact
+                  artifactName: azcopy-windows-signed
+                  targetPath: $(System.DefaultWorkingDirectory)/azcopy-windows-signed
+                  displayName: "Download Windows Signed"
+                - input: pipelineArtifact
+                  artifactName: azcopy-mac-signed
+                  targetPath: $(System.DefaultWorkingDirectory)/azcopy-mac-signed
+                  displayName: "Download Mac Signed"
+                - input: pipelineArtifact
+                  artifactName: azcopy-binaries-linux-amd64
+                  targetPath: $(System.DefaultWorkingDirectory)/azcopy-binaries-linux-amd64
+                  displayName: "Download Linux AMD64 Binaries"
+                - input: pipelineArtifact
+                  artifactName: azcopy-binaries-linux-arm64
+                  targetPath: $(System.DefaultWorkingDirectory)/azcopy-binaries-linux-arm64
+                  displayName: "Download Linux ARM64 Binaries"
+                - input: pipelineArtifact
+                  artifactName: azcopy-binaries-windows
+                  targetPath: $(System.DefaultWorkingDirectory)/azcopy-binaries-windows
+                  displayName: "Download Windows Binaries"
+                - input: pipelineArtifact
+                  artifactName: azcopy-binaries-mac
+                  targetPath: $(System.DefaultWorkingDirectory)/azcopy-binaries-mac
+                  displayName: "Download Mac Binaries"
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+            variables:
+              - name: test_release_account_name
+                value: 'azcopyprivatedrops'
+              - name: release_account_name
+                value: 'azcopyvnextrelease'
+              - name: publish_container
+                value: ${{ parameters.publish_to_container }}
+              - name: publish_m1_container
+                value: ${{ parameters.publish_to_m1_container }}
+              - name: input_path
+                value: $(System.DefaultWorkingDirectory)
+              - name: drop
+                value: $(System.DefaultWorkingDirectory)/drop
+              - name: release
+                value: $(System.DefaultWorkingDirectory)/release
+              - name: azcopy_version
+                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
+
+            steps:
+              - checkout: self
+                displayName: 'Checkout repository'
+              - script: |
+                  sudo apt-get install build-essential -y
+                  rm -rf /usr/local/bin/azcopy
+                  rm -rf /usr/bin/azcopy
+                  sudo dpkg -i $(input_path)/azcopy-linux-signed/azcopy-*x86_64.deb
+                displayName: 'Install azcopy'
+              - script : |
+                  mkdir -p $(release)
+                  rm -rf $(input_path)/azcopy-linux-signed/mariner
+                  cp $(input_path)/azcopy-linux-signed/* $(release)
+                  cp $(input_path)/azcopy-windows-signed/* $(release)
+                  cp $(input_path)/azcopy-mac-signed/* $(release)
+                displayName: 'Prepare release folder'
+              - script : |
+                  mkdir -p $(drop)
+                  cp $(input_path)/azcopy-binaries-linux-amd64/* $(drop)
+                  cp $(input_path)/azcopy-binaries-linux-arm64/* $(drop)
+                  cp $(input_path)/azcopy-binaries-windows/* $(drop)
+                  cp $(input_path)/azcopy-binaries-mac/* $(drop)
+                  cp $(System.DefaultWorkingDirectory)/NOTICE.txt $(drop)
+                displayName: 'Prepare drop.zip folder'
+
+              - task: ArchiveFiles@2
+                displayName: 'Archive drop.zip'
+                inputs:
+                  rootFolderOrFile: '$(drop)'
+                  archiveFile: '$(release)/drop.zip'
+
+              - task: AzureCLI@2
+                displayName: 'Azure CLI'
+                inputs:
+                  azureSubscription: 'ESRP KeyVault identity'
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    today=$(date +"%Y%m%d")
+                    
+                    if [ $(publish_container) = "True" ]; then
+                      container_url="https://$(release_account_name).blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
+                    else
+                      container_url="https://$(test_release_account_name).blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
+                    fi
+                    echo "Artifacts will be uploaded to: $container_url"
+                    
+                    # Upload the archived builds
+                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
+                    
+                    if [ $(publish_m1_container) = "True" ]; then
+                      m1_container_url="https://$(release_account_name).blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
+                      AZCOPY_AUTO_LOGIN_TYPE=AzCLI azcopy cp "$(input_path)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
+                    fi
