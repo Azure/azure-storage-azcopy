@@ -32,47 +32,47 @@ extends:
         image: windows2022-1espt
         os: windows
     stages:
-#      - stage: AzCopyVersion
-#        jobs:
-#          - job: GetAzCopyVersion
-#            pool:
-#              name: azcopy-pool
-#              image: ubuntu22-1espt
-#              os: linux
-#            steps:
-#              - checkout: self
-#                displayName: 'Checkout repository'
-#
-#              - task: GoTool@0
-#                env:
-#                  GO111MODULE: 'on'
-#                inputs:
-#                  version: $(AZCOPY_GOLANG_VERSION)
-#
-#              - script: |
-#                  go build -tags "netgo" -o azcopy
-#                displayName: 'Build AzCopy'
-#
-#              - script: |
-#                  # Run azcopy --version and capture the output
-#                  azcopyOutput=$(./azcopy --version)
-#
-#                  # Extract the version part
-#                  if echo "$azcopyOutput" | grep -q "azcopy version"; then
-#                    version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
-#                    if [[ -n "$version" ]]; then
-#                      echo "Extracted version: $version"
-#                      echo "##vso[task.setvariable variable=azcopy_version;isOutput=true]$version"
-#                    else
-#                      echo "Unable to extract version from azcopy output"
-#                      exit 1
-#                    fi
-#                  else
-#                    echo "azcopy version string not found in output"
-#                    exit 1
-#                  fi
-#                displayName: 'Verify and extract the generated build version'
-#                name: SetAzCopyVersion
+      - stage: AzCopyVersion
+        jobs:
+          - job: GetAzCopyVersion
+            pool:
+              name: azcopy-pool
+              image: ubuntu22-1espt
+              os: linux
+            steps:
+              - checkout: self
+                displayName: 'Checkout repository'
+
+              - task: GoTool@0
+                env:
+                  GO111MODULE: 'on'
+                inputs:
+                  version: $(AZCOPY_GOLANG_VERSION)
+
+              - script: |
+                  go build -tags "netgo" -o azcopy
+                displayName: 'Build AzCopy'
+
+              - script: |
+                  # Run azcopy --version and capture the output
+                  azcopyOutput=$(./azcopy --version)
+
+                  # Extract the version part
+                  if echo "$azcopyOutput" | grep -q "azcopy version"; then
+                    version=$(echo "$azcopyOutput" | sed -n 's/^azcopy version \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/p')
+                    if [[ -n "$version" ]]; then
+                      echo "Extracted version: $version"
+                      echo "##vso[task.setvariable variable=azcopy_version;isOutput=true]$version"
+                    else
+                      echo "Unable to extract version from azcopy output"
+                      exit 1
+                    fi
+                  else
+                    echo "azcopy version string not found in output"
+                    exit 1
+                  fi
+                displayName: 'Verify and extract the generated build version'
+                name: SetAzCopyVersion
       - stage: UploadToContainer
         jobs:
           - job: UploadToContainer
@@ -81,24 +81,23 @@ extends:
               image: ubuntu22-1espt
               os: linux
             variables:
-              - name: test_release_account_name
-                value: 'azcopyprivatedrops'
-              - name: release_account_name
-                value: 'azcopyvnextrelease'
               - name: input_path
                 value: $(System.DefaultWorkingDirectory)
               - name: drop
                 value: $(System.DefaultWorkingDirectory)/drop
               - name: release
                 value: $(System.DefaultWorkingDirectory)/release
-              - name: azcopy_version
-                value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
             steps:
               - checkout: self
                 displayName: 'Checkout repository'
+
               - script: |
                   mkdir -p $(release)
-                displayName: 'Test'
+                displayName: 'Prepare release folder'
+
+              - script: |
+                  mkdir -p $(drop)
+                displayName: 'Prepare drop folder'
 #      - stage: BuildArtifacts
 #        dependsOn: AzCopyVersion
 #        jobs:
