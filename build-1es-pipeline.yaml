@@ -926,12 +926,14 @@ extends:
             steps:
               - checkout: self
                 displayName: 'Checkout repository'
+
               - script: |
                   sudo apt-get install build-essential -y
                   rm -rf /usr/local/bin/azcopy
                   rm -rf /usr/bin/azcopy
                   sudo dpkg -i $(input_path)/azcopy-linux-signed/azcopy-*x86_64.deb
                 displayName: 'Install azcopy'
+
               - script : |
                   mkdir -p $(release)
                   rm -rf $(input_path)/azcopy-linux-signed/mariner
@@ -939,6 +941,7 @@ extends:
                   cp $(input_path)/azcopy-windows-signed/* $(release)
                   cp $(input_path)/azcopy-mac-signed/* $(release)
                 displayName: 'Prepare release folder'
+
               - script : |
                   mkdir -p $(drop)
                   cp $(input_path)/azcopy-binaries-linux-amd64/* $(drop)
@@ -954,26 +957,51 @@ extends:
                   rootFolderOrFile: '$(drop)'
                   archiveFile: '$(release)/drop.zip'
 
-              - task: AzureCLI@2
-                displayName: 'Azure CLI'
+              - task: AzurePowerShell@5
+                displayName: 'Upload Artifacts to Storage'
                 inputs:
                   azureSubscription: 'ESRP KeyVault identity'
-                  scriptType: bash
-                  scriptLocation: inlineScript
-                  inlineScript: |
-                    today=$(date +"%Y%m%d")
+                  ScriptType: 'InlineScript'
+                  Inline: |
+                    $today = Get-Date -Format "yyyyMMdd"
                     
-                    if [ $(publish_container) = "True" ]; then
-                      container_url="https://$(release_account_name).blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
-                    else
-                      container_url="https://$(test_release_account_name).blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
-                    fi
-                    echo "Artifacts will be uploaded to: $container_url"
+                    $container_url = if ($env:publish_container -eq "True") {
+                        "https://$env:release_account_name.blob.core.windows.net/%24web/releases/release-$env:azcopy_version-${today}"
+                    } else {
+                        "https://$env:test_release_account_name.blob.core.windows.net/%24web/releases/release-$env:azcopy_version-${today}"
+                    }
                     
-                    # Upload the archived builds
-                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
+                    Write-Host "Artifacts will be uploaded to: $container_url"
                     
-                    if [ $(publish_m1_container) = "True" ]; then
-                      m1_container_url="https://$(release_account_name).blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
-                      AZCOPY_AUTO_LOGIN_TYPE=AzCLI azcopy cp "$(input_path)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
-                    fi
+                    $env:AZCOPY_AUTO_LOGIN_TYPE = "AzCLI"
+                    azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
+                    
+                    if ($env:publish_m1_container -eq "True") {
+                        $m1_container_url = "https://$env:release_account_name.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$env:azcopy_version-${today}"
+                        azcopy cp "$(input_path)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
+                    }
+                  azurePowerShellVersion: 'LatestVersion'
+
+#              - task: AzureCLI@2
+#                displayName: 'Azure CLI'
+#                inputs:
+#                  azureSubscription: 'ESRP KeyVault identity'
+#                  scriptType: bash
+#                  scriptLocation: inlineScript
+#                  inlineScript: |
+#                    today=$(date +"%Y%m%d")
+#
+#                    if [ $(publish_container) = "True" ]; then
+#                      container_url="https://$(release_account_name).blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
+#                    else
+#                      container_url="https://$(test_release_account_name).blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
+#                    fi
+#                    echo "Artifacts will be uploaded to: $container_url"
+#
+#                    # Upload the archived builds
+#                    AZCOPY_AUTO_LOGIN_TYPE=AzCLI azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
+#
+#                    if [ $(publish_m1_container) = "True" ]; then
+#                      m1_container_url="https://$(release_account_name).blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
+#                      AZCOPY_AUTO_LOGIN_TYPE=AzCLI azcopy cp "$(input_path)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --put-md5=true
+#                    fi
