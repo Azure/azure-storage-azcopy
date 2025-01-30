@@ -871,7 +871,7 @@ extends:
       - stage: ReleaseToContainer
         jobs:
           - job: ReleaseToContainer
-            templateContext:
+#            templateContext:
 #              inputs:
 #                - input: pipelineArtifact
 #                  artifactName: azcopy-linux-signed
