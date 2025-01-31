@@ -104,6 +104,9 @@ var JobsAdmin interface {
 
 	// ChangeLogLevel change the log level for specific job.
 	ChangeLogLevel(level common.LogLevel, jobId common.JobID) error
+
+	// Update bandwidth
+	UpdateTargetBandwidth(newTarget int64)
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder string, azcopyLogPathFolder string, providePerfAdvice bool) {
