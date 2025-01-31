@@ -100,6 +100,8 @@ type IJobMgr interface {
 	CancelPauseJobOrder(desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse
 	IsDaemon() bool
 
+	ChangeLogLevel(common.LogLevel)
+
 	// Cleanup Functions
 	DeferredCleanupJobMgr()
 }
@@ -202,6 +204,17 @@ func NewJobMgr(concurrency ConcurrencySettings, jobID common.JobID, appCtx conte
 	go jm.handleStatusUpdateMessage()
 
 	return &jm
+}
+
+// ChangeLogLevel changes the log level of the job manager's logger.
+// If the logger is not nil, it updates the logger's log level to the specified level.
+//
+// Parameters:
+//   - level: The new log level to set for the logger.
+func (jm *jobMgr) ChangeLogLevel(level common.LogLevel) {
+	if jm.logger != nil {
+		jm.logger.ChangeLogLevel(level)
+	}
 }
 
 func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
