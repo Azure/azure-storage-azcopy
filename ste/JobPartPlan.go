@@ -7,7 +7,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/minio/minio-go/pkg/credentials"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
@@ -107,8 +106,6 @@ type JobPartPlanHeader struct {
 	PermanentDeleteOption common.PermanentDeleteOption
 
 	RehydratePriority common.RehydratePriorityType
-
-	Provider credentials.Provider //Custom credential Provider
 }
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner

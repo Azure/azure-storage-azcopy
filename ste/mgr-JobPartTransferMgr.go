@@ -439,7 +439,6 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
 		VersionID:         versionID,
 		SnapshotID:        snapshotID,
-		Provider:          plan.Provider, //custom Provider
 	}
 }
 
