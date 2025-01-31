@@ -75,6 +75,17 @@ func (jl *sysLogger) ShouldLog(level LogLevel) bool {
 	return level <= jl.minimumLevelToLog
 }
 
+// This update is not necessarily safe from multiple goroutines simultaneously calling it.
+// Typically we will call ChangeLogLevel() once at the beginning so it should be ok.
+func (sl *sysLogger) ChangeLogLevel(level LogLevel) {
+	if level == LogNone {
+		return
+	}
+	sl.minimumLevelToLog = level
+	return
+}
+
+
 func (sl *sysLogger) CloseLog() {
 	if sl.minimumLevelToLog == LogNone {
 		return
