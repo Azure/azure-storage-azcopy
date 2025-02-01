@@ -49,7 +49,7 @@ var logVerbosityRaw string
 var cancelFromStdin bool
 var azcopyOutputFormat common.OutputFormat
 var azcopyOutputVerbosity common.OutputVerbosity
-var azcopyLogVerbosity common.LogLevel
+var AzcopyLogVerbosity common.LogLevel
 var loggerInfo jobLoggerInfo
 var cmdLineCapMegaBitsPerSecond float64
 var azcopyAwaitContinue bool
@@ -117,7 +117,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		err = azcopyLogVerbosity.Parse(logVerbosityRaw)
+		err = AzcopyLogVerbosity.Parse(logVerbosityRaw)
 		if err != nil {
 			return err
 		}
@@ -150,7 +150,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, azcopyLogVerbosity, loggerInfo.logFileFolder, "")
+		common.AzcopyCurrentJobLogger = common.NewJobLogger(loggerInfo.jobID, AzcopyLogVerbosity, loggerInfo.logFileFolder, "")
 		common.AzcopyCurrentJobLogger.OpenLog()
 
 		glcm.SetForceLogging()
