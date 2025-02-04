@@ -32,6 +32,21 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+func ValidateFromTo2(src, dst string, userSpecifiedFromTo common.FromTo) (common.FromTo, error) {
+	if userSpecifiedFromTo == common.EFromTo.Unknown() {
+		inferredFromTo := inferFromTo(src, dst)
+
+		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
+		if inferredFromTo == common.EFromTo.Unknown() {
+			return common.EFromTo.Unknown(), fmt.Errorf("the inferred source/destination combination could not be identified, or is currently not supported")
+		}
+		return inferredFromTo, nil
+	}
+
+	// User explicitly specified FromTo, therefore, we should respect what they specified.
+	return userSpecifiedFromTo, nil
+}
+
 func ValidateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
 	if userSpecifiedFromTo == "" {
 		inferredFromTo := inferFromTo(src, dst)
@@ -218,8 +233,8 @@ func InferArgumentLocation(arg string) common.Location {
 			if common.IsGCPURL(*u) {
 				return common.ELocation.GCP()
 			}
-      
-			// If none of the above conditions match, return Unknown 
+
+			// If none of the above conditions match, return Unknown
 			return common.ELocation.Unknown()
 		}
 	}

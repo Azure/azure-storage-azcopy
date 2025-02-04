@@ -151,7 +151,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	c.putBlobSizeMB = raw.putBlobSizeMB
 	c.putMd5 = raw.putMd5
 	c.CheckLength = raw.checkLength
-	c.blobType = raw.blobType
+	c.BlobType = raw.blobType
 	c.output = raw.output
 
 	cooked, err := c.cook()

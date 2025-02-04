@@ -977,7 +977,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
 		src:                            src,
 		dst:                            dst,
-		blobType:                       common.EBlobType.Detect().String(),
+		BlobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
@@ -1001,7 +1001,7 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
 		src:                            src,
 		fromTo:                         fromTo.String(),
-		blobType:                       common.EBlobType.Detect().String(),
+		BlobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
@@ -1038,7 +1038,7 @@ func getDefaultSetPropertiesRawInput(src string, params transferParams) rawCopyC
 	rawArgs := rawCopyCmdArgs{
 		src:                            src,
 		fromTo:                         fromTo.String(),
-		blobType:                       common.EBlobType.Detect().String(),
+		BlobType:                       common.EBlobType.Detect().String(),
 		blockBlobTier:                  common.EBlockBlobTier.None().String(),
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),

@@ -1717,6 +1717,11 @@ func (RehydratePriorityType) Standard() RehydratePriorityType { return Rehydrate
 func (RehydratePriorityType) High() RehydratePriorityType     { return RehydratePriorityType(2) }
 
 func (rpt *RehydratePriorityType) Parse(s string) error {
+	// Allow empty to mean Standard
+	if s == "" {
+		*rpt = ERehydratePriorityType.Standard()
+		return nil
+	}
 	val, err := enum.ParseInt(reflect.TypeOf(rpt), s, true, true)
 	if err == nil {
 		*rpt = val.(RehydratePriorityType)

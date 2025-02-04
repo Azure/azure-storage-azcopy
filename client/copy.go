@@ -1,11 +1,15 @@
 package client
 
 import (
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
 )
 
 type CopyOptions struct {
+	src string
+	dst string
+
 	FollowSymlinks                   bool
 	IncludeBefore                    *time.Time
 	IncludeAfter                     *time.Time
@@ -16,7 +20,7 @@ type CopyOptions struct {
 	ExcludeRegex                     []string
 	listOfFiles                      string
 	ExcludePattern                   []string
-	Overwrite                        bool // Default true
+	Overwrite                        common.OverwriteOption // Default true
 	Decompress                       bool
 	Recursive                        bool
 	FromTo                           common.FromTo
@@ -66,6 +70,32 @@ type CopyOptions struct {
 	deleteDestinationFileIfNecessary bool
 }
 
+func (opts CopyOptions) convert() (cca cmd.CookedCopyCmdArgs, err error) {
+	cca = cmd.CookedCopyCmdArgs{
+		Src:             opts.src,
+		Dst:             opts.dst,
+		FromTo:          opts.FromTo,
+		Recursive:       opts.Recursive,
+		ForceIfReadOnly: opts.ForceIfReadOnly,
+	}
+	err = cca.SymlinkHandling.Determine(opts.FollowSymlinks, opts.PreserveSymlinks)
+	if err != nil {
+		return
+	}
+	cca.ForceWrite = opts.Overwrite
+	cca.AutoDecompress = opts.Decompress
+	cca.BlockSizeMB = opts.BlockSizeMB
+	cca.PutBlobSizeMB = opts.PutBlobSizeMB
+	cca.BlobType = opts.BlobType
+	cca.BlockBlobTier = opts.BlockBlobTier
+	cca.PageBlobTier = opts.PageBlobTier
+
+	return
+}
+
 func (cc Client) Copy(source string, destination string, options CopyOptions) error {
+	options.src = source
+	options.dst = destination
+
 	return nil
 }

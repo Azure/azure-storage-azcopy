@@ -121,7 +121,7 @@ type rawCopyCmdArgs struct {
 
 	blobTags string
 	// defines the type of the blob at the destination in case of upload / account to account copy
-	blobType      string
+	BlobType      string
 	blockBlobTier string
 	pageBlobTier  string
 	output        string // TODO: Is this unused now? replaced with param at root level?
@@ -228,8 +228,8 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 
 // returns result of stripping and if striptopdir is enabled
 // if nothing happens, the original source is returned
-func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
-	result = raw.src
+func stripTrailingWildcardOnRemoteSource(src string, location common.Location) (result string, stripTopDir bool, err error) {
+	result = src
 	resourceURL, err := url.Parse(result)
 	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
 
@@ -267,11 +267,84 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 	return
 }
 
-func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
-	cooked := CookedCopyCmdArgs{
-		jobID: azcopyCurrentJobID,
+func (raw rawCopyCmdArgs) convert() (cca CookedCopyCmdArgs, err error) {
+	cca = CookedCopyCmdArgs{
+		Src:             raw.src,
+		Dst:             raw.dst,
+		StripTopDir:     raw.internalOverrideStripTopDir,
+		Recursive:       raw.recursive,
+		ForceIfReadOnly: raw.forceIfReadOnly,
+	}
+	err = cca.FromTo.Parse(raw.fromTo)
+	if err != nil {
+		return cca, fmt.Errorf("invalid --from-to value specified: %q. "+fromToHelpText, raw.fromTo)
+	}
+	if err = cca.SymlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
+		return cca, err
+	}
+	err = cca.ForceWrite.Parse(raw.forceWrite)
+	if err != nil {
+		return cca, err
+	}
+	cca.AutoDecompress = raw.autoDecompress
+	cca.BlockSizeMB = raw.blockSizeMB
+	cca.PutBlobSizeMB = raw.putBlobSizeMB
+	err = cca.BlobType.Parse(raw.BlobType)
+	if err != nil {
+		return cca, err
+	}
+	err = cca.BlockBlobTier.Parse(raw.blockBlobTier)
+	if err != nil {
+		return cca, err
+	}
+	err = cca.PageBlobTier.Parse(raw.pageBlobTier)
+	if err != nil {
+		return cca, err
+	}
+	err = cca.RehydratePriority.Parse(raw.rehydratePriority)
+	if err != nil {
+		return cca, err
+	}
+	if raw.legacyInclude != "" || raw.legacyExclude != "" {
+		return cca, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern; include-path; exclude-pattern and exclude-path. For info, run: azcopy copy help")
+	}
+	return
+}
+
+func (cca *CookedCopyCmdArgs) validate() (err error) {
+	cca.FromTo, err = ValidateFromTo2(cca.Src, cca.Dst, cca.FromTo) // TODO: src/dst
+	if err != nil {
+		return err
+	}
+	if err = validateForceIfReadOnly(cca.ForceIfReadOnly, cca.FromTo); err != nil {
+		return err
+	}
+	if err = validateSymlinkHandlingMode(cca.SymlinkHandling, cca.FromTo); err != nil {
+		return err
+	}
+	allowAutoDecompress := cca.FromTo == common.EFromTo.BlobLocal() || cca.FromTo == common.EFromTo.FileLocal()
+	if cca.AutoDecompress && !allowAutoDecompress {
+		return errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
 	}
 
+	cca.blockSize, err = blockSizeInBytes(cca.BlockSizeMB)
+	if err != nil {
+		return err
+	}
+	cca.putBlobSize, err = blockSizeInBytes(cca.PutBlobSizeMB)
+	if err != nil {
+		return err
+	}
+	// If the given BlobType is AppendBlob, block-size-mb should not be greater than
+	// common.MaxAppendBlobBlockSize.
+	if cca.BlobType == common.EBlobType.AppendBlob() && cca.blockSize > common.MaxAppendBlobBlockSize {
+		return fmt.Errorf("block size cannot be greater than %dMB for AppendBlob blob type", common.MaxAppendBlobBlockSize/common.MegaByte)
+	}
+	return
+}
+
+func (cca *CookedCopyCmdArgs) process2() (err error) {
+	cca.jobID = azcopyCurrentJobID
 	// set up the front end scanning logger
 	azcopyScanningLogger = common.NewJobLogger(azcopyCurrentJobID, azcopyLogVerbosity, azcopyLogPathFolder, "-scanning")
 	azcopyScanningLogger.OpenLog()
@@ -283,134 +356,62 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	if azcopyLogVerbosity == common.LogNone {
 		azcopyLogPathFolder = ""
 	}
+	tempSrc := cca.Src
+	tempDst := cca.Dst
 
-	fromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
-	if err != nil {
-		return cooked, err
-	}
-
-	var tempSrc string
-	tempDest := raw.dst
-
-	if strings.EqualFold(tempDest, common.Dev_Null) && runtime.GOOS == "windows" {
-		tempDest = common.Dev_Null // map all capitalization of "NUL"/"nul" to one because (on Windows) they all mean the same thing
+	if strings.EqualFold(tempDst, common.Dev_Null) && runtime.GOOS == "windows" {
+		tempDst = common.Dev_Null // map all capitalization of "NUL"/"nul" to one because (on Windows) they all mean the same thing
 	}
 
 	// Check if source has a trailing wildcard on a URL
-	if fromTo.From().IsRemote() {
-		tempSrc, cooked.StripTopDir, err = raw.stripTrailingWildcardOnRemoteSource(fromTo.From())
-
+	var srcStripTopDir bool
+	if cca.FromTo.From().IsRemote() {
+		tempSrc, srcStripTopDir, err = stripTrailingWildcardOnRemoteSource(cca.Src, cca.FromTo.From())
 		if err != nil {
-			return cooked, err
+			return err
 		}
-	} else {
-		tempSrc = raw.src
 	}
-	if raw.internalOverrideStripTopDir {
-		cooked.StripTopDir = true
-	}
+	// Handle case where StripTopDir might be overwritten internally (for benchmark)
+	cca.StripTopDir = cca.StripTopDir || srcStripTopDir
 
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
 
-	cooked.Source, err = SplitResourceString(tempSrc, fromTo.From())
+	cca.Source, err = SplitResourceString(tempSrc, cca.FromTo.From())
 	if err != nil {
-		return cooked, err
+		return
 	}
 
-	cooked.Destination, err = SplitResourceString(tempDest, fromTo.To())
+	cca.Destination, err = SplitResourceString(tempDst, cca.FromTo.To())
 	if err != nil {
-		return cooked, err
+		return
 	}
-
-	cooked.FromTo = fromTo
-	cooked.Recursive = raw.recursive
-	cooked.ForceIfReadOnly = raw.forceIfReadOnly
-	if err = validateForceIfReadOnly(cooked.ForceIfReadOnly, cooked.FromTo); err != nil {
-		return cooked, err
-	}
-
-	if err = cooked.SymlinkHandling.Determine(raw.followSymlinks, raw.preserveSymlinks); err != nil {
-		return cooked, err
-	}
-
-	if err = validateSymlinkHandlingMode(cooked.SymlinkHandling, cooked.FromTo); err != nil {
-		return cooked, err
-	}
-
-	// copy&transform flags to type-safety
-	err = cooked.ForceWrite.Parse(raw.forceWrite)
-	if err != nil {
-		return cooked, err
-	}
-	allowAutoDecompress := fromTo == common.EFromTo.BlobLocal() || fromTo == common.EFromTo.FileLocal()
-	if raw.autoDecompress && !allowAutoDecompress {
-		return cooked, errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
-	}
-	cooked.autoDecompress = raw.autoDecompress
 
 	// cooked.StripTopDir is effectively a workaround for the lack of wildcards in remote sources.
 	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
 	// Thus, we check for wildcards and instruct the processor to strip the top dir later instead of repeatedly checking cca.Source for wildcards.
-	if fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.Source.ValueLocal(), "*") {
-		cooked.StripTopDir = true
+	if cca.FromTo.From() == common.ELocation.Local() && strings.Contains(cca.Source.ValueLocal(), "*") {
+		cca.StripTopDir = true
 	}
 
-	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
-	if err != nil {
-		return cooked, err
-	}
+	return
+}
 
-	cooked.putBlobSize, err = blockSizeInBytes(raw.putBlobSizeMB)
-	if err != nil {
-		return cooked, err
-	}
+func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
-	// parse the given blob type.
-	err = cooked.blobType.Parse(raw.blobType)
-	if err != nil {
-		return cooked, err
-	}
-
-	// If the given blobType is AppendBlob, block-size-mb should not be greater than
-	// common.MaxAppendBlobBlockSize.
-	if cookedSize, _ := blockSizeInBytes(raw.blockSizeMB); cooked.blobType == common.EBlobType.AppendBlob() && cookedSize > common.MaxAppendBlobBlockSize {
-		return cooked, fmt.Errorf("block size cannot be greater than %dMB for AppendBlob blob type", common.MaxAppendBlobBlockSize/common.MegaByte)
-	}
-
-	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)
-	if err != nil {
-		return cooked, err
-	}
-	err = cooked.pageBlobTier.Parse(raw.pageBlobTier)
-	if err != nil {
-		return cooked, err
-	}
-
-	if raw.rehydratePriority == "" {
-		raw.rehydratePriority = "standard"
-	}
-	err = cooked.rehydratePriority.Parse(raw.rehydratePriority)
-	if err != nil {
-		return cooked, err
-	}
+	cooked := CookedCopyCmdArgs{}
 
 	// Everything uses the new implementation of list-of-files now.
 	// This handles both list-of-files and include-path as a list enumerator.
 	// This saves us time because we know *exactly* what we're looking for right off the bat.
 	// Note that exclude-path is handled as a filter unlike include-path.
-
-	if raw.legacyInclude != "" || raw.legacyExclude != "" {
-		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern; include-path; exclude-pattern and exclude-path. For info, run: azcopy copy help")
-	}
-
 	if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.FromTo == common.EFromTo.BlobFSTrash() {
 		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
 		// note there's another, more rigorous check, in removeBfsResources()
 	}
 
 	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
-	raw.warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
+	warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
 
 	// unbuffered so this reads as we need it to rather than all at once in bulk
 	listChan := make(chan string)
@@ -433,7 +434,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		addToChannel := func(v string, paramName string) {
 			// empty strings should be ignored, otherwise the source root itself is selected
 			if len(v) > 0 {
-				raw.warnIfHasWildcard(includeWarningOncer, paramName, v)
+				warnIfHasWildcard(includeWarningOncer, paramName, v)
 				listChan <- v
 			}
 		}
@@ -624,7 +625,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 
 		// TODO: Remove these warnings once service starts supporting it
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None() {
+		if cooked.BlockBlobTier != common.EBlockBlobTier.None() || cooked.PageBlobTier != common.EPageBlobTier.None() {
 			glcm.Info("Tier is provided by user explicitly. Ignoring it because Azure Service currently does" +
 				" not support setting tier when client provided keys are involved.")
 		}
@@ -713,14 +714,14 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.FromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.Detect() {
+		if cooked.BlobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
+		if cooked.BlockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.PageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
 		}
 		if cooked.preservePermissions.IsTruthy() {
@@ -758,8 +759,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
+		if cooked.BlockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.PageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to Azure File")
 		}
 		if cooked.s2sPreserveProperties {
@@ -774,7 +775,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
-		if cooked.blobType != common.EBlobType.Detect() {
+		if cooked.BlobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
@@ -783,8 +784,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.SymlinkHandling.Follow() {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
+		if cooked.BlockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.PageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while downloading")
 		}
 		if cooked.noGuessMimeType {
@@ -818,12 +819,12 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
 		// blob type is not supported if destination is not blob
-		if cooked.blobType != common.EBlobType.Detect() && cooked.FromTo.To() != common.ELocation.Blob() {
+		if cooked.BlobType != common.EBlobType.Detect() && cooked.FromTo.To() != common.ELocation.Blob() {
 			return cooked, fmt.Errorf("blob-type is not supported for the scenario (%s)", cooked.FromTo.String())
 		}
 
 		// Setting blob tier is supported only when destination is a blob storage. Disabling it for all the other transfer scenarios.
-		if (cooked.blockBlobTier != common.EBlockBlobTier.None() || cooked.pageBlobTier != common.EPageBlobTier.None()) &&
+		if (cooked.BlockBlobTier != common.EBlockBlobTier.None() || cooked.PageBlobTier != common.EPageBlobTier.None()) &&
 			cooked.FromTo.To() != common.ELocation.Blob() {
 			return cooked, fmt.Errorf("blob-tier is not supported for the scenario (%s)", cooked.FromTo.String())
 		}
@@ -850,7 +851,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	// If the user has provided some input with excludeBlobType flag, parse the input.
 	if len(raw.excludeBlobType) > 0 {
-		// Split the string using delimiter ';' and parse the individual blobType
+		// Split the string using delimiter ';' and parse the individual BlobType
 		blobTypes := strings.Split(raw.excludeBlobType, ";")
 		for _, blobType := range blobTypes {
 			var eBlobType common.BlobType
@@ -903,7 +904,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 var excludeWarningOncer = &sync.Once{}
 var includeWarningOncer = &sync.Once{}
 
-func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
+func warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
 	if strings.Contains(value, "*") || strings.Contains(value, "?") {
 		oncer.Do(func() {
 			glcm.Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
@@ -913,10 +914,10 @@ func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string,
 	}
 }
 
-// When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
+// When other commands use the copy command arguments to cook cook, set the BlobType to None and validation option
 // else parsing the arguments will fail.
 func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
-	raw.blobType = common.EBlobType.Detect().String()
+	raw.BlobType = common.EBlobType.Detect().String()
 	raw.blockBlobTier = common.EBlockBlobTier.None().String()
 	raw.pageBlobTier = common.EPageBlobTier.None().String()
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
@@ -1104,6 +1105,13 @@ func validateMetadataString(metadata string) error {
 
 // represents the processed copy command input from the user
 type CookedCopyCmdArgs struct {
+	// >>>> for use by AzCopy as a library
+	Src           string
+	Dst           string
+	BlockSizeMB   float64
+	PutBlobSizeMB float64
+	// <<<< end
+
 	// from arguments
 	Source      common.ResourceString
 	Destination common.ResourceString
@@ -1136,19 +1144,19 @@ type CookedCopyCmdArgs struct {
 	ForceIfReadOnly    bool                   // says whether we should _force_ any overwrites (triggered by forceWrite) to work on Azure Files objects that are set to read-only
 	IsSourceDir        bool
 
-	autoDecompress bool
+	AutoDecompress bool
 
 	// options from flags
 	blockSize   int64
 	putBlobSize int64
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType []blob.BlobType
-	blobType        common.BlobType
+	BlobType        common.BlobType
 	// Blob index tags categorize data in your storage account utilizing key-value tag attributes.
 	// These tags are automatically indexed and exposed as a queryable multi-dimensional index to easily find data.
 	blobTags                 common.BlobTags
-	blockBlobTier            common.BlockBlobTier
-	pageBlobTier             common.PageBlobTier
+	BlockBlobTier            common.BlockBlobTier
+	PageBlobTier             common.PageBlobTier
 	metadata                 string
 	contentType              string
 	contentEncoding          string
@@ -1238,7 +1246,7 @@ type CookedCopyCmdArgs struct {
 	permanentDeleteOption common.PermanentDeleteOption
 
 	// Optional flag that sets rehydrate priority for rehydration
-	rehydratePriority common.RehydratePriorityType
+	RehydratePriority common.RehydratePriorityType
 
 	// Bitmasked uint checking which properties to transfer
 	propertiesToTransfer common.SetPropertiesFlags
@@ -1424,8 +1432,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 	blobTags := cca.blobTags
 	var bbAccessTier *blob.AccessTier
-	if cca.blockBlobTier != common.EBlockBlobTier.None() {
-		bbAccessTier = to.Ptr(blob.AccessTier(cca.blockBlobTier.String()))
+	if cca.BlockBlobTier != common.EBlockBlobTier.None() {
+		bbAccessTier = to.Ptr(blob.AccessTier(cca.BlockBlobTier.String()))
 	}
 	_, err = blockBlobClient.UploadStream(ctx, os.Stdin, &blockblob.UploadStreamOptions{
 		BlockSize:   blockSize,
@@ -1550,7 +1558,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ExcludeBlobType:     cca.excludeBlobType,
 		SymlinkHandlingType: cca.SymlinkHandling,
 		BlobAttributes: common.BlobTransferAttributes{
-			BlobType:                 cca.blobType,
+			BlobType:                 cca.BlobType,
 			BlockSizeInBytes:         cca.blockSize,
 			PutBlobSizeInBytes:       cca.putBlobSize,
 			ContentType:              cca.contentType,
@@ -1558,8 +1566,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			ContentLanguage:          cca.contentLanguage,
 			ContentDisposition:       cca.contentDisposition,
 			CacheControl:             cca.cacheControl,
-			BlockBlobTier:            cca.blockBlobTier,
-			PageBlobTier:             cca.pageBlobTier,
+			BlockBlobTier:            cca.BlockBlobTier,
+			PageBlobTier:             cca.PageBlobTier,
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
@@ -2125,7 +2133,7 @@ func init() {
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "Use this block size (specified in MiB) when uploading to Azure Storage, and downloading from Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25)."+
 		" When uploading or downloading, maximum allowed block size is 0.75 * AZCOPY_BUFFER_GB. Please refer https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-optimize#optimize-memory-use.")
 	cpCmd.PersistentFlags().Float64Var(&raw.putBlobSizeMB, "put-blob-size-mb", 0, "Use this size (specified in MiB) as a threshold to determine whether to upload a blob as a single PUT request when uploading to Azure Storage. The default value is automatically calculated based on file size. Decimal fractions are allowed (For example: 0.25).")
-	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
+	cpCmd.PersistentFlags().StringVar(&raw.BlobType, "blob-type", "Detect", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'Detect'). Valid values include 'Detect', 'BlockBlob', 'PageBlob', and 'AppendBlob'. "+
 		"When copying between accounts, a value of 'Detect' causes AzCopy to use the type of source blob to determine the type of the destination blob. When uploading a file, 'Detect' determines if the file is a VHD or a VHDX file based on the file extension. If the file is either a VHD or VHDX file, AzCopy treats the file as a page blob.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Upload block blob to Azure Storage using this blob tier. (default 'None'). Valid options are Hot, Cold, Cool, Archive")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None'). Valid options are P10, P15, P20, P30, P4, P40, P50, P6")

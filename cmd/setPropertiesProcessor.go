@@ -39,11 +39,11 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 		// flags
 		LogLevel: azcopyLogVerbosity,
 		BlobAttributes: common.BlobTransferAttributes{
-			BlockBlobTier:     cca.blockBlobTier,
-			PageBlobTier:      cca.pageBlobTier,
+			BlockBlobTier:     cca.BlockBlobTier,
+			PageBlobTier:      cca.PageBlobTier,
 			Metadata:          cca.metadata,
 			BlobTagsString:    cca.blobTags.ToString(),
-			RehydratePriority: cca.rehydratePriority,
+			RehydratePriority: cca.RehydratePriority,
 		},
 		SetPropertiesFlags: cca.propertiesToTransfer,
 		FileAttributes: common.FileTransferAttributes{

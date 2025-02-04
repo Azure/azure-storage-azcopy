@@ -81,7 +81,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		dst:                            dst,
 		recursive:                      true,
 		output:                         defaultOutputFormatForCopy,
-		blobType:                       defaultBlobTypeForCopy,
+		BlobType:                       defaultBlobTypeForCopy,
 		blockBlobTier:                  defaultBlockBlobTierForCopy,
 		pageBlobTier:                   defaultPageBlobTierForCopy,
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
@@ -918,7 +918,7 @@ func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "BlockBlob"
+	raw.BlobType = "BlockBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -933,7 +933,7 @@ func TestS2SCopyFromPageToBlockBlob(t *testing.T) {
 	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "BlockBlob"
+	raw.BlobType = "BlockBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -971,7 +971,7 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "PageBlob"
+	raw.BlobType = "PageBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -986,7 +986,7 @@ func TestS2SCopyFromBlockToPageBlob(t *testing.T) {
 	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "PageBlob"
+	raw.BlobType = "PageBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1024,7 +1024,7 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "AppendBlob"
+	raw.BlobType = "AppendBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1039,7 +1039,7 @@ func TestS2SCopyFromBlockToAppendBlob(t *testing.T) {
 	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "AppendBlob"
+	raw.BlobType = "AppendBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1078,7 +1078,7 @@ func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "BlockBlob"
+	raw.BlobType = "BlockBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1093,7 +1093,7 @@ func TestS2SCopyFromAppendToBlockBlob(t *testing.T) {
 	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "BlockBlob"
+	raw.BlobType = "BlockBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1132,7 +1132,7 @@ func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "AppendBlob"
+	raw.BlobType = "AppendBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1147,7 +1147,7 @@ func TestS2SCopyFromPageToAppendBlob(t *testing.T) {
 	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "AppendBlob"
+	raw.BlobType = "AppendBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1186,7 +1186,7 @@ func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "file")
 	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "PageBlob"
+	raw.BlobType = "PageBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1201,7 +1201,7 @@ func TestS2SCopyFromAppendToPageBlob(t *testing.T) {
 	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(a, srcContainerName, "sub/file2")
 	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
-	raw.blobType = "PageBlob"
+	raw.BlobType = "PageBlob"
 
 	// Run copy command
 	runCopyAndVerify(a, raw, func(err error) {
@@ -1318,9 +1318,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	// set up the parent
 	parentDirNameSource := generateName("dir", 0)
 	parentDirClientSource := fsClientSource.NewDirectoryClient(parentDirNameSource)
-	_, err := parentDirClientSource.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
-		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
-			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+	_, err := parentDirClientSource.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	// set up the file
@@ -1341,9 +1339,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	// set up the parent
 	parentDirName := generateName("dir", 0)
 	parentDirClient := fsClient.NewDirectoryClient(parentDirName)
-	_, err = parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
-		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
-			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+	_, err = parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	dirClientWithSAS := serviceClientWithSAS.NewFileSystemClient(fsName).NewDirectoryClient(parentDirName)

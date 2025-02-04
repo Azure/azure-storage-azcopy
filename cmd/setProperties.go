@@ -28,7 +28,7 @@ import (
 )
 
 func (raw *rawCopyCmdArgs) setMandatoryDefaultsForSetProperties() {
-	raw.blobType = common.EBlobType.Detect().String()
+	raw.BlobType = common.EBlobType.Detect().String()
 	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
 	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 	raw.forceWrite = common.EOverwriteOption.True().String()
@@ -47,12 +47,12 @@ func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
 	}
 
 	// tier of a BlobFS can't be set to Archive
-	if cca.FromTo.From() == common.ELocation.BlobFS() && cca.blockBlobTier == common.EBlockBlobTier.Archive() {
+	if cca.FromTo.From() == common.ELocation.BlobFS() && cca.BlockBlobTier == common.EBlockBlobTier.Archive() {
 		return fmt.Errorf("tier of a BlobFS can't be set to Archive")
 	}
 
 	// metadata can't be set if blob is set to be archived (note that tags can still be set)
-	if cca.blockBlobTier == common.EBlockBlobTier.Archive() && cca.propertiesToTransfer.ShouldTransferMetaData() {
+	if cca.BlockBlobTier == common.EBlockBlobTier.Archive() && cca.propertiesToTransfer.ShouldTransferMetaData() {
 		return fmt.Errorf("metadata can't be set if blob is set to be archived")
 	}
 
@@ -61,7 +61,7 @@ func (cca *CookedCopyCmdArgs) checkIfChangesPossible() error {
 
 func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	// ACCESS TIER
-	if cca.blockBlobTier != common.EBlockBlobTier.None() || cca.pageBlobTier != common.EPageBlobTier.None() {
+	if cca.BlockBlobTier != common.EBlockBlobTier.None() || cca.PageBlobTier != common.EPageBlobTier.None() {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetTier()
 	}
 
