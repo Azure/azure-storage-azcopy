@@ -171,7 +171,7 @@ extends:
                 value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
             steps:
-              - template: azurePipelineTemplates/build1es/build_linux.yml@self
+              - template: azurePipelineTemplates/build_linux.yml@self
                 parameters:
                   host_architecture: 'arm64'
                   host_suffix: 'arm64'
@@ -741,7 +741,7 @@ extends:
               - name: extracted
                 value: '$(System.DefaultWorkingDirectory)/extracted'
             steps:
-              - template: azurePipelineTemplates/build1es/verify_linux.yml@self
+              - template: azurePipelineTemplates/verify_linux.yml@self
                 parameters:
                   host_architecture: 'arm64'
                   host_suffix: 'arm64'
