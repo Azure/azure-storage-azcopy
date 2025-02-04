@@ -1216,9 +1216,8 @@ extends:
                     displayName: 'Remove tar gz files'
 
                   - script: |
-                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload azcopy-linux-signed
+                      pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload signed
                     displayName: 'Upload files'
-                    workingDirectory: $(System.DefaultWorkingDirectory)
 
                   - script: |
                       azcopyAmdDeb=`pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) --id-only package upload azcopy*.x86_64.deb`
