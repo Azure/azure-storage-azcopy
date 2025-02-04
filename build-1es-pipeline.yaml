@@ -901,6 +901,10 @@ extends:
                 value: '$(System.DefaultWorkingDirectory)/release'
               - name: drop
                 value: '$(System.DefaultWorkingDirectory)/drop'
+              - name: publish_to_container
+                value: ${{ parameters.publish_to_container }}
+              - name: publish_to_m1_container
+                value: ${{ parameters.publish_to_m1_container }}
               - name: azcopy_version
                 value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
             steps:
@@ -994,7 +998,7 @@ extends:
                   scriptLocation: inlineScript
                   inlineScript: |
                     today=$(date +"%Y%m%d")
-                    if [[ "${{ parameters.publish_to_container }}" == "true" ]]; then
+                    if [ $(publish_to_container) = "True" ]; then
                       container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
                     else
                       container_url="https://azcopyprivatedrops.blob.core.windows.net/%24web/releases/release-$(azcopy_version)-$today"
@@ -1002,7 +1006,7 @@ extends:
                     echo "Artifacts will be uploaded to: $container_url"
                     AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(release)/*" "$container_url" --recursive --put-md5=true
                     
-                    if [[ "${{ parameters.publish_to_m1_container }}" == "true" ]]; then
+                    if [ $(publish_to_m1_container) = "True" ]; then
                       m1_container_url="https://azcopyvnextrelease.blob.core.windows.net/%24web/azcopy-m1-drops/azcopy-$(azcopy_version)-$today"
                     AZCOPY_AUTO_LOGIN_TYPE=AzCLI ./azcopy cp "$(input)/azcopy-binaries-mac/azcopy_darwin_m1_arm64" "$m1_container_url" --recursive --put-md5=true
                     fi
