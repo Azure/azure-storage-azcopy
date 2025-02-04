@@ -1220,6 +1220,10 @@ extends:
                     displayName: 'Remove tar gz files'
 
                   - script: |
+                      rm -r $(signed)/_manifest
+                    displayName: 'Remove manifest'
+
+                  - script: |
                       pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package upload signed
                     displayName: 'Upload files'
 
