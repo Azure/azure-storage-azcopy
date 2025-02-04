@@ -28,9 +28,12 @@ import (
 	"sync"
 
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/credentials"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
+
+const customCreds string = "customS3Creds" //key for custom credentials in stored in context
 
 type s3Traverser struct {
 	rawURL        *url.URL // No pipeline needed for S3
@@ -202,11 +205,19 @@ func newS3Traverser(credentialType common.CredentialType, rawURL *url.URL, ctx c
 
 	showS3UrlTypeWarning(s3URLParts)
 
+	//Optional check for custom credential provider
+	var credProvider credentials.Provider = nil
+	creds := ctx.Value(customCreds)
+	if creds != nil {
+		credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
+	}
+
 	t.s3Client, err = common.CreateS3Client(t.ctx, common.CredentialInfo{
 		CredentialType: credentialType,
 		S3CredentialInfo: common.S3CredentialInfo{
 			Endpoint: t.s3URLParts.Endpoint,
 			Region:   t.s3URLParts.Region,
+			Provider: credProvider, //will pass nil in most cases, but if provider is implemented and passed explicitly, it will be used
 		},
 	}, common.CredentialOpOptions{
 		LogError: glcm.Error,
