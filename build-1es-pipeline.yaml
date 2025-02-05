@@ -1148,6 +1148,7 @@ extends:
               - UploadToStorage
             jobs:
               - job: Job
+                timeoutInMinutes: 120
                 pool:
                   name: azcopy-pool
                   image: ubuntu22-1espt
