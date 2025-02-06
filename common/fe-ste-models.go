@@ -1192,6 +1192,14 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	return result, nil
 }
 
+func (m Metadata) ToString() string {
+	lst := make([]string, 0)
+	for k, v := range m {
+		lst = append(lst, k+"="+IffNotNil(v, ""))
+	}
+	return strings.Join(lst, "&")
+}
+
 func StringToMetadata(metadataString string) (Metadata, error) {
 	metadataMap := Metadata{}
 	if len(metadataString) > 0 {

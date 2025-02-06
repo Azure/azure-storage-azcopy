@@ -41,13 +41,13 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 		BlobAttributes: common.BlobTransferAttributes{
 			BlockBlobTier:     cca.BlockBlobTier,
 			PageBlobTier:      cca.PageBlobTier,
-			Metadata:          cca.metadata,
-			BlobTagsString:    cca.blobTags.ToString(),
+			Metadata:          cca.Metadata,
+			BlobTagsString:    cca.BlobTags.ToString(),
 			RehydratePriority: cca.RehydratePriority,
 		},
 		SetPropertiesFlags: cca.propertiesToTransfer,
 		FileAttributes: common.FileTransferAttributes{
-			TrailingDot: cca.trailingDot,
+			TrailingDot: cca.TrailingDot,
 		},
 	}
 
@@ -61,5 +61,5 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
 	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.Source, cca.Destination,
-		reportFirstPart, reportFinalPart, false, cca.dryrunMode)
+		reportFirstPart, reportFinalPart, false, cca.DryrunMode)
 }

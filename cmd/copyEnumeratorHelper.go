@@ -77,7 +77,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *CookedCopyCmdArgs
 		}
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, cca.isCleanupJob, cca.cleanupJobMessage))
 
-		if cca.dryrunMode {
+		if cca.DryrunMode {
 			return nil
 		}
 

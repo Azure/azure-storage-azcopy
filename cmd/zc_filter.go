@@ -264,7 +264,7 @@ func (fs FilterSet) GetEnumerationPreFilter(recursive bool) string {
 
 ////////
 
-// includeRegex & excludeRegex
+// IncludeRegex & ExcludeRegex
 type regexFilter struct {
 	patterns   []string
 	isIncluded bool

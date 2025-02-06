@@ -161,7 +161,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		filters = append(filters, excludeAttrFilters...)
 	}
 
-	// includeRegex
+	// IncludeRegex
 	filters = append(filters, buildRegexFilters(cca.includeRegex, true)...)
 	filters = append(filters, buildRegexFilters(cca.excludeRegex, false)...)
 

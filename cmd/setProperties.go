@@ -66,15 +66,15 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	}
 
 	// METADATA
-	if cca.metadata != "" {
+	if cca.Metadata != "" {
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetMetadata()
-		if strings.EqualFold(cca.metadata, common.MetadataAndBlobTagsClearFlag) {
-			cca.metadata = ""
+		if strings.EqualFold(cca.Metadata, common.MetadataAndBlobTagsClearFlag) {
+			cca.Metadata = ""
 		}
 	}
 
 	// BLOB TAGS
-	if cca.blobTags != nil {
+	if cca.BlobTags != nil {
 		// the fact that fromto is not filenone is taken care of by the cook function
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetBlobTags()
 	}
@@ -149,7 +149,7 @@ func init() {
 				glcm.Error("failed to perform set-properties command due to error: " + err.Error())
 			}
 
-			if cooked.dryrunMode {
+			if cooked.DryrunMode {
 				glcm.Exit(nil, common.EExitCode.Success())
 			}
 
