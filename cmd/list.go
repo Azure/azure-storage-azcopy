@@ -51,27 +51,29 @@ type rawListCmdArgs struct {
 	trailingDot     string
 }
 
-type validProperty string
+type ListProperty string
 
 const (
-	LastModifiedTime validProperty = "LastModifiedTime"
-	VersionId        validProperty = "VersionId"
-	BlobType         validProperty = "BlobType"
-	BlobAccessTier   validProperty = "BlobAccessTier"
-	ContentType      validProperty = "ContentType"
-	ContentEncoding  validProperty = "ContentEncoding"
-	ContentMD5       validProperty = "ContentMD5"
-	LeaseState       validProperty = "LeaseState"
-	LeaseDuration    validProperty = "LeaseDuration"
-	LeaseStatus      validProperty = "LeaseStatus"
-	ArchiveStatus    validProperty = "ArchiveStatus"
+	LastModifiedTime ListProperty = "LastModifiedTime"
+	VersionId        ListProperty = "VersionId"
+	BlobType         ListProperty = "BlobType"
+	BlobAccessTier   ListProperty = "BlobAccessTier"
+	ContentType      ListProperty = "ContentType"
+	ContentEncoding  ListProperty = "ContentEncoding"
+	ContentMD5       ListProperty = "ContentMD5"
+	LeaseState       ListProperty = "LeaseState"
+	LeaseDuration    ListProperty = "LeaseDuration"
+	LeaseStatus      ListProperty = "LeaseStatus"
+	ArchiveStatus    ListProperty = "ArchiveStatus"
+)
 
+const (
 	versionIdTimeFormat    = "2006-01-02T15:04:05.9999999Z"
 	LastModifiedTimeFormat = "2006-01-02 15:04:05 +0000 GMT"
 )
 
 // containsProperty checks if the property array contains a valid property
-func containsProperty(properties []validProperty, prop validProperty) bool {
+func containsProperty(properties []ListProperty, prop ListProperty) bool {
 	for _, item := range properties {
 		if item == prop {
 			return true
@@ -81,8 +83,8 @@ func containsProperty(properties []validProperty, prop validProperty) bool {
 }
 
 // validProperties returns an array of possible values for the validProperty const type.
-func validProperties() []validProperty {
-	return []validProperty{LastModifiedTime, VersionId, BlobType, BlobAccessTier,
+func validProperties() []ListProperty {
+	return []ListProperty{LastModifiedTime, VersionId, BlobType, BlobAccessTier,
 		ContentType, ContentEncoding, ContentMD5, LeaseState, LeaseDuration, LeaseStatus, ArchiveStatus}
 }
 
@@ -95,8 +97,8 @@ func validPropertiesString() []string {
 	return propertiesArray
 }
 
-func (raw rawListCmdArgs) parseProperties() []validProperty {
-	parsedProperties := make([]validProperty, 0)
+func (raw rawListCmdArgs) parseProperties() []ListProperty {
+	parsedProperties := make([]ListProperty, 0)
 	if raw.Properties != "" {
 		listProperties := strings.Split(raw.Properties, ";")
 		for _, p := range listProperties {
@@ -153,7 +155,7 @@ type cookedListCmdArgs struct {
 	sourcePath string
 	location   common.Location
 
-	properties      []validProperty
+	properties      []ListProperty
 	MachineReadable bool
 	RunningTally    bool
 	MegaUnits       bool
