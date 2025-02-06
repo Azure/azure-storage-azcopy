@@ -192,12 +192,14 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jm.AddJobPart(args)
 
 	// Update jobPart Status with the status Manager
-	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
-		IsFinalPart:          order.IsFinalPart,
-		TotalBytesEnumerated: order.Transfers.TotalSizeInBytes,
-		FileTransfers:        order.Transfers.FileTransferCount,
-		SymlinkTransfers:     order.Transfers.SymlinkTransferCount,
-		FolderTransfer:       order.Transfers.FolderTransferCount})
+	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{
+		TotalTransfers:          uint32(len(order.Transfers.List)),
+		IsFinalPart:             order.IsFinalPart,
+		TotalBytesEnumerated:    order.Transfers.TotalSizeInBytes,
+		FileTransfers:           order.Transfers.FileTransferCount,
+		SymlinkTransfers:        order.Transfers.SymlinkTransferCount,
+		FolderTransfer:          order.Transfers.FolderTransferCount,
+		FilePropertiesTransfers: order.Transfers.FilePropertiesTransferCount})
 
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }

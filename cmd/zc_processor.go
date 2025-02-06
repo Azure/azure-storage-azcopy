@@ -23,9 +23,10 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
 	"github.com/pkg/errors"
 
@@ -242,6 +243,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		s.copyJobTemplate.Transfers.FolderTransferCount++
 	case common.EEntityType.Symlink():
 		s.copyJobTemplate.Transfers.SymlinkTransferCount++
+	case common.EEntityType.FileProperties():
+		s.copyJobTemplate.Transfers.FilePropertiesTransferCount++
 	}
 
 	return nil

@@ -666,6 +666,7 @@ Files Scanned at Destination: %v
 Elapsed Time (Minutes): %v
 Number of Copy Transfers for Files: %v
 Number of Copy Transfers for Folder Properties: %v 
+Number of Copy Transfers for Files Properties: %v
 Total Number of Copy Transfers: %v
 Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
@@ -680,6 +681,7 @@ Final Job Status: %v%s%s
 				jobsAdmin.ToFixed(duration.Minutes(), 4),
 				summary.FileTransfers,
 				summary.FolderPropertyTransfers,
+				summary.FilePropertyTransfers,
 				summary.TotalTransfers,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,

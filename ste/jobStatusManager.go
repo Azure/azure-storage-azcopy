@@ -28,12 +28,13 @@ import (
 )
 
 type JobPartCreatedMsg struct {
-	TotalTransfers       uint32
-	IsFinalPart          bool
-	TotalBytesEnumerated uint64
-	FileTransfers        uint32
-	FolderTransfer       uint32
-	SymlinkTransfers     uint32
+	TotalTransfers          uint32
+	IsFinalPart             bool
+	TotalBytesEnumerated    uint64
+	FileTransfers           uint32
+	FolderTransfer          uint32
+	SymlinkTransfers        uint32
+	FilePropertiesTransfers uint32
 }
 
 type xferDoneMsg = common.TransferDetail
@@ -130,6 +131,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 			js.FileTransfers += msg.FileTransfers
 			js.FolderPropertyTransfers += msg.FolderTransfer
 			js.SymlinkTransfers += msg.SymlinkTransfers
+			js.FilePropertyTransfers += msg.FilePropertiesTransfers
 			js.TotalBytesEnumerated += msg.TotalBytesEnumerated
 			js.TotalBytesExpected += msg.TotalBytesEnumerated
 
