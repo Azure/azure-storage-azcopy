@@ -1,11 +1,15 @@
 package client
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"time"
 )
 
 type CopyOptions struct {
+	src string
+	dst string
+
 	FollowSymlinks                   bool
 	IncludeBefore                    *time.Time
 	IncludeAfter                     *time.Time
@@ -16,17 +20,17 @@ type CopyOptions struct {
 	ExcludeRegex                     []string
 	listOfFiles                      string
 	ExcludePattern                   []string
-	Overwrite                        bool // Default true
+	Overwrite                        common.OverwriteOption // Default true
 	Decompress                       bool
 	Recursive                        bool
 	FromTo                           common.FromTo
-	ExcludeBlobType                  []common.BlobType
+	ExcludeBlobType                  []blob.BlobType
 	BlockSizeMB                      float64
 	PutBlobSizeMB                    float64
 	BlobType                         common.BlobType
 	BlockBlobTier                    common.BlockBlobTier
 	PageBlobTier                     common.PageBlobTier
-	Metadata                         common.Metadata
+	Metadata                         string
 	ContentType                      string
 	ContentEncoding                  string
 	ContentDisposition               string
@@ -38,7 +42,7 @@ type CopyOptions struct {
 	AsSubDir                         bool // Default true
 	PreserveOwner                    bool // Default true
 	PreserveSMBInfo                  bool // Default based on OS
-	PreservePosixProperties          bool
+	PreservePOSIXProperties          bool
 	PreserveSymlinks                 bool
 	ForceIfReadOnly                  bool
 	BackupMode                       bool
@@ -53,7 +57,7 @@ type CopyOptions struct {
 	S2SDetectSourceChanged           bool
 	S2SHandleInvalidMetadata         common.InvalidMetadataHandleOption
 	ListOfVersions                   string
-	BlobTags                         common.BlobTags
+	BlobTags                         string
 	S2SPreserveBlobTags              bool
 	IncludeDirectoryStubs            bool
 	DisableAutoDecoding              bool
