@@ -291,6 +291,30 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 	return obj
 }
 
+type ResourceTraverserTemplate struct {
+	location common.Location
+	credential *common.CredentialInfo
+	symlinkHandling common.SymlinkHandlingType
+	listOfFilesChannel chan string
+	recursive bool
+	getProperties bool
+	includeDirectoryStubs bool
+	permanentDeleteOption common.PermanentDeleteOption
+	incrementEnumerationCounter enumerationCounterFunc
+	listOfVersionIds chan string
+	s2sPreserveBlobTags bool
+	syncHashType common.SyncHashType
+	preservePermissions common.PreservePermissionsOption
+	logLevel common.LogLevel
+	cpkOptions common.CpkOptions
+	errorChannel chan ErrorFileInfo
+	stripTopDir bool
+	trailingDot common.TrailingDotOption
+	destination *common.Location
+	excludeContainerNames []string
+	includeVersionsList bool
+}
+
 // capable of traversing a structured resource like container or local directory
 // pass each StoredObject to the given objectProcessor if it passes all the filters
 type ResourceTraverser interface {
@@ -710,6 +734,9 @@ type preFilterProvider interface {
 // they define the work flow in the most generic terms
 
 type syncEnumerator struct {
+	primaryTraverserTemplate ResourceTraverserTemplate
+	secondaryTraverserTemplate ResourceTraverserTemplate
+
 	// these allow us to go through the source and destination
 	// there is flexibility in which side we scan first, it could be either the source or the destination
 	primaryTraverser   ResourceTraverser
@@ -726,19 +753,24 @@ type syncEnumerator struct {
 	// based on the data from the primary traverser stored in the objectIndexer
 	objectComparator objectProcessor
 
+	ctp *copyTransferProcessor
+
 	// a finalizer that is always called if the enumeration finishes properly
 	finalize func() error
 }
 
-func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
-	filters []ObjectFilter, comparator objectProcessor, finalize func() error) *syncEnumerator {
+func newSyncEnumerator(primaryTemplate ResourceTraverserTemplate, secondaryTemplate ResourceTraverserTemplate, primaryTraverser ResourceTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
+	filters []ObjectFilter, comparator objectProcessor, finalize func() error, ctp *copyTransferProcessor) *syncEnumerator {
 	return &syncEnumerator{
+		primaryTraverserTemplate : primaryTemplate,
+		secondaryTraverserTemplate : secondaryTemplate,
 		primaryTraverser:   primaryTraverser,
 		secondaryTraverser: secondaryTraverser,
 		objectIndexer:      indexer,
 		filters:            filters,
 		objectComparator:   comparator,
 		finalize:           finalize,
+		ctp : ctp,
 	}
 }
 

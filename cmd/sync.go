@@ -702,6 +702,9 @@ Final Job Status: %v%s%s
 	return
 }
 
+type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
+var syncHandler CustomSyncHandler = moverSyncHandler
+
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -765,21 +768,26 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		}
 	}
 
-	enumerator, err := cca.initEnumerator(ctx)
-	if err != nil {
-		return err
+	if syncHandler == nil {
+		enumerator, err := cca.initEnumerator(ctx)
+		if err != nil {
+			return err
+		}
+
+		// trigger the progress reporting
+		if !cca.dryrunMode {
+			cca.waitUntilJobCompletion(false)
+		}
+
+		// trigger the enumeration
+		err = enumerator.enumerate()
+		if err != nil {
+			return err
+		}
+	} else {
+		err = syncHandler(cca, ctx)
 	}
 
-	// trigger the progress reporting
-	if !cca.dryrunMode {
-		cca.waitUntilJobCompletion(false)
-	}
-
-	// trigger the enumeration
-	err = enumerator.enumerate()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 

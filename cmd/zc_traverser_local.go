@@ -777,12 +777,19 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if entry.IsDir() {
-					continue
+					// continue
 					// it doesn't make sense to transfer directory properties when not recurring
+					entityType = common.EEntityType.Folder()
+				} else {
+					entityType = common.EEntityType.File()
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(common.EEntityType.File())
+					if entry.IsDir() {
+						t.incrementEnumerationCounter(common.EEntityType.Folder())
+					} else {
+						t.incrementEnumerationCounter(common.EEntityType.File())
+					}
 				}
 
 				err := processIfPassedFilters(filters,
