@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -125,8 +126,9 @@ func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 	return json.Marshal(surrogate)
 }
 
-func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
+var transferMutex sync.Mutex
 
+func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
 	var srcRelativePath, dstRelativePath string
@@ -218,7 +220,9 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		return nil
 	}
 
+	transferMutex.Lock()
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
+		fmt.Printf("GOD: sendPartToSte: partNum=%v\n", s.copyJobTemplate.PartNum)
 		resp := s.sendPartToSte()
 
 		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
@@ -235,6 +239,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
 	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+	transferMutex.Unlock()
 
 	switch copyTransfer.EntityType {
 	case common.EEntityType.File():
@@ -255,6 +260,7 @@ var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
 	var resp common.CopyJobPartOrderResponse
+	fmt.Printf("GOD: zc_processor: DispatchFinalPart\n")
 	s.copyJobTemplate.IsFinalPart = true
 	resp = s.sendPartToSte()
 
