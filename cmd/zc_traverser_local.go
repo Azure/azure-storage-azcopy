@@ -45,7 +45,7 @@ const MAX_SYMLINKS_TO_FOLLOW = 40
 type localTraverser struct {
 	fullPath        string
 	recursive       bool
-	stripTopDir    bool
+	stripTopDir     bool
 	symlinkHandling common.SymlinkHandlingType
 	appCtx          context.Context
 	// a generic function to notify that a new stored object has been enumerated
@@ -53,7 +53,7 @@ type localTraverser struct {
 	errorChannel                chan ErrorFileInfo
 
 	targetHashType common.SyncHashType
-	hashAdapter common.HashDataAdapter
+	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
 }
@@ -287,7 +287,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				result, err := UnfurlSymlinks(filePath)
 
 				if err != nil {
-					err = fmt.Errorf("Failed to resolve symlink %s: %s", filePath, err.Error())
+					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -295,7 +295,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				result, err = filepath.Abs(result)
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of symlink result %s: %s", filePath, err.Error())
+					err = fmt.Errorf("failed to get absolute path of symlink result %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -303,7 +303,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				slPath, err := filepath.Abs(filePath)
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
+					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -311,7 +311,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 				rStat, err := os.Stat(result)
 				if err != nil {
-					err = fmt.Errorf("Failed to get properties of symlink target at %s: %s", result, err.Error())
+					err = fmt.Errorf("failed to get properties of symlink target at %s: %w", result, err)
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -354,7 +354,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				result, err := filepath.Abs(filePath)
 
 				if err != nil {
-					err = fmt.Errorf("Failed to get absolute path of %s: %s", filePath, err.Error())
+					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
@@ -513,7 +513,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 				fullPath := filepath.Join(t.fullPath, relPath)
 				fi, err := os.Stat(fullPath) // query LMT & if it's a directory
 				if err != nil {
-					err = fmt.Errorf("failed to get properties of file result %s: %s", relPath, err.Error())
+					err = fmt.Errorf("failed to get properties of file result %s: %w", relPath, err)
 					hashError <- err
 					return
 				}
@@ -524,7 +524,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 
 				f, err := os.OpenFile(fullPath, os.O_RDONLY, 0644) // perm is not used here since it's RO
 				if err != nil {
-					err = fmt.Errorf("failed to open file for reading result %s: %s", relPath, err.Error())
+					err = fmt.Errorf("failed to open file for reading result %s: %w", relPath, err)
 					hashError <- err
 					return
 				}
@@ -538,7 +538,7 @@ func (t *localTraverser) prepareHashingThreads(preprocessor objectMorpher, proce
 				// hash.Hash provides a writer type, allowing us to do a (small, 32MB to be precise) buffered write into the hasher and avoid memory concerns
 				_, err = io.Copy(hasher, f)
 				if err != nil {
-					err = fmt.Errorf("failed to read file into hasher result %s: %s", relPath, err.Error())
+					err = fmt.Errorf("failed to read file into hasher result %s: %w", relPath, err)
 					hashError <- err
 					return
 				}
@@ -644,7 +644,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	// it fails here if file does not exist
 	if err != nil {
 		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
-		return fmt.Errorf("failed to scan path %s due to %s", t.fullPath, err.Error())
+		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
 
 	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
@@ -790,7 +790,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						preprocessor,
 						entry.Name(),
 						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
-						entityType,                                                                                                       // TODO: add code path for folders
+						entityType, // TODO: add code path for folders
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
@@ -829,8 +829,8 @@ func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, str
 		incrementEnumerationCounter: incrementEnumerationCounter,
 		errorChannel:                errorChannel,
 		targetHashType:              syncHashType,
-		hashAdapter: hashAdapter,
-		stripTopDir: stripTopDir,
+		hashAdapter:                 hashAdapter,
+		stripTopDir:                 stripTopDir,
 	}
 	return &traverser, nil
 }

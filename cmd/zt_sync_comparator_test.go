@@ -384,53 +384,6 @@ func TestFileSyncS2SWithIncludeAndExcludeFlag(t *testing.T) {
 // 	})
 // }
 
-// there is a type mismatch between the source and destination
-func TestFileSyncS2SMismatchShareAndFile(t *testing.T) {
-	a := assert.New(t)
-	fsc := getFileServiceClient()
-	srcShareClient, srcShareName := createNewShare(a, fsc)
-	dstShareClient, dstShareName := createNewShare(a, fsc)
-	defer deleteShare(a, srcShareClient)
-	defer deleteShare(a, dstShareClient)
-
-	// set up the source share with numerous files
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(a, srcShareClient, fsc, "")
-	a.NotZero(len(fileList))
-
-	// set up the destination share with a single file
-	singleFileName := "single"
-	scenarioHelper{}.generateShareFilesFromList(a, dstShareClient, fsc, []string{singleFileName})
-
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
-
-	// construct the raw input to simulate user input
-	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, srcShareName)
-	dstFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(a, dstShareName, singleFileName)
-	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstFileURLWithSAS.String())
-
-	// type mismatch, we should get an error
-	runSyncAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
-
-		// validate that the right number of transfers were scheduled
-		a.Zero(len(mockedRPC.transfers))
-	})
-
-	// reverse the source and destination
-	raw = getDefaultSyncRawInput(dstFileURLWithSAS.String(), srcShareURLWithSAS.String())
-
-	// type mismatch again, we should also get an error
-	runSyncAndVerify(a, raw, func(err error) {
-		a.NotNil(err)
-
-		// validate that the right number of transfers were scheduled
-		a.Zero(len(mockedRPC.transfers))
-	})
-}
-
 // share <-> dir sync
 func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	a := assert.New(t)

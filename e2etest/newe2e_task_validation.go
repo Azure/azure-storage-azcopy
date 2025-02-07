@@ -214,7 +214,7 @@ func ValidateContainsError(a Asserter, stdout AzCopyStdout, errorMsg []string) {
 		}
 	}
 	fmt.Println(stdout.String())
-	a.Error("expected error message not found in azcopy output")
+	a.Error(fmt.Sprintf("expected error message %v not found in azcopy output", errorMsg))
 }
 
 func checkMultipleErrors(errorMsg []string, line string) bool {
