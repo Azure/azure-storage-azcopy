@@ -59,7 +59,12 @@ type resumeJobController struct {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
+	// Output the log location if log-level is set to other then NONE
+	var logPathFolder string
+	if azcopyLogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+	}
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -294,23 +299,55 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		}
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+	jobID, err := common.ParseJobID(rca.jobID)
+	if err != nil {
+		// Error for invalid JobId format
+		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
+	}
 
-	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, nil)
+	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
+	var getJobDetailsResponse common.GetJobDetailsResponse
+	// Get job details from the STE
+	Rpc(common.ERpcCmd.GetJobDetails(),
+		&common.GetJobDetailsRequest{JobID: jobID},
+		&getJobDetailsResponse)
+	if getJobDetailsResponse.ErrorMsg != "" {
+		glcm.Error(getJobDetailsResponse.ErrorMsg)
+	}
+
+	var fileSrcClientOptions any
+	if fromTo.From() == common.ELocation.File() {
+		fileSrcClientOptions = &common.FileClientOptions{
+			AllowTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled(), //Access the trailingDot option of the job
+		}
+	}
+	srcServiceClient, err := common.GetServiceClientForLocation(fromTo.From(), source, srcCredType, tc, &options, fileSrcClientOptions)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var srcCred *common.ScopedCredential
+	var srcCred *common.ScopedToken
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
-	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, nil)
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
+	var fileClientOptions any
+	if fromTo.To() == common.ELocation.File() {
+		fileClientOptions = &common.FileClientOptions{
+			AllowSourceTrailingDot: getJobDetailsResponse.TrailingDot.IsEnabled() && fromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       getJobDetailsResponse.TrailingDot.IsEnabled(),
+		}
+	}
+	dstServiceClient, err := common.GetServiceClientForLocation(fromTo.To(), destination, dstCredType, tc, &options, fileClientOptions)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return srcServiceClient, dstServiceClient, nil
 }
 
@@ -321,7 +358,12 @@ func (rca resumeCmdArgs) process() error {
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
-		return fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
+	}
+
+	// if no logging, set this empty so that we don't display the log location
+	if azcopyLogVerbosity == common.LogNone {
+		azcopyLogPathFolder = ""
 	}
 
 	includeTransfer := make(map[string]int)
@@ -357,9 +399,9 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// Get fromTo info, so we can decide what's the proper credential type to use.
-	var getJobFromToResponse common.GetJobFromToResponse
-	Rpc(common.ERpcCmd.GetJobFromTo(),
-		&common.GetJobFromToRequest{JobID: jobID},
+	var getJobFromToResponse common.GetJobDetailsResponse
+	Rpc(common.ERpcCmd.GetJobDetails(),
+		&common.GetJobDetailsRequest{JobID: jobID},
 		&getJobFromToResponse)
 	if getJobFromToResponse.ErrorMsg != "" {
 		glcm.Error(getJobFromToResponse.ErrorMsg)

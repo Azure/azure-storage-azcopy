@@ -71,14 +71,34 @@ type blobTraverser struct {
 	isDFS bool
 }
 
-func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
+var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, and can overlap.")
+
+func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error) {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
+
+	blobURLParts, err := blob.ParseURL(t.rawURL)
+	if err != nil {
+		return false, err
+	}
 
 	// Skip the single blob check if we're checking a destination.
 	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
 	// On HNS accounts, we would still perform this test. The user may have provided directory name without path-separator
 	if isDirDirect { // a container or a path ending in '/' is always directory
-		return true, nil
+		if blobURLParts.ContainerName != "" && blobURLParts.BlobName == "" {
+			// If it's a container, let's ensure that container exists. Listing is a safe assumption to be valid, because how else would we enumerate?
+			containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
+			p := containerClient.NewListBlobsFlatPager(nil)
+			_, err = p.NextPage(t.ctx)
+
+			if bloberror.HasCode(err, bloberror.AuthorizationPermissionMismatch) {
+				// Maybe we don't have the ability to list? Can we get container properties as a fallback?
+				_, propErr := containerClient.GetProperties(t.ctx, nil)
+				err = common.Iff(propErr == nil, nil, err)
+			}
+		}
+
+		return true, err
 	}
 	if !isSource && !t.isDFS {
 		// destination on blob endpoint. If it does not end in '/' it is a file
@@ -98,10 +118,6 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 		return isDirStub, nil
 	}
 
-	blobURLParts, err := blob.ParseURL(t.rawURL)
-	if err != nil {
-		return false, err
-	}
 	containerClient := t.serviceClient.NewContainerClient(blobURLParts.ContainerName)
 	searchPrefix := strings.TrimSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING) + common.AZCOPY_PATH_SEPARATOR_STRING
 	maxResults := int32(1)
@@ -116,12 +132,8 @@ func (t *blobTraverser) IsDirectory(isSource bool) (bool, error) {
 	}
 
 	if len(resp.Segment.BlobItems) == 0 {
-		// Not a directory
-		// If the blob is not found return the error to throw
-		if bloberror.HasCode(blobErr, bloberror.BlobNotFound) {
-			return false, errors.New(common.FILE_NOT_FOUND)
-		}
-		return false, blobErr
+		// Not a directory, but there was also no file on site. Therefore, there's nothing.
+		return false, errors.New(common.FILE_NOT_FOUND)
 	}
 
 	return true, nil
@@ -606,7 +618,7 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		isDFS:                       isDFS,
 	}
 
-	disableHierarchicalScanning := strings.ToLower(glcm.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
+	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))
 
 	// disableHierarchicalScanning should be true for permanent delete
 	if (disableHierarchicalScanning == "false" || disableHierarchicalScanning == "") && includeDeleted && (includeSnapshot || includeVersion) {

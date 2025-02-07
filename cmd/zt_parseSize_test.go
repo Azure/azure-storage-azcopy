@@ -55,7 +55,7 @@ func TestParseSize(t *testing.T) {
 	_, err = ParseSizeString("123T", "foo-bar") // we don't support terabytes
 	a.Equal(expectedError, err.Error())
 
-	_, err = ParseSizeString("abcK", "foo-bar")
+	_, err = ParseSizeString("abcK", "foo-bar") //codespell:ignore
 	a.Equal(expectedError, err.Error())
 
 }

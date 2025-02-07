@@ -22,8 +22,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -53,7 +51,7 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 	case common.ERpcCmd.PauseJob():
 	case common.ERpcCmd.CancelJob():
 	case common.ERpcCmd.ResumeJob():
-	case common.ERpcCmd.GetJobFromTo():
+	case common.ERpcCmd.GetJobDetails():
 		fallthrough
 	default:
 		panic("RPC mock not implemented")
@@ -81,10 +79,6 @@ type mockedLifecycleManager struct {
 	exitLog      chan string
 	dryrunLog    chan string
 	outputFormat common.OutputFormat
-}
-
-func (m *mockedLifecycleManager) DownloadToTempPath() bool {
-	return false
 }
 
 func (m *mockedLifecycleManager) ReportAllJobPartsDone() {
@@ -143,24 +137,11 @@ func (*mockedLifecycleManager) SurrenderControl()                               
 func (*mockedLifecycleManager) RegisterCloseFunc(func())                        {}
 func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
-func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
-	_ = os.Setenv(env.Name, "")
-}
-func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVariable) string {
-	value := os.Getenv(env.Name)
-	if value == "" {
-		return env.DefaultValue
-	}
-	return value
-}
 func (m *mockedLifecycleManager) SetOutputFormat(format common.OutputFormat) {
 	m.outputFormat = format
 }
 func (*mockedLifecycleManager) EnableInputWatcher()    {}
 func (*mockedLifecycleManager) EnableCancelFromStdIn() {}
-func (*mockedLifecycleManager) AddUserAgentPrefix(userAgent string) string {
-	return userAgent
-}
 
 func (*mockedLifecycleManager) SetForceLogging() {}
 

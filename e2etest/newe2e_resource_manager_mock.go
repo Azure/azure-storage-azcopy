@@ -232,6 +232,9 @@ func (m *MockContainerResourceManager) GetProperties(a Asserter) ContainerProper
 	return ContainerProperties{}
 }
 
+func (m *MockContainerResourceManager) SetProperties(a Asserter, properties *ContainerResourceManager) {
+}
+
 func (m *MockContainerResourceManager) Delete(a Asserter) {
 	// No-op it
 }

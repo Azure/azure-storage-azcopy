@@ -10,7 +10,7 @@ import (
 // AccountRegistry is a set of accounts that are intended to be initialized when the tests start running.
 // Suites and tests should not add to this pool.
 // todo: long-term, support flexible static configuration of accounts.
-var AccountRegistry = map[string]AccountResourceManager{} // For re-using accounts across testing
+var AccountRegistry = map[string]AccountResourceManager{} // For reusing accounts across testing
 
 func GetAccount(a Asserter, AccountName string) AccountResourceManager {
 	targetAccount, ok := AccountRegistry[AccountName]

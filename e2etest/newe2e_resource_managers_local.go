@@ -274,15 +274,21 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 	a.AssertNow("Object must be file to have content", Equal{})
 
 	l.CreateParents(a)
-	f, err := os.OpenFile(l.getWorkingPath(), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0774)
-	a.NoError("Open file", err)
-	defer func(f *os.File) {
-		err := f.Close()
-		a.NoError("Close file", err)
-	}(f)
 
-	_, err = io.Copy(f, body.Reader())
-	a.NoError("Write file", err)
+	if l.entityType == common.EEntityType.File() {
+		f, err := os.OpenFile(l.getWorkingPath(), os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0774)
+		a.NoError("Open file", err)
+		defer func(f *os.File) {
+			err := f.Close()
+			a.NoError("Close file", err)
+		}(f)
+
+		_, err = io.Copy(f, body.Reader())
+		a.NoError("Write file", err)
+	} else if l.entityType == common.EEntityType.Folder() {
+		err := os.Mkdir(l.getWorkingPath(), 0775)
+		a.NoError("Mkdir", err)
+	}
 
 	l.SetObjectProperties(a, properties)
 
@@ -320,11 +326,11 @@ func (l *LocalObjectResourceManager) ListChildren(a Asserter, recursive bool) ma
 func (l *LocalObjectResourceManager) GetProperties(a Asserter) ObjectProperties {
 	a.HelperMarker().Helper()
 	stats, err := os.Stat(l.getWorkingPath())
-	a.NoError("failed to get stat", err)
-	var lmt *time.Time
-	if stats != nil {
-		lmt = PtrOf(stats.ModTime())
+	if err != nil { // Prevent nil dereferences
+		a.NoError("failed to get stat", err)
+		return ObjectProperties{}
 	}
+	lmt := common.Iff(stats == nil, nil, PtrOf(stats.ModTime()))
 	out := ObjectProperties{
 		LastModifiedTime: lmt,
 	}

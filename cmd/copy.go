@@ -234,7 +234,7 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
 
 	if err != nil {
-		err = fmt.Errorf("failed to parse url %s; %s", result, err)
+		err = fmt.Errorf("failed to parse url %s; %w", result, err)
 		return
 	}
 
@@ -278,6 +278,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
 	})
+
+	// if no logging, set this empty so that we don't display the log location
+	if azcopyLogVerbosity == common.LogNone {
+		azcopyLogPathFolder = ""
+	}
 
 	fromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
@@ -549,7 +554,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
-		glcm.Info("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
+		glcm.Warn("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
 	}
 	cooked.metadata = raw.metadata
 	if err = validateMetadataString(cooked.metadata); err != nil {
@@ -573,7 +578,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
-		glcm.Info("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
+		glcm.Warn("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
 	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
 	err = validateBlobTagsKeyValue(blobTags)
@@ -901,7 +906,7 @@ var includeWarningOncer = &sync.Once{}
 func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
 	if strings.Contains(value, "*") || strings.Contains(value, "?") {
 		oncer.Do(func() {
-			glcm.Info(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
+			glcm.Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
 				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
 				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
 		})
@@ -1305,7 +1310,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil)}
+	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1349,7 +1355,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Use the concurrency environment value
-	concurrencyEnvVar := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
+	concurrencyEnvVar := common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
 
 	pipingUploadParallelism := pipingUploadParallelism
 	if concurrencyEnvVar != "" {
@@ -1381,8 +1387,15 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
 	}
 
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := credInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
 	// step 0: initialize pipeline
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil)}
+	// Reauthentication is theoretically possible here, since stdin is blocked.
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1485,7 +1498,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
-	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
+	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1564,18 +1577,25 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
-	var azureFileSpecificOptions any
-	if cca.FromTo.From() == common.ELocation.File() {
-		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
-		}
-	}
-
 	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
 	if err != nil {
 		return err
 	}
+
+	var srcReauth *common.ScopedAuthenticator
+	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
+	var azureFileSpecificOptions any
+	if cca.FromTo.From() == common.ELocation.File() {
+		azureFileSpecificOptions = &common.FileClientOptions{
+			AllowTrailingDot: cca.trailingDot.IsEnabled(),
+		}
+	}
+
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		cca.Source,
@@ -1590,16 +1610,22 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	if cca.FromTo.To() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
-			AllowSourceTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable() && cca.FromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       cca.trailingDot.IsEnabled(),
+			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
 		}
 	}
 
-	var srcCred *common.ScopedCredential
+	var dstReauthTok *common.ScopedAuthenticator
+	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	var srcCred *common.ScopedToken
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,
@@ -1632,6 +1658,17 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// TODO: Remove this check when FileBlob w/ File OAuth works.
 	if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.FromTo.To() != common.ELocation.File() {
 		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
+	}
+
+	// Check if destination is system container
+	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
+		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		if err != nil {
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
+		}
+		if common.IsSystemContainer(dstContainerName) {
+			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
+		}
 	}
 
 	switch {
@@ -1689,11 +1726,13 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	// if on dry run mode do not want to print message since no  job is being done
 	if !cca.dryrunMode {
+		// Output the log location if log-level is set to other then NONE
+		var logPathFolder string
+		if azcopyLogPathFolder != "" {
+			logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+		}
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
-			fmt.Sprintf("%s%s%s.log",
-				azcopyLogPathFolder,
-				common.OS_PATH_SEPARATOR,
-				cca.jobID),
+			logPathFolder,
 			cca.isCleanupJob,
 			cca.cleanupJobMessage))
 	}
@@ -1971,7 +2010,7 @@ func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfCo
 }
 
 func shouldDisplayPerfStates() bool {
-	return glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
+	return common.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
 }
 
 func isStdinPipeIn() (bool, error) {
@@ -2134,9 +2173,11 @@ func init() {
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "True by default. Gets S3 objects' or Azure files' properties in backend, if properties need to be accessed. Properties need to be accessed if s2s-preserve-properties is true, and in certain other cases where we need the properties for modification time checks or MD5 checks.")
-	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
-		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
+	cpCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "Available options: "+strings.Join(common.ValidTrailingDotOptions(), ", ")+". "+
+		"'Enable'(Default) treats trailing dot file operations in a safe manner between systems that support these files. On Windows, the transfers will not occur to stop risk of data corruption. See 'AllowToUnsafeDestination' to bypass this."+
+		"'Disable' reverts to the legacy functionality, where trailing dot files are ignored. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (E.g 'path/foo' and 'path/foo.'). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
+		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration."+
+		"'AllowToUnsafeDestination' supports transferring trailing dot files to systems that do not support them e.g Windows. Use with caution acknowledging risk of data corruption, when two files with different contents 'path/bar' and 'path/bar.' (differ only by a trailing dot) are seen as identical.")
 
 	// Public Documentation: https://docs.microsoft.com/en-us/azure/storage/blobs/encryption-customer-provided-keys
 	// Clients making requests against Azure Blob storage have the option to provide an encryption key on a per-request basis.

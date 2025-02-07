@@ -191,7 +191,7 @@ type GlobalFlags struct {
 	OutputLevel *common.OutputVerbosity `flag:"output-level,default:DEFAULT"`
 
 	// TODO: reconsider/reengineer this flag; WI#26475473
-	//DebugSkipFiles   []string                `flag:"debug-skip-files"`
+	// DebugSkipFiles []string `flag:"debug-skip-files"`
 
 	// TODO: handle prompting and input; WI#26475441
 	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
@@ -383,6 +383,7 @@ type SyncFlags struct {
 	LocalHashStorageMode *common.HashStorageMode `flag:"local-hash-storage-mode"`
 	// The real flag name is not all that great due to `delete-destination`, but, it works.
 	DeleteIfNecessary *bool `flag:"delete-destination-file"`
+	IncludeRoot       *bool `flag:"include-root"`
 }
 
 // RemoveFlags is not tiered like CopySyncCommonFlags is, because it is dissimilar in functionality, and would be hard to test in the same scenario.
