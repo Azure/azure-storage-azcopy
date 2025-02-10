@@ -2259,8 +2259,8 @@ stages:
 
                     for REPO_NAME in $(echo "$pkg_repo_names" | jq -r '.results[].name'); do
                         echo "Found repo: $REPO_NAME $PKG_ID" # Debugging line
-                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
-                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $REPO_NAME
+                        #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
+                        #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $REPO_NAME
                     done
                 done
               displayName: 'Remove deb packages from the repository'
@@ -2275,8 +2275,8 @@ stages:
 
                     for REPO_NAME in $(echo "$pkg_repo_names" | jq -r '.results[].name'); do
                         echo "Found repo: $REPO_NAME $PKG_ID" # Debugging line
-                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
-                        pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $REPO_NAME
+                        #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo package update --remove-packages $PKG_ID $REPO_NAME
+                        #pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo publish $REPO_NAME
                     done
                 done
               displayName: 'Remove rpm packages from the repository'
