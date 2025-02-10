@@ -27,20 +27,20 @@ import (
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
 func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart int, fpo common.FolderPropertyOption, targetServiceClient *common.ServiceClient) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:               cca.jobID,
-		CommandString:       cca.commandString,
-		FromTo:              cca.FromTo,
-		Fpo:                 fpo,
-		SymlinkHandlingType: common.ESymlinkHandlingType.Preserve(),       // We want to delete symlinks
-		SourceRoot:          cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
-		CredentialInfo:      cca.credentialInfo,
-		ForceIfReadOnly:     cca.ForceIfReadOnly,
+		JobID:                 cca.jobID,
+		CommandString:         cca.commandString,
+		FromTo:                cca.FromTo,
+		Fpo:                   fpo,
+		SymlinkHandlingType:   common.ESymlinkHandlingType.Preserve(),       // We want to delete symlinks
+		SourceRoot:            cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
+		CredentialInfo:        cca.credentialInfo,
+		ForceIfReadOnly:       cca.ForceIfReadOnly,
 		BlobFSRecursiveDelete: cca.Recursive,
-		SrcServiceClient:    targetServiceClient,
+		SrcServiceClient:      targetServiceClient,
 
 		// flags
-		LogLevel:       azcopyLogVerbosity,
-		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.permanentDeleteOption},
+		LogLevel:       AzcopyLogVerbosity,
+		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.PermanentDeleteOption},
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},

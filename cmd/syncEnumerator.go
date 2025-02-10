@@ -24,13 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"strings"
+	"sync/atomic"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"runtime"
-	"strings"
-	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -70,7 +71,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false)
 
 	if err != nil {
 		return nil, err
@@ -90,7 +91,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, nil, false)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +208,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		},
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
-		LogLevel:                       azcopyLogVerbosity,
+		LogLevel:                       AzcopyLogVerbosity,
 		PreserveSMBPermissions:         cca.preservePermissions,
 		PreserveSMBInfo:                cca.preserveSMBInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
