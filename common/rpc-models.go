@@ -8,6 +8,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	datalake "github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/service"
+	"github.com/minio/minio-go/pkg/credentials"
 
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -179,6 +180,7 @@ type CopyJobPartOrderRequest struct {
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
+	Provider                credentials.Provider //credential provider implementation for custom credential management
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
@@ -203,6 +205,7 @@ type GCPCredentialInfo struct {
 type S3CredentialInfo struct {
 	Endpoint string
 	Region   string
+	Provider credentials.Provider //credential provider implementation for custom credential management
 }
 
 type CopyJobPartOrderErrorType string

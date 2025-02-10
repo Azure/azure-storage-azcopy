@@ -13,6 +13,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/minio/minio-go/pkg/credentials"
 
 	"net/url"
 
@@ -144,6 +145,8 @@ type TransferInfo struct {
 
 	VersionID  string
 	SnapshotID string
+
+	Provider credentials.Provider //custom Provider
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
