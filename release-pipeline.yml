@@ -2245,10 +2245,24 @@ stages:
           displayName: 'Test PMC installation'
         
         - script: |
-            # deb package
-            pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version 10.28.1
+            # Capture the JSON output into a variable
+            json_output_deb=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version 10.28.1)
+
+            # Loop over all the results and extract the id for each one
+            for id in $(echo "$json_output_deb" | jq -r '.results[].id'); do
+                echo "Found id: $id"
+                # Use the extracted id to list the repo
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$id"
+            done
 
             # rpm package
-            pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package rpm list --name azcopy --version 10.28.1
-          displayName: 'Test PMC installation'
+            json_output_rpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package rpm list --name azcopy --version 10.28.1)
+
+            # Loop over all the results and extract the id for each one
+            for id in $(echo "$json_output_rpm" | jq -r '.results[].id'); do
+                echo "Found id: $id"
+                # Use the extracted id to list the repo
+                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$id"
+            done
+          displayName: 'List the repositories'
           
