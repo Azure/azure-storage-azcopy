@@ -2246,9 +2246,9 @@ stages:
         
         - script: |
             # deb package
-            pmc package deb list --name azcopy --version 10.28.1
+            pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version 10.28.1
 
             # rpm package
-            pmc package rpm list --name azcopy --version 10.28.1
+            pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package rpm list --name azcopy --version 10.28.1
           displayName: 'Test PMC installation'
           
