@@ -2246,23 +2246,33 @@ stages:
         
         - script: |
             # Capture the JSON output into a variable
-            json_output_deb=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version 10.28.1)
+            deb_pkg_id_list=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package deb list --name azcopy --version 10.28.1)
 
             # Loop over all the results and extract the id for each one
-            for id in $(echo "$json_output_deb" | jq -r '.results[].id'); do
-                echo "Found id: $id"
+            for PKG_ID in $(echo "$deb_pkg_id_list" | jq -r '.results[].id'); do
+                #echo "Found id: $PKG_ID"
                 # Use the extracted id to list the repo
-                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$id"
+                deb_pkg_repo_names=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$pkg_id")
+                for REPO_NAME in $(echo "$deb_pkg_repo_names" | jq -r '.results[].name'); do
+                    echo "Found repo: $REPO_NAME"
+                    # pmc repo package update --remove-packages $PKG_ID $REPO_NAME
+                    # pmc repo publish $REPO_NAME
+                done
             done
 
             # rpm package
-            json_output_rpm=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package rpm list --name azcopy --version 10.28.1)
+            rpm_pkg_id_list=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) package rpm list --name azcopy --version 10.28.1)
 
             # Loop over all the results and extract the id for each one
-            for id in $(echo "$json_output_rpm" | jq -r '.results[].id'); do
-                echo "Found id: $id"
+            for PKG_ID in $(echo "$rpm_pkg_id_list" | jq -r '.results[].id'); do
+                #echo "Found id: $PKG_ID"
                 # Use the extracted id to list the repo
-                pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$id"
+                rpm_pkg_repo_names=$(pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --package "$PKG_ID")
+                for REPO_NAME in $(echo "$rpm_pkg_repo_names" | jq -r '.results[].name'); do
+                    echo "Found repo: $REPO_NAME $PKG_ID"
+                    # pmc repo package update --remove-packages $PKG_ID $REPO_NAME
+                    # pmc repo publish $REPO_NAME
+                done
             done
           displayName: 'List the repositories'
           
