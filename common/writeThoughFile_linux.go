@@ -180,7 +180,13 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return f, err
 	}
 
-	err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
+	for { // keep retrying when EINTR error occurs
+		err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
+		if err != syscall.EINTR {
+			break
+		}
+	}
+
 	if err != nil {
 		// To solve the case that Fallocate cannot work well with cifs/smb3.
 		if err == syscall.ENOTSUP {
