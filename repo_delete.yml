@@ -1,0 +1,58 @@
+stages:
+- stage: PublishArtifacts
+  jobs:
+    - job: Job
+      timeoutInMinutes: 120
+      pool:
+        name: azcopy-pool
+        image: ubuntu22-1espt
+        os: linux
+      variables:
+        - group: AZCOPY_SECRET_VAULT
+      steps:
+        - checkout: none
+
+        - task: PipAuthenticate@1
+          inputs:
+            artifactFeeds: 'DevExGlobalFeed'
+          displayName: 'Connect to PMC artifact'
+
+        - script: |
+            sudo apt-get clean
+            sudo apt-get update --fix-missing
+            sudo apt-get install -y tree
+          displayName: 'Install Dependencies'
+
+        - script: |
+            pip install pmc-cli
+            echo '##vso[task.prependpath]$(HOME)/.local/bin'
+          displayName: 'Install pmc-cli'
+
+        - task: DownloadSecureFile@1
+          name: pmcCertificate
+          displayName: 'Download pmc pem file'
+          inputs:
+            secureFile: 'blobfusebuildvault-blobfuse-release-pmc1-20230911.pem'
+
+        - task: DownloadSecureFile@1
+          name: settings
+          displayName: 'Download settings.toml file'
+          inputs:
+            secureFile: 'settings.toml'
+
+        - script: |
+            pmc --version
+            pmc --msal-cert-path $(pmcCertificate.secureFilePath) --config $(settings.secureFilePath) repo list --limit 1
+            if [ $? -ne 0 ]; then
+              exit 1
+            fi
+          displayName: 'Test PMC installation'
+        
+        - script: |
+            # deb package
+            pmc package deb list --name azcopy --version 10.28.1
+
+            # rpm package
+            pmc package rpm list --name azcopy --version 10.28.1
+          displayName: 'Test PMC installation'
+          
