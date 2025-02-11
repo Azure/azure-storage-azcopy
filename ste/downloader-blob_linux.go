@@ -83,9 +83,12 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 		return
 	}
 
-	for {
+	for i := 0; i < 5; i++ {
 		err = syscall.Fallocate(int(file.(*os.File).Fd()), 0, 0, size)
-		if errr != syscall.EINTR {
+		if err == nil {
+			break
+		}
+		if err != syscall.EINTR { // Perform up to 5 EINTR error retries
 			break
 		}
 	}

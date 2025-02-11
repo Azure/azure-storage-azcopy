@@ -180,8 +180,11 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return f, err
 	}
 
-	for { // keep retrying when EINTR error occurs
+	for i := 0; i < 5; i++ { // // Perform up to 5 EINTR error retries
 		err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
+		if err == nil {
+			break
+		}
 		if err != syscall.EINTR {
 			break
 		}
