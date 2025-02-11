@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
-	"net/url"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 
@@ -56,6 +57,8 @@ type blobTraverser struct {
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
 
+	errorChannel chan TraverserErrorItemInfo
+
 	s2sPreserveSourceTags bool
 
 	cpkOptions common.CpkOptions
@@ -69,9 +72,66 @@ type blobTraverser struct {
 	includeVersion bool
 
 	isDFS bool
+
+	// isSourceTraverser is used to determine if the traverser is for source or destination.
+	isSourceTraverser bool
 }
 
+// ErrorFileInfo holds information about files and folders that failed enumeration.
+type ErrorBlobInfo struct {
+	BlobPath             string
+	BlobSize             int64
+	BlobName             string
+	BlobLastModifiedTime time.Time
+	ErrorMsg             error
+	Source               bool
+	Dir                  bool
+}
+
+// Compile-time check to ensure ErrorFileInfo implements TraverserErrorItemInfo
+var _ TraverserErrorItemInfo = (*ErrorBlobInfo)(nil)
+
+///////////////////////////////////////////////////////////////////////////
+// START - Implementing methods defined in TraverserErrorItemInfo
+
+func (e ErrorBlobInfo) FullPath() string {
+	return e.BlobPath
+}
+
+func (e ErrorBlobInfo) Name() string {
+	return e.BlobName
+}
+
+func (e ErrorBlobInfo) Size() int64 {
+	return e.BlobSize
+}
+
+func (e ErrorBlobInfo) LastModifiedTime() time.Time {
+	return e.BlobLastModifiedTime
+}
+
+func (e ErrorBlobInfo) IsDir() bool {
+	return e.Dir
+}
+
+func (e ErrorBlobInfo) ErrorMessage() error {
+	return e.ErrorMsg
+}
+
+func (e ErrorBlobInfo) IsSource() bool {
+	return e.Source
+}
+
+// END - Implementing methods defined in TraverserErrorItemInfo
+///////////////////////////////////////////////////////////////////////////
+
 var NonErrorDirectoryStubOverlappable = errors.New("The directory stub exists, and can overlap.")
+
+func writeToBlobErrorChannel(errorChannel chan TraverserErrorItemInfo, err ErrorBlobInfo) {
+	if errorChannel != nil {
+		errorChannel <- err
+	}
+}
 
 func (t *blobTraverser) IsDirectory(isSource bool) (isDirectory bool, err error) {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
@@ -215,15 +275,29 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 	var respErr *azcore.ResponseError
 	if errors.As(err, &respErr) {
+		errorBlobInfo := ErrorBlobInfo{
+			BlobPath:             t.rawURL,
+			BlobSize:             *blobProperties.ContentLength,
+			BlobName:             blobName,
+			BlobLastModifiedTime: *blobProperties.LastModified,
+			ErrorMsg:             err,
+			Source:               t.isSourceTraverser,
+			Dir:                  false,
+		}
+
 		// Don't error out unless it's a CPK error just yet
 		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
 		if respErr.ErrorCode == string(bloberror.BlobUsesCustomerSpecifiedEncryption) {
+			writeToBlobErrorChannel(t.errorChannel, errorBlobInfo)
 			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
 		if respErr.RawResponse == nil {
+			writeToBlobErrorChannel(t.errorChannel, errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
-		} else if respErr.StatusCode == 403 { // Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
+		} else if respErr.StatusCode == 403 {
+			// Some nature of auth error-- Whatever the user is pointing at, they don't have access to, regardless of whether it's a file or a dir stub.
+			writeToBlobErrorChannel(t.errorChannel, errorBlobInfo)
 			return fmt.Errorf("cannot list files due to reason %s", respErr)
 		}
 	}
@@ -479,6 +553,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
+			writeToBlobErrorChannel(t.errorChannel, ErrorBlobInfo{ErrorMsg: workerError, Source: t.isSourceTraverser})
 			return workerError
 		}
 
@@ -490,6 +565,14 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 		processErr := processIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {
+			writeToBlobErrorChannel(
+				t.errorChannel, ErrorBlobInfo{
+					BlobName:             object.name,
+					BlobPath:             object.relativePath,
+					BlobLastModifiedTime: object.lastModifiedTime,
+					Dir:                  object.entityType == common.EEntityType.Folder(),
+					ErrorMsg:             processErr,
+					Source:               t.isSourceTraverser})
 			return processErr
 		}
 	}

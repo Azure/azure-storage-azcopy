@@ -26,8 +26,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"hash"
 	"io"
 	"io/fs"
@@ -38,6 +36,10 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
@@ -50,12 +52,21 @@ type localTraverser struct {
 	appCtx          context.Context
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter enumerationCounterFunc
-	errorChannel                chan ErrorFileInfo
+	errorChannel                chan TraverserErrorItemInfo
 
 	targetHashType common.SyncHashType
 	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
+
+	// isSourceTraverser is used to determine if the traverser is for source or destination.
+	isSourceTraverser bool
+}
+
+func writeToErrorChannel(errorChannel chan TraverserErrorItemInfo, err ErrorFileInfo) {
+	if errorChannel != nil {
+		errorChannel <- err
+	}
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
@@ -185,23 +196,55 @@ type ErrorFileInfo struct {
 	FilePath string
 	FileInfo os.FileInfo
 	ErrorMsg error
+	Source   bool
 }
+
+// Compile-time check to ensure ErrorFileInfo implements TraverserErrorItemInfo
+var _ TraverserErrorItemInfo = (*ErrorFileInfo)(nil)
+
+///////////////////////////////////////////////////////////////////////////
+// START - Implementing methods defined in TraverserErrorItemInfo
+
+func (e ErrorFileInfo) FullPath() string {
+	return e.FilePath
+}
+
+func (e ErrorFileInfo) Name() string {
+	return e.FileInfo.Name()
+}
+
+func (e ErrorFileInfo) Size() int64 {
+	return e.FileInfo.Size()
+}
+
+func (e ErrorFileInfo) LastModifiedTime() time.Time {
+	return e.FileInfo.ModTime()
+}
+
+func (e ErrorFileInfo) IsDir() bool {
+	return e.FileInfo.IsDir()
+}
+
+func (e ErrorFileInfo) ErrorMessage() error {
+	return e.ErrorMsg
+}
+
+func (e ErrorFileInfo) IsSource() bool {
+	return e.Source
+}
+
+// END - Implementing methods defined in TraverserErrorItemInfo
+///////////////////////////////////////////////////////////////////////////
 
 func (s symlinkTargetFileInfo) Name() string {
 	return s.name // override the name
-}
-
-func writeToErrorChannel(errorChannel chan ErrorFileInfo, err ErrorFileInfo) {
-	if errorChannel != nil {
-		errorChannel <- err
-	}
 }
 
 // WalkWithSymlinks is a symlinks-aware, parallelized, version of filePath.Walk.
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan ErrorFileInfo) (err error) {
+func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan TraverserErrorItemInfo, isSourceTraverser bool) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -234,7 +277,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
 				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
-				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError})
+				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError, Source: isSourceTraverser})
 				return nil
 			}
 			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
@@ -289,7 +332,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				if err != nil {
 					err = fmt.Errorf("failed to resolve symlink %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 					return nil
 				}
 
@@ -297,7 +340,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of symlink result %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 					return nil
 				}
 
@@ -305,7 +348,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 					return nil
 				}
 
@@ -313,7 +356,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				if err != nil {
 					err = fmt.Errorf("failed to get properties of symlink target at %s: %w", result, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 					return nil
 				}
 
@@ -356,7 +399,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
-					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
+					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 					return nil
 				}
 
@@ -727,7 +770,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel))
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.isSourceTraverser))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -811,7 +854,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, stripTopDir bool, symlinkHandling common.SymlinkHandlingType, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan ErrorFileInfo) (*localTraverser, error) {
+func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, stripTopDir bool, symlinkHandling common.SymlinkHandlingType, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan TraverserErrorItemInfo) (*localTraverser, error) {
 	var hashAdapter common.HashDataAdapter
 	if syncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
 		var err error

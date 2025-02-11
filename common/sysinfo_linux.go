@@ -94,7 +94,7 @@ func parseStat(in unix.Stat_t) UnixStatContainer {
 	out.birthTime = time.Time{}
 
 	// Fields present in stat call
-	out.numLinks = in.Nlink
+	out.numLinks = uint64(in.Nlink)
 	out.groupGID = in.Gid
 	out.ownerUID = in.Uid
 	out.accessTime = time.Unix(in.Atim.Sec, in.Atim.Nsec)

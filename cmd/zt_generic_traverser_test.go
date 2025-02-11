@@ -22,9 +22,6 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,6 +29,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/stretchr/testify/assert"
 
 	gcpUtils "cloud.google.com/go/storage"
 
@@ -347,7 +348,7 @@ func TestWalkWithSymlinks_ToFolder(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, true))
 
 	// 3 files live in base, 3 files live in symlink
 	a.Equal(6, fileCount)
@@ -414,7 +415,7 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, true))
 
 	a.Equal(3, fileCount)
 }
@@ -445,7 +446,7 @@ func TestWalkWithSymlinksDedupe(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, true))
 
 	a.Equal(6, fileCount)
 }
@@ -477,7 +478,7 @@ func TestWalkWithSymlinksMultitarget(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, true))
 
 	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
 	a.Equal(6, fileCount)
@@ -511,7 +512,7 @@ func TestWalkWithSymlinksToParentAndChild(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil))
+		common.ESymlinkHandlingType.Follow(), nil, true))
 
 	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
 	a.Equal(6, fileCount)
