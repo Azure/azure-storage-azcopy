@@ -772,6 +772,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		glcm.Info("Recursive flag is set to false, only top level files and folders will be copied")
 		syncHandler = nil
 	}
+	syncHandler = nil
 	if syncHandler == nil {
 		enumerator, err := cca.initEnumerator(ctx)
 		if err != nil {
