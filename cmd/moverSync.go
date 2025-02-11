@@ -1,3 +1,5 @@
+// +build smslidingwindow
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -37,6 +39,21 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
+
+type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
+var syncHandler CustomSyncHandler = moverSyncHandler
+
+type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
+var counterIncrementer CustomCounterIncrementer = IncrementCounter
+
+func IncrementCounter(entry fs.DirEntry, t *localTraverser) error {
+	if entry.IsDir() {
+		t.incrementEnumerationCounter(common.EEntityType.Folder())
+	} else {
+		t.incrementEnumerationCounter(common.EEntityType.File())
+	}
+	return nil
+}
 
 type SyncTraverser struct {
 	enumerator *syncEnumerator

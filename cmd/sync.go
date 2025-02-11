@@ -702,10 +702,8 @@ Final Job Status: %v%s%s
 	return
 }
 
-type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
-var syncHandler CustomSyncHandler = moverSyncHandler
-
 func (cca *cookedSyncCmdArgs) process() (err error) {
+
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
@@ -767,7 +765,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
 		}
 	}
-
 	if syncHandler == nil {
 		enumerator, err := cca.initEnumerator(ctx)
 		if err != nil {
