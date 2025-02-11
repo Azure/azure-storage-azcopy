@@ -48,7 +48,7 @@ func TestGetVerifiedChunkParams(t *testing.T) {
 
 	// Verify large block Size
 	memLimit = int64(8388608000) // 8000MiB
-	expectedErr = "block size of 3.91GiB for file tmpSrc of size 7.81GiB exceeds maximum allowed block size for a BlockBlob"
+	expectedErr = "block size of 3.91GiB for file tmpSrc of size 7.81GiB exceeds maximum allowed 4000.00MiB block size for a BlockBlob"
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
 	a.Equal(expectedErr, err.Error())
 
@@ -64,6 +64,40 @@ func TestGetVerifiedChunkParams(t *testing.T) {
 	expectedErr = "Block size 2048 for source of size 2147483648 is not correct. Number of blocks will exceed the limit"
 	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
 	a.Equal(expectedErr, err.Error())
+
+	// Verify PutBlob size checks against correct max
+	memLimit = int64(8388608000)                                                // 8000MiB
+	transferInfo.PutBlobSize = common.MaxBlockBlobBlockSize + (1 * 1024 * 1024) // 4001MiB
+	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
+	a.NoError(err)
+
+	// Verify large PutBlob size
+	transferInfo.PutBlobSize = 5001 * 1024 * 1024    // 5001MiB
+	transferInfo.SourceSize = 2 * 1024 * 1024 * 1024 // 2.00GB
+	expectedErr = "block size of 4.88GiB for file tmpSrc of size 2.00GiB exceeds maximum allowed 5000.00MiB block size for a BlockBlob"
+	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
+	a.Equal(expectedErr, err.Error())
+
+	// Large PutBlob, large Source file
+	transferInfo.SourceSize = 6 * 1024 * 1024 * 1024 // 6.00GB
+	expectedErr = "put blob size of 4.88GiB for file tmpSrc of size 6.00GiB exceeds maximum allowed put blob size for a BlockBlob"
+	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
+	a.Equal(expectedErr, err.Error())
+
+	// Block greater than memory
+	memLimit = int64(3 * 1024 * 1024 * 1024)        // 3GiB
+	transferInfo.BlockSize = 4 * 1024 * 1024 * 1024 // 4GiB
+	expectedErr = "Cannot use a block size of 4.00GiB. AzCopy is limited to use only 3.00GiB of memory"
+	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
+	a.Equal(expectedErr, err.Error())
+
+	// PutBlob greater than memory
+	transferInfo.BlockSize = 2 * 1024 * 1024 * 1024   // 2GiB
+	transferInfo.PutBlobSize = 5 * 1024 * 1024 * 1024 // 4GiB
+	expectedErr = "Cannot use a put blob size of 5.00GiB. AzCopy is limited to use only 3.00GiB of memory"
+	_, _, err = getVerifiedChunkParams(transferInfo, memLimit, memLimit)
+	a.Equal(expectedErr, err.Error())
+
 }
 
 func TestDeleteDstBlob(t *testing.T) {
