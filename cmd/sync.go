@@ -703,6 +703,7 @@ Final Job Status: %v%s%s
 }
 
 type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
+
 var syncHandler CustomSyncHandler = moverSyncHandler
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
@@ -767,7 +768,10 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
 		}
 	}
-
+	if !cca.recursive {
+		glcm.Info("Recursive flag is set to false, only top level files and folders will be copied")
+		syncHandler = nil
+	}
 	if syncHandler == nil {
 		enumerator, err := cca.initEnumerator(ctx)
 		if err != nil {
