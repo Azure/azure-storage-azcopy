@@ -1,11 +1,12 @@
 package e2etest
 
 import (
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/cmd"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 func init() {
@@ -820,7 +821,7 @@ func (s *ListSuite) Scenario_EmptySASErrorCodes(svm *ScenarioVariationManager) {
 		})
 
 	// Validate that the stdout contains these error URLs
-	ValidateMessageOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation")
+	ValidateMessageOutput(svm, stdout, "https://aka.ms/AzCopyError/NoAuthenticationInformation", true)
 }
 
 func (s *ListSuite) Scenario_VirtualDirectoryHandling(svm *ScenarioVariationManager) {
