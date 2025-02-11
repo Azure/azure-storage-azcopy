@@ -43,5 +43,5 @@ func (s *JobsCleanSuite) Scenario_JobsCleanBasic(svm *ScenarioVariationManager) 
 			},
 		})
 
-	ValidateMessageOutput(svm, jobsCleanOutput, cmd.JobsCleanupSuccessMsg)
+	ValidateMessageOutput(svm, jobsCleanOutput, cmd.JobsCleanupSuccessMsg, true)
 }

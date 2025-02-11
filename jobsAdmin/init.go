@@ -57,12 +57,10 @@ func ToFixed(num float64, precision int) float64 {
 func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec float64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder, providePerfAdvice)
-	// No need to read the existing JobPartPlan files since Azcopy is running in process
-	// JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	// if we've a custom mime map
-	if path := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
+	if path := common.GetEnvironmentVariable(common.EEnvironmentVariable.MimeMapping()); path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -141,11 +139,11 @@ func MainSTE(concurrency ste.ConcurrencySettings, targetRateInMegaBitsPerSec flo
 			serialize(ResumeJobOrder(payload), writer)
 		})
 
-	http.HandleFunc(common.ERpcCmd.GetJobFromTo().Pattern(),
+	http.HandleFunc(common.ERpcCmd.GetJobDetails().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.GetJobFromToRequest
+			var payload common.GetJobDetailsRequest
 			deserialize(request, &payload)
-			serialize(GetJobFromTo(payload), writer)
+			serialize(GetJobDetails(payload), writer)
 		})
 
 	// Listen for front-end requests
@@ -188,10 +186,10 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 		ExistingPlanMMF:   nil,
 		SrcClient:         order.SrcServiceClient,
 		DstClient:         order.DstServiceClient,
-		SrcIsOAuth: order.S2SSourceCredentialType.IsAzureOAuth(),
+		SrcIsOAuth:        order.S2SSourceCredentialType.IsAzureOAuth(),
 		ScheduleTransfers: true,
 	}
-	jm.AddJobPart2(args)
+	jm.AddJobPart(args)
 
 	// Update jobPart Status with the status Manager
 	jm.SendJobPartCreatedMsg(ste.JobPartCreatedMsg{TotalTransfers: uint32(len(order.Transfers.List)),
@@ -698,14 +696,14 @@ func ListJobs(givenStatus common.JobStatus) common.ListJobsResponse {
 	return JobsAdmin.ListJobs(givenStatus)
 }
 
-// GetJobFromTo api returns the job FromTo info.
-func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
+// GetJobDetails api returns the job FromTo info.
+func GetJobDetails(r common.GetJobDetailsRequest) common.GetJobDetailsResponse {
 	jm, found := JobsAdmin.JobMgr(r.JobID)
 	if !found {
 		// Job with JobId does not exists.
 		// Search the plan files in Azcopy folder and resurrect the Job.
 		if !JobsAdmin.ResurrectJob(r.JobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING, nil, nil, false) {
-			return common.GetJobFromToResponse{
+			return common.GetJobDetailsResponse{
 				ErrorMsg: fmt.Sprintf("Job with JobID %v does not exist or is invalid", r.JobID),
 			}
 		}
@@ -715,7 +713,7 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 	// Get zeroth part of the job part plan.
 	jp0, ok := jm.JobPartMgr(0)
 	if !ok {
-		return common.GetJobFromToResponse{
+		return common.GetJobDetailsResponse{
 			ErrorMsg: fmt.Sprintf("error getting the job's FromTo with JobID %v", r.JobID),
 		}
 	}
@@ -723,15 +721,16 @@ func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
 	// Use first transfer's source/destination as represent.
 	source, destination, _ := jp0.Plan().TransferSrcDstStrings(0)
 	if source == "" && destination == "" {
-		return common.GetJobFromToResponse{
+		return common.GetJobDetailsResponse{
 			ErrorMsg: fmt.Sprintf("error getting the source/destination with JobID %v", r.JobID),
 		}
 	}
 
-	return common.GetJobFromToResponse{
+	return common.GetJobDetailsResponse{
 		ErrorMsg:    "",
 		FromTo:      jp0.Plan().FromTo,
 		Source:      source,
 		Destination: destination,
+		TrailingDot: jp0.Plan().DstFileData.TrailingDot,
 	}
 }

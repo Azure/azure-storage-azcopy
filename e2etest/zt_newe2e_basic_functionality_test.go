@@ -1,10 +1,12 @@
 package e2etest
 
 import (
-	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"strconv"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -346,7 +348,7 @@ func (s *BasicFunctionalitySuite) Scenario_SingleFileUploadDownload_EmptySAS(svm
 		})
 
 	// Validate that the stdout contains the missing sas message
-	ValidateMessageOutput(svm, stdout, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL.")
+	ValidateMessageOutput(svm, stdout, "Please authenticate using Microsoft Entra ID (https://aka.ms/AzCopy/AuthZ), use AzCopy login, or append a SAS token to your Azure URL.", true)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_Sync_EmptySASErrorCodes(svm *ScenarioVariationManager) {
@@ -410,6 +412,57 @@ func (s *BasicFunctionalitySuite) Scenario_Copy_EmptySASErrorCodes(svm *Scenario
 
 	// Validate that the stdout contains these error URLs
 	ValidateContainsError(svm, stdout, []string{"https://aka.ms/AzCopyError/NoAuthenticationInformation", "https://aka.ms/AzCopyError/ResourceNotFound"})
+}
+
+// Test of Copy to UnsafeDestinations (Windows Local dest)
+func (s *BasicFunctionalitySuite) Scenario_CopyUnSafeDest(svm *ScenarioVariationManager) {
+	azCopyVerb := AzCopyVerbCopy
+
+	fileName := "file."
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()), // Only source is File - Windows Local & Blob doesn't support T.D
+		ResourceDefinitionObject{
+			ObjectName: pointerTo(fileName),
+			Body:       body,
+		})
+
+	dstObj := CreateResource[ContainerResourceManager](svm,
+		GetRootResource(svm,
+			ResolveVariation(svm, []common.Location{common.ELocation.File(),
+				common.ELocation.Local()})),
+		ResourceDefinitionContainer{}).GetObject(svm, "file", common.EEntityType.File())
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm,
+					CreateAzCopyTargetOptions{
+						SASTokenOptions: sasOpts,
+					}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive:   pointerTo(true),
+					TrailingDot: to.Ptr(common.ETrailingDotOption.AllowToUnsafeDestination()), // Allow download to unsafe Local destination
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj,
+		ResourceDefinitionObject{
+			Body: body,
+		}, false)
 }
 
 func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariationManager) {
@@ -482,5 +535,5 @@ func (s *BasicFunctionalitySuite) Scenario_TagsPermission(svm *ScenarioVariation
 		},
 	)
 
-	ValidateMessageOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission")
+	ValidateMessageOutput(svm, stdOut, "Authorization failed during an attempt to set tags, please ensure you have the appropriate Tags permission", true)
 }
