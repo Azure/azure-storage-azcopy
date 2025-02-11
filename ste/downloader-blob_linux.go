@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package ste
@@ -82,7 +83,16 @@ func (bd *blobDownloader) CreateFile(jptm IJobPartTransferMgr, destination strin
 		return
 	}
 
-	err = syscall.Fallocate(int(file.(*os.File).Fd()), 0, 0, size)
+	for i := 0; i < 5; i++ {
+		err = syscall.Fallocate(int(file.(*os.File).Fd()), 0, 0, size)
+		if err == nil {
+			break
+		}
+		if err != syscall.EINTR { // Perform up to 5 EINTR error retries
+			break
+		}
+	}
+
 	if err == syscall.ENOTSUP {
 		err = file.(*os.File).Truncate(size) // err will get returned at the end
 	}
