@@ -18,7 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-
 package cmd
 
 import (
@@ -707,11 +706,10 @@ type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
 
 var syncHandler CustomSyncHandler = nil
 
-// +build smslidingwindow
-
-var syncHandler = moverSyncHandler
-
 func (cca *cookedSyncCmdArgs) process() (err error) {
+	// +build smslidingwindow
+	syncHandler := moverSyncHandler
+	
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
@@ -773,11 +771,6 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
 		}
 	}
-	if !cca.recursive {
-		glcm.Info("Recursive flag is set to false, only top level files and folders will be copied")
-		syncHandler = nil
-	}
-	syncHandler = nil
 	if syncHandler == nil {
 		enumerator, err := cca.initEnumerator(ctx)
 		if err != nil {
