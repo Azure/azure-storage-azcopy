@@ -1,3 +1,5 @@
+// +build smslidingwindow
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy

@@ -18,6 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+
 package cmd
 
 import (
@@ -704,7 +705,11 @@ Final Job Status: %v%s%s
 
 type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
 
-var syncHandler CustomSyncHandler = moverSyncHandler
+var syncHandler CustomSyncHandler = nil
+
+// +build smslidingwindow
+
+var syncHandler = moverSyncHandler
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
