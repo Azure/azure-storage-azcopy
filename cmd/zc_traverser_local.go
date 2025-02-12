@@ -59,8 +59,7 @@ type localTraverser struct {
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
 
-	// isSourceTraverser is used to determine if the traverser is for source or destination.
-	isSourceTraverser bool
+	syncOptions SyncTraverserOptions
 }
 
 func writeToErrorChannel(errorChannel chan TraverserErrorItemInfo, err ErrorFileInfo) {
@@ -210,18 +209,30 @@ func (e ErrorFileInfo) FullPath() string {
 }
 
 func (e ErrorFileInfo) Name() string {
+	if e.FileInfo == nil {
+		return ""
+	}
 	return e.FileInfo.Name()
 }
 
 func (e ErrorFileInfo) Size() int64 {
+	if e.FileInfo == nil {
+		return 0
+	}
 	return e.FileInfo.Size()
 }
 
 func (e ErrorFileInfo) LastModifiedTime() time.Time {
+	if e.FileInfo == nil {
+		return time.Time{}
+	}
 	return e.FileInfo.ModTime()
 }
 
 func (e ErrorFileInfo) IsDir() bool {
+	if e.FileInfo == nil {
+		return false
+	}
 	return e.FileInfo.IsDir()
 }
 
@@ -687,6 +698,17 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	// it fails here if file does not exist
 	if err != nil {
 		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+
+		if t.errorChannel != nil {
+			ErrorFileInfo := ErrorFileInfo{
+				FilePath: t.fullPath,
+				FileInfo: nil,
+				ErrorMsg: err,
+				Source:   t.syncOptions.isSource,
+			}
+			t.errorChannel <- ErrorFileInfo
+		}
+
 		return fmt.Errorf("failed to scan path %s due to %w", t.fullPath, err)
 	}
 
@@ -770,7 +792,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.isSourceTraverser))
+			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.syncOptions.isSource))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
@@ -884,6 +906,7 @@ func newLocalTraverser(
 		targetHashType:              syncHashType,
 		hashAdapter:                 hashAdapter,
 		stripTopDir:                 stripTopDir,
+		syncOptions:                 syncOptions,
 	}
 	return &traverser, nil
 }

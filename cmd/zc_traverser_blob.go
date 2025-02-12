@@ -73,8 +73,7 @@ type blobTraverser struct {
 
 	isDFS bool
 
-	// isSourceTraverser is used to determine if the traverser is for source or destination.
-	isSourceTraverser bool
+	syncOptions SyncTraverserOptions
 }
 
 // ErrorFileInfo holds information about files and folders that failed enumeration.
@@ -276,13 +275,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	var respErr *azcore.ResponseError
 	if errors.As(err, &respErr) {
 		errorBlobInfo := ErrorBlobInfo{
-			BlobPath:             t.rawURL,
-			BlobSize:             *blobProperties.ContentLength,
-			BlobName:             blobName,
-			BlobLastModifiedTime: *blobProperties.LastModified,
-			ErrorMsg:             err,
-			Source:               t.isSourceTraverser,
-			Dir:                  false,
+			BlobPath: blobURLParts.BlobName,
+			ErrorMsg: err,
+			Source:   t.syncOptions.isSource,
 		}
 
 		// Don't error out unless it's a CPK error just yet
@@ -553,7 +548,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 	for x := range cCrawled {
 		item, workerError := x.Item()
 		if workerError != nil {
-			writeToBlobErrorChannel(t.errorChannel, ErrorBlobInfo{ErrorMsg: workerError, Source: t.isSourceTraverser})
+			writeToBlobErrorChannel(t.errorChannel, ErrorBlobInfo{ErrorMsg: workerError, Source: t.syncOptions.isSource})
 			return workerError
 		}
 
@@ -572,7 +567,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 					BlobLastModifiedTime: object.lastModifiedTime,
 					Dir:                  object.entityType == common.EEntityType.Folder(),
 					ErrorMsg:             processErr,
-					Source:               t.isSourceTraverser})
+					Source:               t.syncOptions.isSource})
 			return processErr
 		}
 	}
@@ -683,7 +678,22 @@ func (t *blobTraverser) serialList(containerClient *container.Client, containerN
 	return nil
 }
 
-func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.Context, recursive, includeDirectoryStubs bool, incrementEnumerationCounter enumerationCounterFunc, s2sPreserveSourceTags bool, cpkOptions common.CpkOptions, includeDeleted, includeSnapshot, includeVersion bool, preservePermissions common.PreservePermissionsOption, isDFS bool) (t *blobTraverser) {
+func newBlobTraverser(
+	rawURL string,
+	serviceClient *service.Client,
+	ctx context.Context, recursive,
+	includeDirectoryStubs bool,
+	incrementEnumerationCounter enumerationCounterFunc,
+	s2sPreserveSourceTags bool,
+	cpkOptions common.CpkOptions,
+	includeDeleted,
+	includeSnapshot,
+	includeVersion bool,
+	preservePermissions common.PreservePermissionsOption,
+	isDFS bool,
+	errorChannel chan TraverserErrorItemInfo,
+	syncOptions SyncTraverserOptions) (t *blobTraverser) {
+
 	t = &blobTraverser{
 		rawURL:                      rawURL,
 		serviceClient:               serviceClient,
@@ -699,6 +709,8 @@ func newBlobTraverser(rawURL string, serviceClient *service.Client, ctx context.
 		includeVersion:              includeVersion,
 		preservePermissions:         preservePermissions,
 		isDFS:                       isDFS,
+		errorChannel:                errorChannel,
+		syncOptions:                 syncOptions,
 	}
 
 	disableHierarchicalScanning := strings.ToLower(common.GetEnvironmentVariable(common.EEnvironmentVariable.DisableHierarchicalScanning()))

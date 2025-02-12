@@ -23,9 +23,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"strings"
 )
 
 // Enumerates an entire blob account, looking into each matching container as it goes
@@ -120,7 +121,8 @@ func (t *blobAccountTraverser) Traverse(preprocessor objectMorpher, processor ob
 
 	for _, v := range cList {
 		containerURL := t.serviceClient.NewContainerClient(v).URL()
-		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter, t.s2sPreserveSourceTags, t.cpkOptions, false, false, false, t.preservePermissions, t.isDFS)
+		containerTraverser := newBlobTraverser(containerURL, t.serviceClient, t.ctx, true, t.includeDirectoryStubs, t.incrementEnumerationCounter,
+			t.s2sPreserveSourceTags, t.cpkOptions, false, false, false, t.preservePermissions, t.isDFS, nil, NewDefaultSyncTraverserOptions())
 
 		preprocessorForThisChild := preprocessor.FollowedBy(newContainerDecorator(v))
 
