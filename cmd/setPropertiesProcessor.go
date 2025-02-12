@@ -47,7 +47,7 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 		},
 		SetPropertiesFlags: cca.propertiesToTransfer,
 		FileAttributes: common.FileTransferAttributes{
-			TrailingDot: cca.trailingDot,
+			TrailingDot: cca.TrailingDot,
 		},
 	}
 

@@ -569,7 +569,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.disableAutoDecoding = raw.disableAutoDecoding
 
-	err = cooked.trailingDot.Parse(raw.trailingDot)
+	err = cooked.TrailingDot.Parse(raw.trailingDot)
 	if err != nil {
 		return cooked, err
 	}
@@ -1243,7 +1243,7 @@ type CookedCopyCmdArgs struct {
 	// Bitmasked uint checking which properties to transfer
 	propertiesToTransfer common.SetPropertiesFlags
 
-	trailingDot common.TrailingDotOption
+	TrailingDot common.TrailingDotOption
 
 	deleteDestinationFileIfNecessary bool
 }
@@ -1573,7 +1573,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		CommandString:  cca.commandString,
 		CredentialInfo: cca.credentialInfo,
 		FileAttributes: common.FileTransferAttributes{
-			TrailingDot: cca.trailingDot,
+			TrailingDot: cca.TrailingDot,
 		},
 	}
 
@@ -1592,7 +1592,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot: cca.trailingDot.IsEnabled(),
+			AllowTrailingDot: cca.TrailingDot.IsEnabled(),
 		}
 	}
 
@@ -1610,8 +1610,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	if cca.FromTo.To() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
-			AllowTrailingDot:       cca.trailingDot.IsEnabled(),
-			AllowSourceTrailingDot: cca.trailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
+			AllowTrailingDot:       cca.TrailingDot.IsEnabled(),
+			AllowSourceTrailingDot: cca.TrailingDot.IsEnabled() && cca.FromTo.From() == common.ELocation.File(),
 		}
 	}
 

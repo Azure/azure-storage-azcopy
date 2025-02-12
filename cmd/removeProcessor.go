@@ -42,7 +42,7 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		LogLevel:       AzcopyLogVerbosity,
 		BlobAttributes: common.BlobTransferAttributes{DeleteSnapshotsOption: cca.deleteSnapshotsOption, PermanentDeleteOption: cca.PermanentDeleteOption},
 		FileAttributes: common.FileTransferAttributes{
-			TrailingDot: cca.trailingDot,
+			TrailingDot: cca.TrailingDot,
 		},
 	}
 
