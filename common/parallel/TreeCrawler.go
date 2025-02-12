@@ -45,6 +45,14 @@ type CrawlResult struct {
 	err  error
 }
 
+type OrderedTqueueInterface interface {
+	MarkProcessed(int32, interface{})
+	Enqueue(DirectoryEntry) int32
+	GetTqueue() chan interface{}
+	SetTargetExited()
+	IsTargetExited() bool
+}
+
 func (r CrawlResult) Item() (interface{}, error) {
 	return r.item, r.err
 }

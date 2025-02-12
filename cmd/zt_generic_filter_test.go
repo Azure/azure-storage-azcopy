@@ -23,10 +23,11 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	chk "gopkg.in/check.v1"
 )
@@ -38,7 +39,7 @@ var _ = chk.Suite(&genericFilterSuite{})
 func TestIncludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
-	raw := rawSyncCmdArgs{}
+	raw := RawSyncCmdArgs{}
 	includePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
 	includeFilter := buildIncludeFilters(includePatternList)[0]
 
@@ -60,7 +61,7 @@ func TestIncludeFilter(t *testing.T) {
 func TestExcludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
-	raw := rawSyncCmdArgs{}
+	raw := RawSyncCmdArgs{}
 	excludePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
 	excludeFilterList := buildExcludeFilters(excludePatternList, false)
 

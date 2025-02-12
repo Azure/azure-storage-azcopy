@@ -24,13 +24,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"sort"
+	"strings"
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/stretchr/testify/assert"
-	"sort"
-	"strings"
-	"testing"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -116,7 +117,7 @@ func TestSyncS2SWithEmptyDestination(t *testing.T) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -512,7 +513,7 @@ func TestSyncS2SContainerAndEmptyVirtualDir(t *testing.T) {
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
@@ -777,7 +778,7 @@ func TestSyncS2SWithExcludeRegexFlag(t *testing.T) {
 	srcContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, srcContainerName)
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
-	raw.excludeRegex = excludeString
+	raw.ExcludeRegex = excludeString
 
 	// make sure the list doesn't include the blobs specified by the exclude flag
 	runSyncAndVerify(a, raw, func(err error) {
@@ -822,7 +823,7 @@ func TestSyncS2SWithIncludeAndExcludeRegexFlag(t *testing.T) {
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	raw.includeRegex = includeString
-	raw.excludeRegex = excludeString
+	raw.ExcludeRegex = excludeString
 
 	// verify that only the blobs specified by the include flag are synced
 	runSyncAndVerify(a, raw, func(err error) {
@@ -870,7 +871,7 @@ func TestDryrunSyncBlobtoBlob(t *testing.T) {
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -919,7 +920,7 @@ func TestDryrunSyncBlobtoBlobJson(t *testing.T) {
 	dstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(a, dstContainerName)
 	raw := getDefaultSyncRawInput(srcContainerURLWithSAS.String(), dstContainerURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)

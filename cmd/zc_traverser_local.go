@@ -854,7 +854,17 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	return finalizer(err)
 }
 
-func newLocalTraverser(ctx context.Context, fullPath string, recursive bool, stripTopDir bool, symlinkHandling common.SymlinkHandlingType, syncHashType common.SyncHashType, incrementEnumerationCounter enumerationCounterFunc, errorChannel chan TraverserErrorItemInfo) (*localTraverser, error) {
+func newLocalTraverser(
+	ctx context.Context,
+	fullPath string,
+	recursive bool,
+	stripTopDir bool,
+	symlinkHandling common.SymlinkHandlingType,
+	syncHashType common.SyncHashType,
+	incrementEnumerationCounter enumerationCounterFunc,
+	errorChannel chan TraverserErrorItemInfo,
+	syncOptions SyncTraverserOptions) (*localTraverser, error) {
+
 	var hashAdapter common.HashDataAdapter
 	if syncHashType != common.ESyncHashType.None() { // Only initialize the hash adapter should we need it.
 		var err error

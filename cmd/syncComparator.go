@@ -22,9 +22,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"reflect"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 const (
@@ -70,8 +71,21 @@ type syncDestinationComparator struct {
 	disableComparison bool
 }
 
-func newSyncDestinationComparator(i *objectIndexer, copyScheduler, cleaner objectProcessor, comparisonHashType common.SyncHashType, preferSMBTime, disableComparison bool) *syncDestinationComparator {
-	return &syncDestinationComparator{sourceIndex: i, copyTransferScheduler: copyScheduler, destinationCleaner: cleaner, preferSMBTime: preferSMBTime, disableComparison: disableComparison, comparisonHashType: comparisonHashType}
+func newSyncDestinationComparator(
+	i *objectIndexer,
+	copyScheduler,
+	cleaner objectProcessor,
+	comparisonHashType common.SyncHashType,
+	preferSMBTime,
+	disableComparison bool) *syncDestinationComparator {
+
+	return &syncDestinationComparator{
+		sourceIndex:           i,
+		copyTransferScheduler: copyScheduler,
+		destinationCleaner:    cleaner,
+		preferSMBTime:         preferSMBTime,
+		disableComparison:     disableComparison,
+		comparisonHashType:    comparisonHashType}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map

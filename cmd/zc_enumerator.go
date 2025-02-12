@@ -364,7 +364,8 @@ func InitResourceTraverser(
 	trailingDot common.TrailingDotOption,
 	destination *common.Location,
 	excludeContainerNames []string,
-	includeVersionsList bool) (ResourceTraverser, error) {
+	includeVersionsList bool,
+	syncOptions SyncTraverserOptions) (ResourceTraverser, error) {
 
 	var output ResourceTraverser
 
@@ -406,7 +407,8 @@ func InitResourceTraverser(
 		}
 
 		output = newListTraverser(resource, location, credential, ctx, recursive, symlinkHandling, getProperties,
-			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
+			listOfFilesChannel, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel,
+			cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
 		return output, nil
 	}
 
@@ -444,12 +446,15 @@ func InitResourceTraverser(
 
 			baseResource := resource.CloneWithValue(cleanLocalPath(basePath))
 			output = newListTraverser(baseResource, location, nil, nil, recursive, symlinkHandling, getProperties,
-				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel, cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
+				globChan, includeDirectoryStubs, incrementEnumerationCounter, s2sPreserveBlobTags, logLevel,
+				cpkOptions, syncHashType, preservePermissions, trailingDot, destination)
 		} else {
 			if ctx != nil {
-				output, _ = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
+				output, _ = newLocalTraverser(*ctx, resource.ValueLocal(), recursive, stripTopDir, symlinkHandling,
+					syncHashType, incrementEnumerationCounter, errorChannel, syncOptions)
 			} else {
-				output, _ = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, stripTopDir, symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel)
+				output, _ = newLocalTraverser(context.TODO(), resource.ValueLocal(), recursive, stripTopDir,
+					symlinkHandling, syncHashType, incrementEnumerationCounter, errorChannel, syncOptions)
 			}
 		}
 	case common.ELocation.Benchmark():
@@ -767,7 +772,7 @@ func newSyncEnumerator(primaryTraverser, secondaryTraverser ResourceTraverser, i
 	}
 }
 
-func (e *syncEnumerator) enumerate() (err error) {
+func (e *syncEnumerator) Enumerate() (err error) {
 	handleAcceptableErrors := func() {
 		switch {
 		case err == nil: // don't do any error checking

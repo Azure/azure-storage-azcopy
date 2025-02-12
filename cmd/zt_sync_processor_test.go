@@ -22,10 +22,11 @@ package cmd
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -40,7 +41,7 @@ func TestLocalDeleter(t *testing.T) {
 
 	// construct the cooked input to simulate user input
 	cca := &cookedSyncCmdArgs{
-		destination:       newLocalRes(dstDirName),
+		Destination:       newLocalRes(dstDirName),
 		deleteDestination: common.EDeleteDestination.True(),
 	}
 
@@ -78,7 +79,7 @@ func TestBlobDeleter(t *testing.T) {
 	// construct the cooked input to simulate user input
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(a, containerName)
 	cca := &cookedSyncCmdArgs{
-		destination:       newRemoteRes(rawContainerURL.String()),
+		Destination:       newRemoteRes(rawContainerURL.String()),
 		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.LocalBlob(),
@@ -94,7 +95,7 @@ func TestBlobDeleter(t *testing.T) {
 	a.Nil(err)
 
 	// validate that the blob was deleted
-	_, err = bc.GetProperties(context.Background(),nil)
+	_, err = bc.GetProperties(context.Background(), nil)
 	a.NotNil(err)
 }
 
@@ -116,7 +117,7 @@ func TestFileDeleter(t *testing.T) {
 	// construct the cooked input to simulate user input
 	rawShareSAS := scenarioHelper{}.getRawShareURLWithSAS(a, shareName)
 	cca := &cookedSyncCmdArgs{
-		destination:       newRemoteRes(rawShareSAS.String()),
+		Destination:       newRemoteRes(rawShareSAS.String()),
 		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
 		deleteDestination: common.EDeleteDestination.True(),
 		fromTo:            common.EFromTo.FileFile(),

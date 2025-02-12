@@ -114,7 +114,7 @@ func TestFileSyncS2SWithEmptyDestination(t *testing.T) {
 	})
 
 	// turn off recursive, this time only top files should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -423,7 +423,7 @@ func TestFileSyncS2SShareAndEmptyDir(t *testing.T) {
 	})
 
 	// turn off recursive, this time only top files should be transferred
-	raw.recursive = false
+	raw.Recursive = false
 	mockedRPC.reset()
 
 	runSyncAndVerify(a, raw, func(err error) {
@@ -512,7 +512,7 @@ func TestDryrunSyncFiletoFile(t *testing.T) {
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -562,7 +562,7 @@ func TestDryrunSyncLocaltoFile(t *testing.T) {
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 	raw := getDefaultSyncRawInput(srcDirName, dstShareURLWithSAS.String())
 	raw.dryrun = true
-	raw.deleteDestination = "true"
+	raw.DeleteDestination = "true"
 
 	runSyncAndVerify(a, raw, func(err error) {
 		a.Nil(err)
@@ -613,7 +613,7 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, srcShareName)
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.preserveSMBInfo = false
+	raw.PreserveSMBInfo = false
 
 	// nothing should be sync since the source is older
 	runSyncAndVerify(a, raw, func(err error) {
