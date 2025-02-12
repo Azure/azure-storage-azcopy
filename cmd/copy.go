@@ -726,32 +726,32 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if cooked.PreservePermissions.IsTruthy() {
 			return cooked, fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
 		}
-		if cooked.s2sPreserveProperties {
+		if cooked.S2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
 		}
-		if cooked.s2sPreserveAccessTier {
+		if cooked.S2sPreserveAccessTier {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
 		}
-		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+		if cooked.S2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
 			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
 		}
-		if cooked.s2sSourceChangeValidation {
+		if cooked.S2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
 		}
-		if cooked.s2sPreserveProperties {
+		if cooked.S2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading to Blob Storage")
 		}
-		if cooked.s2sPreserveAccessTier {
+		if cooked.S2sPreserveAccessTier {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading to Blob Storage")
 		}
-		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+		if cooked.S2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
 			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading to Blob Storage")
 		}
-		if cooked.s2sSourceChangeValidation {
+		if cooked.S2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading to Blob Storage")
 		}
 	case common.EFromTo.LocalFile():
@@ -762,16 +762,16 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to Azure File")
 		}
-		if cooked.s2sPreserveProperties {
+		if cooked.S2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
 		}
-		if cooked.s2sPreserveAccessTier {
+		if cooked.S2sPreserveAccessTier {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
 		}
-		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+		if cooked.S2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
 			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
 		}
-		if cooked.s2sSourceChangeValidation {
+		if cooked.S2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
 		if cooked.blobType != common.EBlobType.Detect() {
@@ -793,16 +793,16 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
 			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while downloading")
 		}
-		if cooked.s2sPreserveProperties {
+		if cooked.S2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while downloading")
 		}
-		if cooked.s2sPreserveAccessTier {
+		if cooked.S2sPreserveAccessTier {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while downloading")
 		}
-		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+		if cooked.S2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
 			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while downloading")
 		}
-		if cooked.s2sSourceChangeValidation {
+		if cooked.S2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
 	case common.EFromTo.BlobFile(),
@@ -843,10 +843,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	// Because of some of our defaults, these must live down here and can't be properly checked.
 	// TODO: Remove the above checks where they can't be done.
-	cooked.s2sPreserveProperties = raw.s2sPreserveProperties
+	cooked.S2sPreserveProperties = raw.s2sPreserveProperties
 	cooked.s2sGetPropertiesInBackend = raw.s2sGetPropertiesInBackend
-	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
-	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
+	cooked.S2sPreserveAccessTier = raw.s2sPreserveAccessTier
+	cooked.S2sSourceChangeValidation = raw.s2sSourceChangeValidation
 
 	// If the user has provided some input with excludeBlobType flag, parse the input.
 	if len(raw.excludeBlobType) > 0 {
@@ -862,7 +862,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 	}
 
-	err = cooked.s2sInvalidMetadataHandleOption.Parse(raw.s2sInvalidMetadataHandleOption)
+	err = cooked.S2sInvalidMetadataHandleOption.Parse(raw.s2sInvalidMetadataHandleOption)
 	if err != nil {
 		return cooked, err
 	}
@@ -1200,21 +1200,21 @@ type CookedCopyCmdArgs struct {
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
-	s2sPreserveProperties bool
+	S2sPreserveProperties bool
 	// useful when preserveS3Properties set to true, enables get S3 objects' or Azure files' properties during s2s copy in backend, the default value is true
 	s2sGetPropertiesInBackend bool
 	// whether user wants to preserve access tier during service to service copy, the default value is true.
 	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
-	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
+	// In such cases, use S2sPreserveAccessTier=false to bypass the access tier copy.
 	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	s2sPreserveAccessTier bool
+	S2sPreserveAccessTier bool
 	// whether user wants to check if source has changed after enumerating, the default value is true.
 	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
-	s2sSourceChangeValidation bool
+	S2sSourceChangeValidation bool
 	// To specify whether user wants to preserve the blob index tags during service to service transfer.
 	S2sPreserveBlobTags bool
 	// specify how user wants to handle invalid metadata.
-	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
+	S2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
 	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
