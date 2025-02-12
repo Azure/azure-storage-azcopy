@@ -40,6 +40,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
+var syncHandler CustomSyncHandler = moverSyncHandler
 type SyncTraverser struct {
 	enumerator *syncEnumerator
 	comparator objectProcessor

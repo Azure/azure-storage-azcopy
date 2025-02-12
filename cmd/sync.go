@@ -707,9 +707,7 @@ type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
 var syncHandler CustomSyncHandler = nil
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
-	// +build smslidingwindow
-	syncHandler := moverSyncHandler
-	
+
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	err = common.SetBackupMode(cca.backupMode, cca.fromTo)
