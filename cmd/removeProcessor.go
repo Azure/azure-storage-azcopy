@@ -33,7 +33,7 @@ func newRemoveTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPart in
 		Fpo:                   fpo,
 		SymlinkHandlingType:   common.ESymlinkHandlingType.Preserve(),       // We want to delete symlinks
 		SourceRoot:            cca.Source.CloneWithConsolidatedSeparators(), // TODO: why do we consolidate here, but not in "copy"? Is it needed in both places or neither? Or is copy just covering the same need differently?
-		CredentialInfo:        cca.credentialInfo,
+		CredentialInfo:        cca.CredentialInfo,
 		ForceIfReadOnly:       cca.ForceIfReadOnly,
 		BlobFSRecursiveDelete: cca.Recursive,
 		SrcServiceClient:      targetServiceClient,

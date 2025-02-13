@@ -50,7 +50,7 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), AzcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, nil, cca.excludeContainer, false, NewDefaultSyncTraverserOptions())
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.CredentialInfo, common.ESymlinkHandlingType.Skip(), cca.ListOfFilesChannel, cca.Recursive, true, cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), AzcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, nil, cca.excludeContainer, false, NewDefaultSyncTraverserOptions())
 
 	// report failure to create traverser
 	if err != nil {
@@ -93,12 +93,12 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	}
 
 	var reauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+	if at, ok := cca.CredentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	var fileClientOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.TrailingDot.IsEnabled()}
@@ -106,8 +106,8 @@ func newRemoveEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator, er
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		cca.Source,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		cca.CredentialInfo.CredentialType,
+		cca.CredentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		fileClientOptions,
 	)
@@ -151,14 +151,14 @@ func removeBfsResources(cca *CookedCopyCmdArgs) (err error) {
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	sourceURL, _ := cca.Source.String()
 	var reauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+	if at, ok := cca.CredentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 
-	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, cca.credentialInfo.CredentialType, cca.credentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
+	targetServiceClient, err := common.GetServiceClientForLocation(cca.FromTo.From(), cca.Source, cca.CredentialInfo.CredentialType, cca.CredentialInfo.OAuthTokenInfo.TokenCredential, &options, nil)
 	if err != nil {
 		return err
 	}

@@ -32,7 +32,7 @@ func setPropertiesTransferProcessor(cca *CookedCopyCmdArgs, numOfTransfersPerPar
 		Fpo:                 fpo,
 		SymlinkHandlingType: common.ESymlinkHandlingType.Preserve(), // we want to set properties on symlink blobs
 		SourceRoot:          cca.Source.CloneWithConsolidatedSeparators(),
-		CredentialInfo:      cca.credentialInfo,
+		CredentialInfo:      cca.CredentialInfo,
 		ForceIfReadOnly:     cca.ForceIfReadOnly,
 		SrcServiceClient:    targetServiceClient,
 

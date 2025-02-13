@@ -574,10 +574,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo, cpkOptions common
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
-// createClientOptions creates generic client options which are required to create any
+// CreateClientOptions creates generic client options which are required to create any
 // client to interact with storage service. Default options are modified to suit azcopy.
 // srcCred is required in cases where source is authenticated via oAuth for S2S transfers
-func createClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedToken, reauthCred *common.ScopedAuthenticator) azcore.ClientOptions {
+func CreateClientOptions(logger common.ILoggerResetable, srcCred *common.ScopedToken, reauthCred *common.ScopedAuthenticator) azcore.ClientOptions {
 	logOptions := ste.LogOptions{}
 
 	if logger != nil {

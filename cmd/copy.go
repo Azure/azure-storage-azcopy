@@ -1168,7 +1168,7 @@ type CookedCopyCmdArgs struct {
 	jobID common.JobID
 
 	// extracted from the input
-	credentialInfo common.CredentialInfo
+	CredentialInfo common.CredentialInfo
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -1311,7 +1311,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 
 	// step 1: create client options
 	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
+	options := &blockblob.ClientOptions{ClientOptions: CreateClientOptions(azcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1395,7 +1395,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 
 	// step 0: initialize pipeline
 	// Reauthentication is theoretically possible here, since stdin is blocked.
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
+	options := &blockblob.ClientOptions{ClientOptions: CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1517,7 +1517,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// Note: Currently, only one credential type is necessary for source and destination.
 	// For upload&download, only one side need credential.
 	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
-	if cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+	if cca.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:      cca.FromTo,
 		source:      cca.Source,
 		destination: cca.Destination,
@@ -1527,13 +1527,13 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType.IsAzureOAuth() {
+	if cca.CredentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			cca.CredentialInfo.OAuthTokenInfo = *tokenInfo
 		}
 	}
 
@@ -1571,7 +1571,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
 		},
 		CommandString:  cca.commandString,
-		CredentialInfo: cca.credentialInfo,
+		CredentialInfo: cca.CredentialInfo,
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.TrailingDot,
 		},
@@ -1588,7 +1588,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
+	options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1616,7 +1616,7 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	var dstReauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+	if at, ok := cca.CredentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
@@ -1625,12 +1625,12 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
+	options = CreateClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		cca.CredentialInfo.CredentialType,
+		cca.CredentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		azureFileSpecificOptions,
 	)

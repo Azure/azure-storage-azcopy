@@ -23,9 +23,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
@@ -97,7 +98,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	}
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	resourceURL := cookedArgs.resourceURL.String()
 	cred := credentialInfo.OAuthTokenInfo.TokenCredential
 

@@ -47,7 +47,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
-	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.credentialInfo, common.ESymlinkHandlingType.Preserve(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), AzcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, nil, cca.excludeContainer, false, NewDefaultSyncTraverserOptions())
+	sourceTraverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &cca.CredentialInfo, common.ESymlinkHandlingType.Preserve(), cca.ListOfFilesChannel, cca.Recursive, false, cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), common.EPreservePermissionsOption.None(), AzcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, nil, cca.excludeContainer, false, NewDefaultSyncTraverserOptions())
 
 	// report failure to create traverser
 	if err != nil {
@@ -74,12 +74,12 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	}
 
 	var reauthTok *common.ScopedAuthenticator
-	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+	if at, ok := cca.CredentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 	var fileClientOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		fileClientOptions = &common.FileClientOptions{AllowTrailingDot: cca.TrailingDot.IsEnabled()}
@@ -88,8 +88,8 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 	targetServiceClient, err := common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		cca.Source,
-		cca.credentialInfo.CredentialType,
-		cca.credentialInfo.OAuthTokenInfo.TokenCredential,
+		cca.CredentialInfo.CredentialType,
+		cca.CredentialInfo.OAuthTokenInfo.TokenCredential,
 		&options,
 		fileClientOptions,
 	)

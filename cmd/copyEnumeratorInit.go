@@ -72,7 +72,10 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	jobPartOrder.S2SPreserveBlobTags = cca.S2sPreserveBlobTags
 
 	dest := cca.FromTo.To()
-	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive, getRemoteProperties, cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags, common.ESyncHashType.None(), cca.PreservePermissions, AzcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, &dest, cca.excludeContainer, false, NewDefaultSyncTraverserOptions())
+	traverser, err = InitResourceTraverser(cca.Source, cca.FromTo.From(), &ctx, &srcCredInfo, cca.SymlinkHandling, cca.ListOfFilesChannel, cca.Recursive,
+		getRemoteProperties, cca.IncludeDirectoryStubs, cca.PermanentDeleteOption, func(common.EntityType) {}, cca.ListOfVersionIDs, cca.S2sPreserveBlobTags,
+		common.ESyncHashType.None(), cca.PreservePermissions, AzcopyLogVerbosity, cca.CpkOptions, nil, cca.StripTopDir, cca.TrailingDot, &dest, cca.excludeContainer,
+		false, NewDefaultSyncTraverserOptions())
 
 	if err != nil {
 		return nil, err
@@ -434,7 +437,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
+	options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)
 
 	sc, err := common.GetServiceClientForLocation(
 		cca.FromTo.To(),

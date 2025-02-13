@@ -22,12 +22,13 @@ package cmd
 
 import (
 	"context"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestVersionEquality(t *testing.T) {
@@ -215,7 +216,7 @@ func TestCheckReleaseMetadata(t *testing.T) {
 	a := assert.New(t)
 
 	// sanity test for checking if the release metadata exists and can be downloaded
-	options := createClientOptions(nil, nil, nil)
+	options := CreateClientOptions(nil, nil, nil)
 
 	blobClient, err := blob.NewClientWithNoCredential(versionMetadataUrl, &blob.ClientOptions{ClientOptions: options})
 	a.NoError(err)

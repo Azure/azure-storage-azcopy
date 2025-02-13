@@ -420,7 +420,7 @@ func InitResourceTraverser(
 		}
 	}
 
-	options := createClientOptions(azcopyScanningLogger, nil, reauthTok)
+	options := CreateClientOptions(azcopyScanningLogger, nil, reauthTok)
 
 	switch location {
 	case common.ELocation.Local():
