@@ -202,7 +202,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	}
 
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:               cca.jobID,
+		JobID:               cca.JobID,
 		CommandString:       cca.commandString,
 		FromTo:              cca.fromTo,
 		Fpo:                 fpo,
@@ -318,7 +318,21 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		// we ALREADY have available a complete map of everything that exists locally
 		// so as soon as we see a remote destination object we can know whether it exists in the local source
 
-		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode).processIfNecessary
+		comparator = newSyncDestinationComparator(
+			indexer,
+			transferScheduler.scheduleCopyTransfer,
+			destCleanerFunc,
+			cca.compareHash,
+			cca.preserveSMBInfo,
+			cca.mirrorMode,
+			func(entityType common.EntityType) {
+				if entityType == common.EEntityType.File() {
+					atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+				} else if entityType == common.EEntityType.Folder() {
+					atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+				}
+			}).processIfNecessary
+
 		finalize = func() error {
 			// schedule every local file that doesn't exist at the destination
 			err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)

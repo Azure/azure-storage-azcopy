@@ -57,8 +57,8 @@ type RawSyncCmdArgs struct {
 	legacyExclude         string // for warning messages only
 	includeRegex          string
 	ExcludeRegex          string
-	compareHash           string
-	localHashStorageMode  string
+	CompareHash           string
+	LocalHashStorageMode  string
 
 	includeDirectoryStubs   bool // Includes hdi_isfolder objects in the sync even w/o preservePermissions.
 	PreservePermissions     bool
@@ -242,7 +242,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	}
 
 	// use the globally generated JobID
-	cooked.jobID = azcopyCurrentJobID
+	cooked.JobID = azcopyCurrentJobID
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {
@@ -312,7 +312,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (valid pairings are Linux->Blob, Blob->Linux, Blob->Blob)")
 	}
 
-	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
+	if err = cooked.compareHash.Parse(raw.CompareHash); err != nil {
 		return cooked, err
 	} else {
 		switch cooked.compareHash {
@@ -323,7 +323,7 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 		}
 	}
 
-	if err = common.LocalHashStorageMode.Parse(raw.localHashStorageMode); err != nil {
+	if err = common.LocalHashStorageMode.Parse(raw.LocalHashStorageMode); err != nil {
 		return cooked, err
 	}
 
@@ -402,6 +402,16 @@ func (raw *RawSyncCmdArgs) Cook() (cookedSyncCmdArgs, error) {
 	cooked.includeDirectoryStubs = raw.includeDirectoryStubs
 	cooked.includeRoot = raw.includeRoot
 
+	// This check is in-line with copy mode.
+	// Note: * can be filename in that case, which means user want to copy file with name "*". For files we don't copy
+	//      top directory. So it will not break any functionality.
+	if cooked.fromTo.From() == common.ELocation.Local() && strings.HasSuffix(cooked.Source.ValueLocal(), "/*") {
+		cooked.StripTopDir = true
+		cooked.Source.Value = strings.TrimSuffix(cooked.Source.Value, "/*")
+	} else {
+		cooked.StripTopDir = false
+	}
+
 	return cooked, nil
 }
 
@@ -462,7 +472,7 @@ type cookedSyncCmdArgs struct {
 	commandString string
 
 	// generated
-	jobID common.JobID
+	JobID common.JobID
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -642,9 +652,9 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// Output the log location if log-level is set to other then NONE
 	var logPathFolder string
 	if azcopyLogPathFolder != "" {
-		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.JobID)
 	}
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.JobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -680,9 +690,9 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 		}
 	}
 
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	err := cookedCancelCmdArgs{jobID: cca.JobID}.process()
 	if err != nil {
-		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
+		lcm.Error("error occurred while cancelling the job " + cca.JobID.String() + ". Failed with error " + err.Error())
 	}
 }
 
@@ -734,8 +744,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.FirstPartOrdered() {
-		Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
-		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.jobID, &lcm)
+		Rpc(common.ERpcCmd.ListJobSummary(), &cca.JobID, &summary)
+		Rpc(common.ERpcCmd.GetJobLCMWrapper(), &cca.JobID, &lcm)
 		jobDone = summary.JobStatus.IsJobDone()
 		totalKnownCount = summary.TotalTransfers
 
@@ -1012,9 +1022,9 @@ func init() {
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 	syncCmd.PersistentFlags().BoolVar(&raw.includeRoot, "include-root", false, "Disabled by default. Enable to include the root directory's properties when persisting properties such as SMB or HNS ACLs")
 
-	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
+	syncCmd.PersistentFlags().StringVar(&raw.CompareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")
 	syncCmd.PersistentFlags().StringVar(&common.LocalHashDir, "hash-meta-dir", "", "When using `--local-hash-storage-mode=HiddenFiles` you can specify an alternate directory to store hash metadata files in (as opposed to next to the related files in the source)")
-	syncCmd.PersistentFlags().StringVar(&raw.localHashStorageMode, "local-hash-storage-mode", common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; valid options are: HiddenFiles (OS Agnostic), XAttr (Linux/MacOS only; requires user_xattr on all filesystems traversed @ source), AlternateDataStreams (Windows only; requires named streams on target volume)")
+	syncCmd.PersistentFlags().StringVar(&raw.LocalHashStorageMode, "local-hash-storage-mode", common.EHashStorageMode.Default().String(), "Specify an alternative way to cache file hashes; valid options are: HiddenFiles (OS Agnostic), XAttr (Linux/MacOS only; requires user_xattr on all filesystems traversed @ source), AlternateDataStreams (Windows only; requires named streams on target volume)")
 
 	// temp, to assist users with change in param names, by providing a clearer message when these obsolete ones are accidentally used
 	syncCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "Legacy include param. DO NOT USE")

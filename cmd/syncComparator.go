@@ -69,6 +69,9 @@ type syncDestinationComparator struct {
 
 	preferSMBTime     bool
 	disableComparison bool
+
+	// Function to increment files/folders not transferred as a result of no change since last sync.
+	incrementNotTransferred func(common.EntityType)
 }
 
 func newSyncDestinationComparator(
@@ -77,15 +80,17 @@ func newSyncDestinationComparator(
 	cleaner objectProcessor,
 	comparisonHashType common.SyncHashType,
 	preferSMBTime,
-	disableComparison bool) *syncDestinationComparator {
+	disableComparison bool,
+	incrementNotTransferred func(common.EntityType)) *syncDestinationComparator {
 
 	return &syncDestinationComparator{
-		sourceIndex:           i,
-		copyTransferScheduler: copyScheduler,
-		destinationCleaner:    cleaner,
-		preferSMBTime:         preferSMBTime,
-		disableComparison:     disableComparison,
-		comparisonHashType:    comparisonHashType}
+		sourceIndex:             i,
+		copyTransferScheduler:   copyScheduler,
+		destinationCleaner:      cleaner,
+		preferSMBTime:           preferSMBTime,
+		disableComparison:       disableComparison,
+		comparisonHashType:      comparisonHashType,
+		incrementNotTransferred: incrementNotTransferred}
 }
 
 // it will only schedule transfers for destination objects that are present in the indexer but stale compared to the entry in the map
@@ -138,6 +143,11 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
 			return f.copyTransferScheduler(sourceObjectInMap)
+		} else {
+			// Neither data nor metadata for the file has changed, hence file is not transferred.
+			if f.incrementNotTransferred != nil {
+				f.incrementNotTransferred(sourceObjectInMap.entityType)
+			}
 		}
 
 		// skip if dest is more recent
