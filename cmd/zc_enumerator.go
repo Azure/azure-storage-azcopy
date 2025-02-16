@@ -293,27 +293,27 @@ func newStoredObject(morpher objectMorpher, name string, relativePath string, en
 }
 
 type ResourceTraverserTemplate struct {
-	location common.Location
-	credential *common.CredentialInfo
-	symlinkHandling common.SymlinkHandlingType
-	listOfFilesChannel chan string
-	recursive bool
-	getProperties bool
-	includeDirectoryStubs bool
-	permanentDeleteOption common.PermanentDeleteOption
+	location                    common.Location
+	credential                  *common.CredentialInfo
+	symlinkHandling             common.SymlinkHandlingType
+	listOfFilesChannel          chan string
+	recursive                   bool
+	getProperties               bool
+	includeDirectoryStubs       bool
+	permanentDeleteOption       common.PermanentDeleteOption
 	incrementEnumerationCounter enumerationCounterFunc
-	listOfVersionIds chan string
-	s2sPreserveBlobTags bool
-	syncHashType common.SyncHashType
-	preservePermissions common.PreservePermissionsOption
-	logLevel common.LogLevel
-	cpkOptions common.CpkOptions
-	errorChannel chan ErrorFileInfo
-	stripTopDir bool
-	trailingDot common.TrailingDotOption
-	destination *common.Location
-	excludeContainerNames []string
-	includeVersionsList bool
+	listOfVersionIds            chan string
+	s2sPreserveBlobTags         bool
+	syncHashType                common.SyncHashType
+	preservePermissions         common.PreservePermissionsOption
+	logLevel                    common.LogLevel
+	cpkOptions                  common.CpkOptions
+	errorChannel                chan TraverserErrorItemInfo
+	stripTopDir                 bool
+	trailingDot                 common.TrailingDotOption
+	destination                 *common.Location
+	excludeContainerNames       []string
+	includeVersionsList         bool
 }
 
 // capable of traversing a structured resource like container or local directory
@@ -768,7 +768,7 @@ type preFilterProvider interface {
 // they define the work flow in the most generic terms
 
 type syncEnumerator struct {
-	primaryTraverserTemplate ResourceTraverserTemplate
+	primaryTraverserTemplate   ResourceTraverserTemplate
 	secondaryTraverserTemplate ResourceTraverserTemplate
 
 	// these allow us to go through the source and destination
@@ -796,15 +796,15 @@ type syncEnumerator struct {
 func newSyncEnumerator(primaryTemplate ResourceTraverserTemplate, secondaryTemplate ResourceTraverserTemplate, primaryTraverser ResourceTraverser, secondaryTraverser ResourceTraverser, indexer *objectIndexer,
 	filters []ObjectFilter, comparator objectProcessor, finalize func() error, ctp *copyTransferProcessor) *syncEnumerator {
 	return &syncEnumerator{
-		primaryTraverserTemplate : primaryTemplate,
-		secondaryTraverserTemplate : secondaryTemplate,
-		primaryTraverser:   primaryTraverser,
-		secondaryTraverser: secondaryTraverser,
-		objectIndexer:      indexer,
-		filters:            filters,
-		objectComparator:   comparator,
-		finalize:           finalize,
-		ctp : ctp,
+		primaryTraverserTemplate:   primaryTemplate,
+		secondaryTraverserTemplate: secondaryTemplate,
+		primaryTraverser:           primaryTraverser,
+		secondaryTraverser:         secondaryTraverser,
+		objectIndexer:              indexer,
+		filters:                    filters,
+		objectComparator:           comparator,
+		finalize:                   finalize,
+		ctp:                        ctp,
 	}
 }
 
