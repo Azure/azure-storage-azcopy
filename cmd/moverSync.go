@@ -40,6 +40,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
+type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
 var syncHandler CustomSyncHandler = moverSyncHandler
 type SyncTraverser struct {
 	enumerator *syncEnumerator

@@ -702,10 +702,6 @@ Final Job Status: %v%s%s
 	return
 }
 
-type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
-
-var syncHandler CustomSyncHandler = nil
-
 func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
