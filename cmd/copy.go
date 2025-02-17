@@ -187,6 +187,12 @@ type rawCopyCmdArgs struct {
 
 	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
 	deleteDestinationFileIfNecessary bool
+	// Opt-in flag to persist additional NFS properties to Azure Files
+	preserveNFSInfo bool
+	// Opt-in flag to persist additional NFS permissions to Azure Files
+	preserveNFSPermissions bool
+	// Opt-in flag to state if the copy is nfs copy
+	isNFSCopy bool
 }
 
 func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -264,6 +270,51 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 
 	result = resourceURL.String()
 
+	return
+}
+func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
+	glcm.Info("NFS copy support addition in progress")
+	cooked.isNFSCopy = raw.isNFSCopy
+	cooked.preserveNFSInfo = raw.preserveNFSInfo && areBothLocationsNFSAware(cooked.FromTo)
+	if err = validatePreserveNFSPropertyOption(cooked.preserveNFSInfo, cooked.FromTo, "preserve-nfs-info"); err != nil {
+		return err
+	}
+
+	isUserPersistingPermissions := raw.preserveNFSPermissions
+	if cooked.preserveNFSInfo && !isUserPersistingPermissions {
+		glcm.Info("Please note: the preserve-nfs-permissions flag is set to false, TODO: Add description here.")
+	}
+	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions, cooked.FromTo, "preserve-nfs-permissions"); err != nil {
+		return err
+	}
+	// TODO: Discuss and add the validation for owner flags if required in case of NFS
+	return nil
+}
+
+func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
+	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.FromTo)
+
+	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
+		return fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (Linux->Blob, Blob->Linux, Blob->Blob)")
+	}
+
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, &cooked.ForceWrite, "preserve-smb-info"); err != nil {
+		return err
+	}
+
+	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
+	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
+		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
+	}
+
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, &cooked.ForceWrite, PreservePermissionsFlag); err != nil {
+		return err
+	}
+	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
+		return err
+	}
+	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.FromTo)
 	return
 }
 
@@ -664,29 +715,17 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.FromTo)
-
-	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
-		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (Linux->Blob, Blob->Linux, Blob->Blob)")
+	if raw.isNFSCopy {
+		err = raw.performNFSSpecificValidation(&cooked)
+		if err != nil {
+			return cooked, err
+		}
+	} else {
+		err = raw.performSMBSpecificValidation(&cooked)
+		if err != nil {
+			return cooked, err
+		}
 	}
-
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, &cooked.ForceWrite, "preserve-smb-info"); err != nil {
-		return cooked, err
-	}
-
-	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
-	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
-	}
-
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, &cooked.ForceWrite, PreservePermissionsFlag); err != nil {
-		return cooked, err
-	}
-	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
-		return cooked, err
-	}
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.FromTo)
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.asSubdir = raw.asSubdir
@@ -935,21 +974,6 @@ func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
 		return errors.New("force-if-read-only is only supported when the target is Azure Files or a Windows file system")
 	}
 	return nil
-}
-
-func areBothLocationsSMBAware(fromTo common.FromTo) bool {
-	// preserverSMBInfo will be true by default for SMB-aware locations unless specified false.
-	// 1. Upload (Windows/Linux -> Azure File)
-	// 2. Download (Azure File -> Windows/Linux)
-	// 3. S2S (Azure File -> Azure File)
-	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") &&
-		(fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
-		return true
-	} else if fromTo == common.EFromTo.FileFile() {
-		return true
-	} else {
-		return false
-	}
 }
 
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
@@ -1246,6 +1270,13 @@ type CookedCopyCmdArgs struct {
 	trailingDot common.TrailingDotOption
 
 	deleteDestinationFileIfNecessary bool
+
+	// Whether the user wants to preserve the NFS properties ...
+	preserveNFSInfo bool
+	// Whether the user wants to preserve the NFS permissions ...
+	preserveNFSPermisssions bool
+	// Specifies whether the copy operation is an NFS copy
+	isNFSCopy bool
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -2208,4 +2239,8 @@ func init() {
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveNFSInfo, "preserve-nfs-info", true, "True by default. Preserves NFS properties. TODO: Add flag description")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveNFSPermissions, "preserve-nfs-permissions", false, "False by default. Preserves NFS permissions. TODO: Add flag description")
+	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, "nfs", false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
 }

@@ -217,6 +217,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		PreservePermissions:     order.PreserveSMBPermissions,
 		PreserveSMBInfo:         order.PreserveSMBInfo,
 		PreservePOSIXProperties: order.PreservePOSIXProperties,
+		PreserveNFSPermissions:  order.PreserveNFSPermissions,
+		PreserveNFSInfo:         order.PreserveNFSInfo,
 		// For S2S copy, per JobPartPlan info
 		S2SGetPropertiesInBackend:      order.S2SGetPropertiesInBackend,
 		S2SSourceChangeValidation:      order.S2SSourceChangeValidation,
