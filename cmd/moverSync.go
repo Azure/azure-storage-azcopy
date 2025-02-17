@@ -285,7 +285,6 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
             fmt.Printf("Continuing sync traversal...\n")
         }
 
-		atomic.AddInt64(&syncQDepth, -1)
 		sync_src := []string{cca.source.Value, dir.(StoredObject).relativePath}
 		sync_dst := []string{cca.destination.Value, dir.(StoredObject).relativePath}
 
@@ -382,10 +381,17 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 			return err
 		}
 
+		// XXX should we worry about case??
+		syncMutex.Lock()
+		delete(stra.enumerator.objectIndexer.indexMap, dir.(StoredObject).relativePath)
+		syncMutex.Unlock()
+
 		atomic.AddInt64(&syncQDepth, int64(len(stra.sub_dirs)))
 		for _, sub_dir := range stra.sub_dirs {
 			enqueueDir(sub_dir)
 		}
+
+		atomic.AddInt64(&syncQDepth, -1)
 
 		return nil
 	}
@@ -399,20 +405,22 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 								fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
 
 	parallelism := 4
-	cCrawled := parallel.Crawl(ctx, root, syncOneDir, parallelism)
+	atomic.AddInt64(&syncQDepth, 1)
+	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
 	cca.waitUntilJobCompletion(false)
 
-	fmt.Printf("Waiting on channel...\n")
-	for x := range cCrawled {
-		_, err := x.Item()
-		if err != nil {
-			fmt.Printf("Got into error!\n")
-			continue
+	// XXX consider using wg
+	for {
+		qd := atomic.AddInt64(&syncQDepth, 0)
+		if qd == 0 {
+			fmt.Printf("Sync traversers exited..\n")
+			break
 		}
+		fmt.Printf("Waiting for sync traversers to exit..\n")
+		time.Sleep(10 * 60 * time.Second)
 	}
-	fmt.Printf("Done waiting on channel...\n")
-	fmt.Printf("Stopping monitor and waiting...\n")
+
 	atomic.AddInt32(&syncMonitorRun, -1)
 
 	for {
@@ -421,17 +429,11 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 			fmt.Printf("Sync monitor exited, quitting..\n")
 			break
 		}
-		fmt.Printf("\nWaiting for sync monitor to exit...\n")
-		time.Sleep(1 * time.Second)
+		fmt.Printf("Waiting for sync monitor to exit...\n")
+		time.Sleep(1 * 10 * time.Second)
 	}
 
-	for {
-		fmt.Printf("Waiting for 1 hour in a loop until completion...\n")
-		time.Sleep(1 * 3600 * time.Second)
-	}
-
-	// execute the finalize func which may perform useful clean up steps
-	fmt.Printf("GOD: Enumerator finalize...\n")
+	fmt.Printf("Enumerator finalize running...\n")
 	err = enumerator.finalize()
 	if err != nil {
 		fmt.Printf("Sync finalize failed!!\n")
