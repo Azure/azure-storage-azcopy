@@ -26,7 +26,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
 	"strings"
-	"sync"
+	//"sync"
 
 	"github.com/pkg/errors"
 
