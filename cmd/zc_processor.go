@@ -26,6 +26,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -124,8 +125,9 @@ func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 	return json.Marshal(surrogate)
 }
 
-func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
+var transferMutex sync.Mutex
 
+func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
 	// Escape paths on destinations where the characters are invalid
 	// And re-encode them where the characters are valid.
 	var srcRelativePath, dstRelativePath string
@@ -217,6 +219,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		return nil
 	}
 
+	transferMutex.Lock()
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
 		resp := s.sendPartToSte()
 
@@ -234,6 +237,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
 	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
+	transferMutex.Unlock()
 
 	switch copyTransfer.EntityType {
 	case common.EEntityType.File():
