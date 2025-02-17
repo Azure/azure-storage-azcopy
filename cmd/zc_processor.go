@@ -125,7 +125,7 @@ func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
 	return json.Marshal(surrogate)
 }
 
-var transferMutex sync.Mutex
+//var transferMutex sync.Mutex
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) (err error) {
 	// Escape paths on destinations where the characters are invalid
@@ -219,7 +219,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 		return nil
 	}
 
-	transferMutex.Lock()
+	//transferMutex.Lock()
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
 		fmt.Printf("GOD: sendPartToSte: partNum=%v\n", s.copyJobTemplate.PartNum)
 		resp := s.sendPartToSte()
@@ -238,7 +238,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers.List = append(s.copyJobTemplate.Transfers.List, copyTransfer)
 	s.copyJobTemplate.Transfers.TotalSizeInBytes += uint64(copyTransfer.SourceSize)
-	transferMutex.Unlock()
+	//transferMutex.Unlock()
 
 	switch copyTransfer.EntityType {
 	case common.EEntityType.File():

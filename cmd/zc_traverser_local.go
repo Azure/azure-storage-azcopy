@@ -26,8 +26,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"hash"
 	"io"
 	"io/fs"
@@ -38,6 +36,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
@@ -777,19 +778,20 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 				}
 
 				if entry.IsDir() {
-					 continue
+
 					// it doesn't make sense to transfer directory properties when not recurring
-					//entityType = common.EEntityType.Folder()
-				//} else {
-				//	entityType = common.EEntityType.File()
+					entityType = common.EEntityType.Folder()
+					//continue
+				} else {
+					entityType = common.EEntityType.File()
 				}
 
 				if t.incrementEnumerationCounter != nil {
-					//if entry.IsDir() {
-					//	t.incrementEnumerationCounter(common.EEntityType.Folder())
-					//} else {
-						t.incrementEnumerationCounter(common.EEntityType.File())
-					//}
+					if entry.IsDir() {
+						t.incrementEnumerationCounter(common.EEntityType.Folder())
+					} else {
+					        t.incrementEnumerationCounter(common.EEntityType.File())
+					}
 				}
 
 				err := processIfPassedFilters(filters,
