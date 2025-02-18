@@ -35,7 +35,7 @@ import (
 	"bufio"
 	"net/http"
 	_ "net/http/pprof"
-
+        "io/fs"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
