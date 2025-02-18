@@ -44,12 +44,15 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.SetErrorMessage(msg)
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
 
-	if (jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties() ||
-						srcInfoProvider.EntityType() != common.EEntityType.File()) {
+	if jptm.GetOverwriteOption() != common.EOverwriteOption.PosixProperties() ||
+		srcInfoProvider.EntityType() != common.EEntityType.File() {
 		panic("configuration error. Source Info Provider does not have FileProperties entity type")
 	}
 
@@ -57,6 +60,9 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.SetErrorMessage(msg)
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
@@ -64,6 +70,7 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 	if !ok {
 		jptm.LogSendError(info.Source, info.Destination, "sender implementation does not support copying properties alone", 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetErrorMessage("sender implementation does not support copying properties alone")
 		jptm.ReportTransferDone()
 		return
 	}
@@ -73,11 +80,14 @@ func anyToRemote_fileProperties(jptm IJobPartTransferMgr, info *TransferInfo, pa
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.SetErrorMessage(msg)
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
 
 	jptm.SetNumberOfChunks(1)
 	jptm.SetActionAfterLastChunk(func() { commonSenderCompletion(jptm, baseSender, info) }) // for consistency run standard Epilogue
-	jptm.ScheduleChunks(s.GenerateCopyMetadata(id)) // Just one chunk to schedule
+	jptm.ScheduleChunks(s.GenerateCopyMetadata(id))                                         // Just one chunk to schedule
 }

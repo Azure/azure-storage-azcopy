@@ -40,6 +40,9 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.SetErrorMessage(msg)
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
@@ -51,6 +54,9 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 	if err != nil {
 		jptm.LogSendError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.SetErrorMessage(msg)
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
@@ -58,6 +64,7 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 	if !ok {
 		jptm.LogSendError(info.Source, info.Destination, "sender implementation does not support folders", 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetErrorMessage("sender implementation does not support folders")
 		jptm.ReportTransferDone()
 		return
 	}
@@ -74,6 +81,9 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 		case folderPropertiesNotOverwroteInCreation{}:
 			jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")
 			jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists()) // using same status for both files and folders, for simplicity
+			_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+			jptm.SetErrorMessage(msg)
+			jptm.SetErrorCode(int32(status))
 			jptm.ReportTransferDone()
 			return
 		default:
@@ -87,6 +97,9 @@ func anyToRemote_folder(jptm IJobPartTransferMgr, info *TransferInfo, pacer pace
 		if !shouldSetProps {
 			jptm.LogAtLevelForCurrentTransfer(common.LogWarning, "Folder already exists, so due to the --overwrite option, its properties won't be set")
 			jptm.SetStatus(common.ETransferStatus.SkippedEntityAlreadyExists()) // using same status for both files and folders, for simplicity
+			_, status, msg := ErrorEx{err}.ErrorCodeAndString()
+			jptm.SetErrorMessage(msg)
+			jptm.SetErrorCode(int32(status))
 			jptm.ReportTransferDone()
 			return
 		}
