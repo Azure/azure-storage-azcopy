@@ -400,8 +400,8 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 			fmt.Printf("Sync traversers exited..\n")
 			break
 		}
-		fmt.Printf("Waiting for sync traversers to exit..\n")
-		time.Sleep(10 * 60 * time.Second)
+		// fmt.Printf("Waiting for sync traversers to exit..\n")
+		time.Sleep(1 * time.Second)
 	}
 
 	atomic.AddInt32(&syncMonitorRun, -1)
@@ -412,8 +412,8 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 			fmt.Printf("Sync monitor exited, quitting..\n")
 			break
 		}
-		fmt.Printf("Waiting for sync monitor to exit...\n")
-		time.Sleep(1 * 10 * time.Second)
+		// fmt.Printf("Waiting for sync monitor to exit...\n")
+		time.Sleep(1 * time.Second)
 	}
 
 	fmt.Printf("Enumerator finalize running...\n")
