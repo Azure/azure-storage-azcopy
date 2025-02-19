@@ -43,7 +43,6 @@ const (
 // 100-nanosecond intervals from Windows Epoch (January 1, 1601) to Unix Epoch (January 1, 1970).
 const (
 	TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH = 116444736000000000
-	EINTR_RETRY_COUNT                      = 5
 )
 
 // windows.Filetime.
