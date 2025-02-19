@@ -420,7 +420,7 @@ func (ja *jobsAdmin) ListJobs(givenStatus common.JobStatus) common.ListJobsRespo
 	files := func(ext string) []os.FileInfo {
 		var files []os.FileInfo
 		_ = filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && strings.HasSuffix(fileInfo.Name(), ext) {
+			if !fileInfo.IsDir() && fileInfo.Size() != 0 && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
 			return nil
