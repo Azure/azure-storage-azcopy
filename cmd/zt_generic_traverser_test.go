@@ -416,7 +416,7 @@ func TestWalkWithSymlinksBreakLoop(t *testing.T) {
 		fileCount++
 		return nil
 	},
-		common.ESymlinkHandlingType.Follow(), nil, true, nil)
+		common.ESymlinkHandlingType.Follow(), nil, true, nil))
 
 	a.Equal(3, fileCount)
 }
