@@ -73,6 +73,31 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	// GetProperties is enabled by default as sync supports both upload and download.
 	// This property only supports Files and S3 at the moment, but provided that Files sync is coming soon, enable to avoid stepping on Files sync work
 	dest := cca.fromTo.To()
+
+	srcTraverserTemplate := ResourceTraverserTemplate{
+		location:                    cca.fromTo.From(),
+		credential:                  &srcCredInfo,
+		symlinkHandling:             common.ESymlinkHandlingType.Skip(),
+		listOfFilesChannel:          nil,
+		recursive:                   cca.recursive,
+		getProperties:               true,
+		includeDirectoryStubs:       includeDirStubs,
+		permanentDeleteOption:       common.EPermanentDeleteOption.None(),
+		incrementEnumerationCounter: func(entityType common.EntityType) {},
+		listOfVersionIds:            nil,
+		s2sPreserveBlobTags:         cca.s2sPreserveBlobTags,
+		syncHashType:                cca.compareHash,
+		preservePermissions:         cca.preservePermissions,
+		logLevel:                    AzcopyLogVerbosity,
+		cpkOptions:                  cca.cpkOptions,
+		errorChannel:                nil,
+		stripTopDir:                 false,
+		trailingDot:                 cca.trailingDot,
+		destination:                 &dest,
+		excludeContainerNames:       nil,
+		includeVersionsList:         false,
+	}
+
 	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
@@ -90,6 +115,34 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 
 	if err != nil {
 		return nil, err
+	}
+
+	dstTraverserTemplate := ResourceTraverserTemplate{
+		location:              cca.fromTo.To(),
+		credential:            &dstCredInfo,
+		symlinkHandling:       common.ESymlinkHandlingType.Skip(),
+		listOfFilesChannel:    nil,
+		recursive:             cca.recursive,
+		getProperties:         true,
+		includeDirectoryStubs: includeDirStubs,
+		permanentDeleteOption: common.EPermanentDeleteOption.None(),
+		incrementEnumerationCounter: func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+			}
+		},
+		listOfVersionIds:      nil,
+		s2sPreserveBlobTags:   cca.s2sPreserveBlobTags,
+		syncHashType:          cca.compareHash,
+		preservePermissions:   cca.preservePermissions,
+		logLevel:              AzcopyLogVerbosity,
+		cpkOptions:            cca.cpkOptions,
+		errorChannel:          nil,
+		stripTopDir:           false,
+		trailingDot:           cca.trailingDot,
+		destination:           nil,
+		excludeContainerNames: nil,
+		includeVersionsList:   false,
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -351,7 +404,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 			return nil
 		}
 
-		return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize), nil
+		return newSyncEnumerator(srcTraverserTemplate, dstTraverserTemplate, sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize, transferScheduler), nil
 	default:
 		indexer.isDestinationCaseInsensitive = IsDestinationCaseInsensitive(cca.fromTo)
 		// in all other cases (download and S2S), the destination is scanned/indexed first
@@ -392,7 +445,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 			return nil
 		}
 
-		return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize), nil
+		return newSyncEnumerator(dstTraverserTemplate, srcTraverserTemplate, destinationTraverser, sourceTraverser, indexer, filters, comparator, finalize, transferScheduler), nil
 	}
 }
 

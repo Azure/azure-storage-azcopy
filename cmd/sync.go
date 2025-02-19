@@ -852,21 +852,26 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	enumerator, err := cca.InitEnumerator(ctx, nil)
-	if err != nil {
-		return err
+	if customSyncHandler == nil {
+		enumerator, err := cca.InitEnumerator(ctx, nil)
+		if err != nil {
+			return err
+		}
+
+		// trigger the progress reporting
+		if !cca.dryrunMode {
+			cca.waitUntilJobCompletion(false)
+		}
+
+		// trigger the enumeration
+		err = enumerator.Enumerate()
+		if err != nil {
+			return err
+		}
+	} else {
+		err = customSyncHandler(cca, ctx)
 	}
 
-	// trigger the progress reporting
-	if !cca.dryrunMode {
-		cca.waitUntilJobCompletion(false)
-	}
-
-	// trigger the enumeration
-	err = enumerator.Enumerate()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 

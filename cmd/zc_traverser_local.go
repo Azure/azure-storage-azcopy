@@ -872,14 +872,23 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 						}
 					}
 				}
-
-				if entry.IsDir() {
-					continue
-					// it doesn't make sense to transfer directory properties when not recurring
+				if counterIncrementer == nil {
+					if entry.IsDir() {
+						continue
+					}
+				} else {
+					if entry.IsDir() {
+						entityType = common.EEntityType.Folder()
+					} else {
+						entityType = common.EEntityType.File()
+					}
 				}
-
 				if t.incrementEnumerationCounter != nil {
-					t.incrementEnumerationCounter(common.EEntityType.File())
+					if counterIncrementer == nil {
+						t.incrementEnumerationCounter(common.EEntityType.File())
+					} else {
+						counterIncrementer(entry, t)
+					}
 				}
 
 				err := processIfPassedFilters(filters,
