@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -64,4 +65,24 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 	fullPath := path + "\\" + fileName
 	err = common.CreateParentDirectoryIfNotExist(fullPath, tracker)
 	a.Nil(err)
+}
+
+// Test EINTR errors are not returned on Linux
+func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		return // EINTR errors are POSIX specific
+	}
+	a := assert.New(t)
+	destinationPath := "/"
+
+	plan := &ste.JobPartPlanHeader{}
+	fpo := common.EFolderPropertiesOption.AllFolders()
+	tracker := ste.NewFolderCreationTracker(fpo, plan)
+
+	_, err := common.CreateFileOfSizeWithWriteThroughOption(destinationPath, 1,
+		false,
+		tracker,
+		false)
+
+	a.NoError(err, "Error creating file")
 }

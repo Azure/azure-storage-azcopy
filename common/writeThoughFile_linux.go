@@ -43,6 +43,7 @@ const (
 // 100-nanosecond intervals from Windows Epoch (January 1, 1601) to Unix Epoch (January 1, 1970).
 const (
 	TICKS_FROM_WINDOWS_EPOCH_TO_UNIX_EPOCH = 116444736000000000
+	EINTR_RETRY_COUNT                      = 5
 )
 
 // windows.Filetime.
@@ -180,12 +181,9 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return f, err
 	}
 
-	for i := 0; i < 5; i++ { // // Perform up to 5 EINTR error retries
+	for i := 0; i < EINTR_RETRY_COUNT; i++ { // Perform up to 5 EINTR error retries
 		err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
-		if err == nil {
-			break
-		}
-		if err != syscall.EINTR {
+		if err == nil || err != syscall.EINTR {
 			break
 		}
 	}
