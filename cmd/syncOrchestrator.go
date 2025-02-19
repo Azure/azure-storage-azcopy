@@ -42,6 +42,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
+var UseSyncOrchestrator = true
+
 type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
 
 var customSyncHandler CustomSyncHandler = syncOrchestratorHandler
@@ -57,6 +59,10 @@ func IncrementCounter(entry fs.DirEntry, t *localTraverser) error {
 		t.incrementEnumerationCounter(common.EEntityType.File())
 	}
 	return nil
+}
+
+func GetCustomSyncHandlerInfo() string {
+	return "Sync Handler: Sliding Window"
 }
 
 type SyncTraverser struct {

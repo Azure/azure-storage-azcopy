@@ -852,7 +852,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	if customSyncHandler == nil {
+	if !UseSyncOrchestrator {
 		enumerator, err := cca.InitEnumerator(ctx, nil)
 		if err != nil {
 			return err
