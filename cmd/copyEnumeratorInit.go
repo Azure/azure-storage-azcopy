@@ -55,7 +55,7 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	if cca.isNFSCopy {
 		jobPartOrder.PreserveNFSPermissions = cca.preserveNFSPermisssions
-		jobPartOrder.PreserveSMBInfo = cca.preserveNFSInfo
+		jobPartOrder.PreserveNFSInfo = cca.preserveNFSInfo
 	} else {
 		jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
 		jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
