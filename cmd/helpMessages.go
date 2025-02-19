@@ -10,7 +10,7 @@ const rootCmdLongDescription = "AzCopy " + common.AzcopyVersion +
 Project URL: github.com/Azure/azure-storage-azcopy
 
 AzCopy is a command line tool that moves data into and out of Azure Storage.
-To report issues or to learn more about the tool, go to github.com/Azure/azure-storage-azcopy
+To report issues or to learn more about the tool, go to github.com/Azure/azure-storage-azcopy.
 
 The general format of the commands is: 'azcopy [command] [arguments] --[flag-name]=[flag-value]'.
 `
@@ -19,27 +19,27 @@ The general format of the commands is: 'azcopy [command] [arguments] --[flag-nam
 const copyCmdShortDescription = "Copies source data to a destination location"
 
 const copyCmdLongDescription = `
-Copies source data to a destination location. The supported directions are:
-  - local <-> Azure Blob (SAS or OAuth authentication)
-  - local <-> Azure Files (Share/directory SAS or OAuth authentication)
-  - local <-> ADLS Gen 2 (SAS, OAuth, or SharedKey authentication)
-  - Azure Blob (SAS, OAuth or public authentication) -> Azure Blob (SAS or OAuth authentication)
-  - ADLS Gen2 (SAS or OAuth authentication) <-> ADLS Gen2 (SAS or OAuth authentication)
-  - ADLS Gen2 (SAS or OAuth authentication) <-> Azure Blob (SAS or OAuth authentication)
-  - Azure Blob (SAS, OAuth or public) -> Azure Files (SAS or OAuth authentication)
-  - Azure Files (SAS or OAuth authentication) -> Azure Files (SAS or OAuth authentication)
-  - Azure Files (SAS or OAuth authentication) -> Azure Blob (SAS or OAuth authentication)
-  - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
-  - Google Cloud Storage (Service Account Key) -> Azure Block Blob (SAS or OAuth authentication)
+Copies source data to a destination location. The supported directions and forms of authorization are:
+  - local <-> Azure Blob (Microsoft Entra ID or Shared access signature (SAS))
+  - local <-> Azure Files (Microsoft Entra ID or Share/directory SAS)
+  - local <-> Azure Data Lake Storage (Microsoft Entra ID, SAS, or Shared Key)
+  - Azure Blob (Microsoft Entra ID, SAS, public) -> Azure Blob (Microsoft Entra ID or SAS)
+  - Data Lake Storage (Microsoft Entra ID or SAS) <-> Data Lake Storage (Microsoft Entra ID or SAS)
+  - Data Lake Storage (Microsoft Entra ID or SAS) <-> Azure Blob (Microsoft Entra ID or SAS)
+  - Azure Blob (Microsoft Entra ID, SAS or public) -> Azure Files (Microsoft Entra ID or SAS)
+  - Azure Files (Microsoft Entra ID or SAS) -> Azure Files (Microsoft Entra ID or SAS)
+  - Azure Files (Microsoft Entra ID or SAS) -> Azure Blob (Microsoft Entra ID or SAS)
+  - AWS S3 (Access Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
+  - Google Cloud Storage (Service Account Key) -> Azure Block Blob (Microsoft Entra ID or SAS)
 
 Please refer to the examples for more information.
 
 Advanced:
 AzCopy does not support modifications to the source or destination during a transfer. 
 
-AzCopy automatically detects the content type of the files when uploading from the local disk, based on the file extension or content (if no extension is specified).
+When you upload files from a local disk, AzCopy automatically detects the content type of the files based on the file extension or content (if no extension is specified).
 
-The built-in lookup table is small, but on Unix, it is augmented by the local system's mime.types file(s) if available under one or more of these names:
+The built-in lookup table is small, but on Unix, it is augmented by the local system's mime.types file(s) if those files are available under one or more of these names:
 
 - /etc/mime.types
 - /etc/apache2/mime.types
@@ -49,7 +49,7 @@ On Windows, MIME types are extracted from the registry. This feature can be turn
 
 ` + environmentVariableNotice
 
-const copyCmdExample = `Upload a single file by using OAuth authentication. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
+const copyCmdExample = `Upload a single file by using Microsoft Entra ID authorization. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
 
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
 
@@ -65,7 +65,7 @@ Upload a single file by using a SAS token and piping (block blobs only):
   
   - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" --from-to PipeBlob
 
-Upload a single file by using OAuth and piping (block blobs only):
+Upload a single file by using piping (block blobs only). This example assumes that you've authorized access by using Microsoft Entra ID:
 
   - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --from-to PipeBlob
 
@@ -91,7 +91,7 @@ Upload files and directories to Azure Storage account and set the query-string e
 	- https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-index-how-to?tabs=azure-portal
 	- While setting tags on the blobs, there are additional permissions('t' for tags) in SAS without which the service will give authorization error back.
 
-Download a single file by using OAuth authentication. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
+Download a single file by using Microsoft Entra ID authorization. If you have not yet logged into AzCopy, please run the azcopy login command before you run the following command.
 
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" "/path/to/file.txt"
 
@@ -103,7 +103,7 @@ Download a single file by using a SAS token and then piping the output to a file
   
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" --from-to BlobPipe > "/path/to/file.txt"
 
-Download a single file by using OAuth and then piping the output to a file (block blobs only):
+Download a single file by piping the output to a file (block blobs only). This example assumes that you've authorized access by using Microsoft Entra ID
   
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --from-to BlobPipe > "/path/to/file.txt"
 
@@ -141,7 +141,7 @@ Copy a single blob to another blob by using a SAS token.
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Copy a single blob to another blob by using a SAS token and an OAuth token. You have to use a SAS token at the end of the source account URL if you do not have the right permissions to read it with the identity used for login. 
+Copy a single blob to another blob by using a SAS token on the source URL and Microsoft Entra ID authorization at the destination. You have to use a SAS token at the end of the source account URL if you do not have the right permissions to read it with the identity used for login. 
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
 
@@ -153,7 +153,7 @@ Copy all blob containers, directories, and blobs from storage account to another
 
   - azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
-Copy a single object to Blob Storage from Amazon Web Services (AWS) S3 by using an access key and a SAS token. First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
+Copy a single object to Blob Storage from AWS S3 by using an access key and a SAS token. First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
   
   - azcopy cp "https://s3.amazonaws.com/[bucket]/[object]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
@@ -163,11 +163,11 @@ Copy an entire directory to Blob Storage from AWS S3 by using an access key and 
     
     Please refer to https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html to better understand the [folder] placeholder.
 
-Copy all buckets to Blob Storage from Amazon Web Services (AWS) by using an access key and a SAS token. First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
+Copy all buckets to Blob Storage from AWS by using an access key and a SAS token. First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
  
   - azcopy cp "https://s3.amazonaws.com/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
-Copy all buckets to Blob Storage from an Amazon Web Services (AWS) region by using an access key and a SAS token. First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
+Copy all buckets to Blob Storage from an AWS region by using an access key and a SAS token. First, set the environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for AWS S3 source.
  
   - azcopy cp "https://s3-[region].amazonaws.com/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
@@ -175,7 +175,7 @@ Copy a subset of buckets by using a wildcard symbol (*) in the bucket name. Like
 
   - azcopy cp "https://s3.amazonaws.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
-Copy blobs from one blob storage to another and preserve the tags from source. To preserve tags, use the following syntax :
+Copy blobs from one blob storage to another and preserve the tags from source. To preserve tags, use the following syntax:
   	
   - azcopy cp "https://[account].blob.core.windows.net/[source_container]/[path/to/directory]?[SAS]" "https://[account].blob.core.windows.net/[destination_container]/[path/to/directory]?[SAS]" --s2s-preserve-blob-tags=true
 
@@ -191,19 +191,19 @@ Copy a single object to Blob Storage from Google Cloud Storage (GCS) by using a 
   
   - azcopy cp "https://storage.cloud.google.com/[bucket]/[object]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Copy an entire directory to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
+Copy an entire directory to Blob Storage from GCS by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
  
   - azcopy cp "https://storage.cloud.google.com/[bucket]/[folder]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Copy an entire bucket to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
+Copy an entire bucket to Blob Storage from GCS by using a service account key and a SAS token. First, set the environment variable GOOGLE_APPLICATION_CREDENTIALS for GCS source.
  
   - azcopy cp "https://storage.cloud.google.com/[bucket]" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
 
-Copy all buckets to Blob Storage from Google Cloud Storage (GCS) by using a service account key and a SAS token. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
+Copy all buckets to Blob Storage from GCS by using a service account key and a SAS token. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
  
   - azcopy cp "https://storage.cloud.google.com/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
 
-Copy a subset of buckets by using a wildcard symbol (*) in the bucket name from Google Cloud Storage (GCS) by using a service account key and a SAS token for destination. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
+Copy a subset of buckets by using a wildcard symbol (*) in the bucket name from GCS by using a service account key and a SAS token for destination. First, set the environment variables GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_CLOUD_PROJECT=<project-id> for GCS source
  
   - azcopy cp "https://storage.cloud.google.com/[bucket*name]/" "https://[destaccount].blob.core.windows.net/?[SAS]" --recursive=true
 
@@ -268,7 +268,7 @@ const cleanJobsCmdExample = "  azcopy jobs clean --with-status=completed"
 // ===================================== LIST COMMAND ===================================== //
 const listCmdShortDescription = "List the entities in a given resource"
 
-const listCmdLongDescription = `This command lists accounts, containers, and directories. Blob Storage, Azure Data Lake Storage Gen2, and File Storage are supported. OAuth for Files is currently not supported; please use SAS to authenticate for Files.`
+const listCmdLongDescription = `This command lists accounts, containers, and directories. Blob Storage, Azure Data Lake Storage, and File Storage are supported. Microsoft Entra ID authorization for Files is currently not supported; please use SAS to authenticate for Files.`
 
 const listCmdExample = "azcopy list [containerURL] --properties [semicolon(;) separated list of attributes " +
 	"(LastModifiedTime, VersionId, BlobType, BlobAccessTier, ContentType, ContentEncoding, ContentMD5, LeaseState, LeaseDuration, LeaseStatus) " +
@@ -412,12 +412,12 @@ Remove a single directory from a Blob Storage account that has a hierarchical na
 const syncCmdShortDescription = "Replicate source to the destination location"
 
 const syncCmdLongDescription = `
-The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. Alternatively, you can use the --compare-hash flag to transfer only files which differ in their MD5 hash. The supported pairs are:
-  
-  - Local <-> Azure Blob / Azure File (either SAS or OAuth authentication can be used)
-  - Azure Blob <-> Azure Blob (either SAS or OAuth authentication can be used)
-  - ADLS Gen2 <-> ADLS Gen2 (either SAS or OAuth authentication can be used)
-  - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authentication should be used for destination)
+The last modified times are used for comparison. The file is skipped if the last modified time in the destination is more recent. Alternatively, you can use the --compare-hash flag to transfer only files which differ in their MD5 hash.  The supported directions and forms of authorization are:
+
+  - Local <-> Azure Blob / Azure File (Microsoft Entra ID or SAS)
+  - Azure Blob <-> Azure Blob (Microsoft Entra ID SAS)
+  - Azure Data Lake Storage <-> Azure Data Lake Storage (Microsoft Entra ID or SAS)
+  - Azure File <-> Azure File (Source must include a SAS or is publicly accessible; SAS authorization should be used for destination)
   - Azure Blob <-> Azure File
 
 The sync command differs from the copy command in several ways:
@@ -510,7 +510,7 @@ For uploads, the test data is automatically generated.
 The benchmark command runs the same process as 'copy', except that: 
 
   - Instead of requiring both source and destination parameters, benchmark takes just one. This is the 
-    blob container, Azure Files Share, or ADLS Gen 2 File System that you want to upload to or download from.
+    blob or Data Lake Storage container, or an Azure Files Share that you want to upload to or download from.
 
   - The 'mode' parameter describes whether AzCopy should test uploads to or downloads from given target. Valid values are 'Upload'
     and 'Download'. Default value is 'Upload'.
@@ -525,22 +525,22 @@ The benchmark command runs the same process as 'copy', except that:
   
   - Additional diagnostics are measured and reported.
   
-  - For uploads, the default behaviour is to delete the transferred data at the end of the test run.  For downloads, the data
+  - For uploads, the default behavior is to delete the transferred data at the end of the test run.  For downloads, the data
     is never actually saved locally.
 
 Benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
 the maximum throughput. It will display that number at the end. To prevent auto-tuning, set the 
 AZCOPY_CONCURRENCY_VALUE environment variable to a specific number of connections. 
 
-All the usual authentication types are supported. However, the most convenient approach for benchmarking upload is typically
-to create an empty container with a SAS token and use SAS authentication. (Download mode requires a set of test data to be
+All the usual authorization types are supported. However, the most convenient approach for benchmarking upload is typically
+to create an empty container with a SAS token and use SAS authorization. (Download mode requires a set of test data to be
 present in the target container.)
   
 `
 
 const benchCmdExample = `Run an upload benchmark with default parameters (suitable for benchmarking networks up to 1 Gbps):'
 
-   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>"
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]"
 
 Run an upload benchmark with a specified block size of 2 MiB and check the length of files after transfer:
 
@@ -552,13 +552,13 @@ Run a benchmark test that uploads 500 files, each 500 MiB in size, with a log le
 
 Run a benchmark test that uploads 100 files, each 2 GiB in size: (suitable for benchmarking on a fast network, e.g. 10 Gbps):'
 
-   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --size-per-file 2G
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 100 --size-per-file 2G
 
 Same as above, but use 50,000 files, each 8 MiB in size and compute their MD5 hashes (in the same way that the --put-md5 flag does this
 in the copy command). The purpose of --put-md5 when benchmarking is to test whether MD5 computation affects throughput for the 
 selected file count and size:
 
-   - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
+   - azcopy bench --mode='Upload' "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 50000 --size-per-file 8M --put-md5
 
 Run a benchmark test that uploads 1000 files, each 100 KiB in size, and creates folders to divide up the data:
 
@@ -566,7 +566,7 @@ Run a benchmark test that uploads 1000 files, each 100 KiB in size, and creates 
  
 Run a benchmark test that downloads existing files from a target
 
-   - azcopy bench --mode='Download' "https://[account].blob.core.windows.net/[container]?<SAS?"
+   - azcopy bench --mode='Download' "https://[account].blob.core.windows.net/[container]?[SAS]"
 
 Run a download benchmark with the default parameters and cap the transfer rate at 500 Mbps:
 
@@ -574,7 +574,7 @@ Run a download benchmark with the default parameters and cap the transfer rate a
 
 Run an upload that does not delete the transferred files. (These files can then serve as the payload for a download test)
 
-   - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --delete-test-data=false
+   - azcopy bench "https://[account].blob.core.windows.net/[container]?[SAS]" --file-count 100 --delete-test-data=false
 `
 
 // ===================================== SET-PROPERTIES COMMAND ===================================== //
@@ -582,11 +582,12 @@ Run an upload that does not delete the transferred files. (These files can then 
 const setPropertiesCmdShortDescription = "Given a location, change all the valid system properties of that storage (blob or file)"
 
 const setPropertiesCmdLongDescription = `
-Sets properties of Blob, ADLS Gen2, and File storage. The properties currently supported by this command are:
+Sets properties of Blob, Data Lake Storage, and File storage. The properties currently supported by this command are:
 
 	Blobs -> Tier, Metadata, Tags
-	ADLS Gen2 -> Tier, Metadata, Tags
+	Data Lake Storage -> Tier, Metadata, Tags
 	Files -> Metadata
+
 Note: dfs endpoints will be replaced by blob endpoints.
 `
 
@@ -594,7 +595,7 @@ const setPropertiesCmdExample = `
 Change tier of blob to hot:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=hot
 
-Change tier of blob to Cold:
+Change tier of blob to cold:
 	- azcopy set-properties "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --block-blob-tier=cold
 
 Change tier of blob from hot to Archive:
