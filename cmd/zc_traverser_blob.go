@@ -308,7 +308,10 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			panic("isBlob should never be set if getting properties is an error")
 		}
 
-		if azcopyScanningLogger != nil {
+		if t.syncOptions.scannerLogger != nil {
+			err := fmt.Errorf("Detected the root[%v] as a blob.", t.rawURL)
+			t.syncOptions.scannerLogger.Log(common.LogDebug, err.Error())
+		} else if azcopyScanningLogger != nil {
 			azcopyScanningLogger.Log(common.LogDebug, "Detected the root as a blob.")
 			azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Root entity type: %s", getEntityType(blobProperties.Metadata)))
 		}

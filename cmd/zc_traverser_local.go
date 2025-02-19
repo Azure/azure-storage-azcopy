@@ -255,7 +255,14 @@ func (s symlinkTargetFileInfo) Name() string {
 // Separate this from the traverser for two purposes:
 // 1) Cleaner code
 // 2) Easier to test individually than to test the entire traverser.
-func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath.WalkFunc, symlinkHandling common.SymlinkHandlingType, errorChannel chan TraverserErrorItemInfo, isSourceTraverser bool) (err error) {
+func WalkWithSymlinks(
+	appCtx context.Context,
+	fullPath string,
+	walkFunc filepath.WalkFunc,
+	symlinkHandling common.SymlinkHandlingType,
+	errorChannel chan TraverserErrorItemInfo,
+	isSourceTraverser bool,
+	scannerLogger common.ILoggerResetable) (err error) {
 
 	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 	// So, what is the plan of attack?
@@ -287,7 +294,11 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 		// (for simplicity of coding, we don't parallelize across multiple queueItems)
 		parallel.Walk(appCtx, queueItem.fullPath, EnumerationParallelism, EnumerationParallelStatFiles, func(filePath string, fileInfo os.FileInfo, fileError error) error {
 			if fileError != nil {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
+				if scannerLogger != nil {
+					scannerLogger.Log(common.LogDebug, fileError.Error())
+				} else {
+					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing '%s' failed with error: %s", filePath, fileError.Error()))
+				}
 				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: fileError, Source: isSourceTraverser})
 				return nil
 			}
@@ -302,6 +313,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 			if fileInfo == nil {
 				err := fmt.Errorf("fileInfo is nil for file %s", filePath)
 				WarnStdoutAndScanningLog(err.Error())
+				writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 				return nil
 			}
 
@@ -312,6 +324,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 					if err != nil {
 						WarnStdoutAndScanningLog(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+						writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
 						return nil
 					}
 
@@ -388,7 +401,9 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return err
 					} else {
-						WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+						err = fmt.Errorf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath))
+						writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+						WarnStdoutAndScanningLog(err.Error())
 					}
 				} else {
 					// It's a symlink to a file and we handle cyclic symlinks.
@@ -400,6 +415,9 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
 					_, err = getProcessingError(err)
+					if err != nil {
+						writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err, Source: isSourceTraverser})
+					}
 					return err
 				}
 				return nil
@@ -478,7 +496,9 @@ func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, erro
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
 			common.LogHashStorageFailure()
-			if azcopyScanningLogger != nil {
+			if t.syncOptions.scannerLogger != nil {
+				t.syncOptions.scannerLogger.Log(common.LogDebug, err.Error())
+			} else if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("failed to read hash data for %s: %s", relPath, err.Error()))
 			}
 		}
@@ -697,7 +717,11 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 	// it fails here if file does not exist
 	if err != nil {
-		azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+		if t.syncOptions.scannerLogger != nil {
+			t.syncOptions.scannerLogger.Log(common.LogDebug, err.Error())
+		} else if azcopyScanningLogger != nil {
+			azcopyScanningLogger.Log(common.LogError, fmt.Sprintf("Failed to scan path %s: %s", t.fullPath, err.Error()))
+		}
 
 		if t.errorChannel != nil {
 			ErrorFileInfo := ErrorFileInfo{
@@ -792,7 +816,15 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			}
 
 			// note: Walk includes root, so no need here to separately create StoredObject for root (as we do for other folder-aware sources)
-			return finalizer(WalkWithSymlinks(t.appCtx, t.fullPath, processFile, t.symlinkHandling, t.errorChannel, t.syncOptions.isSource))
+			return finalizer(
+				WalkWithSymlinks(
+					t.appCtx,
+					t.fullPath,
+					processFile,
+					t.symlinkHandling,
+					t.errorChannel,
+					t.syncOptions.isSource,
+					t.syncOptions.scannerLogger))
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			// We don't transfer any directory properties here, not even the root. (Because the root's
