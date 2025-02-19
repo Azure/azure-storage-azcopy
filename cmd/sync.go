@@ -105,15 +105,8 @@ type RawSyncCmdArgs struct {
 	// For more information, please refer to cookedSyncCmdArgs.
 	MaxObjectIndexerMapSizeInGB string
 
-	// Change file detection mode.
-	// For more information, please refer to cookedSyncCmdArgs.
-	CfdMode string
-
 	// For more information, please refer to cookedSyncCmdArgs.
 	MetaDataOnlySync bool
-
-	// This is the time of last sync in ISO8601 format. For more information, please refer to cookedSyncCmdArgs.
-	LastSyncTime string
 }
 
 func (raw *RawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -507,8 +500,6 @@ type cookedSyncCmdArgs struct {
 
 	deleteDestinationFileIfNecessary bool
 
-	////////////////////////  Sliding window variables  //////////////////////////
-
 	// Whether we want top dir to be included in target or not. If it's true, we skip copying top directory at source, only
 	// underneath files will be coped.
 	// If source has following directory structure
@@ -533,62 +524,11 @@ type cookedSyncCmdArgs struct {
 	maxObjectIndexerSizeInGB uint32
 
 	//
-	// This is the time of last sync in ISO8601 format. This is compared with the source files' ctime/mtime value to find out if they have changed
-	// since the last sync and hence need to be copied. It's not used if the CFDMode is anything other than CTimeMTime and CTime, since in other
-	// CFDModes it's not considered safe to trust file times and we need to compare every file with target to find out which files have changed.
-	// There are a few subtelties that caller should be aware of:
-	//
-	// Since sync takes finite time, this should be set to the start of sync and not any later, else files that changed in the source while the
-	// last sync was running may be (incorrectly) skipped in this sync. Infact, to correctly account for any time skew between the machine running AzCopy
-	// and the machine hosting the source filesystem (if they are different, f.e., when the source is an NFS/SMB mount) this should be set to few seconds
-	// in the past. 60 seconds is a good value for skew adjustment. A larger skew value could cause more data to be sync'ed while a smaller skew value may
-	// cause us to miss some changed files, latter is obviously not desirable. If we are not sure what skew value to use, it's best to create a temp file
-	// on the source and compare its ctime with the nodes time and use that as a baseline.
-	//
-	// Time of last sync, used by the sync process.
-	// A file/directory having ctime/mtime greater than lastSyncTime is considered "changed", though the exact interpretation depends on the CFDMode
-	// used and other variables. Depending on CFDMode this will be compared with source files' ctime/mtime and/or target files' ctime/mtime.
-	//
-	lastSyncTime time.Time
-
-	//
-	// Change file detection mode.
-	// This controls how target traverser decides whether a file has changed (and hence needs to be sync'ed to the target) by looking at the file
-	// properties stored in the sourceFolderIndex. Valid Enums will be TargetCompare, Ctime, CtimeMtime.
-	//
-	// TargetCompare - This is the most generic and the slowest of all. It enumerates all target directories
-	//                 and compares the children at source and target to find out if an object has changed.
-	//
-	// CtimeMtime    - Compare source file’s mtime/ctime (Unix/NFS) or LastWriteTime/ChangeTime (Windows/SMB) with LastSyncTime for detecting changed files.
-	//                 If mtime/LastWriteTime > LastSyncTime then it means both data and metadata have changed else if ctime/ChangeTime > LastSyncTime then
-	//                 only metadata has changed. For detecting changed directories this uses ctime/ChangeTime (not mtime/LastWriteTime) of the directory,
-	//                 changed directories will be enumerated in the target and every object will be compared with the source to find changes. This is needed
-	//                 to cover the case of directory renames where a completely different directory in the source can have the same name as a target directory
-	//                 and checking only mtime/LastWriteTime of children is not safe since rename of a directory won’t affect mtime of its children. If a directory
-	//                 has not changed then it’ll compare mtime/LastWriteTime and ctime/ChangeTime of its children with LastSyncTime for finding data/metadata changes,
-	//                 thus it enumerates only target directories that have changed.
-	//                 This is the most efficient of all and should be used when we safely can use it, i.e., we know that source updates ctime/mtime correctly.
-	//
-	// Ctime         - If we don’t want to depend on mtime/LastWriteTime (since it can be changed by applications) but we still don’t want to lose the advantage of
-	//                 ctime/ChangeTime which is much more dependable, we can use this mode. In this mode we use only ctime/ChangeTime to detect if there’s a change
-	//                 to a file/directory and if there’s a change, to find the exact change (data/metadata/both) we compare the file with the target. This has the
-	//                 advantage that we use the more robust ctime/ChangeTime and only for files/directories which could have potentially changed we have
-	//                 to compare with the target. This results in a much smaller set of files to enumerate at the target.
-	//
-	// So, in the order of preference we have,
-	//
-	// CtimeMtime -> Ctime -> TargetCompare.
-	//
-	cfdMode common.CFDMode
-
-	//
 	// Sync only file metadata if only metadata has changed and not the file content, else for changed files both file data and metadata are sync’ed.
 	// The latter could be expensive especially for cases where user updates some file metadata (owner/mode/atime/mtime/etc) recursively. How we find out
-	// whether only metadata has changed or only data has changed, or both have changed depends on the CFDMode that controls how changed files are detected.
+	// whether only metadata has changed or only data has changed, or both have changed.
 	//
 	metaDataOnlySync bool
-
-	////////////////////////  Sliding window variables  //////////////////////////
 }
 
 func (cca *cookedSyncCmdArgs) incrementDeletionCount() {

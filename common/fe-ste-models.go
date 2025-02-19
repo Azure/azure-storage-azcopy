@@ -1592,28 +1592,6 @@ func (e *EntityType) Parse(s string) error {
 	return err
 }
 
-////////////////////////////////////////////////////////////////
-// CFDMode is the mode for comparing the ctime and mtime of the source and destination
-// to determine whether the file should be copied or not.
-
-type CFDMode uint8
-
-var CFDModeFlags = CFDMode(0)
-
-func (CFDMode) NotDefined() CFDMode { return CFDMode(0) }
-
-func (CFDMode) TargetCompare() CFDMode { return CFDMode(1) }
-
-func (CFDMode) CtimeMtime() CFDMode { return CFDMode(2) }
-
-func (CFDMode) Ctime() CFDMode { return CFDMode(3) }
-
-func (c CFDMode) String() string {
-	return enum.StringInt(c, reflect.TypeOf(c))
-}
-
-/////////////////////////////////////////////////////////////////
-
 var EFolderPropertiesOption = FolderPropertyOption(0)
 
 // FolderPropertyOption controls which folders get their properties recorded in the Plan file
