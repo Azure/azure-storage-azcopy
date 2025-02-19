@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -339,6 +340,12 @@ type FileClientStub interface {
 	URL() string
 }
 
+type NFSProperties struct {
+	Owner    *string
+	Group    *string
+	FileMode *string
+}
+
 // DoWithOverrideReadOnlyOnAzureFiles performs the given action,
 // and forces it to happen even if the target is read only.
 // NOTE that all SMB attributes (and other headers?) on the target will be lost,
@@ -367,13 +374,20 @@ func DoWithOverrideReadOnlyOnAzureFiles(ctx context.Context, action func() (inte
 	// did fail as readonly, and forcing is enabled
 	if f, ok := targetFileOrDir.(*file.Client); ok {
 		h := file.HTTPHeaders{}
-		_, err = f.SetHTTPHeaders(ctx, &file.SetHTTPHeadersOptions{
+		headerOptions := &file.SetHTTPHeadersOptions{
 			HTTPHeaders: &h,
-			SMBProperties: &file.SMBProperties{
-				// clear the attributes
-				Attributes: &file.NTFSFileAttributes{None: true},
-			},
-		})
+		}
+		// if nfsProperties != nil {
+		headerOptions.Owner = to.Ptr("123456")
+		headerOptions.Group = to.Ptr("123456")
+		headerOptions.FileMode = to.Ptr("123456")
+		// } else {
+		// 	headerOptions.SMBProperties = &file.SMBProperties{
+		// 		// clear the attributes
+		// 		Attributes: &file.NTFSFileAttributes{None: true},
+		// 	}
+		// }
+		_, err = f.SetHTTPHeaders(ctx, headerOptions)
 	} else if d, ok := targetFileOrDir.(*directory.Client); ok {
 		// this code path probably isn't used, since ReadOnly (in Windows file systems at least)
 		// only applies to the files in a folder, not to the folder itself. But we'll leave the code here, for now.
