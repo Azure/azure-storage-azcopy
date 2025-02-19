@@ -840,10 +840,6 @@ Final Job Status: %v%s%s
 	return
 }
 
-type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
-
-var syncHandler CustomSyncHandler = moverSyncHandler
-
 func (cca *cookedSyncCmdArgs) CredentialInfo(ctx context.Context) error {
 
 	err := common.SetBackupMode(cca.backupMode, cca.fromTo)
@@ -916,7 +912,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return err
 	}
 
-	if syncHandler == nil {
+	if customSyncHandler == nil {
 		enumerator, err := cca.InitEnumerator(ctx, nil)
 		if err != nil {
 			return err
@@ -933,7 +929,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 			return err
 		}
 	} else {
-		err = syncHandler(cca, ctx)
+		err = customSyncHandler(cca, ctx)
 	}
 
 	return nil

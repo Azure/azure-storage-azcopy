@@ -1,4 +1,7 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//go:build smslidingwindow
+// +build smslidingwindow
+
+// // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +27,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -37,6 +41,23 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
+
+type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
+
+var customSyncHandler CustomSyncHandler = syncOrchestratorHandler
+
+type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
+
+var counterIncrementer CustomCounterIncrementer = IncrementCounter
+
+func IncrementCounter(entry fs.DirEntry, t *localTraverser) error {
+	if entry.IsDir() {
+		t.incrementEnumerationCounter(common.EEntityType.Folder())
+	} else {
+		t.incrementEnumerationCounter(common.EEntityType.File())
+	}
+	return nil
+}
 
 type SyncTraverser struct {
 	enumerator *syncEnumerator
@@ -231,7 +252,7 @@ func syncMonitor() {
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
-func moverSyncHandler(cca *cookedSyncCmdArgs, ctx context.Context) error {
+func syncOrchestratorHandler(cca *cookedSyncCmdArgs, ctx context.Context) error {
 	// Start the profiling
 	go func() {
 		fmt.Printf("Listening to port 6060..\n")

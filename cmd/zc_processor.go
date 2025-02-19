@@ -222,7 +222,6 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 	transferMutex.Lock()
 	if len(s.copyJobTemplate.Transfers.List) == s.numOfTransfersPerPart {
-		fmt.Printf("GOD: sendPartToSte: partNum=%v\n", s.copyJobTemplate.PartNum)
 		resp := s.sendPartToSte()
 
 		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
@@ -260,7 +259,6 @@ var FinalPartCreatedMessage = "Final job part has been created"
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
 	var resp common.CopyJobPartOrderResponse
-	fmt.Printf("GOD: zc_processor: DispatchFinalPart\n")
 	s.copyJobTemplate.IsFinalPart = true
 	resp = s.sendPartToSte()
 
