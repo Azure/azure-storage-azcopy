@@ -79,7 +79,6 @@ type IJobPartMgr interface {
 // 'ulimit -Hn' is low).
 func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
-	fmt.Println("NewAzcopyHTTPClient:", concurrentDialsPerCpu*runtime.NumCPU())
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy:                  common.GlobalProxyLookup,
