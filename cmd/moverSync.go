@@ -1,3 +1,4 @@
+//go:build smslidingwindow
 // +build smslidingwindow
 
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
@@ -23,27 +24,30 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
-	"runtime"
-	"strings"
-	"sync/atomic"
-	"time"
-	"sync"
-	"os"
-	"strconv"
-	"bufio"
+	"io/fs"
 	"net/http"
 	_ "net/http/pprof"
-        "io/fs"
+	"os"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
 type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
+
 var syncHandler CustomSyncHandler = moverSyncHandler
 
 type CustomCounterIncrementer func(entry fs.DirEntry, t *localTraverser) error
+
 var counterIncrementer CustomCounterIncrementer = IncrementCounter
 
 func IncrementCounter(entry fs.DirEntry, t *localTraverser) error {
@@ -58,7 +62,7 @@ func IncrementCounter(entry fs.DirEntry, t *localTraverser) error {
 type SyncTraverser struct {
 	enumerator *syncEnumerator
 	comparator objectProcessor
-	dir string
+	dir        string
 	// sub_dirs []string
 	// children []string
 	sub_dirs []StoredObject
@@ -74,14 +78,12 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 		strs = []string{so.relativePath}
 	}
 	child_path = strings.Join(strs, common.AZCOPY_PATH_SEPARATOR_STRING)
-	so.relativePath  = child_path
+	so.relativePath = child_path
 
 	if so.entityType == common.EEntityType.Folder() {
-		// st.sub_dirs = append(st.sub_dirs, child_path)
 		st.sub_dirs = append(st.sub_dirs, so)
 	}
 
-	// st.children = append(st.children, so.relativePath)
 	st.children = append(st.children, so)
 
 	syncMutex.Lock()
@@ -133,16 +135,15 @@ func (st *SyncTraverser) Finalize() error {
 	return nil
 }
 
-func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectProcessor) *SyncTraverser{
-    return &SyncTraverser{
-        enumerator: enumerator,
-        dir: dir,
-		sub_dirs  : make([]StoredObject, 0, 1024),
-		children : make([]StoredObject, 0, 1024),
-		comparator : comparator,
-    }
+func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectProcessor) *SyncTraverser {
+	return &SyncTraverser{
+		enumerator: enumerator,
+		dir:        dir,
+		sub_dirs:   make([]StoredObject, 0, 1024),
+		children:   make([]StoredObject, 0, 1024),
+		comparator: comparator,
+	}
 }
-
 
 var syncQDepth int64
 var syncMonitorRun int32
@@ -152,147 +153,150 @@ var totalGoroutines int32
 var goroutineThreshold int32
 
 func monitorGoroutines() {
-    for {
-        current := runtime.NumGoroutine()
-        atomic.StoreInt32(&totalGoroutines, int32(current))
-        time.Sleep(5 * time.Second) // Sample at a reasonable interval
-    }
+	for {
+		current := runtime.NumGoroutine()
+		atomic.StoreInt32(&totalGoroutines, int32(current))
+		time.Sleep(5 * time.Second) // Sample at a reasonable interval
+	}
 }
 
 func shouldThrottle() bool {
-    return atomic.LoadInt32(&totalGoroutines) > goroutineThreshold
+	return atomic.LoadInt32(&totalGoroutines) > goroutineThreshold
 }
 
 func continueThrottle() bool {
-    return atomic.LoadInt32(&totalGoroutines) > int32((goroutineThreshold * 80)/100)
+	return atomic.LoadInt32(&totalGoroutines) > int32((goroutineThreshold*80)/100)
 }
 
 func getTotalVirtualMemory() (uint64, error) {
-   // Open /proc/self/statm
-   data, err := os.ReadFile("/proc/self/statm")
-   if err != nil {
-       return 0, err
-   }
+	// Open /proc/self/statm
+	data, err := os.ReadFile("/proc/self/statm")
+	if err != nil {
+		return 0, err
+	}
 
-   // Parse the first field (total virtual memory pages)
-   fields := strings.Fields(string(data))
-   if len(fields) < 1 {
-       return 0, fmt.Errorf("unexpected format in /proc/self/statm")
-   }
+	// Parse the first field (total virtual memory pages)
+	fields := strings.Fields(string(data))
+	if len(fields) < 1 {
+		return 0, fmt.Errorf("unexpected format in /proc/self/statm")
+	}
 
-   // Convert pages to bytes (assuming 4KB pages)
-   pages, err := strconv.ParseUint(fields[0], 10, 64)
-   if err != nil {
-       return 0, err
-   }
+	// Convert pages to bytes (assuming 4KB pages)
+	pages, err := strconv.ParseUint(fields[0], 10, 64)
+	if err != nil {
+		return 0, err
+	}
 
-   pageSize := uint64(os.Getpagesize()) // Get system page size
-   return uint64((pages * pageSize)/1024/1024), nil
+	pageSize := uint64(os.Getpagesize()) // Get system page size
+	return uint64((pages * pageSize) / 1024 / 1024), nil
 }
 
 func getRSSMemory() (uint64, error) {
-   // Open the /proc/<PID>/status file
-   pid := os.Getpid()
-   file, err := os.Open(fmt.Sprintf("/proc/%d/status", pid))
-   if err != nil {
-       return 0, err
-   }
-   defer file.Close()
+	// Open the /proc/<PID>/status file
+	pid := os.Getpid()
+	file, err := os.Open(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
 
-   // Scan the file line by line to find VmRSS
-   scanner := bufio.NewScanner(file)
-   for scanner.Scan() {
-       line := scanner.Text()
-       if strings.HasPrefix(line, "VmRSS:") {
-           fields := strings.Fields(line)
-           if len(fields) < 2 {
-               return 0, fmt.Errorf("unexpected VmRSS line format")
-           }
-           // Parse the value (in kB) and convert to bytes
-           rssKB, err := strconv.ParseUint(fields[1], 10, 64)
-           if err != nil {
-               return 0, err
-           }
-           return uint64(rssKB / 1024), nil
-       }
-   }
+	// Scan the file line by line to find VmRSS
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "VmRSS:") {
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				return 0, fmt.Errorf("unexpected VmRSS line format")
+			}
+			// Parse the value (in kB) and convert to bytes
+			rssKB, err := strconv.ParseUint(fields[1], 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return uint64(rssKB / 1024), nil
+		}
+	}
 
-   if err := scanner.Err(); err != nil {
-       return 0, err
-   }
-   return 0, fmt.Errorf("VmRSS not found in /proc/%d/status", pid)
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+	return 0, fmt.Errorf("VmRSS not found in /proc/%d/status", pid)
 }
 
 func syncMonitor() {
 	syncMonitorRun = 1
 	syncMonitorExited = 0
 
-	fmt.Printf("Starting SyncMonitor...\n")
+	//fmt.Printf("Starting SyncMonitor...\n")
 	var run int32
 
 	run = 1
 
-    for (run == 1) {
-        t := time.Now()
-        ts := string(t.Format("2006-01-02 15:04:05"))
+	for run == 1 {
+		t := time.Now()
+		ts := string(t.Format("2006-01-02 15:04:05"))
 
-        grs := atomic.LoadInt32(&totalGoroutines)
+		grs := atomic.LoadInt32(&totalGoroutines)
 		qd := atomic.AddInt64(&syncQDepth, 0)
-        vm, _ := getTotalVirtualMemory()
-        rss, _ := getRSSMemory()
-        fmt.Printf("\n%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss)
+		vm, _ := getTotalVirtualMemory()
+		rss, _ := getRSSMemory()
+		glcm.Info(fmt.Sprintf("%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss))
 		time.Sleep(30 * time.Second)
-	run = atomic.AddInt32(&syncMonitorRun, 0)
+		run = atomic.AddInt32(&syncMonitorRun, 0)
 	}
-
-	fmt.Printf("Exiting SyncMonitor...\n")
+	glcm.Info("Exiting SyncMonitor...")
+	//fmt.Printf("Exiting SyncMonitor...\n")
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
 func moverSyncHandler(cca *cookedSyncCmdArgs, ctx context.Context) error {
 	// Start the profiling
 	go func() {
-		fmt.Printf("Listening to port 6060..\n")
+		//fmt.Printf("Listening to port 6060..\n")
+		glcm.Info("Listening to port 6060..")
 		http.ListenAndServe("localhost:6060", nil)
 	}()
 
 	return cca.runSyncOrchestrator(ctx)
 }
 
-func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error) {
+func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err error) {
 	go syncMonitor()
-    go monitorGoroutines()
+	go monitorGoroutines()
 
 	enumerator, err := cca.initEnumerator(ctx)
 	if err != nil {
 		return err
 	}
 
-    goroutineThreshold = 30000
+	goroutineThreshold = 30000
 
 	syncOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
 
-        var waits int64
-        waits = 0
-        if shouldThrottle() {
-            for continueThrottle() {
-                if ((waits % 1800) == 0) {
-                    fmt.Printf("Too many go routines, slowing down...\n")
-                }
-                time.Sleep(100 * time.Millisecond) // Simulate throttling
-                waits++
-            }
-            fmt.Printf("Continuing sync traversal...\n")
-        }
+		var waits int64
+		waits = 0
+		if shouldThrottle() {
+			for continueThrottle() {
+				if (waits % 1800) == 0 {
+					glcm.Warn("Too many go routines, slowing down...")
+					//fmt.Printf("Too many go routines, slowing down...\n")
+				}
+				time.Sleep(100 * time.Millisecond) // Simulate throttling
+				waits++
+			}
+			glcm.Info("Continuing sync traversal...")
+			//fmt.Printf("Continuing sync traversal...\n")
+		}
 
-		sync_src := []string{cca.source.Value, dir.(StoredObject).relativePath}
-		sync_dst := []string{cca.destination.Value, dir.(StoredObject).relativePath}
+		//sync_src := []string{cca.source.Value, dir.(StoredObject).relativePath}
+		//sync_dst := []string{cca.destination.Value, dir.(StoredObject).relativePath}
 
 		pt_src := cca.source
 		st_src := cca.destination
 
-		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
-		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
+		//pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
+		//st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate
@@ -302,82 +306,86 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 		syncMutex.Unlock()
 
 		if err != nil {
-			fmt.Printf("Storing root object failed: %s\n", err)
+			//fmt.Printf("Storing root object failed: %s\n", err)
+			glcm.Error(fmt.Sprintf("Storing root object failed: %s", err))
 			return err
 		}
 
 		pt, err := InitResourceTraverser(pt_src,
-										ptt.location,
-										&ctx,
-										ptt.credential,
-										ptt.symlinkHandling,
-										ptt.listOfFilesChannel,
-										ptt.recursive,
-										ptt.getProperties,
-										ptt.includeDirectoryStubs,
-										ptt.permanentDeleteOption,
-										ptt.incrementEnumerationCounter,
-										ptt.listOfVersionIds,
-										ptt.s2sPreserveBlobTags,
-										ptt.syncHashType,
-										ptt.preservePermissions,
-										ptt.logLevel,
-										ptt.cpkOptions,
-										ptt.errorChannel,
-										ptt.stripTopDir,
-										ptt.trailingDot,
-										ptt.destination,
-										ptt.excludeContainerNames,
-										ptt.includeVersionsList)
+			ptt.location,
+			&ctx,
+			ptt.credential,
+			ptt.symlinkHandling,
+			ptt.listOfFilesChannel,
+			ptt.recursive,
+			ptt.getProperties,
+			ptt.includeDirectoryStubs,
+			ptt.permanentDeleteOption,
+			ptt.incrementEnumerationCounter,
+			ptt.listOfVersionIds,
+			ptt.s2sPreserveBlobTags,
+			ptt.syncHashType,
+			ptt.preservePermissions,
+			ptt.logLevel,
+			ptt.cpkOptions,
+			ptt.errorChannel,
+			ptt.stripTopDir,
+			ptt.trailingDot,
+			ptt.destination,
+			ptt.excludeContainerNames,
+			ptt.includeVersionsList)
 		if err != nil {
-			fmt.Printf("Creating source traverser failed : %s\n", err)
+			glcm.Error(fmt.Sprintf("Creating source traverser failed : %s", err))
+			//fmt.Printf("Creating source traverser failed : %s\n", err)
 			return err
 		}
 
-
 		st, err := InitResourceTraverser(st_src,
-										stt.location,
-										&ctx,
-										stt.credential,
-										stt.symlinkHandling,
-										stt.listOfFilesChannel,
-										stt.recursive,
-										stt.getProperties,
-										stt.includeDirectoryStubs,
-										stt.permanentDeleteOption,
-										stt.incrementEnumerationCounter,
-										stt.listOfVersionIds,
-										stt.s2sPreserveBlobTags,
-										stt.syncHashType,
-										stt.preservePermissions,
-										stt.logLevel,
-										stt.cpkOptions,
-										stt.errorChannel,
-										stt.stripTopDir,
-										stt.trailingDot,
-										stt.destination,
-										stt.excludeContainerNames,
-										stt.includeVersionsList)
+			stt.location,
+			&ctx,
+			stt.credential,
+			stt.symlinkHandling,
+			stt.listOfFilesChannel,
+			stt.recursive,
+			stt.getProperties,
+			stt.includeDirectoryStubs,
+			stt.permanentDeleteOption,
+			stt.incrementEnumerationCounter,
+			stt.listOfVersionIds,
+			stt.s2sPreserveBlobTags,
+			stt.syncHashType,
+			stt.preservePermissions,
+			stt.logLevel,
+			stt.cpkOptions,
+			stt.errorChannel,
+			stt.stripTopDir,
+			stt.trailingDot,
+			stt.destination,
+			stt.excludeContainerNames,
+			stt.includeVersionsList)
 
 		stra := newSyncTraverser(enumerator, dir.(StoredObject).relativePath, enumerator.objectComparator)
 
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		if err != nil {
-			fmt.Printf("Creating target traverser failed : %s\n", err)
+			glcm.Error(fmt.Sprintf("Sync traversal failed type = %s", err))
+			//fmt.Printf("Creating target traverser failed : %s\n", err)
 			return err
 		}
 
 		err = st.Traverse(noPreProccessor, stra.my_comparator, enumerator.filters)
 		if err != nil {
-			if ! strings.Contains(err.Error(), "RESPONSE 404") {
-				fmt.Printf("Sync traversal failed type = %s \n", err)
+			if !strings.Contains(err.Error(), "RESPONSE 404") {
+				glcm.Error(fmt.Sprintf("Sync traversal failed type = %s", err))
+				//fmt.Printf("Sync traversal failed type = %s \n", err)
 				return err
 			}
 		}
 
 		err = stra.Finalize()
 		if err != nil {
-			fmt.Printf("Sync finalize failed!!\n")
+			glcm.Error(fmt.Sprintf("Sync finalize failed!! %s", err))
+			//fmt.Printf("Sync finalize failed!!\n")
 			return err
 		}
 
@@ -402,7 +410,7 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 	}
 
 	root := newStoredObject(nil, fi.Name(), "", common.EEntityType.Folder(),
-								fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
+		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
 
 	parallelism := 4
 	atomic.AddInt64(&syncQDepth, 1)
@@ -414,9 +422,11 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 	for {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		if qd == 0 {
-			fmt.Printf("Sync traversers exited..\n")
+			glcm.Info("Sync traversers exited..")
+			//fmt.Printf("Sync traversers exited..\n")
 			break
 		}
+		glcm.Info("Waiting for sync traversers to exit..")
 		// fmt.Printf("Waiting for sync traversers to exit..\n")
 		time.Sleep(1 * time.Second)
 	}
@@ -426,20 +436,23 @@ func (cca *cookedSyncCmdArgs)runSyncOrchestrator(ctx context.Context) (err error
 	for {
 		exited := atomic.AddInt32(&syncMonitorExited, 0)
 		if exited == 1 {
-			fmt.Printf("Sync monitor exited, quitting..\n")
+			glcm.Info("Sync monitor exited, quitting..")
+			//fmt.Printf("Sync monitor exited, quitting..\n")
 			break
 		}
+		glcm.Info("Waiting for sync monitor to exit...")
 		// fmt.Printf("Waiting for sync monitor to exit...\n")
 		time.Sleep(1 * time.Second)
 	}
 
-	fmt.Printf("Enumerator finalize running...\n")
+	glcm.Info("Sync operation completed successfully.")
+	//fmt.Printf("Enumerator finalize running...\n")
 	err = enumerator.finalize()
 	if err != nil {
-		fmt.Printf("Sync finalize failed!!\n")
+		glcm.Error(fmt.Sprintf("Sync finalize failed!! %s", err))
+		//fmt.Printf("Sync finalize failed!!\n")
 		return err
 	}
 
 	return nil
 }
-

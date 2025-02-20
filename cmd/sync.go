@@ -766,6 +766,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		}
 	}
 	if syncHandler == nil {
+		glcm.Info("Sync handler is nil")
 		enumerator, err := cca.initEnumerator(ctx)
 		if err != nil {
 			return err
@@ -782,7 +783,12 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 			return err
 		}
 	} else {
+		WarnStdoutAndScanningLog("Using custom sync handler")
+		glcm.Info("Using custom sync handler")
 		err = syncHandler(cca, ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
