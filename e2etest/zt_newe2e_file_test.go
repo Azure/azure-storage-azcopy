@@ -6,6 +6,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"math"
+	"os"
 	"strconv"
 )
 
@@ -574,6 +575,13 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 			Body: NewRandomObjectContentContainer(common.GigaByte),
 		})
 
+	dir, err := os.MkdirTemp("", "azcopytests*")
+	svm.NoError("create tempdir", err)
+	env := &AzCopyEnvironment{
+		LogLocation:     &dir,
+		JobPlanLocation: &dir,
+	} // uses default log and plan locations
+
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
 		Targets: []ResourceManager{srcOverflowObject, shareResource},
@@ -582,14 +590,15 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 				Recursive: pointerTo(true),
 			},
 		},
-		ShouldFail: true,
+		ShouldFail:  true,
+		Environment: env,
 	})
 
 	// Error catchers for full file share
 	ValidateContainsError(svm, stdOut, []string{"Increase the file share quota and call Resume command."})
 
 	fileMap := shareResource.ListObjects(svm, "", true)
-	svm.Assert("One file should be uploaded within the quota", Equal{}, len(fileMap), 1) // -1 to Account for root dir in fileMap
+	svm.Assert("One file should be uploaded within the quota", Equal{}, len(fileMap), 1)
 
 	// Increase quota to fit all files
 	newQuota := int32(2)
@@ -603,6 +612,38 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 	svm.Assert("Quota should be updated", Equal{},
 		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota),
 		newQuota)
+
+	var jobId string
+	if parsedOut, ok := stdOut.(*AzCopyParsedCopySyncRemoveStdout); ok {
+		if parsedOut.InitMsg.JobID != "" {
+			jobId = parsedOut.InitMsg.JobID
+		}
+	} else {
+		// Will enter during dry runs
+		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
+	}
+	//TODO fix error "Failed to read log dir ... The system cannot find the file specified"
+	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:           AzCopyVerbJobs,
+		PositionalArgs: []string{"resume", jobId},
+		Environment:    env, // Resume job with same log and job plan folders
+	})
+
+	if env.LogLocation != nil {
+		if _, err := os.Stat(*env.LogLocation); os.IsNotExist(err) {
+			svm.Log("Log directory does not exist: %s", *env.LogLocation)
+		}
+		svm.Log("Log location: %v", DerefOrZero(env.LogLocation))
+	}
+
+	if !svm.Dryrun() {
+		svm.Log("%v", resStdOut)
+	}
+
+	// Validate all files can be uploaded after resume and quota increase
+	fileMapResume := shareResource.ListObjects(svm, "", true)
+	svm.Assert("All files should be successfully uploaded after quota increase",
+		Equal{}, len(fileMapResume), 2)
 }
 
 // Test that POSIX errors are not returned in a RemoteLocal transfer
