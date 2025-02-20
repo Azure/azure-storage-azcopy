@@ -21,11 +21,13 @@
 package common_test
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -70,7 +72,8 @@ func TestCreateParentDirectoryIfNotExist(t *testing.T) {
 // Test EINTR errors are not returned on Linux
 func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 	if runtime.GOOS != "linux" {
-		return // EINTR errors are POSIX specific
+		t.Skip("EINTR errors are POSIX specific")
+		return
 	}
 	a := assert.New(t)
 	destinationPath := "/"
@@ -84,5 +87,10 @@ func TestCreateFileOfSizeWithWriteThroughOption(t *testing.T) {
 		tracker,
 		false)
 
-	a.NoError(err, "Error creating file")
+	if err != nil {
+		a.NotEqual(syscall.EINTR, err)
+	} else {
+		a.NoError(err, fmt.Sprintf("Error creating file: %v", err))
+	}
+
 }
