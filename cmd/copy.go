@@ -844,7 +844,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	// Because of some of our defaults, these must live down here and can't be properly checked.
 	// TODO: Remove the above checks where they can't be done.
 	cooked.S2sPreserveProperties = raw.s2sPreserveProperties
-	cooked.s2sGetPropertiesInBackend = raw.s2sGetPropertiesInBackend
+	cooked.S2sGetPropertiesInBackend = raw.s2sGetPropertiesInBackend
 	cooked.S2sPreserveAccessTier = raw.s2sPreserveAccessTier
 	cooked.S2sSourceChangeValidation = raw.s2sSourceChangeValidation
 
@@ -1202,7 +1202,7 @@ type CookedCopyCmdArgs struct {
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	S2sPreserveProperties bool
 	// useful when preserveS3Properties set to true, enables get S3 objects' or Azure files' properties during s2s copy in backend, the default value is true
-	s2sGetPropertiesInBackend bool
+	S2sGetPropertiesInBackend bool
 	// whether user wants to preserve access tier during service to service copy, the default value is true.
 	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
 	// In such cases, use S2sPreserveAccessTier=false to bypass the access tier copy.

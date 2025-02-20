@@ -64,8 +64,8 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	getRemoteProperties := cca.ForceWrite == common.EOverwriteOption.IfSourceNewer() ||
 		(cca.FromTo.From() == common.ELocation.File() && !cca.FromTo.To().IsRemote()) || // If it's a download, we still need LMT and MD5 from files.
 		(cca.FromTo.From() == common.ELocation.File() && cca.FromTo.To().IsRemote() && (cca.S2sSourceChangeValidation || cca.IncludeAfter != nil || cca.IncludeBefore != nil)) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties so that we have LMTs. Likewise, if we are using includeAfter or includeBefore, which require LMTs.
-		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.S2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
-	jobPartOrder.S2SGetPropertiesInBackend = cca.S2sPreserveProperties && !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+		(cca.FromTo.From().IsRemote() && cca.FromTo.To().IsRemote() && cca.S2sPreserveProperties && !cca.S2sGetPropertiesInBackend) // If S2S and preserve properties AND get properties in backend is on, turn this off, as properties will be obtained in the backend.
+	jobPartOrder.S2SGetPropertiesInBackend = cca.S2sPreserveProperties && !getRemoteProperties && cca.S2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
 	jobPartOrder.S2SSourceChangeValidation = cca.S2sSourceChangeValidation
 	jobPartOrder.DestLengthValidation = cca.CheckLength
 	jobPartOrder.S2SInvalidMetadataHandleOption = cca.S2sInvalidMetadataHandleOption
@@ -672,8 +672,8 @@ func NewFolderPropertyOption(fromTo common.FromTo, recursive, stripTopDir bool, 
 	if bothFolderAware || isRemoveFromFolderAware {
 		if !recursive {
 			// return common.EFolderPropertiesOption.NoFolders(), // doesn't make sense to move folders when not recursive. E.g. if invoked with /* and WITHOUT recursive
-				// "Any empty folders will not be processed, because --recursive was not specified" +
-					//getSuffix(false)
+			// "Any empty folders will not be processed, because --recursive was not specified" +
+			//getSuffix(false)
 		}
 
 		// check filters. Otherwise, if filter was say --include-pattern *.txt, we would transfer properties
