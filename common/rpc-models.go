@@ -355,6 +355,7 @@ type ResumeJobRequest struct {
 	IncludeTransfer  map[string]int
 	ExcludeTransfer  map[string]int
 	CredentialInfo   CredentialInfo
+	Provider         credentials.Provider
 }
 
 // represents the Details and details of a single transfer

@@ -355,6 +355,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		jm.SetInMemoryTransitJobState(
 			ste.InMemoryTransitJobState{
 				CredentialInfo: req.CredentialInfo,
+				Provider:       req.Provider,
 			})
 
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
