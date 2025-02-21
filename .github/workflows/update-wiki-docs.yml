@@ -22,7 +22,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.22.7'
+        go-version: '1.24.0'
 
     - name: Build Binary and generate doc markdown files
       run: |
