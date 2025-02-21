@@ -2243,7 +2243,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveNFSInfo, "preserve-nfs-info", true, "True by default. Preserves NFS properties. TODO: Add flag description")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveNFSInfo, "preserve-nfs-info", (runtime.GOOS == "linux"), "True by default. Preserves NFS properties. TODO: Add flag description")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveNFSPermissions, "preserve-nfs-permissions", false, "False by default. Preserves NFS permissions. TODO: Add flag description")
 	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, "nfs", false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
 }
