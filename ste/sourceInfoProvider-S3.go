@@ -64,7 +64,9 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		return nil, err
 	}
 
-	if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
+	if p.transferInfo.Provider != nil { //add check for if we want to use provider case
+		p.credType = common.ECredentialType.S3AccessKey()
+	} else if os.Getenv("AWS_ACCESS_KEY_ID") == "" && os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
 		p.credType = common.ECredentialType.S3PublicBucket()
 	} else {
 		p.credType = common.ECredentialType.S3AccessKey()
@@ -76,6 +78,7 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		S3CredentialInfo: common.S3CredentialInfo{
 			Endpoint: p.s3URLPart.Endpoint,
 			Region:   p.s3URLPart.Region,
+			Provider: p.transferInfo.Provider,
 		},
 	}, common.CredentialOpOptions{
 		LogInfo:  func(str string) { p.jptm.Log(common.LogInfo, str) },
