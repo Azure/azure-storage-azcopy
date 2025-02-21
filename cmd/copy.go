@@ -274,6 +274,20 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 	return
 }
 
+// performNFSSpecificValidation performs validation specific to NFS (Network File System) configurations
+// for a synchronization command. It checks NFS-related flags and settings and ensures that the necessary
+// properties are set correctly for NFS copy operations.
+//
+// The function checks the following:
+//   - Validates the "preserve-nfs-info" flag to ensure it is set correctly for NFS-aware locations.
+//   - Validates the "preserve-nfs-permissions" flag, ensuring that user input is correct and provides feedback
+//     if the flag is set to false and NFS info is being preserved.
+//   - Ensures that both source and destination locations are NFS-aware for relevant operations.
+//
+// If any of these validations fail, the function returns an error with the respective validation message.
+//
+// Returns:
+// - An error if any validation fails, otherwise nil indicating successful validation.
 func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
 	// TODO remove it
 	glcm.Info("NFS copy support addition in progress")
@@ -285,7 +299,7 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 
 	isUserPersistingPermissions := raw.preserveNFSPermissions
 	if cooked.preserveNFSInfo && !isUserPersistingPermissions {
-		glcm.Info("Please note: the preserve-nfs-permissions flag is set to false, TODO: Add description here.")
+		glcm.Info(PreserveNFSPermissions)
 	}
 	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions, cooked.FromTo, "preserve-nfs-permissions"); err != nil {
 		return err
@@ -294,24 +308,38 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 	return nil
 }
 
+// performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
+// for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
+// properties are set correctly for SMB copy operations.
+//
+// The function performs the following checks:
+// - Validates the "preserve-smb-info" flag to ensure both source and destination are SMB-aware.
+// - Validates the "preserve-posix-properties" flag, ensuring both locations are POSIX-aware if set.
+// - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
+// - Validates the preservation of file owner information based on user flags.
+//
+// If any of these validations fail, the function returns an error with the respective validation message.
+//
+// Returns:
+// - An error if any validation fails, otherwise nil indicating successful validation.
+
 func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
 	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.FromTo)
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, "preserve-smb-info"); err != nil {
+		return err
+	}
 
 	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
 	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
-		return fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (Linux->Blob, Blob->Linux, Blob->Blob)")
-	}
-
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, &cooked.ForceWrite, "preserve-smb-info"); err != nil {
-		return err
+		return fmt.Errorf(PreservePOSIXPropertiesErrMsg)
 	}
 
 	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
 	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
+		glcm.Info(PreservePermissionsInfoMsg)
 	}
 
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, &cooked.ForceWrite, PreservePermissionsFlag); err != nil {
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, PreservePermissionsFlag); err != nil {
 		return err
 	}
 	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
@@ -719,15 +747,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if raw.isNFSCopy {
-		err = raw.performNFSSpecificValidation(&cooked)
-		if err != nil {
+		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
 			return cooked, err
 		}
-	} else {
-		err = raw.performSMBSpecificValidation(&cooked)
-		if err != nil {
-			return cooked, err
-		}
+	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
+		return cooked, err
 	}
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
@@ -991,7 +1015,7 @@ func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	}
 }
 
-func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
+func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
 	if toPreserve && flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
 		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
 		return nil

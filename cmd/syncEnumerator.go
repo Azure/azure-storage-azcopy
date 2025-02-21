@@ -24,13 +24,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"strings"
+	"sync/atomic"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
-	"runtime"
-	"strings"
-	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -222,6 +223,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+		PreserveNFSPermissions: cca.preserveNFSPermisssions,
+		PreserveNFSInfo:        cca.preserveNFSInfo,
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
