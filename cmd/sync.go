@@ -276,6 +276,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
+	// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
+	// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
+	//	return cooked, err
+	// }
 	if raw.isNFSCopy {
 		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
 			return cooked, err
@@ -283,11 +287,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
 		return cooked, err
 	}
-
-	// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
-	// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
-	//	return cooked, err
-	// }
 
 	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
 		return cooked, err
@@ -449,10 +448,6 @@ func (raw rawSyncCmdArgs) performSMBSpecificValidation(cooked *cookedSyncCmdArgs
 		glcm.Info(PreservePermissionsInfoMsg)
 	}
 	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, PreservePermissionsFlag); err != nil {
-		return err
-	}
-
-	if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); err != nil {
 		return err
 	}
 	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.fromTo)
