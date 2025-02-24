@@ -25,9 +25,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +61,7 @@ var azcopyCurrentJobID common.JobID
 var azcopySkipVersionCheck bool
 var isPipeDownload bool
 var retryStatusCodes string
+var debugMemoryProfile string
 
 type jobLoggerInfo struct {
 	jobID         common.JobID
@@ -81,6 +84,20 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		glcm.RegisterCloseFunc(func() {
+			if debugMemoryProfile != "" {
+				f, err := os.OpenFile(debugMemoryProfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+				if err != nil {
+					panic(fmt.Sprintf("Failed to open memory profile: %v", err))
+				}
+				defer f.Close()
+				runtime.GC()
+				if err := pprof.WriteHeapProfile(f); err != nil {
+					log.Fatal("could not write memory profile: ", err)
+				}
+			}
+		})
+
 		requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
 		if requestTryTimeout != "" {
 			timeout, err := time.ParseDuration(requestTryTimeout + "m")
@@ -283,6 +300,8 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
 	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
 	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
+	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
+	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 }
 
 const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/releasemetadata/latest_version.txt"

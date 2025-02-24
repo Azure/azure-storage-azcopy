@@ -554,7 +554,7 @@ func (b *BlobFSPathResourceProvider) getFileClient() *file.Client {
 func (b *BlobFSPathResourceProvider) getBlobClient(a Asserter) *blob.Client {
 	a.HelperMarker().Helper()
 	blobService := b.internalAccount.GetService(a, common.ELocation.Blob()).(*BlobServiceResourceManager) // Blob and BlobFS are synonymous, so simply getting the same path is fine.
-	container := blobService.internalClient.NewContainerClient(b.Container.containerName)
+	container := blobService.InternalClient.NewContainerClient(b.Container.containerName)
 	return container.NewBlobClient(b.objectPath) // Generic blob client for now, we can specialize if we want in the future.
 }
 

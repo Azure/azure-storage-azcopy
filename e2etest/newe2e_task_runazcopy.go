@@ -3,6 +3,7 @@ package e2etest
 import (
 	"bytes"
 	"errors"
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -12,6 +13,7 @@ import (
 	"reflect"
 	"runtime/debug"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
@@ -170,8 +172,11 @@ func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter) map[
 	return env.InheritEnvironment
 }
 
-func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter) {
-	dir, err := os.MkdirTemp("", "azcopytests*")
+func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter, ctx context.Context) {
+	runName := ctx.Value(azcopyRunName{}).(string)
+	dir := filepath.Join(os.TempDir(), runName)
+	err := os.Mkdir(dir, 0770)
+
 	a.NoError("create tempdir", err)
 	env.LogLocation = &dir
 	env.JobPlanLocation = &dir
@@ -181,21 +186,21 @@ func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter) {
 	})
 }
 
-func (env *AzCopyEnvironment) DefaultLogLoc(a ScenarioAsserter) string {
+func (env *AzCopyEnvironment) DefaultLogLoc(a ScenarioAsserter, ctx context.Context) string {
 	if env.JobPlanLocation != nil {
 		env.LogLocation = env.JobPlanLocation
 	} else if env.LogLocation == nil {
-		env.generateAzcopyDir(a)
+		env.generateAzcopyDir(a, ctx)
 	}
 
 	return *env.LogLocation
 }
 
-func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter) string {
+func (env *AzCopyEnvironment) DefaultPlanLoc(a ScenarioAsserter, ctx context.Context) string {
 	if env.LogLocation != nil {
 		env.JobPlanLocation = env.LogLocation
 	} else if env.JobPlanLocation == nil {
-		env.generateAzcopyDir(a)
+		env.generateAzcopyDir(a, ctx)
 	}
 
 	return *env.JobPlanLocation
@@ -303,6 +308,9 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 	}
 }
 
+type azCopyRunCounter struct{}
+type azcopyRunName struct{}
+
 // RunAzCopy todo define more cleanly, implement
 func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *AzCopyJobPlan) {
 	if a.Dryrun() {
@@ -311,6 +319,30 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	a.HelperMarker().Helper()
 	var flagMap map[string]string
 	var envMap map[string]string
+
+	var runName string
+	var ctx context.Context
+	if cm, ok := a.(ContextManager); ok {
+		ctx = cm.Context()
+		cPtr := ctx.Value(azCopyRunCounter{})
+
+		var runNum int64
+		if cPtr != nil {
+			runNum = atomic.AddInt64(cPtr.(*int64), 1)                // updates parent context
+			ctx = context.WithValue(ctx, azCopyRunCounter{}, &runNum) // register a pointer to *our* run count in the context
+		} else {
+			runNum = 1
+
+			ctx = context.WithValue(ctx, azCopyRunCounter{}, &runNum)                    // register a pointer to *our* run count in the context
+			cm.SetContext(context.WithValue(ctx, azCopyRunCounter{}, pointerTo(runNum))) // set the parent context
+		}
+
+		runName = fmt.Sprintf("%v-%02d", a.UUID().String(), runNum)
+	} else {
+		runName = uuid.NewString()
+		ctx = context.Background()
+	}
+	ctx = context.WithValue(ctx, azcopyRunName{}, runName)
 
 	// separate these from the struct so their execution order is fixed
 	args := func() []string {
@@ -330,7 +362,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		}
 
 		if commandSpec.Flags != nil {
-			flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a)
+			flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a, ctx)
 			for k, v := range flagMap {
 				out = append(out, fmt.Sprintf("--%s=%s", k, v))
 			}
@@ -341,7 +373,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	env := func() []string {
 		out := make([]string, 0)
 
-		envMap = MapFromTags(reflect.ValueOf(commandSpec.Environment), "env", a)
+		envMap = MapFromTags(reflect.ValueOf(commandSpec.Environment), "env", a, ctx)
 
 		for k, v := range envMap {
 			out = append(out, fmt.Sprintf("%s=%s", k, v))
@@ -448,6 +480,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	a.Cleanup(func(a Asserter) {
+		UploadMemoryProfile(a, flagMap["memory-profile"], ctx)
 		UploadLogs(a, out, stderr, commandSpec.Environment)
 		_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
 	})

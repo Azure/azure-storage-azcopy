@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"github.com/google/uuid"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -47,6 +48,7 @@ func (sm *ScenarioManager) NewVariation(origin *ScenarioVariationManager, id str
 		v := setting[i]
 		clone := &ScenarioVariationManager{
 			VariationData: origin.VariationData.Insert(id, v),
+			VariationUUID: uuid.New(),
 			Parent:        sm,
 			callcounts:    make(map[string]uint),
 		}
@@ -64,7 +66,7 @@ func (sm *ScenarioManager) RunScenario() {
 		Thus, we can retain good (read: brain happy) test ordering by doing FIFO. Engineering at its finest.
 	*/
 	sm.varStack = []*ScenarioVariationManager{
-		{Parent: sm, callcounts: make(map[string]uint)}, // Root svm, no variations, no nothing.
+		{Parent: sm, callcounts: make(map[string]uint), VariationUUID: uuid.New()}, // Root svm, no variations, no nothing.
 	}
 
 	for len(sm.varStack) > 0 {

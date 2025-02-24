@@ -2,7 +2,9 @@ package e2etest
 
 import (
 	"errors"
+	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"runtime"
 	"strings"
 	"testing"
@@ -36,10 +38,40 @@ type ScenarioVariationManager struct {
 	Parent *ScenarioManager
 	// VariationData is a mapping of IDs to values, in order.
 	VariationData *VariationDataContainer // todo call order, prepared options
+	VariationUUID uuid.UUID
 
 	// wetrun data
+	RunContext       context.Context
 	CreatedResources *PathTrie[createdResource]
 	CleanupFuncs     []func(a Asserter)
+}
+
+func (svm *ScenarioVariationManager) GetTestName() string {
+	if svm.t != nil {
+		return svm.t.Name()
+	} else {
+		return svm.Parent.testingT.Name() + "/" + svm.VariationName()
+	}
+}
+
+func (svm *ScenarioVariationManager) Context() context.Context {
+	if svm.RunContext == nil {
+		return context.Background()
+	}
+
+	return svm.RunContext
+}
+
+func (svm *ScenarioVariationManager) SetContext(ctx context.Context) {
+	svm.RunContext = ctx
+}
+
+func (svm *ScenarioVariationManager) UUID() uuid.UUID {
+	if svm.VariationUUID == uuid.Nil { // ensure we aren't handing back something empty
+		svm.VariationUUID = uuid.New()
+	}
+
+	return svm.VariationUUID
 }
 
 type createdResource struct {
