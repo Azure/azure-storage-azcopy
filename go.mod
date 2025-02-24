@@ -107,4 +107,4 @@ require (
 	rsc.io/goversion v1.2.0 // indirect
 )
 
-go 1.22.7
+go 1.24.0
