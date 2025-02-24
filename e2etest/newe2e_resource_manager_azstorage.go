@@ -150,8 +150,8 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 		a.NoError("Create Blob client", err)
 
 		return &BlobServiceResourceManager{
-			internalAccount: acct,
-			internalClient:  client,
+			InternalAccount: acct,
+			InternalClient:  client,
 		}
 	case common.ELocation.File():
 		sharedKey, err := fileservice.NewSharedKeyCredential(acct.accountName, acct.accountKey)
@@ -160,8 +160,8 @@ func (acct *AzureAccountResourceManager) GetService(a Asserter, location common.
 		a.NoError("Create File client", err)
 
 		return &FileServiceResourceManager{
-			internalAccount: acct,
-			internalClient:  client,
+			InternalAccount: acct,
+			InternalClient:  client,
 		}
 	case common.ELocation.BlobFS():
 		sharedKey, err := blobfscommon.NewSharedKeyCredential(acct.accountName, acct.accountKey)
