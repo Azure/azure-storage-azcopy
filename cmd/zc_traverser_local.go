@@ -317,27 +317,42 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
-                                 glcm.Info(fmt.Sprintf("result is %s,slPath is %s",result,slPath))
+				glcm.Info(fmt.Sprintf("result is %s,slPath is %s", result, slPath))
+				var path string
+				if syncHandler == nil {
+					path = result
+				} else {
+					path = filePath
+				}
 				if rStat.IsDir() {
-					if !seenPaths.HasSeen(filePath) {
+					if !seenPaths.HasSeen(path) {
 						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
 						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 						skipped, err := getProcessingError(err)
 
 						if !skipped { // Don't go any deeper (or record it) if we skipped it.
-							seenPaths.Record(common.ToExtendedPath(filePath))
+							if syncHandler == nil {
+								seenPaths.Record(common.ToExtendedPath(result))
+								seenPaths.Record(common.ToExtendedPath(slPath))
+							} else {
+								seenPaths.Record(common.ToExtendedPath(path))
+							}
 							//seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
 							walkQueue = append(walkQueue, walkItem{
-								fullPath:     filePath,
+								fullPath:     path,
 								relativeBase: computedRelativePath,
 							})
 						}
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return err
 					} else {
-						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
-						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-						_, err = getProcessingError(err)
+						if syncHandler == nil {
+							WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already seen folder located at %s (found at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+						} else {
+							err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+							// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+							_, err = getProcessingError(err)
+						}
 					}
 				} else {
 					// It's a symlink to a file and we handle cyclic symlinks.
@@ -355,14 +370,16 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 			} else {
 				// not a symlink
 				result, err := filepath.Abs(filePath)
-				foundat := common.GenerateFullPath(fullPath,computedRelativePath)
+				foundat := common.GenerateFullPath(fullPath, computedRelativePath)
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
-
+				if syncHandler == nil {
+					foundat = result
+				}
 				if !seenPaths.HasSeen(foundat) {
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
