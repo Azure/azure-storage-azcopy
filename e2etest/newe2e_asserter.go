@@ -1,7 +1,9 @@
 package e2etest
 
 import (
+	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"strings"
 	"testing"
 )
@@ -28,6 +30,8 @@ type Asserter interface {
 	Failed() bool
 	// HelperMarker returns the associated *testing.T, and if there is none, a NilHelperMarker.
 	HelperMarker() HelperMarker
+
+	GetTestName() string
 }
 
 type DryrunAsserter interface {
@@ -44,6 +48,12 @@ type ScenarioAsserter interface {
 	DryrunAsserter
 
 	Cleanup(CleanupFunc)
+	UUID() uuid.UUID
+}
+
+type ContextManager interface {
+	Context() context.Context
+	SetContext(ctx context.Context)
 }
 
 // HelperMarker handles the fact that testing.T can be sometimes nil, and that we can't indicate a depth to ignore with Helper()
