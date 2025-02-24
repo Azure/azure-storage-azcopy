@@ -25,6 +25,7 @@ type IJobPartTransferMgr interface {
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
+	TamperProofLocation() string
 	DeleteDestinationFileIfNecessary() bool
 	MD5ValidationOption() common.HashValidationOption
 	BlobTypeOverride() common.BlobType
@@ -553,6 +554,10 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 
 func (jptm *jobPartTransferMgr) ShouldPutMd5() bool {
 	return jptm.jobPartMgr.ShouldPutMd5()
+}
+
+func (jptm *jobPartTransferMgr) TamperProofLocation() string {
+	return jptm.jobPartMgr.TamperProofLocation()
 }
 
 func (jptm *jobPartTransferMgr) DeleteDestinationFileIfNecessary() bool {
