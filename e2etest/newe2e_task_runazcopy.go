@@ -290,7 +290,10 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
 					c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicOAuth.Workload.TenantId)
 					c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicOAuth.Workload.ClientId)
+				} else if mode == common.EAutoLoginType.SPN().String() || mode == common.EAutoLoginType.MSI().String() {
+					c.Environment.InheritEnvironment = true
 				}
+
 			}
 		}
 		return target.URI(opts) // Generate like public
