@@ -645,6 +645,10 @@ func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredent
 }
 
 func (credInfo *OAuthTokenInfo) GetAzCliCredential() (azcore.TokenCredential, error) {
+	if credInfo.Tenant == DefaultTenantID {
+		credInfo.Tenant = ""
+	}
+
 	tc, err := azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{TenantID: credInfo.Tenant})
 	if err != nil {
 		return nil, err
@@ -654,6 +658,10 @@ func (credInfo *OAuthTokenInfo) GetAzCliCredential() (azcore.TokenCredential, er
 }
 
 func (credInfo *OAuthTokenInfo) GetPSContextCredential() (azcore.TokenCredential, error) {
+	if credInfo.Tenant == DefaultTenantID {
+		credInfo.Tenant = ""
+	}
+
 	tc, err := NewPowershellContextCredential(&PowershellContextCredentialOptions{TenantID: credInfo.Tenant})
 	if err != nil {
 		return nil, err
