@@ -125,7 +125,7 @@ type SPNArgs struct {
 
 var loginWithSPNArgs SPNArgs = SPNArgs{}
 
-func setSPNArgs(certData string, certPass string, applicationId string, tenantId string, aadEndpoint string) {
+func SetSPNArgs(certData string, certPass string, applicationId string, tenantId string, aadEndpoint string) {
 	loginWithSPNArgs.certData = certData
 	loginWithSPNArgs.applicationId = applicationId
 	loginWithSPNArgs.certPass = certPass
