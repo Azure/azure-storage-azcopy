@@ -110,6 +110,19 @@ func (e NewE2EConfig) GetSPNOptions() (present bool, tenant, applicationId, secr
 	}
 }
 
+func (e NewE2EConfig) GetTenantID() string {
+	if e.StaticResources() {
+		return e.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth.TenantID
+	} else {
+		dynamicInfo := e.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth
+		if tid := dynamicInfo.SPNSecret.TenantID; tid != "" {
+			return tid
+		} else {
+			return dynamicInfo.Workload.TenantId // worst case if it bubbles down and it's all zero, that's OK.
+		}
+	}
+}
+
 // ========= Tag Definition ==========
 
 type EnvTag struct {

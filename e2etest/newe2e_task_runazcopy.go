@@ -54,13 +54,16 @@ var _ AzCopyStdout = &AzCopyRawStdout{}
 type AzCopyVerb string
 
 const ( // initially supporting a limited set of verbs
-	AzCopyVerbCopy   AzCopyVerb = "copy"
-	AzCopyVerbSync   AzCopyVerb = "sync"
-	AzCopyVerbRemove AzCopyVerb = "remove"
-	AzCopyVerbList   AzCopyVerb = "list"
-	AzCopyVerbLogin  AzCopyVerb = "login"
-	AzCopyVerbLogout AzCopyVerb = "logout"
-	AzCopyVerbJobs   AzCopyVerb = "jobs"
+	AzCopyVerbCopy        AzCopyVerb = "copy"
+	AzCopyVerbSync        AzCopyVerb = "sync"
+	AzCopyVerbRemove      AzCopyVerb = "remove"
+	AzCopyVerbList        AzCopyVerb = "list"
+	AzCopyVerbLogin       AzCopyVerb = "login"
+	AzCopyVerbLoginStatus AzCopyVerb = "login status"
+	AzCopyVerbLogout      AzCopyVerb = "logout"
+	AzCopyVerbJobsList    AzCopyVerb = "jobs list"
+	AzCopyVerbJobsResume  AzCopyVerb = "jobs resume"
+	AzCopyVerbJobsClean   AzCopyVerb = "jobs clean"
 )
 
 type AzCopyTarget struct {
@@ -125,6 +128,8 @@ type AzCopyEnvironment struct {
 	AzureFederatedTokenFile *string `env:"AZURE_FEDERATED_TOKEN_FILE"`
 	AzureTenantId           *string `env:"AZURE_TENANT_ID"`
 	AzureClientId           *string `env:"AZURE_CLIENT_ID"`
+
+	LoginCacheName *string `env:"AZCOPY_LOGIN_CACHE_NAME"`
 
 	InheritEnvironment bool
 	ManualLogin        bool
@@ -281,7 +286,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			commandSpec.Environment = &AzCopyEnvironment{}
 		}
 
-		out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath, string(commandSpec.Verb)}
+		out := []string{GlobalConfig.AzCopyExecutableConfig.ExecutablePath}
+		out = append(out, strings.Split(string(commandSpec.Verb), " ")...)
 
 		for _, v := range commandSpec.PositionalArgs {
 			out = append(out, v)
@@ -340,13 +346,15 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			}
 		case commandSpec.Verb == AzCopyVerbList:
 			out = &AzCopyParsedListStdout{}
-		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "list":
+		case commandSpec.Verb == AzCopyVerbJobsList:
 			out = &AzCopyParsedJobsListStdout{}
-		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "resume":
+		case commandSpec.Verb == AzCopyVerbJobsResume:
 			out = &AzCopyParsedCopySyncRemoveStdout{ // Resume command treated the same as copy/sync/remove
 				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
 				LogFolder:     *commandSpec.Environment.LogLocation,
 			}
+		case commandSpec.Verb == AzCopyVerbLoginStatus:
+			out = &AzCopyParsedLoginStatusStdout{}
 
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}

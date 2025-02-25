@@ -36,6 +36,8 @@ func (OutputMessageType) Response() OutputMessageType { return OutputMessageType
 func (OutputMessageType) ListObject() OutputMessageType  { return OutputMessageType(8) }
 func (OutputMessageType) ListSummary() OutputMessageType { return OutputMessageType(9) }
 
+func (OutputMessageType) LoginStatusInfo() OutputMessageType { return OutputMessageType(10) }
+
 func (o OutputMessageType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }
