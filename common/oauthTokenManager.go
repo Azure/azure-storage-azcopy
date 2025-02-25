@@ -621,16 +621,15 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 }
 
 func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCredential, error) {
-	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+	/*authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
-	}
+	}*/
+	var err error
 	var certData []byte
 	if credInfo.SPNInfo.CertData != "" {
 		certData = []byte(credInfo.SPNInfo.CertData)
-		if err != nil {
-			return nil, err
-		}
+
 	} else {
 		certData, err = os.ReadFile(credInfo.SPNInfo.CertPath)
 		if err != nil {
@@ -643,7 +642,7 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 	}
 	tc, err := azidentity.NewClientCertificateCredential(credInfo.Tenant, credInfo.ApplicationID, certs, key, &azidentity.ClientCertificateCredentialOptions{
 		ClientOptions: azcore.ClientOptions{
-			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: authorityHost.String()},
+			Cloud:     cloud.Configuration{ActiveDirectoryAuthorityHost: credInfo.ActiveDirectoryEndpoint},
 			Transport: newAzcopyHTTPClient(),
 		},
 		SendCertificateChain: true,
