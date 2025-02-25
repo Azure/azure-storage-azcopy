@@ -158,12 +158,12 @@ func (lca loginCmdArgs) process() error {
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	case common.EAutoLoginType.AzCLI().String():
-		if err := uotm.AzCliLogin(lca.tenantID); err != nil {
+		if err := uotm.AzCliLogin(lca.tenantID, lca.persistToken); err != nil {
 			return err
 		}
 		glcm.Info("Login with AzCliCreds succeeded")
 	case common.EAutoLoginType.PsCred().String():
-		if err := uotm.PSContextToken(lca.tenantID); err != nil {
+		if err := uotm.PSContextToken(lca.tenantID, lca.persistToken); err != nil {
 			return err
 		}
 		glcm.Info("Login with Powershell context succeeded")
