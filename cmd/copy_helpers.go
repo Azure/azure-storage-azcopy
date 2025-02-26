@@ -26,21 +26,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-func areBothLocationsSMBAware(fromTo common.FromTo) bool {
-	// preserverSMBInfo will be true by default for SMB-aware locations unless specified false.
-	// 1. Upload (Windows/Linux -> Azure File)
-	// 2. Download (Azure File -> Windows/Linux)
-	// 3. S2S (Azure File -> Azure File)
-	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") &&
-		(fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
-		return true
-	} else if fromTo == common.EFromTo.FileFile() {
-		return true
-	} else {
-		return false
-	}
-}
-
 func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
 	// preserverNFSInfo will be true by default for NFS-aware locations unless specified false.
 	// 1. Upload (Windows/Linux -> Azure File)
@@ -62,6 +47,10 @@ func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 }
 
 func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
+	// preserverSMBInfo will be true by default for SMB-aware locations unless specified false.
+	// 1. Upload (Windows/Linux -> Azure File)
+	// 2. Download (Azure File -> Windows/Linux)
+	// 3. S2S (Azure File -> Azure File)
 	if toPreserve && flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
 		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
 		return nil
