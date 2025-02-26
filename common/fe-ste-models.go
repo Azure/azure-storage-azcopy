@@ -58,6 +58,7 @@ const (
 	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
 	BLOB_NOT_FOUND         = "BlobNotFound"
 	FILE_NOT_FOUND         = "The specified file was not found."
+	EINTR_RETRY_COUNT      = 5
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
