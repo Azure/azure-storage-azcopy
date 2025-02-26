@@ -59,10 +59,6 @@ func warnIfSharedKeyAuthForDatalake() {
 // (given appAppPathFolder is mapped to current user)
 var currentUserOAuthTokenManager *common.UserOAuthTokenManager
 
-const oauthLoginSessionCacheKeyName = "AzCopyOAuthTokenCache"
-const oauthLoginSessionCacheServiceName = "AzCopyV10"
-const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
-
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
@@ -198,9 +194,6 @@ type rawFromToInfo struct {
 	fromTo              common.FromTo
 	source, destination common.ResourceString
 }
-
-const trustedSuffixesNameAAD = "trusted-microsoft-suffixes"
-const trustedSuffixesAAD = "*.core.windows.net;*.core.chinacloudapi.cn;*.core.cloudapi.de;*.core.usgovcloudapi.net;*.storage.azure.net"
 
 // checkAuthSafeForTarget checks our "implicit" auth types (those that pick up creds from the environment
 // or a prior login) to make sure they are only being used in places where we know those auth types are safe.
