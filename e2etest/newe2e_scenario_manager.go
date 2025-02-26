@@ -101,8 +101,14 @@ func (sm *ScenarioManager) RunScenario() {
 					t.Parallel()
 				}
 
-				svm.Cleanup(func(a ScenarioAsserter) {
-					svm.DeleteCreatedResources() // clean up after ourselves!
+				t.Cleanup(func() {
+					// cleanup steps FIFO
+					c := ScenarioVariationManagerCleanupAsserter{svm: svm}
+					for _, v := range svm.CleanupFuncs {
+						c.WrapCleanup(v)
+					}
+
+					svm.DeleteCreatedResources()
 				})
 
 				sm.Func.Call([]reflect.Value{reflect.ValueOf(svm)})
