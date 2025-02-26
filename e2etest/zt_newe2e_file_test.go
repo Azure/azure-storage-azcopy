@@ -604,3 +604,26 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		DerefOrZero(shareResource.GetProperties(svm).FileContainerProperties.Quota),
 		newQuota)
 }
+
+// Test that POSIX errors are not returned in a RemoteLocal transfer
+func (s *FileTestSuite) Scenario_SingleFileDownloadNoError(svm *ScenarioVariationManager) {
+	body := NewRandomObjectContentContainer(0)
+	srcObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.File()),
+		ResourceDefinitionObject{Body: body})
+	destObj := CreateResource[ObjectResourceManager](svm,
+		GetRootResource(svm, common.ELocation.Local()),
+		ResourceDefinitionObject{Body: body})
+
+	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
+		Verb:       AzCopyVerbCopy,
+		Targets:    []ResourceManager{srcObj, destObj},
+		ShouldFail: false,
+	})
+
+	//ValidateResource[ObjectResourceManager](svm, destObj, ResourceDefinitionObject{
+	//	Body: body,
+	//}, true)
+
+	ValidateDoesNotContainError(svm, stdOut, []string{"interrupted system call"})
+}
