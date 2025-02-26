@@ -33,6 +33,7 @@ const (
 	base10Mega = 1000 * 1000
 )
 
+// credentials relates consts
 const (
 	oauthLoginSessionCacheKeyName     = "AzCopyOAuthTokenCache"
 	oauthLoginSessionCacheServiceName = "AzCopyV10"
