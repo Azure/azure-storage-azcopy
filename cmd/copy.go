@@ -62,8 +62,6 @@ const base10Mega = 1000 * 1000
 
 const pipeLocation = "~pipe~"
 
-const PreservePermissionsFlag = "preserve-permissions"
-
 // represents the raw copy command input from the user
 type rawCopyCmdArgs struct {
 	// from arguments
@@ -289,19 +287,18 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 // Returns:
 // - An error if any validation fails, otherwise nil indicating successful validation.
 func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	// TODO remove it
-	glcm.Info("NFS copy support addition in progress")
+
 	cooked.isNFSCopy = raw.isNFSCopy
-	cooked.preserveNFSInfo = raw.preserveNFSInfo && areBothLocationsNFSAware(cooked.FromTo)
-	if err = validatePreserveNFSPropertyOption(cooked.preserveNFSInfo, cooked.FromTo, "preserve-nfs-info"); err != nil {
+	cooked.preserveNFSInfo = raw.preserveNFSInfo
+	if err = validatePreserveNFSPropertyOption(cooked.preserveNFSInfo, cooked.FromTo, PreserveNFSInfoFlag); err != nil {
 		return err
 	}
 
 	isUserPersistingPermissions := raw.preserveNFSPermissions
 	if cooked.preserveNFSInfo && !isUserPersistingPermissions {
-		glcm.Info(PreserveNFSPermissions)
+		glcm.Info(PreserveNFSPermissionsDisabledMsg)
 	}
-	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions, cooked.FromTo, "preserve-nfs-permissions"); err != nil {
+	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions, cooked.FromTo, PreserveNFSPermissionsFlag); err != nil {
 		return err
 	}
 	// TODO: Discuss and add the validation for owner flags if required in case of NFS
@@ -324,19 +321,19 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 // - An error if any validation fails, otherwise nil indicating successful validation.
 
 func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.FromTo)
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, "preserve-smb-info"); err != nil {
+	cooked.preserveSMBInfo = raw.preserveSMBInfo
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, PreserveSMBInfoFlag); err != nil {
 		return err
 	}
 
 	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
 	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
-		return fmt.Errorf(PreservePOSIXPropertiesErrMsg)
+		return fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
 	}
 
 	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
 	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info(PreservePermissionsInfoMsg)
+		glcm.Info(PreservePermissionsDisabledMsg)
 	}
 
 	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, PreservePermissionsFlag); err != nil {
@@ -746,6 +743,10 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
+	if err := performSMBAndNFSFlagsValidation(raw.isNFSCopy, raw.preserveNFSInfo, raw.preserveNFSPermissions,
+		raw.preserveSMBInfo, raw.preservePermissions); err != nil {
+		return cooked, err
+	}
 	if raw.isNFSCopy {
 		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
 			return cooked, err
@@ -1013,24 +1014,6 @@ func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	default:
 		return false
 	}
-}
-
-func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
-	if toPreserve && flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
-		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
-		return nil
-	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
-		fromTo == common.EFromTo.FileLocal() ||
-		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
-	}
-
-	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
-		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
-	}
-
-	return nil
 }
 
 func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {

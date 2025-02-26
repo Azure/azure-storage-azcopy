@@ -41,27 +41,16 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	}
 }
 
-func areBothLocationsNFSAware(fromTo common.FromTo) bool {
+func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
 	// preserverNFSInfo will be true by default for NFS-aware locations unless specified false.
 	// 1. Upload (Windows/Linux -> Azure File)
 	// 2. Download (Azure File -> Windows/Linux)
 	// 3. S2S (Azure File -> Azure File)
 	// TODO: More combination checks to be added later
-	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") &&
-		(fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
-		return true
-	} else if fromTo == common.EFromTo.FileFile() {
-		return true
-	} else {
-		return false
-	}
-}
-
-func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
 	if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
 		fromTo == common.EFromTo.FileLocal() ||
 		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == "preserve-nfs-info", "permission", "NFS"))
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreserveNFSInfoFlag, "permission", "NFS"))
 	}
 
 	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
@@ -69,5 +58,47 @@ func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
 	}
 
+	return nil
+}
+
+func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
+	if toPreserve && flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
+		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
+		return nil
+	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
+		fromTo == common.EFromTo.FileLocal() ||
+		fromTo == common.EFromTo.FileFile()) {
+		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
+	}
+
+	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
+		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
+	}
+
+	return nil
+}
+
+// performSMBAndNFSFlagsValidation validates flag combinations for SMB and NFS copy operations.
+// It ensures that incompatible flags are not used based on the protocol type and OS.
+//
+// Parameters:
+// - isNFSCopy: Indicates if the operation is NFS copy.
+// - preserveNFSInfo, preserveNFSPermissions, preserveSMBInfo, preservePermissions: Flags for preserving NFS/SMB info and permissions.
+//
+// Returns:
+// - error: Returns an error if invalid flag combinations are detected, otherwise nil.
+func performSMBAndNFSFlagsValidation(isNFSCopy, preserveNFSInfo, preserveNFSPermissions,
+	preserveSMBInfo, preservePermisssions bool) error {
+
+	if isNFSCopy {
+		if (!(runtime.GOOS == "windows") && preserveSMBInfo) || preservePermisssions {
+			return fmt.Errorf("NFS copy cannot be used with SMB-related flags. Please ensure only NFS-specific flags are provided.")
+		}
+	} else {
+		if (!(runtime.GOOS == "linux") && preserveNFSInfo) || preserveNFSPermissions {
+			return fmt.Errorf("SMB copy cannot be used with NFS-related flags. Please ensure only SMB-specific flags are provided.")
+		}
+	}
 	return nil
 }

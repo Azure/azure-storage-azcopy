@@ -280,6 +280,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
 	//	return cooked, err
 	// }
+	if err := performSMBAndNFSFlagsValidation(raw.isNFSCopy, raw.preserveNFSInfo, raw.preserveNFSPermissions,
+		raw.preserveSMBInfo, raw.preserveSMBPermissions); err != nil {
+		return cooked, err
+	}
 	if raw.isNFSCopy {
 		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
 			return cooked, err
@@ -397,19 +401,25 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 // Returns:
 // - An error if any validation fails, otherwise nil indicating successful validation.
 func (raw rawSyncCmdArgs) performNFSSpecificValidation(cooked *cookedSyncCmdArgs) (err error) {
-	// TODO remove it
-	glcm.Info("NFS copy support addition in progress")
+	if raw.preserveSMBInfo || raw.preservePermissions {
+		return fmt.Errorf("NFS copy cannot be used with SMB-related flags. Please use only NFS-specific flags.")
+	}
+
 	cooked.isNFSCopy = raw.isNFSCopy
-	cooked.preserveNFSInfo = raw.preserveNFSInfo && areBothLocationsNFSAware(cooked.fromTo)
-	if err = validatePreserveNFSPropertyOption(cooked.preserveNFSInfo, cooked.fromTo, "preserve-nfs-info"); err != nil {
+	cooked.preserveNFSInfo = raw.preserveNFSInfo
+	if err = validatePreserveNFSPropertyOption(cooked.preserveNFSInfo,
+		cooked.fromTo,
+		PreserveNFSInfoFlag); err != nil {
 		return err
 	}
 
 	isUserPersistingPermissions := raw.preserveNFSPermissions
 	if cooked.preserveNFSInfo && !isUserPersistingPermissions {
-		glcm.Info(PreserveNFSPermissions)
+		glcm.Info(PreserveNFSPermissionsDisabledMsg)
 	}
-	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions, cooked.fromTo, "preserve-nfs-permissions"); err != nil {
+	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions,
+		cooked.fromTo,
+		PreserveNFSPermissionsFlag); err != nil {
 		return err
 	}
 	// TODO: Discuss and add the validation for owner flags if required in case of NFS
@@ -432,20 +442,23 @@ func (raw rawSyncCmdArgs) performNFSSpecificValidation(cooked *cookedSyncCmdArgs
 // - An error if any validation fails, otherwise nil indicating successful validation.
 
 func (raw rawSyncCmdArgs) performSMBSpecificValidation(cooked *cookedSyncCmdArgs) (err error) {
+	if raw.preserveNFSInfo || raw.preserveNFSPermissions {
+		return fmt.Errorf("SMB copy cannot be used with NFS-related flags. Please ensure only SMB-specific flags are provided.")
+	}
 
-	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.fromTo)
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, "preserve-smb-info"); err != nil {
+	cooked.preserveSMBInfo = raw.preserveSMBInfo
+	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.fromTo, PreserveSMBInfoFlag); err != nil {
 		return err
 	}
 
 	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
 	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.fromTo) {
-		return fmt.Errorf(PreservePOSIXPropertiesErrMsg)
+		return fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
 	}
 
 	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
 	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info(PreservePermissionsInfoMsg)
+		glcm.Info(PreservePermissionsDisabledMsg)
 	}
 	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.fromTo, PreservePermissionsFlag); err != nil {
 		return err
