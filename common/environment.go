@@ -115,6 +115,10 @@ func (AutoLoginType) PsCred() AutoLoginType     { return AutoLoginType(4) }
 func (AutoLoginType) Workload() AutoLoginType   { return AutoLoginType(5) }
 func (AutoLoginType) TokenStore() AutoLoginType { return AutoLoginType(255) } // Storage Explorer internal integration only. Do not add this to ValidAutoLoginTypes.
 
+func (d AutoLoginType) IsInteractive() bool {
+	return d == d.Device()
+}
+
 func (d AutoLoginType) String() string {
 	return strings.ToLower(enum.StringInt(d, reflect.TypeOf(d)))
 }

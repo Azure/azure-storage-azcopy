@@ -40,7 +40,7 @@ func NewScenarioManager(t *testing.T, targetFunc reflect.Value) *ScenarioManager
 
 func (sm *ScenarioManager) NewVariation(origin *ScenarioVariationManager, id string, setting []any) {
 	if origin.isInvalid {
-		return // isInvalid variations shouldn't spawn new variations
+		return // IsInvalid variations shouldn't spawn new variations
 	}
 
 	for i := len(setting) - 1; i >= 0; i-- { // Because the stack is FIFO, insert the first terms last to match expected variation ordering.
