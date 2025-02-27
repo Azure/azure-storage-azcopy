@@ -137,6 +137,8 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 			// indicate whether constrained by disk or not
 			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
 
+			var pending int = int(summary.TransfersCompleted + summary.TransfersFailed + summary.TransfersSkipped)
+			fmt.Sprintf("cast to int: %v", pending)
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.PercentComplete,
 				summary.TransfersCompleted,
