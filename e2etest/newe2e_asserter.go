@@ -46,34 +46,6 @@ type ScenarioAsserter interface {
 	Cleanup(CleanupFunc)
 }
 
-type ScenarioAsserterWrapper struct {
-	Asserter
-
-	CleanupFuncs []CleanupFunc
-}
-
-func (s *ScenarioAsserterWrapper) Dryrun() bool {
-	return false
-}
-
-func (s *ScenarioAsserterWrapper) Invalid() bool {
-	return false
-}
-
-func (s *ScenarioAsserterWrapper) InvalidateScenario() {
-	// noop
-}
-
-func (s *ScenarioAsserterWrapper) Cleanup(cleanupFunc CleanupFunc) {
-	if s.Dryrun() {
-		return
-	}
-}
-
-func (s *ScenarioAsserterWrapper) DoCleanup() {
-	
-}
-
 // HelperMarker handles the fact that testing.T can be sometimes nil, and that we can't indicate a depth to ignore with Helper()
 type HelperMarker interface {
 	Helper()
