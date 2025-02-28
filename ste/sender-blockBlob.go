@@ -71,8 +71,10 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 	srcSize := transferInfo.SourceSize
 	numChunks = getNumChunks(srcSize, chunkSize, putBlobSize)
 
+	maxSize := int64(common.MaxBlockBlobBlockSize)
 	if srcSize < putBlobSize {
 		chunkSize = putBlobSize
+		maxSize = common.MaxPutBlobSize
 	}
 
 	toGiB := func(bytes int64) float64 {
@@ -103,10 +105,10 @@ func getVerifiedChunkParams(transferInfo *TransferInfo, memLimit int64, strictMe
 	}
 
 	// sanity check
-	if chunkSize > common.MaxBlockBlobBlockSize {
+	if chunkSize > maxSize { // Use relevant PutBlob or Block size max
 		// mercy, please
-		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed block size for a BlockBlob",
-			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize))
+		err = fmt.Errorf("block size of %.2fGiB for file %s of size %.2fGiB exceeds maximum allowed %.2fMiB block size for a BlockBlob",
+			toGiB(chunkSize), transferInfo.Source, toGiB(transferInfo.SourceSize), float64(maxSize/(1024*1024)))
 		return
 	}
 
