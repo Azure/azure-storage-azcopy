@@ -131,20 +131,26 @@ func AccountRegistryInitHook(a Asserter) {
 	if GlobalConfig.StaticResources() {
 		acctInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo
 
-		AccountRegistry[PrimaryStandardAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.Standard.AccountName,
-			accountKey:  acctInfo.Standard.AccountKey,
-			accountType: EAccountType.Standard(),
+		if acctInfo.Standard.AccountName != "" {
+			AccountRegistry[PrimaryStandardAcct] = &AzureAccountResourceManager{
+				accountName: acctInfo.Standard.AccountName,
+				accountKey:  acctInfo.Standard.AccountKey,
+				accountType: EAccountType.Standard(),
+			}
 		}
-		AccountRegistry[PrimaryHNSAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.HNS.AccountName,
-			accountKey:  acctInfo.HNS.AccountKey,
-			accountType: EAccountType.HierarchicalNamespaceEnabled(),
+		if acctInfo.HNS.AccountName != "" {
+			AccountRegistry[PrimaryHNSAcct] = &AzureAccountResourceManager{
+				accountName: acctInfo.HNS.AccountName,
+				accountKey:  acctInfo.HNS.AccountKey,
+				accountType: EAccountType.HierarchicalNamespaceEnabled(),
+			}
 		}
-		AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
-			accountName: acctInfo.PremiumPage.AccountName,
-			accountKey:  acctInfo.PremiumPage.AccountKey,
-			accountType: EAccountType.PremiumPageBlobs(),
+		if acctInfo.PremiumPage.AccountName != "" {
+			AccountRegistry[PremiumPageBlobAcct] = &AzureAccountResourceManager{
+				accountName: acctInfo.PremiumPage.AccountName,
+				accountKey:  acctInfo.PremiumPage.AccountKey,
+				accountType: EAccountType.PremiumPageBlobs(),
+			}
 		}
 	} else {
 		// Create standard accounts

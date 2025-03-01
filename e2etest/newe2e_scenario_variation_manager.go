@@ -1,8 +1,8 @@
 package e2etest
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"runtime"
@@ -389,6 +389,10 @@ var CleanupStepEarlyExit = errors.New("cleanupEarlyExit")
 
 type ScenarioVariationManagerCleanupAsserter struct {
 	svm *ScenarioVariationManager
+}
+
+func (s *ScenarioVariationManagerCleanupAsserter) GetTestName() string {
+	return s.svm.GetTestName()
 }
 
 func (s *ScenarioVariationManagerCleanupAsserter) WrapCleanup(cf CleanupFunc) {
