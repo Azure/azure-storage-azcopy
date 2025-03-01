@@ -2,21 +2,15 @@ package e2etest
 
 import (
 	"bytes"
-	"errors"
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime/debug"
 	"strings"
-	"sync/atomic"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/google/uuid"
 )
 
 // AzCopyJobPlan todo probably load the job plan directly? WI#26418256
@@ -139,11 +133,11 @@ type AzCopyEnvironment struct {
 
 	ManualLogin bool
 
-	// If this is set, the logs have already been persisted.
-	// These should never be set by a test writer.
-	SessionId    *string
-	LogUploadDir *string
-	RunCount     *uint
+	// These fields should almost never be intentionally set by a test writer unless the author really knows what they're doing,
+	// as the fields are automatically controlled.
+	ParentContext *AzCopyEnvironmentContext
+	EnvironmentId *uint
+	RunCount      *uint
 }
 
 func (env *AzCopyEnvironment) InheritEnvVar(name string) {
@@ -173,17 +167,13 @@ func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter) map[
 }
 
 func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter, ctx context.Context) {
-	runName := ctx.Value(azcopyRunName{}).(string)
-	dir := filepath.Join(os.TempDir(), runName)
-	err := os.Mkdir(dir, 0770)
+	envCtx := ctx.Value(AzCopyEnvironmentManagerKey{}).(*AzCopyEnvironmentContext)
+	envTmpPath := envCtx.GetEnvTempPath(env)
 
-	a.NoError("create tempdir", err)
-	env.LogLocation = &dir
-	env.JobPlanLocation = &dir
-	a.Cleanup(func(a Asserter) {
-		err := os.RemoveAll(dir)
-		a.NoError("remove tempdir", err)
-	})
+	err := os.MkdirAll(envTmpPath, 0777)
+	a.NoError("failed to create env dir ("+envTmpPath+")", err, true)
+	env.LogLocation = pointerTo(filepath.Join(envTmpPath, LogSubdir))
+	env.JobPlanLocation = pointerTo(filepath.Join(envTmpPath, PlanSubdir))
 }
 
 func (env *AzCopyEnvironment) DefaultLogLoc(a ScenarioAsserter, ctx context.Context) string {
@@ -308,9 +298,6 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 	}
 }
 
-type azCopyRunCounter struct{}
-type azcopyRunName struct{}
-
 // RunAzCopy todo define more cleanly, implement
 func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *AzCopyJobPlan) {
 	if a.Dryrun() {
@@ -320,31 +307,23 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	var flagMap map[string]string
 	var envMap map[string]string
 
-	var runName string
-	var ctx context.Context
-	if cm, ok := a.(ContextManager); ok {
-		ctx = cm.Context()
-		cPtr := ctx.Value(azCopyRunCounter{})
+	// we have no need to update our context manager, Fetch should do it for us.
+	envCtx := FetchAzCopyEnvironmentContext(a)
+	envCtx.SetupCleanup(a) // Make sure we add the cleanup hook; the sync.Once ensures idempotency.
 
-		var runNum int64
-		if cPtr != nil {
-			runNum = atomic.AddInt64(cPtr.(*int64), 1)                // updates parent context
-			ctx = context.WithValue(ctx, azCopyRunCounter{}, &runNum) // register a pointer to *our* run count in the context
-		} else {
-			runNum = 1
-
-			ctx = context.WithValue(ctx, azCopyRunCounter{}, &runNum)                    // register a pointer to *our* run count in the context
-			cm.SetContext(context.WithValue(ctx, azCopyRunCounter{}, pointerTo(runNum))) // set the parent context
-		}
-
-		runName = fmt.Sprintf("%v-%02d", a.UUID().String(), runNum)
+	// register our environment, or create a new one if needed.
+	var runNum uint
+	if env := commandSpec.Environment; env == nil {
+		commandSpec.Environment = envCtx.CreateEnvironment()
 	} else {
-		runName = uuid.NewString()
-		ctx = context.Background()
+		runNum = envCtx.RegisterEnvironment(env)
 	}
-	ctx = context.WithValue(ctx, azcopyRunName{}, runName)
+
+	ctx := context.WithValue(envCtx, AzCopyRunNumKey{}, runNum)
+	ctx = context.WithValue(ctx, AzCopyEnvironmentKey{}, commandSpec.Environment)
 
 	// separate these from the struct so their execution order is fixed
+	// Setup the positional args
 	args := func() []string {
 		if commandSpec.Environment == nil {
 			commandSpec.Environment = &AzCopyEnvironment{}
@@ -370,6 +349,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 
 		return out
 	}()
+	// Setup the env vars
 	env := func() []string {
 		out := make([]string, 0)
 
@@ -398,8 +378,9 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}()
 
 	var out = commandSpec.Stdout
-	if out == nil {
+	if out == nil { // Select the correct stdoutput parser
 		switch {
+		// Dry-run parser
 		case strings.EqualFold(flagMap["dry-run"], "true") && (strings.EqualFold(flagMap["output-type"], "json") || strings.EqualFold(flagMap["output-type"], "text") || flagMap["output-type"] == ""): //  Dryrun has its own special sort of output, that supports non-json output.
 			jsonMode := strings.EqualFold(flagMap["output-type"], "json")
 			var fromTo common.FromTo
@@ -411,25 +392,38 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				fromTo:   fromTo,
 				Raw:      make(map[string]bool),
 			}
-		case !strings.EqualFold(flagMap["output-type"], "json"): // Won't parse non-computer-readable outputs
-			out = &AzCopyRawStdout{}
-		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
 
+		// Text formats don't get parsed usually
+		case !strings.EqualFold(flagMap["output-type"], "json"):
+			out = &AzCopyRawStdout{}
+
+		// Copy/sync/remove share the same output format
+		case commandSpec.Verb == AzCopyVerbCopy || commandSpec.Verb == AzCopyVerbSync || commandSpec.Verb == AzCopyVerbRemove:
 			out = &AzCopyParsedCopySyncRemoveStdout{
 				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
 				LogFolder:     *commandSpec.Environment.LogLocation,
 			}
+
+		// List
 		case commandSpec.Verb == AzCopyVerbList:
 			out = &AzCopyParsedListStdout{}
+
+		// Jobs list
 		case commandSpec.Verb == AzCopyVerbJobsList:
 			out = &AzCopyParsedJobsListStdout{}
+
+		// Jobs resume
 		case commandSpec.Verb == AzCopyVerbJobsResume:
 			out = &AzCopyParsedCopySyncRemoveStdout{ // Resume command treated the same as copy/sync/remove
 				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
 				LogFolder:     *commandSpec.Environment.LogLocation,
 			}
+
+		// Login status
 		case commandSpec.Verb == AzCopyVerbLoginStatus:
 			out = &AzCopyParsedLoginStatusStdout{}
+
+		// Login (interactive)
 		case commandSpec.Verb == AzCopyVerbLogin:
 			var lType common.AutoLoginType
 			if ltStr := flagMap["login-type"]; ltStr != "" {
@@ -475,108 +469,18 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		0, command.ProcessState.ExitCode())
 
 	// validate log file retention for jobs clean command before the job logs are cleaned up and uploaded
-	if !a.Failed() && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "clean" {
+	if !a.Failed() && commandSpec.Verb == AzCopyVerbJobsClean {
 		ValidateLogFileRetention(a, *commandSpec.Environment.LogLocation, 1)
 	}
 
-	a.Cleanup(func(a Asserter) {
-		UploadMemoryProfile(a, flagMap["memory-profile"], ctx)
-		UploadLogs(a, out, stderr, commandSpec.Environment)
-		_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
+	// The environment manager will handle cleanup for us-- All we need to do at this point is register our stdout.
+	envCtx.RegisterLogUpload(LogUpload{
+		EnvironmentID: *commandSpec.Environment.EnvironmentId,
+		RunID:         runNum,
+
+		Stdout: out.String(),
+		Stderr: stderr.String(),
 	})
 
 	return out, &AzCopyJobPlan{}
-}
-
-func UploadLogs(a Asserter, stdout AzCopyStdout, stderr *bytes.Buffer, env *AzCopyEnvironment) {
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Println("Log cleanup failed", err, "\n", string(debug.Stack()))
-		}
-	}()
-
-	logDropPath := GlobalConfig.AzCopyExecutableConfig.LogDropPath
-	if logDropPath == "" || !a.Failed() {
-		return
-	}
-
-	if env.LogUploadDir == nil {
-		logDir := DerefOrZero(env.LogLocation)
-
-		var err error
-		// Previously, we searched for a job ID to upload. Instead, we now treat shared environments as "sessions", and upload the logs all together.
-		sessionId := uuid.NewString()
-		env.SessionId = &sessionId
-
-		// Create the destination log directory
-		destLogDir := filepath.Join(logDropPath, sessionId)
-		err = os.MkdirAll(destLogDir, os.ModePerm|os.ModeDir)
-		a.NoError("Failed to create log dir", err)
-
-		// Copy the files by hand
-		err = filepath.WalkDir(logDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			relPath := strings.TrimPrefix(path, logDir)
-			if d.IsDir() {
-				err = os.MkdirAll(filepath.Join(destLogDir, relPath), os.ModePerm|os.ModeDir)
-				return err
-			}
-
-			// copy the file
-			srcFile, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-
-			destFile, err := os.Create(filepath.Join(destLogDir, relPath))
-			if err != nil {
-				return err
-			}
-
-			defer srcFile.Close()
-			defer destFile.Close()
-
-			_, err = io.Copy(destFile, srcFile)
-			if err != nil {
-				return err
-			}
-
-			return err
-		})
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			a.NoError("Failed to copy log files", err)
-		}
-
-		env.LogUploadDir = &destLogDir
-	}
-
-	sessionId := *env.SessionId
-	destLogDir := *env.LogUploadDir
-	runCount := DerefOrZero(env.RunCount)
-	runCount++
-	env.RunCount = &runCount
-
-	// Write stdout to the folder instead of the job log
-	f, err := os.OpenFile(filepath.Join(destLogDir, fmt.Sprintf("stdout-%03d.txt", runCount)), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
-	a.NoError("Failed to create stdout file", err)
-	_, err = f.WriteString(stdout.String())
-	a.NoError("Failed to write stdout file", err)
-	err = f.Close()
-	a.NoError("Failed to close stdout file", err)
-
-	// If stderr is non-zero, output that too!
-	if stderr != nil && stderr.Len() > 0 {
-		f, err := os.OpenFile(filepath.Join(destLogDir, fmt.Sprintf("stderr-%03d.txt", runCount)), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
-		a.NoError("Failed to create stdout file", err)
-		_, err = stderr.WriteTo(f)
-		a.NoError("Failed to write stdout file", err)
-		err = f.Close()
-		a.NoError("Failed to close stdout file", err)
-	}
-
-	if runCount == 1 {
-		a.Log("Uploaded failed run logs for session %s", sessionId)
-	}
 }

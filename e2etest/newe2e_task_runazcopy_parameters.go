@@ -220,8 +220,17 @@ func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter, ctx context.Context)
 }
 
 func (GlobalFlags) DefaultMemoryProfile(a ScenarioAsserter, ctx context.Context) string {
-	runName := ctx.Value(azcopyRunName{}).(string)
-	return filepath.Join(os.TempDir(), runName, "memoryprof.pprof")
+	envCtx := ctx.Value(AzCopyEnvironmentManagerKey{}).(*AzCopyEnvironmentContext)
+	env := ctx.Value(AzCopyEnvironmentKey{}).(*AzCopyEnvironment)
+	runNum := ctx.Value(AzCopyRunNumKey{}).(uint)
+
+	envTmpPath := envCtx.GetEnvTempPath(env)
+	memProfPath := filepath.Join(
+		envTmpPath,
+		PprofSubdir,
+		fmt.Sprintf(PprofMemFmt, runNum))
+
+	return memProfPath
 }
 
 type CommonFilterFlags struct {

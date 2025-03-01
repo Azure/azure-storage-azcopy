@@ -46,6 +46,7 @@ type CleanupFunc func(a Asserter)
 
 type ScenarioAsserter interface {
 	DryrunAsserter
+	ContextManager
 
 	Cleanup(CleanupFunc)
 	UUID() uuid.UUID

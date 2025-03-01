@@ -2,16 +2,13 @@ package e2etest
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
 	cmd2 "github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/google/uuid"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync/atomic"
 )
 
 const (
@@ -19,7 +16,7 @@ const (
 	MemoryProfileContainer = "memprofdata"
 )
 
-func UploadMemoryProfile(a ScenarioAsserter, profilePath string, ctx context.Context) {
+func UploadMemoryProfile(a Asserter, profilePath string, runCount uint) {
 	// We don't need telemetry configured to dump details on peak memory usage, and we need to grab these anyway.
 	cmd := exec.Command("go", "tool", "pprof", "-top", "-unit=bytes", profilePath)
 
@@ -53,9 +50,6 @@ func UploadMemoryProfile(a ScenarioAsserter, profilePath string, ctx context.Con
 	a.Log("Uploading memory profile!")
 
 	// Fetch our run count for table key
-	var runCount *int64
-	runCount = ctx.Value(azCopyRunCounter{}).(*int64)
-
 	tableService, err := GlobalConfig.GetTelemetryTableService()
 	if err != nil {
 		a.NoError("failed to get telemetry table service", err)
@@ -69,14 +63,7 @@ func UploadMemoryProfile(a ScenarioAsserter, profilePath string, ctx context.Con
 
 	table := tableService.NewClient(MemoryProfileTable)
 	container := blobService.NewContainerClient(MemoryProfileContainer)
-	partitionKey := a.GetTestName() // We'll index the table by test, then select rows by the data key, doing the same on the blob front.
-
-	if runCount == nil {
-		partitionKey = a.GetTestName() + "/" + uuid.NewString()
-		a.Log("run counter not present, falling back to unique key")
-	} else {
-		partitionKey = a.GetTestName() + "/" + fmt.Sprintf("%05d", atomic.LoadInt64(runCount))
-	}
+	partitionKey := a.GetTestName() + "/" + fmt.Sprintf("%05d", runCount) // We'll index the table by test, then select rows by the data key, doing the same on the blob front.
 
 	blobProfilePath := fmt.Sprintf(
 		"%s/%s",
