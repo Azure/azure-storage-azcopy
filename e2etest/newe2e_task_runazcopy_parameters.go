@@ -331,7 +331,7 @@ func (CopyFlags) SerializeListingFile(in any, a ScenarioAsserter) string {
 		_ = file.Close()
 	}(file)
 
-	a.Cleanup(func(a ScenarioAsserter) {
+	a.Cleanup(func(a Asserter) {
 		a.NoError("cleanup list file", os.Remove(path))
 	})
 
