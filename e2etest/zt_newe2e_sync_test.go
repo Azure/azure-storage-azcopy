@@ -86,7 +86,7 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 		customDir = pointerTo(f.URI())
 
 		if !a.Dryrun() {
-			a.Cleanup(func(a ScenarioAsserter) {
+			a.Cleanup(func(a Asserter) {
 				// Should be created by AzCopy, but, won't get tracked by the framework, because it's never actually created.
 				f.Delete(a)
 			})
