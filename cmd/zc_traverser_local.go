@@ -322,7 +322,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				if syncHandler == nil {
 					path = result
 				} else {
-					path = filePath
+					path = slPath
 				}
 				if rStat.IsDir() {
 					if !seenPaths.HasSeen(path) {
@@ -346,6 +346,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
 						return err
 					} else {
+						glcm.Info("Inside else of seen path")
 						if syncHandler == nil {
 							WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already seen folder located at %s (found at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 						} else {
@@ -360,11 +361,35 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					// but if there are two symlinks to the same directory we will process it only once. Because only directories are
 					// deduped to break cycles.  For now, we are living with the inconsistency. The alternative would be to "burn" more
 					// RAM by putting filepaths into seenDirs too, but that could be a non-trivial amount of RAM in big directories trees).
-					targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
+					//targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
+					if syncHandler == nil{
+targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
 
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), targetFi, fileError)
 					_, err = getProcessingError(err)
 					return err
+
+					}else{
+					glcm.Info(fmt.Sprintf("Path is %s", path))
+					if !seenPaths.HasSeen(path) {
+						glcm.Info("Inside not seen")
+						targetFi := symlinkTargetFileInfo{rStat, fileInfo.Name()}
+						newpath := common.GenerateFullPath(path, computedRelativePath)
+						glcm.Info(fmt.Sprintf("New Path is %s", newpath))
+
+						//err := walkFunc(common.GenerateFullPath(path, computedRelativePath), targetFi, fileError)
+						err := walkFunc(path,targetFi, fileError)
+						
+						_, err = getProcessingError(err)
+						if err != nil {
+							return err
+						}
+						seenPaths.Record(common.ToExtendedPath(path))
+					} else {
+						WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
+					}
+					return nil
+					}
 				}
 				return nil
 			} else {
