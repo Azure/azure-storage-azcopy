@@ -535,7 +535,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
 
 	parallelism := 4
-	atomic.AddInt64(&syncQDepth, 1)
 	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
 	cca.waitUntilJobCompletion(false)
