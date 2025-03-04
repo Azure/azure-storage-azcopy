@@ -243,20 +243,20 @@ func syncMonitor() {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		vm, _ := getTotalVirtualMemory()
 		rss, _ := getRSSMemory()
-		glcm.Info(fmt.Sprintf("%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss))
+		WarnStdoutAndScanningLog(fmt.Sprintf("%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss))
+
 		time.Sleep(30 * time.Second)
 		run = atomic.AddInt32(&syncMonitorRun, 0)
 	}
-	glcm.Info("Exiting SyncMonitor...")
-	//fmt.Printf("Exiting SyncMonitor...\n")
+	WarnStdoutAndScanningLog("Exiting SyncMonitor...")
+
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
 func moverSyncHandler(cca *cookedSyncCmdArgs, ctx context.Context) error {
 	// Start the profiling
 	go func() {
-		//fmt.Printf("Listening to port 6060..\n")
-		glcm.Info("Listening to port 6060..")
+		WarnStdoutAndScanningLog("Listening to port 6060..")
 		http.ListenAndServe("localhost:6060", nil)
 	}()
 
@@ -281,14 +281,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		if shouldThrottle() {
 			for continueThrottle() {
 				if (waits % 1800) == 0 {
-					glcm.Warn("Too many go routines, slowing down...")
-					//fmt.Printf("Too many go routines, slowing down...\n")
+					WarnStdoutAndScanningLog("Too many go routines, slowing down...")
+
 				}
 				time.Sleep(100 * time.Millisecond) // Simulate throttling
 				waits++
 			}
-			glcm.Info("Continuing sync traversal...")
-			//fmt.Printf("Continuing sync traversal...\n")
+			WarnStdoutAndScanningLog("Continuing sync traversal...")
 		}
 
 		//sync_src := []string{cca.source.Value, dir.(StoredObject).relativePath}
@@ -306,10 +305,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		syncMutex.Lock()
 		err := enumerator.objectIndexer.store(dir.(StoredObject))
 		syncMutex.Unlock()
-		//glcm.Info(fmt.Sprintf("Storing root object %s", dir.(StoredObject).relativePath))
 		if err != nil {
-			//fmt.Printf("Storing root object failed: %s\n", err)
-			glcm.Error(fmt.Sprintf("Storing root object failed: %s", err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("Storing root object failed: %s", err))
 			return err
 		}
 
@@ -337,8 +334,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			ptt.excludeContainerNames,
 			ptt.includeVersionsList)
 		if err != nil {
-			glcm.Error(fmt.Sprintf("Creating source traverser failed : %s", err))
-			//fmt.Printf("Creating source traverser failed : %s\n", err)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Creating source traverser failed : %s", err))
 			return err
 		}
 
@@ -466,7 +462,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		indexer := newObjectIndexer()
 		var comparator objectProcessor
 		transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
-		//destCleanerFunc := newSyncDestinationCleaner(cca, transferScheduler.scheduleDeleteTransfer).processIfNecessary
 		destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
 		if err != nil {
 			return fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
@@ -476,39 +471,21 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		comparator = newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destCleanerFunc, cca.compareHash, cca.preserveSMBInfo, cca.mirrorMode).processIfNecessary
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		if err != nil {
-			glcm.Error(fmt.Sprintf("Sync traversal failed type = %s, %s", err,comparator))
-			//fmt.Printf("Creating target traverser failed : %s\n", err)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Sync traversal failed type = %s, %s", err, comparator))
 			return err
 		}
 
 		err = st.Traverse(noPreProccessor, stra.my_comparator, enumerator.filters)
 		if err != nil {
 			if !strings.Contains(err.Error(), "RESPONSE 404") {
-				glcm.Error(fmt.Sprintf("Sync traversal failed type = %s", err))
-				//fmt.Printf("Sync traversal failed type = %s \n", err)
+				WarnStdoutAndScanningLog(fmt.Sprintf("Sync traversal failed type = %s", err))
 				return err
 			}
 		}
 
-		// schedule every local file that doesn't exist at the destination
-		//Shilpa err = indexer.traverse(transferScheduler.scheduleCopyTransfer, enumerator.filters)
-		//if err != nil {
-	//		return err
-//		}
-
-		/*jobInitiated, err := transferScheduler.dispatchFinalPart()
-		// sync cleanly exits if nothing is scheduled.
-		if err != nil && err != NothingScheduledError {
-			return err
-		}
-
-		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
-		cca.setScanningComplete()
-		*/
 		err = stra.Finalize()
 		if err != nil {
-			glcm.Error(fmt.Sprintf("Sync finalize failed!! %s", err))
-			//fmt.Printf("Sync finalize failed!!\n")
+			WarnStdoutAndScanningLog(fmt.Sprintf("Sync finalize failed!! %s", err))
 			return err
 		}
 
@@ -545,11 +522,10 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		if qd == 0 {
-			glcm.Info("Sync traversers exited..")
-			//fmt.Printf("Sync traversers exited..\n")
+			WarnStdoutAndScanningLog("Sync traversers exited..")
 			break
 		}
-		glcm.Info("Waiting for sync traversers to exit..")
+		WarnStdoutAndScanningLog("Waiting for sync traversers to exit..")
 		// fmt.Printf("Waiting for sync traversers to exit..\n")
 		time.Sleep(1 * time.Second)
 	}
@@ -559,21 +535,17 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		exited := atomic.AddInt32(&syncMonitorExited, 0)
 		if exited == 1 {
-			glcm.Info("Sync monitor exited, quitting..")
-			//fmt.Printf("Sync monitor exited, quitting..\n")
+			WarnStdoutAndScanningLog("Sync monitor exited, quitting..")
 			break
 		}
-		glcm.Info("Waiting for sync monitor to exit...")
-		// fmt.Printf("Waiting for sync monitor to exit...\n")
+		WarnStdoutAndScanningLog("Waiting for sync monitor to exit...")
 		time.Sleep(1 * time.Second)
 	}
 
-	glcm.Info("Sync operation completed successfully.")
-	//fmt.Printf("Enumerator finalize running...\n")
+	WarnStdoutAndScanningLog("Sync operation completed successfully.")
 	err = enumerator.finalize()
 	if err != nil {
-		glcm.Error(fmt.Sprintf("Sync finalize failed!! %s", err))
-		//fmt.Printf("Sync finalize failed!!\n")
+		WarnStdoutAndScanningLog(fmt.Sprintf("Sync finalize failed!! %s", err))
 		return err
 	}
 	return nil
