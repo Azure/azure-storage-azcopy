@@ -30,6 +30,8 @@ func (a *AzCopyDiscardStdout) RawStdout() []string {
 }
 
 func (a *AzCopyDiscardStdout) Write(p []byte) (n int, err error) {
+	fmt.Print(string(p))
+
 	// no-op
 	return len(p), nil
 }

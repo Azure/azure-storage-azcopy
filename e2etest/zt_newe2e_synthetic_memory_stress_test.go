@@ -53,6 +53,7 @@ func (s *SyntheticMemoryStressTestSuite) Scenario_CopyManyFiles(a *ScenarioVaria
 
 			AsSubdir: PtrOf(false),
 		},
+		Stdout: &AzCopyDiscardStdout{},
 	})
 }
 
@@ -78,6 +79,7 @@ func (s *SyntheticMemoryStressTestSuite) Scenario_CopyFolders(a *ScenarioVariati
 
 			AsSubdir: PtrOf(false),
 		},
+		Stdout: &AzCopyDiscardStdout{},
 	})
 }
 
