@@ -1,16 +1,18 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/e2etest"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type Generator interface {
 	Name() string
 	Generate(manager e2etest.ServiceResourceManager) error
-	RegisterFlags(flags *flag.FlagSet)
+	RegisterFlags(flags *pflag.FlagSet)
+	PreferredService() common.Location
 }
 
 var GeneratorRegistry = make(map[string]Generator)
@@ -30,13 +32,15 @@ func RegisterGenerator(g Generator) {
 		Args: RequireValidTarget,
 	}
 
+	g.RegisterFlags(cmd.PersistentFlags())
+
 	RootCmd.AddCommand(cmd)
 }
 
 func RunGenerator(name, target string) error {
-	svc, err := GetResourceManagerForURI(target)
+	acct, err := GetAccountResourceManager(target)
 	if err != nil {
-		return fmt.Errorf("failed to get resource manager: %w", err)
+		return fmt.Errorf("failed to get account resource manager: %w", err)
 	}
 
 	gen, ok := GeneratorRegistry[name]
@@ -44,7 +48,10 @@ func RunGenerator(name, target string) error {
 		return fmt.Errorf("generator %s does not exist", name)
 	}
 
-	fmt.Printf("Generating scenario %s...", name)
+	a := &DummyAsserter{}
+	svc := acct.GetService(a, gen.PreferredService())
+
+	fmt.Printf("Generating scenario %s... This may take a long time, please be patient.\n", name)
 	err = gen.Generate(svc)
 	if err != nil {
 		return fmt.Errorf("failed generating scenario %s: %w", name, err)

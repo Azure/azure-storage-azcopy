@@ -71,10 +71,10 @@ func (sa *ARMStorageAccount) GetResourceManager() (*AzureAccountResourceManager,
 	}
 
 	return &AzureAccountResourceManager{
-		accountName: sa.AccountName,
-		accountKey:  acctKey,
-		accountType: acctType,
-		armClient:   sa,
+		InternalAccountName: sa.AccountName,
+		InternalAccountKey:  acctKey,
+		InternalAccountType: acctType,
+		ArmClient:           sa,
 	}, nil
 }
 
