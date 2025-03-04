@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/minio/minio-go/pkg/credentials"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -290,6 +291,13 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
+	}
+	//Optional check for custom credential provider
+	var credProvider credentials.Provider = nil
+	creds := ctx.Value(customCreds)
+	if creds != nil {
+		credProvider = creds.(credentials.Provider) //if passed through context, use custom provider
+		copyJobTemplate.Provider = credProvider
 	}
 
 	var srcReauthTok *common.ScopedAuthenticator
