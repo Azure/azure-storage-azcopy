@@ -317,27 +317,62 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					writeToErrorChannel(errorChannel, ErrorFileInfo{FilePath: filePath, FileInfo: fileInfo, ErrorMsg: err})
 					return nil
 				}
-                                 glcm.Info(fmt.Sprintf("result is %s,slPath is %s",result,slPath))
-				if rStat.IsDir() {
-					if !seenPaths.HasSeen(filePath) {
-						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
-						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-						skipped, err := getProcessingError(err)
 
-						if !skipped { // Don't go any deeper (or record it) if we skipped it.
-							seenPaths.Record(common.ToExtendedPath(filePath))
-							//seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
-							walkQueue = append(walkQueue, walkItem{
-								fullPath:     filePath,
-								relativeBase: computedRelativePath,
-							})
+				if rStat.IsDir() {
+					if syncHandler == nil {
+						if !seenPaths.HasSeen(result) {
+							err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+							// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+							skipped, err := getProcessingError(err)
+
+							if !skipped { // Don't go any deeper (or record it) if we skipped it.
+								seenPaths.Record(common.ToExtendedPath(result))
+								seenPaths.Record(common.ToExtendedPath(slPath)) // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
+								walkQueue = append(walkQueue, walkItem{
+									fullPath:     result,
+									relativeBase: computedRelativePath,
+								})
+							}
+							// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
+							return err
+						} else {
+							WarnStdoutAndScanningLog(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, common.GenerateFullPath(fullPath, computedRelativePath)))
 						}
-						// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
-						return err
 					} else {
-						err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
-						// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
-						_, err = getProcessingError(err)
+						finalSlPath, err := filepath.Abs(common.GenerateFullPath(fullPath, computedRelativePath))
+						if err != nil {
+							err = fmt.Errorf("Failed to get absolute path of %s: %s", common.GenerateFullPath(fullPath, computedRelativePath), err.Error())
+							//writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
+							return err
+						}
+						/*
+						 * Symlink pointing to a directory has the potential of causing filesystem loops by pointing
+						 * to one of its ancestor directories.
+						 * Skip the symlink if it causes one, else queue it for scanning.
+						 */
+
+						if ok, err := checkSymlinkCausesDirectoryLoop(finalSlPath); err != nil {
+							err = fmt.Errorf("checkSymlinkCausesDirectoryLoop failed with error: %v", err)
+							//writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
+							return err
+						} else if ok {
+							err = fmt.Errorf("[Directory Loop Detected] %s -> %s, skipping", finalSlPath, result)
+							//writeToErrorChannel(ErrorFileInfo{FileName: fileInfo.Name(), FilePath: filePath, FileLastModifiedTime: fileInfo.ModTime(), FileSize: fileInfo.Size(), IsDir: fileInfo.IsDir(), ErrorMsg: err, IsSource: isSource})
+							return nil
+						} else {
+							err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), symlinkTargetFileInfo{rStat, fileInfo.Name()}, fileError)
+							// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
+							skipped, err := getProcessingError(err)
+
+							if !skipped { // Don't go any deeper (or record it) if we skipped it.
+								walkQueue = append(walkQueue, walkItem{
+									fullPath:     result,
+									relativeBase: computedRelativePath,
+								})
+							}
+							// enumerate the FOLDER now (since its presence in seenDirs will prevent its properties getting enumerated later)
+							return err
+						}
 					}
 				} else {
 					// It's a symlink to a file and we handle cyclic symlinks.
@@ -355,7 +390,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 			} else {
 				// not a symlink
 				result, err := filepath.Abs(filePath)
-				foundat := common.GenerateFullPath(fullPath,computedRelativePath)
+
 				if err != nil {
 					err = fmt.Errorf("failed to get absolute path of %s: %w", filePath, err)
 					WarnStdoutAndScanningLog(err.Error())
@@ -363,7 +398,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					return nil
 				}
 
-				if !seenPaths.HasSeen(foundat) {
+				if !seenPaths.HasSeen(result) {
 					err := walkFunc(common.GenerateFullPath(fullPath, computedRelativePath), fileInfo, fileError)
 					// Since this doesn't directly manipulate the error, and only checks for a specific error, it's OK to use in a generic function.
 					skipped, err := getProcessingError(err)
@@ -391,6 +426,53 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 	return
 }
 
+func checkSymlinkCausesDirectoryLoop(absSymlinkPath string) (bool, error) {
+	if runtime.GOOS != "linux" {
+		// It should work for all Unix OS'es, but since we have tested only on Linux let's enforce that.
+		panic("checkSymlinkCausesDirectoryLoop not supported for this OS")
+	}
+
+	if !filepath.IsAbs(absSymlinkPath) {
+		panic(fmt.Sprintf("checkSymlinkCausesDirectoryLoop failed, symlink path not an absolute path(%s)", absSymlinkPath))
+	}
+
+	// Stat() the symlink target directory to find its inode.
+	tgtStat, err := os.Stat(absSymlinkPath)
+	if err != nil {
+		fmt.Printf("os.Stat(%s) failed: %v\n", absSymlinkPath, err)
+		return false, err
+	}
+
+	if tgtStat.Mode()&os.ModeDir == 0 {
+		panic("checkSymlinkCausesDirectoryLoop must only be called for a symlink pointing to a directory")
+	}
+
+	tgtPath, err := filepath.EvalSymlinks(absSymlinkPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to evaluate symlinks for %s: %w", absSymlinkPath, err)
+	}
+
+	tgtPath, err = filepath.Abs(tgtPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to get absolute path for %s: %w", tgtPath, err)
+	}
+
+	tmpPath := absSymlinkPath
+	for {
+		tmpPath = filepath.Dir(tmpPath)
+
+		if tmpPath == tgtPath {
+			fmt.Printf("Symlink (%s) points to its ancestor (%s), matching target path is %s\n", absSymlinkPath, tmpPath, tgtPath)
+			return true, nil
+		}
+
+		if tmpPath == "/" {
+			break
+		}
+	}
+
+	return false, nil
+}
 func (t *localTraverser) GetHashData(relPath string) (*common.SyncHashData, error) {
 	if t.targetHashType == common.ESyncHashType.None() {
 		return nil, nil // no-op
