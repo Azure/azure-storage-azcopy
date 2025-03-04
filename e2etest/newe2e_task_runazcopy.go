@@ -23,6 +23,21 @@ type AzCopyStdout interface {
 	fmt.Stringer
 }
 
+type AzCopyDiscardStdout struct{}
+
+func (a *AzCopyDiscardStdout) RawStdout() []string {
+	return []string{}
+}
+
+func (a *AzCopyDiscardStdout) Write(p []byte) (n int, err error) {
+	// no-op
+	return len(p), nil
+}
+
+func (a *AzCopyDiscardStdout) String() string {
+	return ""
+}
+
 // AzCopyRawStdout shouldn't be used or relied upon right now! This will be fleshed out eventually. todo WI#26418258
 type AzCopyRawStdout struct {
 	RawOutput []string

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	tableservice "github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
 	blobservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"os"
 	"reflect"
 	"strconv"
@@ -160,6 +161,7 @@ func (e NewE2EConfig) TelemetryConfigured() bool {
 
 var telemetryServiceCache struct {
 	blob  *blobservice.Client
+	file  *fileservice.Client
 	table *tableservice.Client
 }
 
@@ -188,6 +190,7 @@ func (e NewE2EConfig) GetTelemetryBlobService() (*blobservice.Client, error) {
 			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
 		}
 
+		telemetryServiceCache.blob = c
 		return c, nil
 	} else {
 		c, err := blobservice.NewClient(
@@ -198,6 +201,48 @@ func (e NewE2EConfig) GetTelemetryBlobService() (*blobservice.Client, error) {
 			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
 		}
 
+		telemetryServiceCache.blob = c
+		return c, nil
+	}
+}
+
+func (e NewE2EConfig) GetTelemetryFileService() (*fileservice.Client, error) {
+	if telemetryServiceCache.blob != nil {
+		return telemetryServiceCache.file, nil
+	}
+
+	if !e.TelemetryConfigured() {
+		return nil, errors.New("telemetry unconfigured")
+	}
+
+	uri := fmt.Sprintf("https://%s.blob.core.windows.net", e.TelemetryConfig.AccountName)
+
+	if e.StaticResources() {
+		sk, err := fileservice.NewSharedKeyCredential(e.TelemetryConfig.AccountName, e.TelemetryConfig.AccountKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: invalid key: %w", err)
+		}
+
+		c, err := fileservice.NewClientWithSharedKeyCredential(
+			uri,
+			sk,
+			nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
+		}
+
+		telemetryServiceCache.file = c
+		return c, nil
+	} else {
+		c, err := fileservice.NewClient(
+			uri,
+			PrimaryOAuthCache.tc,
+			nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up telemetry: failed client creation: %w", err)
+		}
+
+		telemetryServiceCache.file = c
 		return c, nil
 	}
 }
