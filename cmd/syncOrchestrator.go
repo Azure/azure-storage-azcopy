@@ -236,7 +236,7 @@ func syncMonitor() {
 	syncMonitorRun = 1
 	syncMonitorExited = 0
 
-	fmt.Printf("Starting SyncMonitor...\n")
+	WarnStdoutAndScanningLog("Starting SyncMonitor...\n")
 	var run int32
 
 	run = 1
@@ -249,19 +249,19 @@ func syncMonitor() {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		vm, _ := getTotalVirtualMemory()
 		rss, _ := getRSSMemory()
-		fmt.Printf("\n%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss)
+		WarnStdoutAndScanningLog(fmt.Sprintf("\n%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss))
 		time.Sleep(30 * time.Second)
 		run = atomic.AddInt32(&syncMonitorRun, 0)
 	}
 
-	fmt.Printf("Exiting SyncMonitor...\n")
+	WarnStdoutAndScanningLog("Exiting SyncMonitor...\n")
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
 func syncOrchestratorHandler(cca *cookedSyncCmdArgs, ctx context.Context) error {
 	// Start the profiling
 	go func() {
-		fmt.Printf("Listening to port 6060..\n")
+		WarnStdoutAndScanningLog("Listening to port 6060..\n")
 		http.ListenAndServe("localhost:6060", nil)
 	}()
 
@@ -286,12 +286,12 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		if shouldThrottle() {
 			for continueThrottle() {
 				if (waits % 1800) == 0 {
-					fmt.Printf("Too many go routines, slowing down...\n")
+					WarnStdoutAndScanningLog("Too many go routines, slowing down...\n")
 				}
 				time.Sleep(100 * time.Millisecond) // Simulate throttling
 				waits++
 			}
-			fmt.Printf("Continuing sync traversal...\n")
+			WarnStdoutAndScanningLog("Continuing sync traversal...\n")
 		}
 
 		sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
@@ -311,7 +311,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		syncMutex.Unlock()
 
 		if err != nil {
-			fmt.Printf("Storing root object failed: %s\n", err)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Storing root object failed: %s\n", err))
 			return err
 		}
 
@@ -340,7 +340,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			ptt.includeVersionsList,
 			NewDefaultSyncTraverserOptions())
 		if err != nil {
-			fmt.Printf("Creating source traverser failed : %s\n", err)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Creating source traverser failed : %s\n", err))
 			return err
 		}
 
@@ -370,24 +370,144 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			NewDefaultSyncTraverserOptions())
 
 		stra := newSyncTraverser(enumerator, dir.(StoredObject).relativePath, enumerator.objectComparator)
+		fpo, _ := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, enumerator.filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
 
+		copyJobTemplate := &common.CopyJobPartOrderRequest{
+			JobID:               cca.JobID,
+			CommandString:       cca.commandString,
+			FromTo:              cca.fromTo,
+			Fpo:                 fpo,
+			SymlinkHandlingType: cca.symlinkHandling,
+			SourceRoot:          cca.Source.CloneWithConsolidatedSeparators(),
+			DestinationRoot:     cca.Destination.CloneWithConsolidatedSeparators(),
+			CredentialInfo:      cca.credentialInfo,
+
+			// flags
+			BlobAttributes: common.BlobTransferAttributes{
+				PreserveLastModifiedTime:         cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
+				PutMd5:                           cca.putMd5,
+				MD5ValidationOption:              cca.md5ValidationOption,
+				BlockSizeInBytes:                 cca.blockSize,
+				PutBlobSizeInBytes:               cca.putBlobSize,
+				DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
+			},
+			ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
+			ForceIfReadOnly:                cca.forceIfReadOnly,
+			LogLevel:                       AzcopyLogVerbosity,
+			PreserveSMBPermissions:         cca.preservePermissions,
+			PreserveSMBInfo:                cca.preserveSMBInfo,
+			PreservePOSIXProperties:        cca.preservePOSIXProperties,
+			S2SSourceChangeValidation:      true,
+			DestLengthValidation:           true,
+			S2SGetPropertiesInBackend:      true,
+			S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
+			CpkOptions:                     cca.cpkOptions,
+			S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
+
+			S2SSourceCredentialType: cca.s2sSourceCredentialType,
+			FileAttributes: common.FileTransferAttributes{
+				TrailingDot: cca.trailingDot,
+			},
+		}
+		srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.Source, true, cca.cpkOptions)
+		dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.Destination, false, cca.cpkOptions)
+
+		var srcReauthTok *common.ScopedAuthenticator
+		if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+			srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		}
+
+		options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
+
+		// Create Source Client.
+		var azureFileSpecificOptions any
+		if cca.fromTo.From() == common.ELocation.File() {
+			azureFileSpecificOptions = &common.FileClientOptions{
+				AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
+			}
+		}
+
+		copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
+			cca.fromTo.From(),
+			cca.Source,
+			srcCredInfo.CredentialType,
+			srcCredInfo.OAuthTokenInfo.TokenCredential,
+			&options,
+			azureFileSpecificOptions,
+		)
+
+		// Create Destination client
+		if cca.fromTo.To() == common.ELocation.File() {
+			azureFileSpecificOptions = &common.FileClientOptions{
+				AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
+				AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
+			}
+		}
+
+		var dstReauthTok *common.ScopedAuthenticator
+		if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+			dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+		}
+
+		var srcTokenCred *common.ScopedToken
+		if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
+			srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
+		}
+
+		options = CreateClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
+		copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
+			cca.fromTo.To(),
+			cca.Destination,
+			dstCredInfo.CredentialType,
+			dstCredInfo.OAuthTokenInfo.TokenCredential,
+			&options,
+			azureFileSpecificOptions,
+		)
+
+		indexer := newObjectIndexer()
+		var comparator objectProcessor
+		transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
+		destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
+		if err != nil {
+			return fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
+		}
+		destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
+
+		comparator = newSyncDestinationComparator(
+			indexer,
+			transferScheduler.scheduleCopyTransfer,
+			destCleanerFunc,
+			cca.compareHash,
+			cca.preserveSMBInfo,
+			cca.mirrorMode,
+			func(entityType common.EntityType) {
+				if entityType == common.EEntityType.File() {
+					atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+				} else if entityType == common.EEntityType.Folder() {
+					atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+				}
+			}).processIfNecessary
+
+		WarnStdoutAndScanningLog(fmt.Sprintf("Comparator is %v\n", comparator))
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		if err != nil {
-			fmt.Printf("Creating target traverser failed : %s\n", err)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Creating target traverser failed : %s\n", err))
 			return err
 		}
 
 		err = st.Traverse(noPreProccessor, stra.my_comparator, enumerator.filters)
 		if err != nil {
 			if !strings.Contains(err.Error(), "RESPONSE 404") {
-				fmt.Printf("Sync traversal failed type = %s \n", err)
+				WarnStdoutAndScanningLog(fmt.Sprintf("Sync traversal failed type = %s \n", err))
 				return err
 			}
 		}
 
 		err = stra.Finalize()
 		if err != nil {
-			fmt.Printf("Sync finalize failed!!\n")
+			WarnStdoutAndScanningLog("Sync finalize failed!!\n")
 			return err
 		}
 
@@ -424,10 +544,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		if qd == 0 {
-			fmt.Printf("Sync traversers exited..\n")
+			WarnStdoutAndScanningLog("Sync traversers exited..\n")
 			break
 		}
-		// fmt.Printf("Waiting for sync traversers to exit..\n")
 		time.Sleep(1 * time.Second)
 	}
 
@@ -436,22 +555,21 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		exited := atomic.AddInt32(&syncMonitorExited, 0)
 		if exited == 1 {
-			fmt.Printf("Sync monitor exited, quitting..\n")
+			WarnStdoutAndScanningLog("Sync monitor exited, quitting..\n")
 			break
 		}
-		//fmt.Printf("\nWaiting for sync monitor to exit...\n")
 		time.Sleep(1 * time.Second)
 	}
 
 	for {
-		fmt.Printf("Waiting for sync monitor to exit...\n")
+		WarnStdoutAndScanningLog("Waiting for sync monitor to exit...\n")
 		time.Sleep(1 * 10 * time.Second)
 	}
 
-	fmt.Printf("Enumerator finalize running...\n")
+	WarnStdoutAndScanningLog("Enumerator finalize running...\n")
 	err = enumerator.finalize()
 	if err != nil {
-		fmt.Printf("Sync finalize failed!!\n")
+		WarnStdoutAndScanningLog("Sync finalize failed!!\n")
 		return err
 	}
 
