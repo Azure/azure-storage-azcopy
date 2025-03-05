@@ -30,6 +30,8 @@ import (
 
 var RetryStatusCodes RetryCodes
 
+var platformRetryPolicy func(response *http.Response, err error) bool
+
 func getShouldRetry() func(*http.Response, error) bool {
 	if len(RetryStatusCodes) == 0 {
 		return nil
@@ -48,7 +50,13 @@ func getShouldRetry() func(*http.Response, error) bool {
 				}
 			}
 		}
-		return false
+
+		// fall back to our platform retry policy
+		if platformRetryPolicy != nil {
+			return platformRetryPolicy(resp, err)
+		} else {
+			return false // If we have none, don't retry.
+		}
 	}
 }
 

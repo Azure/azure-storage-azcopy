@@ -38,10 +38,12 @@ type DryrunAsserter interface {
 	InvalidateScenario()
 }
 
+type CleanupFunc func(a Asserter)
+
 type ScenarioAsserter interface {
 	DryrunAsserter
 
-	Cleanup(func(a ScenarioAsserter))
+	Cleanup(CleanupFunc)
 }
 
 // HelperMarker handles the fact that testing.T can be sometimes nil, and that we can't indicate a depth to ignore with Helper()
