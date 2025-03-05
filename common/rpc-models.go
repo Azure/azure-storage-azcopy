@@ -162,8 +162,8 @@ type CopyJobPartOrderRequest struct {
 	CommandString  string // commandString hold the user given command which is logged to the Job log file
 	CredentialInfo CredentialInfo
 
-	PreserveSMBPermissions         PreservePermissionsOption
-	PreserveSMBInfo                bool
+	PreservePermissions            PreservePermissionsOption
+	PreserveInfo                   bool
 	PreservePOSIXProperties        bool
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
@@ -179,6 +179,7 @@ type CopyJobPartOrderRequest struct {
 	// This may not always be the case (for instance, if we opt to use multiple OAuth tokens). At that point, this will likely be it's own CredentialInfo.
 	S2SSourceCredentialType CredentialType // Only Anonymous and OAuth will really be used in response to this, but S3 and GCP will come along too...
 	FileAttributes          FileTransferAttributes
+	IsNFSCopy               bool
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,

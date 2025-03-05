@@ -52,8 +52,9 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		TrailingDot: cca.trailingDot,
 	}
 	jobPartOrder.CpkOptions = cca.CpkOptions
-	jobPartOrder.PreserveSMBPermissions = cca.preservePermissions
-	jobPartOrder.PreserveSMBInfo = cca.preserveSMBInfo
+	jobPartOrder.IsNFSCopy = cca.isNFSCopy
+	jobPartOrder.PreservePermissions = cca.preservePermissions
+	jobPartOrder.PreserveInfo = cca.preserveSMBInfo
 	// We set preservePOSIXProperties if the customer has explicitly asked for this in transfer or if it is just a Posix-property only transfer
 	jobPartOrder.PreservePOSIXProperties = cca.preservePOSIXProperties || (cca.ForceWrite == common.EOverwriteOption.PosixProperties())
 
