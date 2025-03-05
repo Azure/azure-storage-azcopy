@@ -294,14 +294,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			WarnStdoutAndScanningLog("Continuing sync traversal...\n")
 		}
 
-		sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
-		sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+		//sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
+		//sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
 
 		pt_src := cca.Source
 		st_src := cca.Destination
 
-		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
-		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
+		//pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
+		//st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate
@@ -370,127 +370,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			NewDefaultSyncTraverserOptions())
 
 		stra := newSyncTraverser(enumerator, dir.(StoredObject).relativePath, enumerator.objectComparator)
-		fpo, _ := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, enumerator.filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.Destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
 
-		copyJobTemplate := &common.CopyJobPartOrderRequest{
-			JobID:               cca.JobID,
-			CommandString:       cca.commandString,
-			FromTo:              cca.fromTo,
-			Fpo:                 fpo,
-			SymlinkHandlingType: cca.symlinkHandling,
-			SourceRoot:          cca.Source.CloneWithConsolidatedSeparators(),
-			DestinationRoot:     cca.Destination.CloneWithConsolidatedSeparators(),
-			CredentialInfo:      cca.credentialInfo,
-
-			// flags
-			BlobAttributes: common.BlobTransferAttributes{
-				PreserveLastModifiedTime:         cca.preserveSMBInfo, // true by default for sync so that future syncs have this information available
-				PutMd5:                           cca.putMd5,
-				MD5ValidationOption:              cca.md5ValidationOption,
-				BlockSizeInBytes:                 cca.blockSize,
-				PutBlobSizeInBytes:               cca.putBlobSize,
-				DeleteDestinationFileIfNecessary: cca.deleteDestinationFileIfNecessary,
-			},
-			ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
-			ForceIfReadOnly:                cca.forceIfReadOnly,
-			LogLevel:                       AzcopyLogVerbosity,
-			PreserveSMBPermissions:         cca.preservePermissions,
-			PreserveSMBInfo:                cca.preserveSMBInfo,
-			PreservePOSIXProperties:        cca.preservePOSIXProperties,
-			S2SSourceChangeValidation:      true,
-			DestLengthValidation:           true,
-			S2SGetPropertiesInBackend:      true,
-			S2SInvalidMetadataHandleOption: common.EInvalidMetadataHandleOption.RenameIfInvalid(),
-			CpkOptions:                     cca.cpkOptions,
-			S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
-
-			S2SSourceCredentialType: cca.s2sSourceCredentialType,
-			FileAttributes: common.FileTransferAttributes{
-				TrailingDot: cca.trailingDot,
-			},
-		}
-		srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.Source, true, cca.cpkOptions)
-		dstCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.Destination, false, cca.cpkOptions)
-
-		var srcReauthTok *common.ScopedAuthenticator
-		if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-			srcReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-		}
-
-		options := CreateClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauthTok)
-
-		// Create Source Client.
-		var azureFileSpecificOptions any
-		if cca.fromTo.From() == common.ELocation.File() {
-			azureFileSpecificOptions = &common.FileClientOptions{
-				AllowTrailingDot: cca.trailingDot == common.ETrailingDotOption.Enable(),
-			}
-		}
-
-		copyJobTemplate.SrcServiceClient, err = common.GetServiceClientForLocation(
-			cca.fromTo.From(),
-			cca.Source,
-			srcCredInfo.CredentialType,
-			srcCredInfo.OAuthTokenInfo.TokenCredential,
-			&options,
-			azureFileSpecificOptions,
-		)
-
-		// Create Destination client
-		if cca.fromTo.To() == common.ELocation.File() {
-			azureFileSpecificOptions = &common.FileClientOptions{
-				AllowTrailingDot:       cca.trailingDot == common.ETrailingDotOption.Enable(),
-				AllowSourceTrailingDot: (cca.trailingDot == common.ETrailingDotOption.Enable() && cca.fromTo.To() == common.ELocation.File()),
-			}
-		}
-
-		var dstReauthTok *common.ScopedAuthenticator
-		if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
-			// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
-			dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
-		}
-
-		var srcTokenCred *common.ScopedToken
-		if cca.fromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
-			srcTokenCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
-		}
-
-		options = CreateClientOptions(common.AzcopyCurrentJobLogger, srcTokenCred, dstReauthTok)
-		copyJobTemplate.DstServiceClient, err = common.GetServiceClientForLocation(
-			cca.fromTo.To(),
-			cca.Destination,
-			dstCredInfo.CredentialType,
-			dstCredInfo.OAuthTokenInfo.TokenCredential,
-			&options,
-			azureFileSpecificOptions,
-		)
-
-		indexer := newObjectIndexer()
-		var comparator objectProcessor
-		transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
-		destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
-		if err != nil {
-			return fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
-		}
-		destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
-
-		comparator = newSyncDestinationComparator(
-			indexer,
-			transferScheduler.scheduleCopyTransfer,
-			destCleanerFunc,
-			cca.compareHash,
-			cca.preserveSMBInfo,
-			cca.mirrorMode,
-			func(entityType common.EntityType) {
-				if entityType == common.EEntityType.File() {
-					atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
-				} else if entityType == common.EEntityType.Folder() {
-					atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
-				}
-			}).processIfNecessary
-
-		WarnStdoutAndScanningLog(fmt.Sprintf("Comparator is %v\n", comparator))
+		//WarnStdoutAndScanningLog(fmt.Sprintf("Comparator is %v\n", comparator))
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("Creating target traverser failed : %s\n", err))
@@ -558,11 +439,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			break
 		}
 		time.Sleep(1 * time.Second)
-	}
-
-	for {
-		WarnStdoutAndScanningLog("Waiting for sync monitor to exit...\n")
-		time.Sleep(1 * 10 * time.Second)
 	}
 
 	WarnStdoutAndScanningLog("Enumerator finalize running...\n")
