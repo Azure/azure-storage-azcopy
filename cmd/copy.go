@@ -274,7 +274,7 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 		return fmt.Errorf("NFS copy cannot be used with SMB-related flags. Please use --preserve-info or --preserve-permissions flags instead.")
 	}
 	cooked.isNFSCopy = raw.isNFSCopy
-	cooked.preserveInfo = raw.preserveInfo
+	cooked.preserveInfo = raw.preserveInfo && (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.FromTo)
 	if err = validatePreserveNFSPropertyOption(cooked.preserveInfo, cooked.FromTo, PreserveInfoFlag); err != nil {
 		return err
 	}
@@ -306,7 +306,7 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 // - An error if any validation fails, otherwise nil indicating successful validation.
 
 func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	cooked.preserveInfo = raw.preserveSMBInfo || raw.preserveInfo
+	cooked.preserveInfo = (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.FromTo)
 	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, PreserveInfoFlag); err != nil {
 		return err
 	}

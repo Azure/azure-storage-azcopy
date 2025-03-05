@@ -403,7 +403,7 @@ func (raw rawSyncCmdArgs) performNFSSpecificValidation(cooked *cookedSyncCmdArgs
 	}
 
 	cooked.isNFSCopy = raw.isNFSCopy
-	cooked.preserveInfo = raw.preserveInfo
+	cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
 	if err = validatePreserveNFSPropertyOption(cooked.preserveInfo,
 		cooked.fromTo,
 		PreserveInfoFlag); err != nil {
@@ -440,7 +440,7 @@ func (raw rawSyncCmdArgs) performNFSSpecificValidation(cooked *cookedSyncCmdArgs
 
 func (raw rawSyncCmdArgs) performSMBSpecificValidation(cooked *cookedSyncCmdArgs) (err error) {
 
-	cooked.preserveInfo = raw.preserveSMBInfo || raw.preserveInfo
+	cooked.preserveInfo = (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.fromTo)
 	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo, cooked.fromTo, PreserveInfoFlag); err != nil {
 		return err
 	}
