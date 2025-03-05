@@ -307,7 +307,7 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 
 func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
 	cooked.preserveInfo = (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.FromTo)
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, PreserveInfoFlag); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo, cooked.FromTo, PreserveInfoFlag); err != nil {
 		return err
 	}
 
@@ -317,7 +317,7 @@ func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs
 	}
 
 	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
-	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
+	if cooked.preserveInfo && !isUserPersistingPermissions {
 		glcm.Info(PreservePermissionsDisabledMsg)
 	}
 
