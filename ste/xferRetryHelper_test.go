@@ -1,8 +1,11 @@
 package ste
 
 import (
+	"errors"
 	"github.com/stretchr/testify/assert"
 	"net/http"
+	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -38,6 +41,14 @@ func TestGetShouldRetry(t *testing.T) {
 	header["x-ms-error-code"] = []string{"ContainerBeingDeleted"}
 	response = &http.Response{Header: header, StatusCode: 409}
 	a.False(shouldRetry(response, nil))
+
+	if runtime.GOOS == "windows" {
+		rawErr := syscall.Errno(10054) // magic number, in reference to windows.WSAECONNRESET, preventing OS specific shenanigans
+		strErr := errors.New("wsarecv: An existing connection was forcibly closed by the remote host.")
+
+		a.True(shouldRetry(nil, rawErr))
+		a.True(shouldRetry(nil, strErr))
+	}
 }
 
 func TestGetErrorCode(t *testing.T) {
