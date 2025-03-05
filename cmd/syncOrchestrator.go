@@ -491,12 +491,11 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			}).processIfNecessary
 
 		WarnStdoutAndScanningLog(fmt.Sprintf("Comparator is %v\n", comparator))
-		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
+		err = pt.Traverse(noPreProccessor,  stra.processor, enumerator.filters)
 		if err != nil {
 			WarnStdoutAndScanningLog(fmt.Sprintf("Creating target traverser failed : %s\n", err))
 			return err
 		}
-
 		err = st.Traverse(noPreProccessor, stra.my_comparator, enumerator.filters)
 		if err != nil {
 			if !strings.Contains(err.Error(), "RESPONSE 404") {
@@ -535,6 +534,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
 
 	parallelism := 4
+		atomic.AddInt64(&syncQDepth, 1)
 	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
 	cca.waitUntilJobCompletion(false)
@@ -558,11 +558,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			break
 		}
 		time.Sleep(1 * time.Second)
-	}
-
-	for {
-		WarnStdoutAndScanningLog("Waiting for sync monitor to exit...\n")
-		time.Sleep(1 * 10 * time.Second)
 	}
 
 	WarnStdoutAndScanningLog("Enumerator finalize running...\n")
