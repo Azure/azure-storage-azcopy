@@ -236,7 +236,7 @@ func syncMonitor() {
 	syncMonitorRun = 1
 	syncMonitorExited = 0
 
-	fmt.Printf("Starting SyncMonitor...\n")
+	WarnStdoutAndScanningLog("Starting SyncMonitor...\n")
 	var run int32
 
 	run = 1
@@ -249,19 +249,19 @@ func syncMonitor() {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		vm, _ := getTotalVirtualMemory()
 		rss, _ := getRSSMemory()
-		fmt.Printf("\n%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss)
+		WarnStdoutAndScanningLog(fmt.Sprintf("\n%s: SyncMonitor: QDepth = %v, GoRoutines = %v, VirtualMemory = %v, Resident = %v\n", ts, qd, grs, vm, rss))
 		time.Sleep(30 * time.Second)
 		run = atomic.AddInt32(&syncMonitorRun, 0)
 	}
 
-	fmt.Printf("Exiting SyncMonitor...\n")
+	WarnStdoutAndScanningLog("Exiting SyncMonitor...\n")
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
 func syncOrchestratorHandler(cca *cookedSyncCmdArgs, ctx context.Context) error {
 	// Start the profiling
 	go func() {
-		fmt.Printf("Listening to port 6060..\n")
+		WarnStdoutAndScanningLog("Listening to port 6060..\n")
 		http.ListenAndServe("localhost:6060", nil)
 	}()
 
@@ -286,22 +286,22 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		if shouldThrottle() {
 			for continueThrottle() {
 				if (waits % 1800) == 0 {
-					fmt.Printf("Too many go routines, slowing down...\n")
+					WarnStdoutAndScanningLog("Too many go routines, slowing down...\n")
 				}
 				time.Sleep(100 * time.Millisecond) // Simulate throttling
 				waits++
 			}
-			fmt.Printf("Continuing sync traversal...\n")
+			WarnStdoutAndScanningLog("Continuing sync traversal...\n")
 		}
 
-		sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
-		sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+		//sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
+		//sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
 
 		pt_src := cca.Source
 		st_src := cca.Destination
 
-		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
-		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
+		//pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
+		//st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate
@@ -311,7 +311,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		syncMutex.Unlock()
 
 		if err != nil {
-			fmt.Printf("Storing root object failed: %s\n", err)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Storing root object failed: %s\n", err))
 			return err
 		}
 
@@ -340,7 +340,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			ptt.includeVersionsList,
 			NewDefaultSyncTraverserOptions())
 		if err != nil {
-			fmt.Printf("Creating source traverser failed : %s\n", err)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Creating source traverser failed : %s\n", err))
 			return err
 		}
 
@@ -373,21 +373,20 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		if err != nil {
-			fmt.Printf("Creating target traverser failed : %s\n", err)
+			WarnStdoutAndScanningLog(fmt.Sprintf("Creating target traverser failed : %s\n", err))
 			return err
 		}
-
 		err = st.Traverse(noPreProccessor, stra.my_comparator, enumerator.filters)
 		if err != nil {
 			if !strings.Contains(err.Error(), "RESPONSE 404") {
-				fmt.Printf("Sync traversal failed type = %s \n", err)
+				WarnStdoutAndScanningLog(fmt.Sprintf("Sync traversal failed type = %s \n", err))
 				return err
 			}
 		}
 
 		err = stra.Finalize()
 		if err != nil {
-			fmt.Printf("Sync finalize failed!!\n")
+			WarnStdoutAndScanningLog("Sync finalize failed!!\n")
 			return err
 		}
 
@@ -415,7 +414,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
 
 	parallelism := 4
-	atomic.AddInt64(&syncQDepth, 1)
+		atomic.AddInt64(&syncQDepth, 1)
 	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
 	cca.waitUntilJobCompletion(false)
@@ -424,10 +423,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		if qd == 0 {
-			fmt.Printf("Sync traversers exited..\n")
+			WarnStdoutAndScanningLog("Sync traversers exited..\n")
 			break
 		}
-		// fmt.Printf("Waiting for sync traversers to exit..\n")
 		time.Sleep(1 * time.Second)
 	}
 
@@ -436,22 +434,16 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		exited := atomic.AddInt32(&syncMonitorExited, 0)
 		if exited == 1 {
-			fmt.Printf("Sync monitor exited, quitting..\n")
+			WarnStdoutAndScanningLog("Sync monitor exited, quitting..\n")
 			break
 		}
-		//fmt.Printf("\nWaiting for sync monitor to exit...\n")
 		time.Sleep(1 * time.Second)
 	}
 
-	for {
-		fmt.Printf("Waiting for sync monitor to exit...\n")
-		time.Sleep(1 * 10 * time.Second)
-	}
-
-	fmt.Printf("Enumerator finalize running...\n")
+	WarnStdoutAndScanningLog("Enumerator finalize running...\n")
 	err = enumerator.finalize()
 	if err != nil {
-		fmt.Printf("Sync finalize failed!!\n")
+		WarnStdoutAndScanningLog("Sync finalize failed!!\n")
 		return err
 	}
 
