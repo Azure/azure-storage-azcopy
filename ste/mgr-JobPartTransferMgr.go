@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
@@ -142,6 +143,9 @@ type TransferInfo struct {
 
 	VersionID  string
 	SnapshotID string
+
+	PreserveNFSPermissions bool
+	PreserveNFSInfo        bool
 }
 
 func (i *TransferInfo) IsFilePropertiesTransfer() bool {
@@ -432,11 +436,13 @@ func (jptm *jobPartTransferMgr) Info() *TransferInfo {
 			SrcMetadata:    srcMetadata,
 			SrcBlobTags:    srcBlobTags,
 		},
-		SrcBlobType:       srcBlobType,
-		S2SSrcBlobTier:    srcBlobTier,
-		RehydratePriority: plan.RehydratePriority.ToRehydratePriorityType(),
-		VersionID:         versionID,
-		SnapshotID:        snapshotID,
+		SrcBlobType:            srcBlobType,
+		S2SSrcBlobTier:         srcBlobTier,
+		RehydratePriority:      plan.RehydratePriority.ToRehydratePriorityType(),
+		VersionID:              versionID,
+		SnapshotID:             snapshotID,
+		PreserveNFSInfo:        plan.PreserveNFSInfo,
+		PreserveNFSPermissions: plan.PreserveNFSPermissions,
 	}
 }
 
