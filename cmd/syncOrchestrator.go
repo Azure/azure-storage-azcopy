@@ -294,14 +294,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			WarnStdoutAndScanningLog("Continuing sync traversal...\n")
 		}
 
-		//sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
-		//sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+		sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
+		sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
 
 		pt_src := cca.Source
 		st_src := cca.Destination
 
-		//pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
-		//st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
+		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
+		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate
