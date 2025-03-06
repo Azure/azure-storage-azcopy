@@ -270,11 +270,11 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 // Returns:
 // - An error if any validation fails, otherwise nil indicating successful validation.
 func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	if raw.preserveSMBInfo || raw.preserveSMBPermissions {
-		return fmt.Errorf("NFS copy cannot be used with SMB-related flags. Please use --preserve-info or --preserve-permissions flags instead.")
-	}
+	// if raw.preserveSMBInfo || raw.preserveSMBPermissions {
+	// 	return fmt.Errorf("NFS copy cannot be used with SMB-related flags. Please use --preserve-info or --preserve-permissions flags instead.")
+	// }
 	cooked.isNFSCopy = raw.isNFSCopy
-	cooked.preserveInfo = raw.preserveInfo && (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.FromTo)
+	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
 	if err = validatePreserveNFSPropertyOption(cooked.preserveInfo, cooked.FromTo, PreserveInfoFlag); err != nil {
 		return err
 	}
@@ -286,7 +286,10 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions, cooked.FromTo, PreservePermissionsFlag); err != nil {
 		return err
 	}
-	// TODO: Discuss and add the validation for owner flags if required in case of NFS
+	//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
+	// Using the same EPreservePermissionsOption that we have today for NFS as well
+	// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
+	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, true, cooked.FromTo)
 	return nil
 }
 
@@ -728,10 +731,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	// TODO: Check if this validation is required after making the flags common
-	// if err := performSMBAndNFSFlagsValidation(raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions); err != nil {
-	// 	return cooked, err
-	// }
+	// By default in case of NFS the preserve-info flag is set to true for linux and false for windows
+	raw.preserveInfo = raw.preserveInfo || ((runtime.GOOS == "linux" && raw.isNFSCopy) || (runtime.GOOS == "windows" && !raw.isNFSCopy))
 	if raw.isNFSCopy {
 		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
 			return cooked, err
@@ -739,7 +740,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
 		return cooked, err
 	}
-
+	fmt.Println("Info", cooked.preserveInfo, "Permissiosn", cooked.preservePermissions, "IsNFS", cooked.isNFSCopy)
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.asSubdir = raw.asSubdir
 
@@ -1205,8 +1206,7 @@ type CookedCopyCmdArgs struct {
 
 	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
 	preservePermissions common.PreservePermissionsOption
-	// Whether the user wants to preserve the SMB properties ...
-	preserveSMBInfo bool
+
 	// Whether the user wants to preserve the POSIX properties ...
 	preservePOSIXProperties bool
 
@@ -2105,7 +2105,7 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
-
+			return
 			glcm.Info("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
@@ -2165,9 +2165,11 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, "nfs", false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
 	//TODO: should we mark this flag hidden?
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, true, "True by default. Preserves properties. TODO: Add flag description")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Preserve properties. TODO: Add flag description")
+
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false, "False by default. If enabled, symlink destinations are preserved as the blob content, rather than uploading the file/folder on the other end of the symlink")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
@@ -2235,6 +2237,4 @@ func init() {
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
-
-	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
 }
