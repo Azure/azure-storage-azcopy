@@ -740,7 +740,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
 		return cooked, err
 	}
-	fmt.Println("Info", cooked.preserveInfo, "Permissiosn", cooked.preservePermissions, "IsNFS", cooked.isNFSCopy)
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.asSubdir = raw.asSubdir
 
