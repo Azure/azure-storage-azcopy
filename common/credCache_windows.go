@@ -197,6 +197,10 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 }
 
 func (c *CredCache) tokenFilePath() string {
+	if cacheFile := GetEnvironmentVariable(EEnvironmentVariable.LoginCacheName()); cacheFile != "" {
+		return path.Join(c.dpapiFilePath, "/", cacheFile)
+	}
+
 	return path.Join(c.dpapiFilePath, "/", defaultTokenFileName)
 }
 

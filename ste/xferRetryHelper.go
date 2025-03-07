@@ -32,21 +32,23 @@ var RetryStatusCodes RetryCodes
 
 var platformRetryPolicy func(response *http.Response, err error) bool
 
-func getShouldRetry() func(*http.Response, error) bool {
+func GetShouldRetry() func(*http.Response, error) bool {
 	if len(RetryStatusCodes) == 0 {
 		return nil
 	}
 	return func(resp *http.Response, err error) bool {
-		if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
-			// no status codes specified to compare to
-			if len(storageErrorCodes) == 0 {
-				return true
-			}
-			// compare to status codes
-			errorCode := getErrorCode(resp)
-			if errorCode != "" {
-				if _, ok = storageErrorCodes[errorCode]; ok {
+		if resp != nil {
+			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
+				// no status codes specified to compare to
+				if len(storageErrorCodes) == 0 {
 					return true
+				}
+				// compare to status codes
+				errorCode := getErrorCode(resp)
+				if errorCode != "" {
+					if _, ok = storageErrorCodes[errorCode]; ok {
+						return true
+					}
 				}
 			}
 		}
