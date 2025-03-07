@@ -68,8 +68,7 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	return nil
 }
 
-func areBothLocationsSMBAware(fromTo common.FromTo) bool {
-	// preserverInfo will be true by default for SMB-aware locations unless specified false.
+func areBothLocationsNFSAware(fromTo common.FromTo) bool {
 	// 1. Upload (Windows/Linux -> Azure File)
 	// 2. Download (Azure File -> Windows/Linux)
 	// 3. S2S (Azure File -> Azure File)
@@ -83,12 +82,10 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	}
 }
 
-func areBothLocationsNFSAware(fromTo common.FromTo) bool {
-	// preserverInfo will be true by default for NFS-aware locations unless specified false.
+func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	// 1. Upload (Windows/Linux -> Azure File)
 	// 2. Download (Azure File -> Windows/Linux)
 	// 3. S2S (Azure File -> Azure File)
-	// TODO: Add other combinations if required
 	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") &&
 		(fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
 		return true

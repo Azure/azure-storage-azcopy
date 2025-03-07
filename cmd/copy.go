@@ -265,17 +265,17 @@ func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Lo
 //     if the flag is set to false and NFS info is being preserved.
 //   - Ensures that both source and destination locations are NFS-aware for relevant operations.
 //
-// If any of these validations fail, the function returns an error with the respective validation message.
-//
 // Returns:
 // - An error if any validation fails, otherwise nil indicating successful validation.
 func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	// if raw.preserveSMBInfo || raw.preserveSMBPermissions {
-	// 	return fmt.Errorf("NFS copy cannot be used with SMB-related flags. Please use --preserve-info or --preserve-permissions flags instead.")
-	// }
+	if (raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions {
+		return fmt.Errorf(InvalidFlagsForNFSMsg)
+	}
 	cooked.isNFSCopy = raw.isNFSCopy
-	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
-	if err = validatePreserveNFSPropertyOption(cooked.preserveInfo, cooked.FromTo, PreserveInfoFlag); err != nil {
+	cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
+	if err = validatePreserveNFSPropertyOption(cooked.preserveInfo,
+		cooked.FromTo,
+		PreserveInfoFlag); err != nil {
 		return err
 	}
 
@@ -283,13 +283,17 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 	if cooked.preserveInfo && !isUserPersistingPermissions {
 		glcm.Info(PreserveNFSPermissionsDisabledMsg)
 	}
-	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions, cooked.FromTo, PreservePermissionsFlag); err != nil {
+	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions,
+		cooked.FromTo,
+		PreservePermissionsFlag); err != nil {
 		return err
 	}
 	//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
 	// Using the same EPreservePermissionsOption that we have today for NFS as well
 	// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, true, cooked.FromTo)
+	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
+		true,
+		cooked.FromTo)
 	return nil
 }
 
@@ -303,14 +307,14 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 // - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
 // - Validates the preservation of file owner information based on user flags.
 //
-// If any of these validations fail, the function returns an error with the respective validation message.
-//
 // Returns:
 // - An error if any validation fails, otherwise nil indicating successful validation.
 
 func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
 	cooked.preserveInfo = (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.FromTo)
-	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo, cooked.FromTo, PreserveInfoFlag); err != nil {
+	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
+		cooked.FromTo,
+		PreserveInfoFlag); err != nil {
 		return err
 	}
 
@@ -324,13 +328,17 @@ func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs
 		glcm.Info(PreservePermissionsDisabledMsg)
 	}
 
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, PreservePermissionsFlag); err != nil {
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
+		cooked.FromTo,
+		PreservePermissionsFlag); err != nil {
 		return err
 	}
 	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
 		return err
 	}
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.FromTo)
+	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
+		raw.preserveOwner,
+		cooked.FromTo)
 	return
 }
 
@@ -2104,7 +2112,6 @@ func init() {
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
-			return
 			glcm.Info("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
@@ -2165,7 +2172,7 @@ func init() {
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, "nfs", false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
-	//TODO: should we mark this flag hidden?
+	//TBD: should we mark this flag hidden?
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Preserve properties. TODO: Add flag description")
 
