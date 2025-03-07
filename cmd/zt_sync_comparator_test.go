@@ -613,7 +613,7 @@ func TestFileSyncS2SWithIdenticalDestinationTemp(t *testing.T) {
 	srcShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, srcShareName)
 	dstShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(a, dstShareName)
 	raw := getDefaultSyncRawInput(srcShareURLWithSAS.String(), dstShareURLWithSAS.String())
-	raw.preserveSMBInfo = false
+	raw.preserveInfo = false
 
 	// nothing should be sync since the source is older
 	runSyncAndVerify(a, raw, func(err error) {

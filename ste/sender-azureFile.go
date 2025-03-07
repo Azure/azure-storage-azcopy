@@ -238,7 +238,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 }
 
 func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destURL string) (stage string, err error) {
-	if !info.PreserveSMBPermissions.IsTruthy() {
+	if !info.PreservePermissions.IsTruthy() {
 		return "", nil
 	}
 
@@ -289,7 +289,7 @@ func (u *azureFileSenderBase) addPermissionsToHeaders(info *TransferInfo, destUR
 }
 
 func (u *azureFileSenderBase) addSMBPropertiesToHeaders(info *TransferInfo) (stage string, err error) {
-	if !info.PreserveSMBInfo {
+	if !info.PreserveInfo {
 		return "", nil
 	}
 	if smbSIP, ok := u.sip.(ISMBPropertyBearingSourceInfoProvider); ok {
@@ -335,7 +335,7 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      This is not trivial but the Files Team has explicitly told us to perform this extra set call.
 	//   2. The service started updating the last-write-time in March 2021 when the file is modified.
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
-	if u.jptm.IsLive() && u.jptm.Info().PreserveSMBInfo {
+	if u.jptm.IsLive() && u.jptm.Info().PreserveInfo {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
 		_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
 			HTTPHeaders:   &u.headersToApply,
@@ -484,7 +484,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 	if len(segments) == 0 {
 		// If we are trying to create root, perform GetProperties instead.
 		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
-		// some operations like SetMetadata or SetProperties will fail. 
+		// some operations like SetMetadata or SetProperties will fail.
 		// TODO: Remove this block once the bug is fixed.
 		_, err := directoryClient.GetProperties(ctx, nil)
 		return err
