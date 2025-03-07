@@ -466,9 +466,7 @@ func (raw rawSyncCmdArgs) performSMBSpecificValidation(cooked *cookedSyncCmdArgs
 		PreservePermissionsFlag); err != nil {
 		return err
 	}
-	if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); err != nil {
-		return err
-	}
+
 	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
 		raw.preserveOwner,
 		cooked.fromTo)
