@@ -937,6 +937,7 @@ func TestBasic_SyncLMTSwitch_PreferServiceLMT(t *testing.T) {
 		anonymousAuthOnly,
 		params{
 			preserveSMBInfo: to.Ptr(false),
+			preserveInfo:    to.Ptr(false),
 		},
 		&hooks{
 			beforeRunJob: func(h hookHelper) {

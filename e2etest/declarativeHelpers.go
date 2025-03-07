@@ -21,10 +21,11 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/JeffreyRichter/enum/enum"
@@ -200,9 +201,10 @@ type params struct {
 	ignoreErrorIfCompleted bool
 
 	// benchmark params
-	mode        string
-	fileCount   int
-	sizePerFile string
+	mode         string
+	fileCount    int
+	sizePerFile  string
+	preserveInfo *bool
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
