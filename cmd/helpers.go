@@ -51,7 +51,8 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	// 1. Upload (Windows/Linux -> Azure File)
 	// 2. Download (Azure File -> Windows/Linux)
 	// 3. S2S (Azure File -> Azure File)
-	if toPreserve && flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
+	if toPreserve && flagName == PreservePermissionsFlag &&
+		(fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
 		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
 		return nil
 	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||

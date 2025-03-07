@@ -5,12 +5,15 @@ package ste
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
 	"golang.org/x/sys/unix"
-	"strings"
-	"time"
 )
 
 func (f localFileSourceInfoProvider) HasUNIXProperties() bool {
@@ -230,4 +233,35 @@ func (hi HandleInfo) FileLastWriteTime() time.Time {
 func (hi HandleInfo) FileAttributes() (*file.NTFSFileAttributes, error) {
 	// Can't shorthand it because the function name overrides.
 	return FileAttributesFromUint32(hi.ByHandleFileInformation.FileAttributes)
+}
+
+func (hi HandleInfo) FileAccessTime() time.Time {
+	// This returns nanoseconds since Unix Epoch.
+	return time.Unix(0, hi.LastAccessTime.Nanoseconds())
+}
+
+func (f localFileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, error) {
+	info, err := common.GetFileInformation(f.jptm.Info().Source)
+	return HandleInfo{info}, err
+}
+
+type HandleNFSPermissions struct {
+	common.UnixStatAdapter
+}
+
+func (f localFileSourceInfoProvider) GetNFSPermissions() (TypedNFSPermissionsHolder, error) {
+	stats, err := f.GetUNIXProperties()
+	return HandleNFSPermissions{stats}, err
+}
+
+func (h HandleNFSPermissions) GetOwner() *string {
+	return to.Ptr(strconv.Itoa(int(h.Owner())))
+}
+
+func (h HandleNFSPermissions) GetGroup() *string {
+	return to.Ptr(strconv.Itoa(int(h.Group())))
+}
+
+func (h HandleNFSPermissions) GetFileMode() *string {
+	return to.Ptr(strconv.Itoa(int(h.FileMode())))
 }
