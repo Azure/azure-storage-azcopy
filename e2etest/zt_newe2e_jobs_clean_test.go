@@ -34,9 +34,8 @@ func (s *JobsCleanSuite) Scenario_JobsCleanBasic(svm *ScenarioVariationManager) 
 	jobsCleanOutput, _ := RunAzCopy(
 		svm,
 		AzCopyCommand{
-			Verb:           AzCopyVerbJobs,
-			PositionalArgs: []string{"clean"},
-			ShouldFail:     false,
+			Verb:       AzCopyVerbJobsClean,
+			ShouldFail: false,
 			Environment: &AzCopyEnvironment{
 				LogLocation:     &logsDir,
 				JobPlanLocation: &jobPlanDir,
