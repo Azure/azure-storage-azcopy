@@ -6,7 +6,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"sync"
 	"time"
 )
@@ -36,14 +35,16 @@ func SetupOAuthCache(a Asserter) {
 		cred, err = azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
 			TenantID: tenantId,
 		})
+	} else if useStatic { // default to AzCLI for static accts
+		cred, err = azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{
+			TenantID: staticLoginInfo.TenantID,
+		})
 	} else {
-		tenantId = common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicOAuth.SPNSecret.TenantID)
 		cred, err = azidentity.NewClientSecretCredential(
-			tenantId,
-			common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID),
-			common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret),
-			nil, // Hopefully the defaults should be OK?
-		)
+			dynamicLoginInfo.DynamicOAuth.SPNSecret.TenantID,
+			dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID,
+			dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret,
+			nil)
 	}
 	a.NoError("create credentials", err)
 
