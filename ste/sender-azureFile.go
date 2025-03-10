@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
@@ -68,6 +69,7 @@ type azureFileSenderBase struct {
 	smbPropertiesToApply file.SMBProperties
 	permissionsToApply   file.Permissions
 	metadataToApply      common.Metadata
+	//nfsPropertiesToApply
 }
 
 func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*azureFileSenderBase, error) {
@@ -187,22 +189,25 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 		return
 	}
 
-	stage, err = u.addSMBPropertiesToHeaders(info)
-	if err != nil {
-		jptm.FailActiveSend(stage, err)
-		return
-	}
-
-	// Turn off readonly at creation time (because if its set at creation time, we won't be
-	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
-	creationProperties := u.smbPropertiesToApply
-	if creationProperties.Attributes != nil {
-		creationProperties.Attributes.ReadOnly = false
+	createOptions := &file.CreateOptions{HTTPHeaders: &u.headersToApply}
+	if info.PreserveNFSInfo {
+		createOptions.Owner = to.Ptr("1000")
+		createOptions.Group = to.Ptr("1000")
+		createOptions.FileMode = to.Ptr("7777")
+	} else {
+		createOptions.Permissions = &u.permissionsToApply
+		createOptions.Metadata = u.metadataToApply
+		stage, err = u.addSMBPropertiesToHeaders(info)
+		if err != nil {
+			jptm.FailActiveSend(stage, err)
+			return
+		}
+		createOptions.SMBProperties = &u.smbPropertiesToApply
 	}
 
 	err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 		func() (interface{}, error) {
-			return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{HTTPHeaders: &u.headersToApply, Permissions: &u.permissionsToApply, SMBProperties: &creationProperties, Metadata: u.metadataToApply})
+			return u.getFileClient().Create(u.ctx, info.SourceSize, createOptions)
 		},
 		u.fileOrDirClient,
 		u.jptm.GetForceIfReadOnly())
@@ -215,15 +220,21 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			u.jptm.FailActiveUpload("Creating parent directory", err)
 		}
 
+		// Turn off readonly at creation time (because if its set at creation time, we won't be
+		// able to upload any data to the file!). We'll set it in epilogue, if necessary.
+
+		if !info.PreserveNFSInfo {
+			creationProperties := u.smbPropertiesToApply
+			if creationProperties.Attributes != nil {
+				creationProperties.Attributes.ReadOnly = false
+			}
+			createOptions.SMBProperties = &creationProperties
+		}
+
 		// retrying file creation
 		err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
 			func() (interface{}, error) {
-				return u.getFileClient().Create(u.ctx, info.SourceSize, &file.CreateOptions{
-					HTTPHeaders:   &u.headersToApply,
-					SMBProperties: &creationProperties,
-					Permissions:   &u.permissionsToApply,
-					Metadata:      u.metadataToApply,
-				})
+				return u.getFileClient().Create(u.ctx, info.SourceSize, createOptions)
 			},
 			u.fileOrDirClient,
 			u.jptm.GetForceIfReadOnly())
@@ -484,7 +495,7 @@ func (d AzureFileParentDirCreator) CreateDirToRoot(ctx context.Context, shareCli
 	if len(segments) == 0 {
 		// If we are trying to create root, perform GetProperties instead.
 		// Azure Files has delayed creation of root, and if we do not perform GetProperties,
-		// some operations like SetMetadata or SetProperties will fail. 
+		// some operations like SetMetadata or SetProperties will fail.
 		// TODO: Remove this block once the bug is fixed.
 		_, err := directoryClient.GetProperties(ctx, nil)
 		return err

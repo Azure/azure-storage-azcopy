@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"net"
 	"net/http"
 	"net/url"
@@ -35,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
