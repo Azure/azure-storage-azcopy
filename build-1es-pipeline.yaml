@@ -1,5 +1,6 @@
 variables:
-  AZCOPY_GOLANG_VERSION: '1.21.8'
+  AZCOPY_GOLANG_VERSION: '1.22.7'
+
 
 parameters:
   - name: publish_to_container
