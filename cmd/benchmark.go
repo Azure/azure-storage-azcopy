@@ -167,7 +167,7 @@ func (raw rawBenchmarkCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	if !downloadMode && raw.deleteTestData {
 		// set up automatic cleanup
-		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.Destination, logVerbosityRaw)
+		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.Destination)
 		if err != nil {
 			return dummyCooked, err
 		}
@@ -217,7 +217,7 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 }
 
 // define a cleanup job
-func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.ResourceString, logVerbosity string) (*CookedCopyCmdArgs, error) {
+func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest common.ResourceString) (*CookedCopyCmdArgs, error) {
 
 	rc := rawCopyCmdArgs{}
 
@@ -289,13 +289,11 @@ func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile i
 	return uint(fc), bpf, uint(nf), nil
 }
 
-var benchCmd *cobra.Command
-
 func init() {
 	raw := rawBenchmarkCmdArgs{}
 
 	// benCmd represents the bench command
-	benchCmd = &cobra.Command{
+	benchCmd := &cobra.Command{
 		Use:        "bench [destination]",
 		Aliases:    []string{"ben", "benchmark"},
 		SuggestFor: []string{"b", "bn"},
