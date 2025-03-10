@@ -189,20 +189,6 @@ type rawCopyCmdArgs struct {
 	deleteDestinationFileIfNecessary bool
 }
 
-func parsePatterns(pattern string) (cookedPatterns []string) {
-	cookedPatterns = make([]string, 0)
-	rawPatterns := strings.Split(pattern, ";")
-	for _, pattern := range rawPatterns {
-
-		// skip the empty patterns
-		if len(pattern) != 0 {
-			cookedPatterns = append(cookedPatterns, pattern)
-		}
-	}
-
-	return
-}
-
 // blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
 // A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
 // The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
@@ -224,47 +210,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
 	}
 	return int64(math.Round(rawSizeInBytes)), nil
-}
-
-// returns result of stripping and if striptopdir is enabled
-// if nothing happens, the original source is returned
-func stripTrailingWildcardOnRemoteSource(source string, location common.Location) (result string, stripTopDir bool, err error) {
-	result = source
-	resourceURL, err := url.Parse(result)
-	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
-
-	if err != nil {
-		err = fmt.Errorf("failed to parse url %s; %w", result, err)
-		return
-	}
-
-	if strings.Contains(gURLParts.GetContainerName(), "*") {
-		// Disallow container name search and object specifics
-		if gURLParts.GetObjectName() != "" {
-			err = errors.New("cannot combine a specific object name with an account-level search")
-			return
-		}
-
-		// Return immediately here because we know this will be safe.
-		return
-	}
-
-	// Trim the trailing /*.
-	if strings.HasSuffix(resourceURL.RawPath, "/*") {
-		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")
-		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
-		stripTopDir = true
-	}
-
-	// Ensure there aren't any extra *s floating around.
-	if strings.Contains(resourceURL.RawPath, "*") {
-		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
-		return
-	}
-
-	result = resourceURL.String()
-
-	return
 }
 
 func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
@@ -902,16 +847,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 var excludeWarningOncer = &sync.Once{}
 var includeWarningOncer = &sync.Once{}
-
-func warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
-	if strings.Contains(value, "*") || strings.Contains(value, "?") {
-		oncer.Do(func() {
-			glcm.Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
-				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
-				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
-		})
-	}
-}
 
 // When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
 // else parsing the arguments will fail.
