@@ -356,6 +356,9 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
+		// Prevents previous number of failed transfers seeping into new run
+		jpm.ResetFailedTransfersCount()
+
 		// Jank, force the jstm to recognize that it's also in progress
 		summaryResp := jm.ListJobSummary()
 		summaryResp.JobStatus = common.EJobStatus.InProgress()
@@ -569,6 +572,8 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 
 	// Add on byte count from files in flight, to get a more accurate running total
 	js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
+	fmt.Printf("TotalBytesTransferred: %d, SuccessfulBytesInActiveFiles: %d, TotalBytesExpected: %d\n",
+		js.TotalBytesTransferred, jm.SuccessfulBytesInActiveFiles(), js.TotalBytesExpected)
 	if js.TotalBytesExpected == 0 {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
