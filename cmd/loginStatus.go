@@ -81,6 +81,6 @@ func init() {
 	}
 
 	lgCmd.AddCommand(lgStatus)
-	lgStatus.PersistentFlags().BoolVar(&commandLineInput.TenantID, "tenant", false, "Prints the Azure Active Directory tenant ID that is currently being used in session.")
-	lgStatus.PersistentFlags().BoolVar(&commandLineInput.AadEndpoint, "endpoint", false, "Prints the Azure Active Directory endpoint that is being used in the current session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.TenantID, "tenant", false, "Prints the Microsoft Entra tenant ID that is currently being used in session.")
+	lgStatus.PersistentFlags().BoolVar(&commandLineInput.AadEndpoint, "endpoint", false, "Prints the Microsoft Entra endpoint that is being used in the current session.")
 }
