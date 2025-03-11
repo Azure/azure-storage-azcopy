@@ -28,7 +28,78 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var loginCmdArg = loginCmdArgs{tenantID: common.DefaultTenantID}
+type LoginOptions struct {
+	TenantID                string
+	ActiveDirectoryEndpoint string
+
+	LoginType common.AutoLoginType
+
+	IdentityClientID   string
+	identityObjectID   string
+	IdentityResourceID string
+
+	ApplicationID   string
+	CertificatePath string
+
+	certificatePassword string
+	clientSecret        string
+	persistToken        bool
+}
+
+func (options LoginOptions) process() error {
+	uotm := GetUserOAuthTokenManagerInstance()
+	// Persist the token to cache, if login fulfilled successfully.
+
+	switch options.LoginType {
+	case common.EAutoLoginType.SPN():
+		if options.CertificatePath != "" {
+			if err := uotm.CertLogin(options.TenantID, options.ActiveDirectoryEndpoint, options.CertificatePath, options.certificatePassword, options.ApplicationID, options.persistToken); err != nil {
+				return err
+			}
+			glcm.Info("SPN Auth via cert succeeded.")
+		} else {
+			if err := uotm.SecretLogin(options.TenantID, options.ActiveDirectoryEndpoint, options.clientSecret, options.ApplicationID, options.persistToken); err != nil {
+				return err
+			}
+			glcm.Info("SPN Auth via secret succeeded.")
+		}
+	case common.EAutoLoginType.MSI():
+		if err := uotm.MSILogin(common.IdentityInfo{
+			ClientID: options.IdentityClientID,
+			ObjectID: options.identityObjectID,
+			MSIResID: options.IdentityResourceID,
+		}, options.persistToken); err != nil {
+			return err
+		}
+		// For MSI login, info success message to user.
+		glcm.Info("Login with identity succeeded.")
+	case common.EAutoLoginType.AzCLI():
+		if err := uotm.AzCliLogin(options.TenantID); err != nil {
+			return err
+		}
+		glcm.Info("Login with AzCliCreds succeeded")
+	case common.EAutoLoginType.PsCred():
+		if err := uotm.PSContextToken(options.TenantID); err != nil {
+			return err
+		}
+		glcm.Info("Login with Powershell context succeeded")
+	case common.EAutoLoginType.Workload():
+		if err := uotm.WorkloadIdentityLogin(options.persistToken); err != nil {
+			return err
+		}
+		glcm.Info("Login with Workload Identity succeeded")
+	default:
+		if err := uotm.UserLogin(options.TenantID, options.ActiveDirectoryEndpoint, options.persistToken); err != nil {
+			return err
+		}
+		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
+		glcm.Info("Login succeeded.")
+	}
+
+	return nil
+}
+
+var loginCmdArg = rawLoginArgs{tenantID: common.DefaultTenantID}
 
 var lgCmd = &cobra.Command{
 	Use:        "login",
@@ -40,29 +111,53 @@ var lgCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		loginCmdArg.certPass = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
-		loginCmdArg.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
-		loginCmdArg.persistToken = true
-
-		if loginCmdArg.certPass != "" || loginCmdArg.clientSecret != "" {
-			glcm.Info(environmentVariableNotice)
+		// Login type consolidation to allow backward compatibility.
+		// Commenting the warning message till we decide on when to deprecate these options
+		// if lca.servicePrincipal || lca.identity {
+		// 	glcm.Warn("The flags --service-principal and --identity will be deprecated in a future release. Please use --login-type=SPN or --login-type=MSI instead.")
+		// }
+		if loginCmdArg.servicePrincipal && loginCmdArg.identity && cmd.Flag("login-type").Changed {
+			return errors.New("you cannot set --service-principal or --identity in conjunction with --login-type. please use --login-type only")
+		} else if loginCmdArg.servicePrincipal && loginCmdArg.identity {
+			// This isn't necessary, but stands as a sanity check. It will never be hit.
+			return errors.New("you can only login using one authentication method at a time")
+		} else if loginCmdArg.servicePrincipal {
+			loginCmdArg.loginType = common.EAutoLoginType.SPN().String()
+		} else if loginCmdArg.identity {
+			loginCmdArg.loginType = common.EAutoLoginType.MSI().String()
 		}
-
 		loginCmdArg.loginType = strings.ToLower(loginCmdArg.loginType)
 
-		err := loginCmdArg.process()
+		options, err := loginCmdArg.toOptions()
 		if err != nil {
-			// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
-			prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
-			prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
-			glcm.Error("Failed to perform login command: \n" + prettyErr + getErrorCodeUrl(err))
+			return err
 		}
+
+		RunLogin(options)
+
 		return nil
 	},
 }
 
-func init() {
+func RunLogin(args LoginOptions) {
+	args.certificatePassword = common.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+	args.clientSecret = common.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+	args.persistToken = true
 
+	if args.certificatePassword != "" || args.clientSecret != "" {
+		glcm.Info(environmentVariableNotice)
+	}
+
+	err := args.process()
+	if err != nil {
+		// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
+		prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
+		prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
+		glcm.Error("Failed to perform login command: \n" + prettyErr + getErrorCodeUrl(err))
+	}
+}
+
+func init() {
 	rootCmd.AddCommand(lgCmd)
 
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.tenantID, "tenant-id", "", "The Azure Active Directory tenant ID to use for OAuth device interactive login.")
@@ -84,12 +179,11 @@ func init() {
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.certPath, "certificate-path", "", "Path to certificate for SPN authentication. Required for certificate-based service principal auth.")
 
 	// Deprecate the identity-object-id flag
-	_ = lgCmd.PersistentFlags().MarkHidden("identity-object-id") // Object ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArg.identityObjectID, "identity-object-id", "", "Object ID of user-assigned identity. This parameter is deprecated. Please use client id or resource id")
-
+	_ = lgCmd.PersistentFlags().MarkHidden("identity-object-id") // Object ID of user-assigned identity.
 }
 
-type loginCmdArgs struct {
+type rawLoginArgs struct {
 	// OAuth login arguments
 	tenantID    string
 	aadEndpoint string
@@ -109,76 +203,22 @@ type loginCmdArgs struct {
 	//Required to sign in with a SPN (Service Principal Name)
 	applicationID string
 	certPath      string
-	certPass      string
-	clientSecret  string
-	persistToken  bool
 }
 
-func (lca loginCmdArgs) process() error {
-	// Login type consolidation to allow backward compatibility.
-	// Commenting the warning message till we decide on when to deprecate these options
-	// if lca.servicePrincipal || lca.identity {
-	// 	glcm.Warn("The flags --service-principal and --identity will be deprecated in a future release. Please use --login-type=SPN or --login-type=MSI instead.")
-	// }
-	if lca.servicePrincipal {
-		lca.loginType = common.EAutoLoginType.SPN().String()
-	} else if lca.identity {
-		lca.loginType = common.EAutoLoginType.MSI().String()
-	} else if lca.servicePrincipal && lca.identity {
-		// This isn't necessary, but stands as a sanity check. It will never be hit.
-		return errors.New("you can only log in with one type of auth at once")
+func (args rawLoginArgs) toOptions() (LoginOptions, error) {
+	var loginType common.AutoLoginType
+	err := loginType.Parse(loginCmdArg.loginType)
+	if err != nil {
+		return LoginOptions{}, err
 	}
-	// Any required variables for login type will be validated by the Azure Identity SDK.
-	lca.loginType = strings.ToLower(lca.loginType)
-
-	uotm := GetUserOAuthTokenManagerInstance()
-	// Persist the token to cache, if login fulfilled successfully.
-
-	switch lca.loginType {
-	case common.EAutoLoginType.SPN().String():
-		if lca.certPath != "" {
-			if err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, lca.persistToken); err != nil {
-				return err
-			}
-			glcm.Info("SPN Auth via cert succeeded.")
-		} else {
-			if err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, lca.persistToken); err != nil {
-				return err
-			}
-			glcm.Info("SPN Auth via secret succeeded.")
-		}
-	case common.EAutoLoginType.MSI().String():
-		if err := uotm.MSILogin(common.IdentityInfo{
-			ClientID: lca.identityClientID,
-			ObjectID: lca.identityObjectID,
-			MSIResID: lca.identityResourceID,
-		}, lca.persistToken); err != nil {
-			return err
-		}
-		// For MSI login, info success message to user.
-		glcm.Info("Login with identity succeeded.")
-	case common.EAutoLoginType.AzCLI().String():
-		if err := uotm.AzCliLogin(lca.tenantID); err != nil {
-			return err
-		}
-		glcm.Info("Login with AzCliCreds succeeded")
-	case common.EAutoLoginType.PsCred().String():
-		if err := uotm.PSContextToken(lca.tenantID); err != nil {
-			return err
-		}
-		glcm.Info("Login with Powershell context succeeded")
-	case common.EAutoLoginType.Workload().String():
-		if err := uotm.WorkloadIdentityLogin(lca.persistToken); err != nil {
-			return err
-		}
-		glcm.Info("Login with Workload Identity succeeded")
-	default:
-		if err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, lca.persistToken); err != nil {
-			return err
-		}
-		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
-		glcm.Info("Login succeeded.")
-	}
-
-	return nil
+	return LoginOptions{
+		TenantID:                args.tenantID,
+		ActiveDirectoryEndpoint: args.aadEndpoint,
+		LoginType:               loginType,
+		IdentityClientID:        args.identityClientID,
+		identityObjectID:        args.identityObjectID,
+		IdentityResourceID:      args.identityResourceID,
+		ApplicationID:           args.applicationID,
+		CertificatePath:         args.certPath,
+	}, nil
 }
