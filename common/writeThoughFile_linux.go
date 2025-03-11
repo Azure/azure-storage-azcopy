@@ -21,13 +21,11 @@
 package common
 
 import (
-	"encoding/binary"
 	"fmt"
 	"os"
 	"syscall"
 	"time"
 
-	"github.com/pkg/xattr"
 	"golang.org/x/sys/unix"
 )
 
@@ -130,15 +128,15 @@ func GetFileInformation(path string) (ByHandleFileInformation, error) {
 	// Note: This doesn't necessarily cause a new QUERY_PATH_INFO call to the SMB server, instead
 	//       the value cached in the inode (likely as a result of the above Statx call) will be
 	//       returned.
-	xattrbuf, err := xattr.Get(path, CIFS_XATTR_ATTRIB)
-	if err != nil {
-		return ByHandleFileInformation{},
-			fmt.Errorf("xattr.Get(%s, %s) failed: %v", path, CIFS_XATTR_ATTRIB, err)
-	}
+	// xattrbuf, err := xattr.Get(path, CIFS_XATTR_ATTRIB)
+	// if err != nil {
+	// 	return ByHandleFileInformation{},
+	// 		fmt.Errorf("xattr.Get(%s, %s) failed: %v", path, CIFS_XATTR_ATTRIB, err)
+	// }
 
 	var info ByHandleFileInformation
 
-	info.FileAttributes = binary.LittleEndian.Uint32(xattrbuf)
+	//info.FileAttributes = binary.LittleEndian.Uint32(xattrbuf)
 
 	info.CreationTime = StatxTimestampToFiletime(stx.Btime)
 	info.LastAccessTime = StatxTimestampToFiletime(stx.Atime)

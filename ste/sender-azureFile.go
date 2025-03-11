@@ -269,6 +269,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	return
 }
+
 func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (stage string, err error) {
 	if !info.PreserveInfo {
 		return "", nil
