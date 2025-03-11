@@ -1,4 +1,4 @@
-// Copyright © 2025 Microsoft <dphulkar@microsoft.com>
+// Copyright © 2025 Microsoft <azcopydev@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -53,7 +53,7 @@ const (
 	base10Mega = 1000 * 1000
 )
 
-// credentials relates consts
+// credentials related consts
 const (
 	oauthLoginSessionCacheKeyName     = "AzCopyOAuthTokenCache"
 	oauthLoginSessionCacheServiceName = "AzCopyV10"
