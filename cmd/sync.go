@@ -657,6 +657,7 @@ Number of Copy Transfers Completed: %v
 Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Total Number of Bytes Transferred: %v
+Total Number of Bytes Skipped: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v%s%s
 `,
@@ -671,6 +672,7 @@ Final Job Status: %v%s%s
 				summary.TransfersFailed,
 				cca.atomicDeletionCount,
 				summary.TotalBytesTransferred,
+				summary.TotalBytesSkipped,
 				summary.TotalBytesEnumerated,
 				summary.JobStatus,
 				screenStats,
