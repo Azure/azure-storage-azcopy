@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
@@ -379,6 +380,10 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 				_, err = blobClient.Delete(b.ctx, nil)
 				return (err == nil)
 			}
+			if UseSyncOrchestrator{
+				cc := bsc.NewContainerClient(b.containerName)
+				IterateThroughFolder(cc,objectPath)
+			}
 		case common.ELocation.File():
 			fsc, _ := sc.FileServiceClient()
 			dirClient := fsc.NewShareClient(b.containerName).NewDirectoryClient(objectPath)
@@ -415,4 +420,37 @@ func (b *remoteResourceDeleter) delete(object StoredObject) error {
 
 		return nil
 	}
+}
+func IterateThroughFolder(containerClient *container.Client, folderPrefix string) error {
+        // Use "/" as the delimiter to get a hierarchical listing
+        pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{Prefix: &folderPrefix})
+
+        ctx := context.Background()
+        for pager.More() {
+                page, err := pager.NextPage(ctx)
+                if err != nil {
+                        return fmt.Errorf("failed to get next page: %v", err)
+                }
+
+                // Print directories
+                for _, blobPrefix := range page.Segment.BlobPrefixes {
+                        // Recursively list blobs in the subdirectory
+                        if err := IterateThroughFolder(containerClient, *blobPrefix.Name); err != nil {
+                                return err
+                        }
+                }
+
+                // Print blobs
+                for _, blob := range page.Segment.BlobItems {
+                        glcm.Info(fmt.Sprintf("~~~~~~~~~~~~~~~Blob: %s\n", *blob.Name))
+                        //delete the blob
+                        blobClient := containerClient.NewBlobClient(*blob.Name)
+                        _, err := blobClient.Delete(ctx, nil)
+                        if err != nil {
+                                return fmt.Errorf("failed to delete blob: %v", err)
+                        }
+                }
+        }
+
+        return nil
 }
