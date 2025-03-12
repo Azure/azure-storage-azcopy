@@ -126,13 +126,15 @@ func (s *SyncTestSuite) Scenario_TestSyncHashStorageModes(a *ScenarioVariationMa
 	data, err := adapter.GetHashData(dupeBodyPath)
 	a.NoError("Poll hash data", err)
 	a.Assert("Data must not be nil", Not{IsNil{}}, data)
-	a.Assert("Data must match target hash mode", Equal{}, data.Mode, common.ESyncHashType.MD5()) // for now, we only have MD5. In the future, CRC64 may be available.
+	if data != nil {
+		a.Assert("Data must match target hash mode", Equal{}, data.Mode, common.ESyncHashType.MD5()) // for now, we only have MD5. In the future, CRC64 may be available.
 
-	fi, err := os.Stat(filepath.Join(source.URI(), dupeBodyPath))
-	a.NoError("Stat file at source", err)
-	a.Assert("LMTs must match between hash data and file", Equal{}, data.LMT.Equal(fi.ModTime()), true)
+		fi, err := os.Stat(filepath.Join(source.URI(), dupeBodyPath))
+		a.NoError("Stat file at source", err)
+		a.Assert("LMTs must match between hash data and file", Equal{}, data.LMT.Equal(fi.ModTime()), true)
 
-	a.Assert("hashes must match", Equal{}, data.Data, base64.StdEncoding.EncodeToString(md5[:]))
+		a.Assert("hashes must match", Equal{}, data.Data, base64.StdEncoding.EncodeToString(md5[:]))
+	}
 }
 
 func (s *SyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
@@ -199,7 +201,7 @@ func (s *SyncTestSuite) Scenario_TestSyncDeleteDestinationIfNecessary(svm *Scena
 
 		switch dstRes.Location() {
 		case common.ELocation.Blob(): // In this case, we want to submit a block ID with a different length.
-			ctClient := dstRes.(*BlobContainerResourceManager).internalClient
+			ctClient := dstRes.(*BlobContainerResourceManager).InternalClient
 			blobClient := ctClient.NewBlockBlobClient(overwriteName)
 
 			_, err := blobClient.StageBlock(ctx, base64.StdEncoding.EncodeToString([]byte("foobar")), buf, nil)

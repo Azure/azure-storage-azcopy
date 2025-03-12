@@ -25,10 +25,8 @@ func GetRootResource(a Asserter, location common.Location, varOpts ...GetResourc
 
 		return NewLocalContainer(a)
 	case common.ELocation.BlobFS():
-		// do we have a hns acct attached, if so, and we're requesting blobfs, let's use it
-		if _, ok := AccountRegistry[PrimaryHNSAcct]; ok {
-			defaultacct = PrimaryHNSAcct
-		}
+		// If we're trying to interact with blobfs we almost always want the hns account. test can specify if otherwise.
+		defaultacct = PrimaryHNSAcct
 
 		fallthrough // Continue to grab the account
 	case common.ELocation.Blob(), common.ELocation.File():

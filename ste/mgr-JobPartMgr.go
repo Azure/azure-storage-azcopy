@@ -109,7 +109,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	if srcCred != nil {
 		perRetryPolicies = append(perRetryPolicies, NewSourceAuthPolicy(srcCred))
 	}
-	retry.ShouldRetry = getShouldRetry()
+	retry.ShouldRetry = GetShouldRetry()
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
