@@ -31,13 +31,31 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type ListReq struct {
+type jobsShowArgs struct {
 	JobID    common.JobID
 	OfStatus string
 }
 
+func (args jobsShowArgs) toOptions() (JobsShowOptions, error) {
+	if args.OfStatus == "" {
+		return JobsShowOptions{
+			JobID: args.JobID,
+		}, nil
+	} else {
+		var withStatus common.TransferStatus
+		err := withStatus.Parse(args.OfStatus)
+		if err != nil {
+			return JobsShowOptions{}, fmt.Errorf("cannot parse the given Transfer Status %s", args.OfStatus)
+		}
+		return JobsShowOptions{
+			JobID:      args.JobID,
+			WithStatus: &withStatus,
+		}, nil
+	}
+}
+
 func init() {
-	commandLineInput := ListReq{}
+	commandLineInput := jobsShowArgs{}
 
 	// shJob represents the ls command
 	shJob := &cobra.Command{
@@ -57,16 +75,12 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			listRequest := common.ListRequest{}
-			listRequest.JobID = commandLineInput.JobID
-			listRequest.OfStatus = commandLineInput.OfStatus
-
-			err := HandleShowCommand(listRequest)
-			if err == nil {
-				glcm.Exit(nil, common.EExitCode.Success())
-			} else {
+			options, err := commandLineInput.toOptions()
+			if err != nil {
 				glcm.Error(err.Error())
 			}
+
+			_ = RunJobsShow(options)
 		},
 	}
 
@@ -76,26 +90,31 @@ func init() {
 	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "List only the transfers of job with the specified status. Available values include: All, Started, Success, Failed.")
 }
 
-// handles the list command
-// dispatches the list order to the transfer engine
-func HandleShowCommand(listRequest common.ListRequest) error {
-	if listRequest.OfStatus == "" {
+func RunJobsShow(options JobsShowOptions) error {
+	err := options.process()
+	if err == nil {
+		glcm.Exit(nil, common.EExitCode.Success())
+	} else {
+		glcm.Error(err.Error())
+	}
+	return nil
+}
+
+type JobsShowOptions struct {
+	JobID      common.JobID
+	WithStatus *common.TransferStatus
+}
+
+func (options JobsShowOptions) process() error {
+	if options.WithStatus == nil {
 		resp := common.ListJobSummaryResponse{}
 		rpcCmd := common.ERpcCmd.ListJobSummary()
-		Rpc(rpcCmd, &listRequest.JobID, &resp)
+		Rpc(rpcCmd, &options.JobID, &resp)
 		PrintJobProgressSummary(resp)
 	} else {
-		lsRequest := common.ListJobTransfersRequest{}
-		lsRequest.JobID = listRequest.JobID
-		// Parse the given expected Transfer Status
-		// If there is an error parsing, then kill return the error
-		err := lsRequest.OfStatus.Parse(listRequest.OfStatus)
-		if err != nil {
-			return fmt.Errorf("cannot parse the given Transfer Status %s", listRequest.OfStatus)
-		}
 		resp := common.ListJobTransfersResponse{}
 		rpcCmd := common.ERpcCmd.ListJobTransfers()
-		Rpc(rpcCmd, lsRequest, &resp)
+		Rpc(rpcCmd, common.ListJobTransfersRequest{JobID: options.JobID, OfStatus: *options.WithStatus}, &resp)
 		PrintJobTransfers(resp)
 	}
 	return nil

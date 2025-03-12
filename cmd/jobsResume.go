@@ -59,7 +59,7 @@ type resumeJobController struct {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	// Output the log location if log-level is set to other then NONE
+	// Output the log location if log-level is set to other than NONE
 	var logPathFolder string
 	if azcopyLogPathFolder != "" {
 		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
@@ -198,7 +198,7 @@ Final Job Status: %v
 }
 
 func init() {
-	resumeCmdArgs := resumeCmdArgs{}
+	resumeArgs := resumeCmdArgs{}
 
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
@@ -214,7 +214,7 @@ func init() {
 			if len(args) != 1 {
 				return errors.New("this command requires jobId to be passed as argument")
 			}
-			resumeCmdArgs.jobID = args[0]
+			resumeArgs.jobID = args[0]
 
 			glcm.EnableInputWatcher()
 			if cancelFromStdin {
@@ -223,22 +223,31 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			err := resumeCmdArgs.process()
+			options, err := resumeArgs.toOptions()
 			if err != nil {
 				glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
 			}
-			glcm.Exit(nil, common.EExitCode.Success())
+			_ = RunJobsResume(options)
 		},
 	}
 
 	jobsCmd.AddCommand(resumeCmd)
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: Include only these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&resumeArgs.includeTransfer, "include", "", "Filter: Include only these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: Exclude these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&resumeArgs.excludeTransfer, "exclude", "", "Filter: Exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	// oauth options
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&resumeArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&resumeArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
+}
+
+func RunJobsResume(options JobsResumeOptions) error {
+	err := options.process()
+	if err != nil {
+		glcm.Error(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()))
+	}
+	glcm.Exit(nil, common.EExitCode.Success())
+	return nil
 }
 
 type resumeCmdArgs struct {
@@ -250,21 +259,79 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
-func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
+func (args resumeCmdArgs) toOptions() (JobsResumeOptions, error) {
+	// parsing the given JobId to validate its format correctness
+	jobID, err := common.ParseJobID(args.jobID)
+	if err != nil {
+		// If parsing gives an error, hence it is not a valid JobId format
+		return JobsResumeOptions{}, fmt.Errorf("error parsing the jobId %s. Failed with error %w", args.jobID, err)
+	}
+	includeTransfer := make(map[string]int)
+	excludeTransfer := make(map[string]int)
+
+	// If the transfer has been provided with the include, parse the transfer list.
+	if len(args.includeTransfer) > 0 {
+		// Split the Include Transfer using ';'
+		transfers := strings.Split(args.includeTransfer, ";")
+		for index := range transfers {
+			if len(transfers[index]) == 0 {
+				// If the transfer provided is empty
+				// skip the transfer
+				// This is to handle the misplaced ';'
+				continue
+			}
+			includeTransfer[transfers[index]] = index
+		}
+	}
+	// If the transfer has been provided with the exclude, parse the transfer list.
+	if len(args.excludeTransfer) > 0 {
+		// Split the Exclude Transfer using ';'
+		transfers := strings.Split(args.excludeTransfer, ";")
+		for index := range transfers {
+			if len(transfers[index]) == 0 {
+				// If the transfer provided is empty
+				// skip the transfer
+				// This is to handle the misplaced ';'
+				continue
+			}
+			excludeTransfer[transfers[index]] = index
+		}
+	}
+	return JobsResumeOptions{
+		JobID:          jobID,
+		Include:        includeTransfer,
+		Exclude:        excludeTransfer,
+		SourceSAS:      args.SourceSAS,
+		DestinationSAS: args.DestinationSAS,
+	}, nil
+}
+
+type JobsResumeOptions struct {
+	JobID common.JobID
+
+	Include        map[string]int
+	Exclude        map[string]int
+	SourceSAS      string
+	DestinationSAS string
+}
+
+func (opts *JobsResumeOptions) trimSAS() {
+	if len(opts.SourceSAS) > 0 && opts.SourceSAS[0] != '?' {
+		opts.SourceSAS = "?" + opts.SourceSAS
+	}
+	if len(opts.DestinationSAS) > 0 && opts.DestinationSAS[0] != '?' {
+		opts.DestinationSAS = "?" + opts.DestinationSAS
+	}
+}
+
+func (opts *JobsResumeOptions) getSourceAndDestinationServiceClients(
 	ctx context.Context,
 	fromTo common.FromTo,
 	source common.ResourceString,
 	destination common.ResourceString,
 ) (*common.ServiceClient, *common.ServiceClient, error) {
-	if len(rca.SourceSAS) > 0 && rca.SourceSAS[0] != '?' {
-		rca.SourceSAS = "?" + rca.SourceSAS
-	}
-	if len(rca.DestinationSAS) > 0 && rca.DestinationSAS[0] != '?' {
-		rca.DestinationSAS = "?" + rca.DestinationSAS
-	}
-
-	source.SAS = rca.SourceSAS
-	destination.SAS = rca.DestinationSAS
+	source.SAS = opts.SourceSAS
+	destination.SAS = opts.DestinationSAS
 
 	srcCredType, _, err := getCredentialTypeForLocation(ctx,
 		fromTo.From(),
@@ -304,18 +371,13 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
 		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
 	}
-	jobID, err := common.ParseJobID(rca.jobID)
-	if err != nil {
-		// Error for invalid JobId format
-		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
-	}
 
 	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
 	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
 	var getJobDetailsResponse common.GetJobDetailsResponse
 	// Get job details from the STE
 	Rpc(common.ERpcCmd.GetJobDetails(),
-		&common.GetJobDetailsRequest{JobID: jobID},
+		&common.GetJobDetailsRequest{JobID: opts.JobID},
 		&getJobDetailsResponse)
 	if getJobDetailsResponse.ErrorMsg != "" {
 		glcm.Error(getJobDetailsResponse.ErrorMsg)
@@ -353,55 +415,16 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 
 // processes the resume command,
 // dispatches the resume Job order to the storage engine.
-func (rca resumeCmdArgs) process() error {
-	// parsing the given JobId to validate its format correctness
-	jobID, err := common.ParseJobID(rca.jobID)
-	if err != nil {
-		// If parsing gives an error, hence it is not a valid JobId format
-		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
-	}
-
+func (opts *JobsResumeOptions) process() error {
 	// if no logging, set this empty so that we don't display the log location
 	if azcopyLogVerbosity == common.LogNone {
 		azcopyLogPathFolder = ""
 	}
 
-	includeTransfer := make(map[string]int)
-	excludeTransfer := make(map[string]int)
-
-	// If the transfer has been provided with the include, parse the transfer list.
-	if len(rca.includeTransfer) > 0 {
-		// Split the Include Transfer using ';'
-		transfers := strings.Split(rca.includeTransfer, ";")
-		for index := range transfers {
-			if len(transfers[index]) == 0 {
-				// If the transfer provided is empty
-				// skip the transfer
-				// This is to handle the misplaced ';'
-				continue
-			}
-			includeTransfer[transfers[index]] = index
-		}
-	}
-	// If the transfer has been provided with the exclude, parse the transfer list.
-	if len(rca.excludeTransfer) > 0 {
-		// Split the Exclude Transfer using ';'
-		transfers := strings.Split(rca.excludeTransfer, ";")
-		for index := range transfers {
-			if len(transfers[index]) == 0 {
-				// If the transfer provided is empty
-				// skip the transfer
-				// This is to handle the misplaced ';'
-				continue
-			}
-			excludeTransfer[transfers[index]] = index
-		}
-	}
-
 	// Get fromTo info, so we can decide what's the proper credential type to use.
 	var getJobFromToResponse common.GetJobDetailsResponse
 	Rpc(common.ERpcCmd.GetJobDetails(),
-		&common.GetJobDetailsRequest{JobID: jobID},
+		&common.GetJobDetailsRequest{JobID: opts.JobID},
 		&getJobFromToResponse)
 	if getJobFromToResponse.ErrorMsg != "" {
 		glcm.Error(getJobFromToResponse.ErrorMsg)
@@ -420,10 +443,10 @@ func (rca resumeCmdArgs) process() error {
 	// TODO: Replace context with root context
 	srcResourceString, err := SplitResourceString(getJobFromToResponse.Source, getJobFromToResponse.FromTo.From())
 	_ = err // todo
-	srcResourceString.SAS = rca.SourceSAS
+	srcResourceString.SAS = opts.SourceSAS
 	dstResourceString, err := SplitResourceString(getJobFromToResponse.Destination, getJobFromToResponse.FromTo.To())
 	_ = err // todo
-	dstResourceString.SAS = rca.DestinationSAS
+	dstResourceString.SAS = opts.DestinationSAS
 
 	// we should stop using credentiaLInfo and use the clients instead. But before we fix
 	// that there will be repeated calls to get Credential type for correctness.
@@ -435,7 +458,8 @@ func (rca resumeCmdArgs) process() error {
 		return err
 	}
 
-	srcServiceClient, dstServiceClient, err := rca.getSourceAndDestinationServiceClients(
+	opts.trimSAS()
+	srcServiceClient, dstServiceClient, err := opts.getSourceAndDestinationServiceClients(
 		ctx, getJobFromToResponse.FromTo,
 		srcResourceString,
 		dstResourceString,
@@ -447,14 +471,14 @@ func (rca resumeCmdArgs) process() error {
 	var resumeJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.ResumeJob(),
 		&common.ResumeJobRequest{
-			JobID:            jobID,
-			SourceSAS:        rca.SourceSAS,
-			DestinationSAS:   rca.DestinationSAS,
+			JobID:            opts.JobID,
+			SourceSAS:        opts.SourceSAS,
+			DestinationSAS:   opts.DestinationSAS,
 			SrcServiceClient: srcServiceClient,
 			DstServiceClient: dstServiceClient,
 			CredentialInfo:   credentialInfo,
-			IncludeTransfer:  includeTransfer,
-			ExcludeTransfer:  excludeTransfer,
+			IncludeTransfer:  opts.Include,
+			ExcludeTransfer:  opts.Exclude,
 		},
 		&resumeJobResponse)
 
@@ -462,7 +486,7 @@ func (rca resumeCmdArgs) process() error {
 		glcm.Error(resumeJobResponse.ErrorMsg)
 	}
 
-	controller := resumeJobController{jobID: jobID}
+	controller := resumeJobController{jobID: opts.JobID}
 	controller.waitUntilJobCompletion(true)
 
 	return nil

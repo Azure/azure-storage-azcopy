@@ -31,12 +31,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	type JobsRemoveReq struct {
-		JobID common.JobID
-	}
+type JobsRemoveOptions struct {
+	JobID common.JobID
+}
 
-	commandLineInput := JobsRemoveReq{}
+func (options JobsRemoveOptions) process() error {
+	err := handleRemoveSingleJob(options.JobID)
+	if err == nil {
+		glcm.Exit(func(format common.OutputFormat) string {
+			return fmt.Sprintf("Successfully removed log and job plan files for job %s.", options.JobID)
+		}, common.EExitCode.Success())
+	} else {
+		glcm.Error(fmt.Sprintf("Failed to remove log and job plan files for job %s due to error: %s.", options.JobID, err))
+	}
+	return nil
+}
+
+func RunJobsRemove(options JobsRemoveOptions) error {
+	return options.process()
+}
+
+func init() {
+	jobsRemoveArgs := JobsRemoveOptions{}
 
 	// remove a single job's log and plan file
 	jobsRemoveCmd := &cobra.Command{
@@ -54,18 +70,11 @@ func init() {
 			if err != nil {
 				return errors.New("invalid jobId given " + args[0])
 			}
-			commandLineInput.JobID = jobId
+			jobsRemoveArgs.JobID = jobId
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			err := handleRemoveSingleJob(commandLineInput.JobID)
-			if err == nil {
-				glcm.Exit(func(format common.OutputFormat) string {
-					return fmt.Sprintf("Successfully removed log and job plan files for job %s.", commandLineInput.JobID)
-				}, common.EExitCode.Success())
-			} else {
-				glcm.Error(fmt.Sprintf("Failed to remove log and job plan files for job %s due to error: %s.", commandLineInput.JobID, err))
-			}
+			_ = RunJobsRemove(jobsRemoveArgs)
 		},
 	}
 

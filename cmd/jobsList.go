@@ -31,16 +31,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type ListResponse struct {
-	ErrorMsg string
+type JobsListOptions struct {
+	WithStatus common.JobStatus
 }
 
 func init() {
-	type JobsListReq struct {
-		withStatus string
-	}
-
-	commandLineInput := JobsListReq{}
+	jobsListArg := rawJobsListArgs{}
 
 	// lsCmd represents the listJob command
 	lsCmd := &cobra.Command{
@@ -49,22 +45,20 @@ func init() {
 		Short:   listJobsCmdShortDescription,
 		Long:    listJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
-
 			// if there is any argument passed
 			// it is an error
 			if len(args) > 0 {
-				return fmt.Errorf("listJobs does not require any argument")
+				return fmt.Errorf("jobs list does not require any argument")
 			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			withStatus := common.EJobStatus
-			err := withStatus.Parse(commandLineInput.withStatus)
+			options, err := jobsListArg.toOptions()
 			if err != nil {
-				glcm.Error(fmt.Sprintf("Failed to parse --with-status due to error: %s.", err))
+				glcm.Error(err.Error())
 			}
 
-			err = HandleListJobsCommand(withStatus)
+			err = RunJobsList(options)
 			if err == nil {
 				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
@@ -75,16 +69,16 @@ func init() {
 
 	jobsCmd.AddCommand(lsCmd)
 
-	lsCmd.PersistentFlags().StringVar(&commandLineInput.withStatus, "with-status", "All",
+	lsCmd.PersistentFlags().StringVar(&jobsListArg.withStatus, "with-status", "All",
 		"List the jobs with the specified status. Available values include: All, Cancelled, Failed, InProgress, Completed,"+
 			" CompletedWithErrors, CompletedWithFailures, CompletedWithErrorsAndSkipped")
 }
 
-// HandleListJobsCommand sends the ListJobs request to transfer engine
+// RunJobsList sends the ListJobs request to transfer engine
 // Print the Jobs in the history of Azcopy
-func HandleListJobsCommand(jobStatus common.JobStatus) error {
+func RunJobsList(options JobsListOptions) error {
 	resp := common.ListJobsResponse{}
-	Rpc(common.ERpcCmd.ListJobs(), jobStatus, &resp)
+	Rpc(common.ERpcCmd.ListJobs(), options.WithStatus, &resp)
 	return PrintExistingJobIds(resp)
 }
 
@@ -126,4 +120,19 @@ func sortJobs(jobsDetails []common.JobIDDetails) {
 		// we say yes if the job i is more recent
 		return jobsDetails[i].StartTime > jobsDetails[j].StartTime
 	})
+}
+
+type rawJobsListArgs struct {
+	withStatus string
+}
+
+func (args rawJobsListArgs) toOptions() (JobsListOptions, error) {
+	var status common.JobStatus
+	err := status.Parse(args.withStatus)
+	if err != nil {
+		return JobsListOptions{}, fmt.Errorf("Failed to parse --with-status due to error: %s.", err)
+	}
+	return JobsListOptions{
+		WithStatus: status,
+	}, nil
 }
