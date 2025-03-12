@@ -106,22 +106,8 @@ type rawSyncCmdArgs struct {
 	preserveInfo bool
 }
 
-func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
-	cookedPatterns = make([]string, 0)
-	rawPatterns := strings.Split(pattern, ";")
-	for _, pattern := range rawPatterns {
-
-		// skip the empty patterns
-		if len(pattern) != 0 {
-			cookedPatterns = append(cookedPatterns, pattern)
-		}
-	}
-
-	return
-}
-
 // it is assume that the given url has the SAS stripped, and safe to print
-func (raw *rawSyncCmdArgs) validateURLIsNotServiceLevel(url string, location common.Location) error {
+func validateURLIsNotServiceLevel(url string, location common.Location) error {
 	srcLevel, err := DetermineLocationLevel(url, location, true)
 	if err != nil {
 		return err
@@ -217,7 +203,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// we do not support service level sync yet
 	if cooked.fromTo.From().IsRemote() {
-		err = raw.validateURLIsNotServiceLevel(cooked.source.Value, cooked.fromTo.From())
+		err = validateURLIsNotServiceLevel(cooked.source.Value, cooked.fromTo.From())
 		if err != nil {
 			return cooked, err
 		}
@@ -225,7 +211,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// we do not support service level sync yet
 	if cooked.fromTo.To().IsRemote() {
-		err = raw.validateURLIsNotServiceLevel(cooked.destination.Value, cooked.fromTo.To())
+		err = validateURLIsNotServiceLevel(cooked.destination.Value, cooked.fromTo.To())
 		if err != nil {
 			return cooked, err
 		}
@@ -269,13 +255,13 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	}
 
 	// parse the filter patterns
-	cooked.includePatterns = raw.parsePatterns(raw.include)
-	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
-	cooked.excludePaths = raw.parsePatterns(raw.excludePath)
+	cooked.includePatterns = parsePatterns(raw.include)
+	cooked.excludePatterns = parsePatterns(raw.exclude)
+	cooked.excludePaths = parsePatterns(raw.excludePath)
 
 	// parse the attribute filter patterns
-	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
-	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
+	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
+	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
 	// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
 	// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
@@ -361,8 +347,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.mirrorMode = raw.mirrorMode
 
-	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
-	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
+	cooked.includeRegex = parsePatterns(raw.includeRegex)
+	cooked.excludeRegex = parsePatterns(raw.excludeRegex)
 
 	cooked.dryrunMode = raw.dryrun
 
