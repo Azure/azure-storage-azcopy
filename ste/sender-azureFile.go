@@ -300,9 +300,6 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 
 		creationTime := nfsProps.FileCreationTime()
 		u.smbPropertiesToApply.CreationTime = &creationTime
-
-		changeTime := nfsProps.FileAccessTime().Local()
-		u.smbPropertiesToApply.ChangeTime = &changeTime
 	}
 	return "", nil
 }
@@ -424,13 +421,27 @@ func (u *azureFileSenderBase) Epilogue() {
 	//      So when we uploaded the ranges, we've unintentionally changed the last-write-time.
 	if u.jptm.IsLive() && u.jptm.Info().PreserveInfo {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
-		_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-			HTTPHeaders:   &u.headersToApply,
-			Permissions:   &u.permissionsToApply,
-			SMBProperties: &u.smbPropertiesToApply,
-		})
-		if err != nil {
-			u.jptm.FailActiveSend("Applying final attribute settings", err)
+		if u.jptm.Info().IsNFSCopy {
+			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
+				HTTPHeaders:   &u.headersToApply,
+				Permissions:   &u.permissionsToApply,
+				SMBProperties: &u.smbPropertiesToApply,
+				FileMode:      u.nfsPermissionsToApply.FileMode,
+				Owner:         u.nfsPermissionsToApply.Owner,
+				Group:         u.nfsPermissionsToApply.Group,
+			})
+			if err != nil {
+				u.jptm.FailActiveSend("Applying final attribute settings", err)
+			}
+		} else {
+			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
+				HTTPHeaders:   &u.headersToApply,
+				Permissions:   &u.permissionsToApply,
+				SMBProperties: &u.smbPropertiesToApply,
+			})
+			if err != nil {
+				u.jptm.FailActiveSend("Applying final attribute settings", err)
+			}
 		}
 	}
 }
@@ -469,17 +480,38 @@ func (u *azureFileSenderBase) EnsureFolderExists() error {
 	return AzureFileParentDirCreator{}.CreateDirToRoot(u.ctx, u.shareClient, u.getDirectoryClient(), u.jptm.GetFolderCreationTracker())
 }
 
-func (u *azureFileSenderBase) SetFolderProperties() error {
+func (u *azureFileSenderBase) SetFolderProperties() (err error) {
 	info := u.jptm.Info()
 
-	_, err := u.addPermissionsToHeaders(info, u.getDirectoryClient().URL())
-	if err != nil {
-		return err
-	}
+	setPropertiesOptions := &directory.SetPropertiesOptions{}
+	if info.IsNFSCopy {
 
-	_, err = u.addSMBPropertiesToHeaders(info)
-	if err != nil {
-		return err
+		_, err = u.addNFSPropertiesToHeaders(info)
+		if err != nil {
+			return
+		}
+		setPropertiesOptions.FileSMBProperties = &u.smbPropertiesToApply
+
+		_, err = u.addNFSPermissionsToHeaders(info, u.getDirectoryClient().URL())
+		if err != nil {
+			return
+		}
+		setPropertiesOptions.Owner = u.nfsPermissionsToApply.Owner
+		setPropertiesOptions.Group = u.nfsPermissionsToApply.Group
+		setPropertiesOptions.FileMode = u.nfsPermissionsToApply.FileMode
+
+	} else {
+		_, err = u.addPermissionsToHeaders(info, u.getDirectoryClient().URL())
+		if err != nil {
+			return
+		}
+		setPropertiesOptions.FilePermissions = &u.permissionsToApply
+
+		_, err = u.addSMBPropertiesToHeaders(info)
+		if err != nil {
+			return
+		}
+		setPropertiesOptions.FileSMBProperties = &u.smbPropertiesToApply
 	}
 
 	err = common.DoWithOverrideReadOnlyOnAzureFiles(u.ctx,
@@ -488,10 +520,7 @@ func (u *azureFileSenderBase) SetFolderProperties() error {
 			if err != nil {
 				return nil, err
 			}
-			return u.getDirectoryClient().SetProperties(u.ctx, &directory.SetPropertiesOptions{
-				FileSMBProperties: &u.smbPropertiesToApply,
-				FilePermissions:   &u.permissionsToApply,
-			})
+			return u.getDirectoryClient().SetProperties(u.ctx, setPropertiesOptions)
 		},
 		u.fileOrDirClient,
 		u.jptm.GetForceIfReadOnly())

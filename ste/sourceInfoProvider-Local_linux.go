@@ -263,5 +263,6 @@ func (h HandleNFSPermissions) GetGroup() *string {
 }
 
 func (h HandleNFSPermissions) GetFileMode() *string {
-	return to.Ptr(strconv.Itoa(int(h.FileMode())))
+	fileMode := h.FileMode() &^ unix.S_IFMT // Remove file type bits
+	return to.Ptr(fmt.Sprintf("%#o", fileMode))
 }
