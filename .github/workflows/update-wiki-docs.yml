@@ -1,10 +1,8 @@
 name: Update wiki docs
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  release:
+    types: [published]
 
 concurrency:
   group: wiki
