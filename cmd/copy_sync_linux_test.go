@@ -20,9 +20,10 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If NFS flag is not set we will not preserve anything and assume its an SMB copy",
 			rawCopyCmdArgs{
-				preserveInfo: false, // this will be false by default
-				isNFSCopy:    false,
-				fromTo:       "LocalFile",
+				preserveInfo:    false, // by default
+				isNFSCopy:       false, // by default
+				preserveSMBInfo: false, // by default
+				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
@@ -33,9 +34,10 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If NFS flag is set to true we will only preserve info for linux",
 			rawCopyCmdArgs{
-				isNFSCopy:    true,
-				preserveInfo: true, // this will be true by default as the OS is linux and nfs flag is also true
-				fromTo:       "LocalFile",
+				preserveSMBInfo: false, // by default
+				isNFSCopy:       true,
+				preserveInfo:    true, // by default as the OS is linux and nfs flag is also true
+				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(true, cooked.preserveInfo)
@@ -46,8 +48,9 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If only preserve-permissions flag is set to true and NFS flag is not set it will assume a SMB copy",
 			rawCopyCmdArgs{
-				isNFSCopy:           false,
-				preservePermissions: true,
+				preserveSMBInfo:     false, // by default
+				isNFSCopy:           false, // by default
+				preservePermissions: true,  // set by user
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
@@ -59,8 +62,8 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If NFS and preserve-permissions flag is set to true we will preserve info and permissions",
 			rawCopyCmdArgs{
-				isNFSCopy:           true,
-				preservePermissions: true,
+				isNFSCopy:           true, // set by user
+				preservePermissions: true, // set by user
 				preserveInfo:        true, // this is set to true by default as OS is linux and nfs flag is also set
 				fromTo:              "LocalFile",
 			},
@@ -73,8 +76,8 @@ func TestCopy_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If NFS flag is set to true and preserve-info is set to false we will not preserve anything",
 			rawCopyCmdArgs{
-				isNFSCopy:           true,
-				preservePermissions: false,
+				isNFSCopy:           true,  // set by user
+				preservePermissions: false, // by default
 				preserveInfo:        false, // by user
 				fromTo:              "LocalFile",
 			},
@@ -107,8 +110,9 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If no flag is provided we will not preserve anything for linux",
 			rawCopyCmdArgs{
-				preserveInfo: false, // default value will be false as OS is linux but nfs flag is not set
-				fromTo:       "LocalFile",
+				preserveSMBInfo: false, //by default
+				preserveInfo:    false, // default value will be false as OS is linux but nfs flag is not set
+				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
 				a.Equal(false, cooked.preserveInfo)
@@ -118,7 +122,8 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If we set preserve-smb-info to true we will preserve info only.",
 			rawCopyCmdArgs{
-				preserveSMBInfo: true,
+				preserveInfo:    false, //by default
+				preserveSMBInfo: true,  // set by user
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
@@ -130,7 +135,7 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 			"If preserve-info flag is set to true we will preserve info only",
 			rawCopyCmdArgs{
 				preserveSMBInfo: false, // default value is false for linux
-				preserveInfo:    true,
+				preserveInfo:    true,  // set by user
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
@@ -142,7 +147,7 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 			"If preserve-permissions flag is set to true we will set the permissions flag only but eventually the job would fail as we dont support this in linux",
 			rawCopyCmdArgs{
 				preserveSMBInfo:     false, // default value is false for linux
-				preservePermissions: true,
+				preservePermissions: true,  // set by user
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
@@ -153,8 +158,8 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If preserve-smb-info and preserve-permissions is set to true we will set both these flags but eventually the job would fail as we dont support fetching attributes in linux.",
 			rawCopyCmdArgs{
-				preserveSMBInfo:     true,
-				preservePermissions: true,
+				preserveSMBInfo:     true,  // set by user
+				preservePermissions: true,  // set by user
 				preserveInfo:        false, //default value is false for linux
 				fromTo:              "LocalFile",
 			},
@@ -186,6 +191,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If NFS flag is not set we will not preserve anything and assume its an SMB copy",
 			rawSyncCmdArgs{
+				preserveSMBInfo:   false, //by default
 				preserveInfo:      false, // this will be false by default
 				isNFSCopy:         false,
 				fromTo:            "LocalFile",
@@ -201,6 +207,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If NFS flag is set to true we will only preserve info for linux",
 			rawSyncCmdArgs{
+				preserveSMBInfo:   false, //by default
 				isNFSCopy:         true,
 				preserveInfo:      true, // this will be true by default as the OS is linux and nfs flag is also true
 				fromTo:            "LocalFile",
@@ -216,8 +223,9 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If only preserve-permissions flag is set to true and NFS flag is not set it will assume a SMB copy",
 			rawSyncCmdArgs{
-				isNFSCopy:           false,
-				preservePermissions: true,
+				preserveSMBInfo:     false, //by default
+				isNFSCopy:           false, // by default
+				preservePermissions: true,  // set by user
 				fromTo:              "LocalFile",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",
@@ -231,9 +239,10 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If NFS and preserve-permissions flag is set to true we will preserve info and permissions",
 			rawSyncCmdArgs{
-				isNFSCopy:           true,
-				preservePermissions: true,
-				preserveInfo:        true, // this is set to true by default as OS is linux and nfs flag is also set
+				preserveSMBInfo:     false, //by default
+				isNFSCopy:           true,  // set by user
+				preservePermissions: true,  // set by user
+				preserveInfo:        true,  // this is set to true by default as OS is linux and nfs flag is also set
 				fromTo:              "LocalFile",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",
@@ -247,6 +256,7 @@ func TestSync_NFSSpecificValidationForFlags(t *testing.T) {
 		{
 			"If NFS flag is set to true and preserve-info is set to false we will not preserve anything",
 			rawSyncCmdArgs{
+				preserveSMBInfo:     false, //by default
 				isNFSCopy:           true,
 				preservePermissions: false,
 				preserveInfo:        false, // by user
@@ -282,6 +292,7 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If no flag is provided we will not preserve anything for linux",
 			rawSyncCmdArgs{
+				preserveSMBInfo:   false, //by default
 				preserveInfo:      false, // default value will be false as OS is linux but nfs flag is not set
 				fromTo:            "LocalFile",
 				dst:               "https://test.file.core.windows.net/testcontainer",
@@ -295,7 +306,8 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If we set preserve-smb-info to true we will preserve info only.",
 			rawSyncCmdArgs{
-				preserveSMBInfo:   true,
+				preserveInfo:      false, // by default
+				preserveSMBInfo:   true,  // set by user
 				fromTo:            "LocalFile",
 				dst:               "https://test.file.core.windows.net/testcontainer",
 				deleteDestination: "false",
@@ -309,7 +321,7 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 			"If preserve-info flag is set to true we will preserve info only",
 			rawSyncCmdArgs{
 				preserveSMBInfo:   false, // default value is false for linux
-				preserveInfo:      true,
+				preserveInfo:      true,  // by user
 				fromTo:            "LocalFile",
 				dst:               "https://test.file.core.windows.net/testcontainer",
 				deleteDestination: "false",
@@ -322,6 +334,7 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If preserve-permissions flag is set to true we will set the permissions flag only but eventually the job would fail as we dont support this in linux",
 			rawSyncCmdArgs{
+				preserveInfo:        false, //by default
 				preserveSMBInfo:     false, // default value is false for linux
 				preservePermissions: true,
 				fromTo:              "LocalFile",
@@ -336,8 +349,8 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If preserve-smb-info and preserve-permissions is set to true we will set both these flags but eventually the job would fail as we dont support fetching attributes in linux.",
 			rawSyncCmdArgs{
-				preserveSMBInfo:     true,
-				preservePermissions: true,
+				preserveSMBInfo:     true,  // set by user
+				preservePermissions: true,  // set by user
 				preserveInfo:        false, //default value is false for linux
 				fromTo:              "LocalFile",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
