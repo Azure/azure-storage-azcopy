@@ -200,47 +200,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	return int64(math.Round(rawSizeInBytes)), nil
 }
 
-// returns result of stripping and if striptopdir is enabled
-// if nothing happens, the original source is returned
-func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
-	result = raw.src
-	resourceURL, err := url.Parse(result)
-	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
-
-	if err != nil {
-		err = fmt.Errorf("failed to parse url %s; %w", result, err)
-		return
-	}
-
-	if strings.Contains(gURLParts.GetContainerName(), "*") {
-		// Disallow container name search and object specifics
-		if gURLParts.GetObjectName() != "" {
-			err = errors.New("cannot combine a specific object name with an account-level search")
-			return
-		}
-
-		// Return immediately here because we know this will be safe.
-		return
-	}
-
-	// Trim the trailing /*.
-	if strings.HasSuffix(resourceURL.RawPath, "/*") {
-		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")
-		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
-		stripTopDir = true
-	}
-
-	// Ensure there aren't any extra *s floating around.
-	if strings.Contains(resourceURL.RawPath, "*") {
-		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
-		return
-	}
-
-	result = resourceURL.String()
-
-	return
-}
-
 // performNFSSpecificValidation performs validation specific to NFS (Network File System) configurations
 // for a synchronization command. It checks NFS-related flags and settings and ensures that the necessary
 // properties are set correctly for NFS copy operations.
