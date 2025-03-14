@@ -283,6 +283,14 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		azureFileSpecificOptions,
 	)
 
+	// we will do the protocol compatibility check after the destination service client is created.
+	if err := validateProtocolCompatibility(ctx, cca.fromTo,
+		cca.destination,
+		copyJobTemplate.DstServiceClient,
+		cca.isNFSCopy); err != nil {
+		return nil, err
+	}
+
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, fpo, copyJobTemplate)
 
 	// set up the comparator so that the source/destination can be compared

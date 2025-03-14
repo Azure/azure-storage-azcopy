@@ -20,10 +20,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/spf13/cobra"
 )
 
 func validatePreserveNFSPropertyOption(toPreserve bool, fromTo common.FromTo, flagName string) error {
@@ -94,4 +97,103 @@ func areBothLocationsSMBAware(fromTo common.FromTo) bool {
 	} else {
 		return false
 	}
+}
+
+// validateProtocolCompatibility checks if the destination share protocol (SMB or NFS) is compatible with the --nfs flag
+// with the type of copy operation (NFS or SMB) requested. It returns an error if there is a protocol mismatch with the --nfs flag.
+func validateProtocolCompatibility(ctx context.Context,
+	fromTo common.FromTo,
+	destination common.ResourceString,
+	dstServiceClient *common.ServiceClient,
+	isNFSCopy bool) error {
+
+	if fromTo.To() != common.ELocation.File() {
+		return nil
+	}
+
+	fileURLParts, err := file.ParseURL(destination.Value)
+	if err != nil {
+		return err
+	}
+	shareName := fileURLParts.ShareName
+	fileServiceClient, err := dstServiceClient.FileServiceClient()
+	if err != nil {
+		return err
+	}
+
+	shareClient := fileServiceClient.NewShareClient(shareName)
+	properties, err := shareClient.GetProperties(ctx, nil)
+	if err != nil {
+		if isNFSCopy {
+			glcm.Info("Failed to fetch share properties. Assuming the transfer to Azure Files NFS share")
+		} else {
+			glcm.Info("Failed to fetch share properties. Assuming the transfer to Azure Files SMB share")
+		}
+		return nil
+	}
+
+	// for older account the EnablesProtocols will be nil
+	if properties.EnabledProtocols == nil || *properties.EnabledProtocols == "SMB" {
+		if isNFSCopy {
+			return fmt.Errorf("The destination share has SMB protocol enabled. If you want to perform copy for SMB share do not use --nfs flag")
+		}
+	} else {
+		if !isNFSCopy {
+			return fmt.Errorf("The destination share has NFS protocol enabled. If you want to perform copy for NFS share please provide --nfs flag")
+		}
+	}
+	return nil
+}
+
+// // GetPreserveInfoFlagVal determines the appropriate flag for preserving SMB or other information
+// // based on the operating system (Windows or Linux), whether the copy is NFS-based, and user-defined flag values.
+// //
+// // Arguments:
+// // - preserveSMBInfo: Boolean indicating whether to preserve SMB-related information.
+// // - preserveInfo: Boolean indicating whether to preserve general information (e.g., metadata).
+// // - isNFSCopy: Boolean indicating if the copy is an NFS (Network File System) copy.
+// //
+// // Returns:
+// //   - A boolean value representing whether the preserve info flag should be true or false
+// //     based on the conditions for the specified operating system and other parameters.
+// func GetPreserveInfoFlagVal(preserveSMBInfo, preserveInfo, isNFSCopy bool) bool {
+// 	if runtime.GOOS == "windows" {
+// 		if isNFSCopy {
+// 			return preserveInfo
+// 		} else {
+// 			// For Windows SMB: By default, both preserve-smb-info and preserve-info are true.
+// 			// If the user explicitly set either to false, we should respect that.
+// 			if preserveSMBInfo == false || preserveInfo == false {
+// 				return false
+// 			}
+// 			return preserveSMBInfo
+// 		}
+// 	} else if runtime.GOOS == "linux" {
+// 		if isNFSCopy {
+// 			return preserveInfo
+// 		} else {
+// 			// For Linux SMB: By default, both preserve-smb-info and preserve-info are false.
+// 			// If the user explicitly set either to true, we should respect that.
+// 			if preserveSMBInfo == true || preserveInfo == true {
+// 				return true
+// 			}
+// 			return preserveSMBInfo
+// 		}
+// 	}
+// 	// Default case if the OS is neither Windows nor Linux
+// 	return false
+// }
+
+// GetPreserveInfoFlagDefault returns the default value for the 'preserve-info' flag
+// based on the operating system and the copy type (NFS or SMB).
+// The default value is:
+// - true if it's an NFS copy on Linux or an SMB copy on Windows.
+// - false otherwise.
+//
+// This default behavior ensures that file preservation logic is aligned with the OS and copy type.
+func GetPreserveInfoFlagDefault(cmd *cobra.Command, isNFSCopy bool) bool {
+	// For Linux systems, if it's an NFS copy, we set the default value of preserveInfo to true.
+	// For Windows systems, if it's an SMB copy, we set the default value of preserveInfo to true.
+	// These default values are important to set here for the logic of file preservation based on the system and copy type.
+	return (runtime.GOOS == "linux" && isNFSCopy) || (runtime.GOOS == "windows" && !isNFSCopy)
 }

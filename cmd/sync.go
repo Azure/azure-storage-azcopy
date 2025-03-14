@@ -267,9 +267,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
 	//	return cooked, err
 	// }
-	raw.preserveInfo = raw.preserveInfo || // if user sets this flag to true
-		((runtime.GOOS == "linux" && raw.isNFSCopy) || // for linux if nfs flag is provided we by default set this flag to true
-			(runtime.GOOS == "windows" && !raw.isNFSCopy)) // for windows if nfs flag is provided we by default set this flag to false
+
 	if raw.isNFSCopy {
 		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
 			return cooked, err
@@ -873,6 +871,11 @@ func init() {
 			glcm.EnableInputWatcher()
 			if cancelFromStdin {
 				glcm.EnableCancelFromStdIn()
+			}
+
+			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
+			if cmd.Flags().Changed(PreserveInfoFlag) {
+				raw.preserveInfo = preserveInfoDefaultVal
 			}
 
 			cooked, err := raw.cook()
