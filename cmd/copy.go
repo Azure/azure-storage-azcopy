@@ -256,7 +256,7 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 // - An error if any validation fails, otherwise nil indicating successful validation.
 
 func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	cooked.preserveInfo = (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.FromTo)
+	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
 	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
 		cooked.FromTo,
 		PreserveInfoFlag); err != nil {
@@ -684,8 +684,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	// By default in case of NFS the preserve-info flag is set to true for linux and false for windows
-	raw.preserveInfo = raw.preserveInfo || ((runtime.GOOS == "linux" && raw.isNFSCopy) || (runtime.GOOS == "windows" && !raw.isNFSCopy))
 	if raw.isNFSCopy {
 		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
 			return cooked, err
@@ -693,6 +691,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
 		return cooked, err
 	}
+
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.asSubdir = raw.asSubdir
 
@@ -1636,6 +1635,13 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
+	if err := validateProtocolCompatibility(ctx, cca.FromTo,
+		cca.Destination,
+		jobPartOrder.DstServiceClient,
+		cca.isNFSCopy); err != nil {
+		return err
+	}
+
 	switch {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
@@ -2043,6 +2049,16 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+
+			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
+				// we give preserdence to raw.preserveInfo flag value if both flags are set
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
+				raw.preserveInfo = preserveInfoDefaultVal
+			}
+
 			cooked, err := raw.cook()
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())

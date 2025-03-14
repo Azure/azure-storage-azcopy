@@ -267,9 +267,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
 	//	return cooked, err
 	// }
-	raw.preserveInfo = raw.preserveInfo || // if user sets this flag to true
-		((runtime.GOOS == "linux" && raw.isNFSCopy) || // for linux if nfs flag is provided we by default set this flag to true
-			(runtime.GOOS == "windows" && !raw.isNFSCopy)) // for windows if nfs flag is provided we by default set this flag to false
+
 	if raw.isNFSCopy {
 		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
 			return cooked, err
@@ -430,7 +428,7 @@ func (raw rawSyncCmdArgs) performNFSSpecificValidation(cooked *cookedSyncCmdArgs
 
 func (raw rawSyncCmdArgs) performSMBSpecificValidation(cooked *cookedSyncCmdArgs) (err error) {
 
-	cooked.preserveInfo = (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.fromTo)
+	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
 	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
 		cooked.fromTo,
 		PreserveInfoFlag); err != nil {
@@ -873,6 +871,15 @@ func init() {
 			glcm.EnableInputWatcher()
 			if cancelFromStdin {
 				glcm.EnableCancelFromStdIn()
+			}
+
+			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
+				// we give preserdence to raw.preserveInfo flag value if both flags are set
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
+				raw.preserveInfo = preserveInfoDefaultVal
 			}
 
 			cooked, err := raw.cook()
