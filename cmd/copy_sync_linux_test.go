@@ -122,8 +122,8 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If we set preserve-smb-info to true we will preserve info only.",
 			rawCopyCmdArgs{
-				preserveInfo:    false, //by default
-				preserveSMBInfo: true,  // set by user
+				preserveInfo:    true, //default will be true but presedence will be given to the flag explicitly set by user.
+				preserveSMBInfo: true, // set by user
 				fromTo:          "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
@@ -158,9 +158,9 @@ func TestCopy_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If preserve-smb-info and preserve-permissions is set to true we will set both these flags but eventually the job would fail as we dont support fetching attributes in linux.",
 			rawCopyCmdArgs{
-				preserveSMBInfo:     true,  // set by user
-				preservePermissions: true,  // set by user
-				preserveInfo:        false, //default value is false for linux
+				preserveSMBInfo:     true, // set by user
+				preservePermissions: true, // set by user
+				preserveInfo:        true, //default will be true but presedence will be given to the flag explicitly set by user.
 				fromTo:              "LocalFile",
 			},
 			func(cooked *CookedCopyCmdArgs) {
@@ -306,8 +306,8 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If we set preserve-smb-info to true we will preserve info only.",
 			rawSyncCmdArgs{
-				preserveInfo:      false, // by default
-				preserveSMBInfo:   true,  // set by user
+				preserveInfo:      true, //default will be true but presedence will be given to the flag explicitly set by user.
+				preserveSMBInfo:   true, // set by user
 				fromTo:            "LocalFile",
 				dst:               "https://test.file.core.windows.net/testcontainer",
 				deleteDestination: "false",
@@ -349,9 +349,9 @@ func TestSync_SMBSpecificValidationForFlags(t *testing.T) {
 		{
 			"If preserve-smb-info and preserve-permissions is set to true we will set both these flags but eventually the job would fail as we dont support fetching attributes in linux.",
 			rawSyncCmdArgs{
-				preserveSMBInfo:     true,  // set by user
-				preservePermissions: true,  // set by user
-				preserveInfo:        false, //default value is false for linux
+				preserveSMBInfo:     true, // set by user
+				preservePermissions: true, // set by user
+				preserveInfo:        true, //default will be true but presedence will be given to the flag explicitly set by user.
 				fromTo:              "LocalFile",
 				dst:                 "https://test.file.core.windows.net/testcontainer",
 				deleteDestination:   "false",

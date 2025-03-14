@@ -3,12 +3,11 @@ package e2etest
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
 	"reflect"
 	"strings"
 	"time"
-
-	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 // MapFromTags Recursively builds a map[string]string from a reflect.val
