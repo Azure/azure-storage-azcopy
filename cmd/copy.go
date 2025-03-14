@@ -297,7 +297,7 @@ func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs
 // - An error if any validation fails, otherwise nil indicating successful validation.
 
 func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	cooked.preserveInfo = (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.FromTo)
+	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
 	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
 		cooked.FromTo,
 		PreserveInfoFlag); err != nil {
@@ -2092,7 +2092,11 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 
 			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
-			if cmd.Flags().Changed(PreserveInfoFlag) {
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
+				// we give preserdence to raw.preserveInfo flag value if both flags are set
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
 				raw.preserveInfo = preserveInfoDefaultVal
 			}
 

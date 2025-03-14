@@ -428,7 +428,7 @@ func (raw rawSyncCmdArgs) performNFSSpecificValidation(cooked *cookedSyncCmdArgs
 
 func (raw rawSyncCmdArgs) performSMBSpecificValidation(cooked *cookedSyncCmdArgs) (err error) {
 
-	cooked.preserveInfo = (raw.preserveSMBInfo || raw.preserveInfo) && areBothLocationsSMBAware(cooked.fromTo)
+	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
 	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
 		cooked.fromTo,
 		PreserveInfoFlag); err != nil {
@@ -874,7 +874,11 @@ func init() {
 			}
 
 			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
-			if cmd.Flags().Changed(PreserveInfoFlag) {
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
+				// we give preserdence to raw.preserveInfo flag value if both flags are set
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
 				raw.preserveInfo = preserveInfoDefaultVal
 			}
 

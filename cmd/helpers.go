@@ -145,45 +145,6 @@ func validateProtocolCompatibility(ctx context.Context,
 	return nil
 }
 
-// // GetPreserveInfoFlagVal determines the appropriate flag for preserving SMB or other information
-// // based on the operating system (Windows or Linux), whether the copy is NFS-based, and user-defined flag values.
-// //
-// // Arguments:
-// // - preserveSMBInfo: Boolean indicating whether to preserve SMB-related information.
-// // - preserveInfo: Boolean indicating whether to preserve general information (e.g., metadata).
-// // - isNFSCopy: Boolean indicating if the copy is an NFS (Network File System) copy.
-// //
-// // Returns:
-// //   - A boolean value representing whether the preserve info flag should be true or false
-// //     based on the conditions for the specified operating system and other parameters.
-// func GetPreserveInfoFlagVal(preserveSMBInfo, preserveInfo, isNFSCopy bool) bool {
-// 	if runtime.GOOS == "windows" {
-// 		if isNFSCopy {
-// 			return preserveInfo
-// 		} else {
-// 			// For Windows SMB: By default, both preserve-smb-info and preserve-info are true.
-// 			// If the user explicitly set either to false, we should respect that.
-// 			if preserveSMBInfo == false || preserveInfo == false {
-// 				return false
-// 			}
-// 			return preserveSMBInfo
-// 		}
-// 	} else if runtime.GOOS == "linux" {
-// 		if isNFSCopy {
-// 			return preserveInfo
-// 		} else {
-// 			// For Linux SMB: By default, both preserve-smb-info and preserve-info are false.
-// 			// If the user explicitly set either to true, we should respect that.
-// 			if preserveSMBInfo == true || preserveInfo == true {
-// 				return true
-// 			}
-// 			return preserveSMBInfo
-// 		}
-// 	}
-// 	// Default case if the OS is neither Windows nor Linux
-// 	return false
-// }
-
 // GetPreserveInfoFlagDefault returns the default value for the 'preserve-info' flag
 // based on the operating system and the copy type (NFS or SMB).
 // The default value is:
