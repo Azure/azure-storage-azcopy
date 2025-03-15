@@ -17,7 +17,7 @@ require (
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/spf13/cobra v1.8.1
 	github.com/wastore/keyctl v0.3.1
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/oauth2 v0.23.0
 	golang.org/x/sync v0.11.0
 	golang.org/x/sys v0.30.0
@@ -33,7 +33,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.3.2
 	github.com/Azure/go-autorest/autorest/date v0.3.0
 	github.com/keybase/go-keychain v0.0.0-20231219164618-57a3676c3af6
-	golang.org/x/net v0.35.0
+	golang.org/x/net v0.36.0
 )
 
 require (
