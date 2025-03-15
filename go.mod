@@ -2,9 +2,9 @@ module github.com/Azure/azure-storage-azcopy/v10
 
 require (
 	cloud.google.com/go/storage v1.45.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.5.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake v1.2.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v1.5.1-beta.1
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20250313100248-09ad70aa7647
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.2.2
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
@@ -17,10 +17,10 @@ require (
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/spf13/cobra v1.8.1
 	github.com/wastore/keyctl v0.3.1
-	golang.org/x/crypto v0.32.0 // indirect
+	golang.org/x/crypto v0.33.0 // indirect
 	golang.org/x/oauth2 v0.23.0
-	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.29.0
+	golang.org/x/sync v0.11.0
+	golang.org/x/sys v0.30.0
 	google.golang.org/api v0.202.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 )
@@ -29,11 +29,11 @@ require github.com/stretchr/testify v1.10.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.17.0
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.1
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.3.1
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.2
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.3.2
 	github.com/Azure/go-autorest/autorest/date v0.3.0
 	github.com/keybase/go-keychain v0.0.0-20231219164618-57a3676c3af6
-	golang.org/x/net v0.34.0
+	golang.org/x/net v0.35.0
 )
 
 require (
@@ -47,7 +47,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/AzureAD/microsoft-authentication-extensions-for-go/cache v0.1.1 // indirect
-	github.com/AzureAD/microsoft-authentication-library-for-go v1.3.2 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v1.4.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.24.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.48.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.48.1 // indirect
@@ -85,7 +85,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.29.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.29.0 // indirect
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
 	google.golang.org/genproto v0.0.0-20241015192408-796eee8c2d53 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241007155032-5fefd90f89a9 // indirect
@@ -95,5 +95,7 @@ require (
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/Azure/azure-sdk-for-go/sdk/storage/azfile => github.com/Azure/azure-sdk-for-go/sdk/storage/azfile v0.0.0-20250313100248-09ad70aa7647
 
 go 1.24.0

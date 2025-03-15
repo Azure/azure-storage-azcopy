@@ -209,9 +209,9 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			jptm.FailActiveSend(stage, err)
 			return
 		}
-		createOptions.Owner = u.nfsPermissionsToApply.Owner
-		createOptions.Group = u.nfsPermissionsToApply.Group
-		createOptions.FileMode = u.nfsPermissionsToApply.FileMode
+		createOptions.NFSProperties.Owner = u.nfsPermissionsToApply.Owner
+		createOptions.NFSProperties.Group = u.nfsPermissionsToApply.Group
+		createOptions.NFSProperties.FileMode = u.nfsPermissionsToApply.FileMode
 
 	} else {
 		stage, err := u.addPermissionsToHeaders(info, u.getFileClient().URL())
@@ -426,9 +426,11 @@ func (u *azureFileSenderBase) Epilogue() {
 				HTTPHeaders:   &u.headersToApply,
 				Permissions:   &u.permissionsToApply,
 				SMBProperties: &u.smbPropertiesToApply,
-				FileMode:      u.nfsPermissionsToApply.FileMode,
-				Owner:         u.nfsPermissionsToApply.Owner,
-				Group:         u.nfsPermissionsToApply.Group,
+				NFSProperties: &file.NFSProperties{
+					FileMode: u.nfsPermissionsToApply.FileMode,
+					Owner:    u.nfsPermissionsToApply.Owner,
+					Group:    u.nfsPermissionsToApply.Group,
+				},
 			})
 			if err != nil {
 				u.jptm.FailActiveSend("Applying final attribute settings", err)
@@ -496,9 +498,9 @@ func (u *azureFileSenderBase) SetFolderProperties() (err error) {
 		if err != nil {
 			return
 		}
-		setPropertiesOptions.Owner = u.nfsPermissionsToApply.Owner
-		setPropertiesOptions.Group = u.nfsPermissionsToApply.Group
-		setPropertiesOptions.FileMode = u.nfsPermissionsToApply.FileMode
+		setPropertiesOptions.FileNFSProperties.Owner = u.nfsPermissionsToApply.Owner
+		setPropertiesOptions.FileNFSProperties.Group = u.nfsPermissionsToApply.Group
+		setPropertiesOptions.FileNFSProperties.FileMode = u.nfsPermissionsToApply.FileMode
 
 	} else {
 		_, err = u.addPermissionsToHeaders(info, u.getDirectoryClient().URL())
