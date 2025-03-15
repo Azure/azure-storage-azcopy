@@ -202,7 +202,6 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			jptm.FailActiveSend(stage, err)
 			return
 		}
-		createOptions.SMBProperties = &u.smbPropertiesToApply
 
 		stage, err = u.addNFSPermissionsToHeaders(info, u.getFileClient().URL())
 		if err != nil {
@@ -226,6 +225,8 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			return
 		}
 	}
+	createOptions.SMBProperties = &u.smbPropertiesToApply
+	createOptions.Permissions = &u.permissionsToApply
 
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
@@ -268,6 +269,7 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 
 	return
 }
+
 func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (stage string, err error) {
 	if !info.PreserveInfo {
 		return "", nil
