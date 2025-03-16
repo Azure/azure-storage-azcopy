@@ -88,6 +88,7 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 
 	if so.entityType == common.EEntityType.Folder() {
 		// st.sub_dirs = append(st.sub_dirs, child_path)
+		// glcm.Info(fmt.Sprintf("Adding folder %s as sub dir of %s", so.relativePath, st.dir))
 		st.sub_dirs = append(st.sub_dirs, so)
 	}
 
@@ -116,10 +117,15 @@ func (st *SyncTraverser) my_comparator(so StoredObject) error {
 	}
 
 	so.relativePath = child_path
+	var err error = nil
 
-	syncMutex.Lock()
-	err := st.comparator(so)
-	syncMutex.Unlock()
+	if so.entityType != common.EEntityType.Folder() {
+		syncMutex.Lock()
+		err = st.comparator(so)
+		syncMutex.Unlock()
+	} else {
+		//glcm.Info(fmt.Sprintf("Skipping folder %s for comparison", so.relativePath))
+	}
 
 	return err
 }
@@ -130,9 +136,14 @@ func (st *SyncTraverser) Finalize() error {
 		so, present := st.enumerator.objectIndexer.indexMap[child.relativePath]
 		syncMutex.Unlock()
 		if present {
-			err := st.enumerator.ctp.scheduleCopyTransfer(so)
-			if err != nil {
-				return err
+			if so.entityType != common.EEntityType.Folder() {
+				//glcm.Info(fmt.Sprintf("Scheduling transfer %s", so.relativePath))
+				err := st.enumerator.ctp.scheduleCopyTransfer(so)
+				if err != nil {
+					return err
+				}
+			} else {
+				//glcm.Info(fmt.Sprintf("Skipping folder %s", so.relativePath))
 			}
 			syncMutex.Lock()
 			delete(st.enumerator.objectIndexer.indexMap, so.relativePath)
