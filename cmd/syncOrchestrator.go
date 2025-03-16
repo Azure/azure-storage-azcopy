@@ -254,7 +254,7 @@ func syncMonitor() {
 		run = atomic.AddInt32(&syncMonitorRun, 0)
 	}
 
-	WarnStdoutAndScanningLog("Exiting SyncMonitor...\n")
+	//WarnStdoutAndScanningLog("Exiting SyncMonitor...\n")
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
@@ -414,7 +414,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
 
 	parallelism := 4
-		atomic.AddInt64(&syncQDepth, 1)
+	atomic.AddInt64(&syncQDepth, 1)
 	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
 	cca.waitUntilJobCompletion(false)
@@ -423,7 +423,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		if qd == 0 {
-			WarnStdoutAndScanningLog("Sync traversers exited..\n")
+			// WarnStdoutAndScanningLog("Sync traversers exited..\n")
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -434,13 +434,13 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		exited := atomic.AddInt32(&syncMonitorExited, 0)
 		if exited == 1 {
-			WarnStdoutAndScanningLog("Sync monitor exited, quitting..\n")
+			// WarnStdoutAndScanningLog("Sync monitor exited, quitting..\n")
 			break
 		}
 		time.Sleep(1 * time.Second)
 	}
 
-	WarnStdoutAndScanningLog("Enumerator finalize running...\n")
+	//WarnStdoutAndScanningLog("Enumerator finalize running...\n")
 	err = enumerator.finalize()
 	if err != nil {
 		WarnStdoutAndScanningLog("Sync finalize failed!!\n")

@@ -846,7 +846,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 		return finalizer(err)
 	} else {
-		if t.recursive || UseSyncOrchestrator {
+		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
 				if fileError != nil {
 					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))

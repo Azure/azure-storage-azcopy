@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
-	"runtime"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -273,7 +274,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	// Our rule is that enumerators of folder-aware sources should include the root folder's properties.
 	// So include the root dir/share in the enumeration results, if it exists or is just the share root.
 	_, err = directoryClient.GetProperties(t.ctx, nil)
-	if err == nil || targetURLParts.DirectoryOrFilePath == "" {
+	if !UseSyncOrchestrator && (err == nil || targetURLParts.DirectoryOrFilePath == "") {
 		s, err := convertToStoredObject(newAzFileRootDirectoryEntity(directoryClient, ""))
 		if err != nil {
 			return err
