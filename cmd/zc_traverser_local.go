@@ -913,9 +913,37 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 			// We don't transfer any directory properties here, not even the root. (Because the root's
 			// properties won't be transferred, because the only way to do a non-recursive directory transfer
 			// is with /* (aka stripTopDir).
+			// In case of sync orchestrator, the above statement is not true. We need to transfer the root directory properties.
 			entries, err := os.ReadDir(t.fullPath)
 			if err != nil {
 				return err
+			}
+
+			if UseSyncOrchestrator {
+				// If we are using the sync orchestrator, we need to process the root directory as well.
+				rootDirInfo, err := common.OSStat(t.fullPath)
+				if err != nil {
+					return err
+				}
+
+				rootSo := newStoredObject(
+					preprocessor,
+					rootDirInfo.Name(),
+					"",
+					common.EEntityType.Folder(), // TODO: add code path for folders
+					rootDirInfo.ModTime(),
+					rootDirInfo.Size(),
+					noContentProps, // Local MD5s are computed in the STE, and other props don't apply to local files
+					noBlobProps,
+					noMetadata,
+					"", // Local has no such thing as containers
+				)
+
+				err = processIfPassedFilters(filters, rootSo, hashingProcessor) // hashingProcessor handles the mutex wrapper
+				_, err = getProcessingError(err)
+				if err != nil {
+					return finalizer(err)
+				}
 			}
 
 			entityType := common.EEntityType.File()
