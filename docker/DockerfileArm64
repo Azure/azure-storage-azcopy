@@ -7,10 +7,5 @@ COPY ./azcopy /usr/local/bin/
 # Make azcopy executable
 RUN chmod +x /usr/local/bin/azcopy
 
-# Install dependencies
-RUN \
-	apt update && \
-	apt-get install -y ca-certificates
-
 WORKDIR /azcopy
 CMD [ "azcopy" ]
