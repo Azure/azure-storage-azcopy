@@ -312,7 +312,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 				env = append(env, "AZCOPY_TENANT_ID="+tenId)
 			}
 		case "", common.EAutoLoginType.AzCLI().String():
-			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
+			if os.Getenv("NEW_E2E_ENVIRONMENT") == TestEnvironmentAzurePipelines {
 				// We are already logged in with AzCLI in Azure Pipeline
 			} else {
 				tenId, appId, clientSecret := GlobalInputManager{}.GetServicePrincipalAuth()
@@ -341,7 +341,7 @@ func (t *TestRunner) ExecuteAzCopyCommand(operation Operation, src, dst string, 
 			env = append(env, "AZCOPY_AUTO_LOGIN_TYPE=AzCLI")
 		case "pscred":
 			var script string
-			if os.Getenv("NEW_E2E_ENVIRONMENT") == AzurePipeline {
+			if os.Getenv("NEW_E2E_ENVIRONMENT") == TestEnvironmentAzurePipelines {
 				tenId, clientId, token := GlobalInputManager{}.GetWorkloadIdentity()
 				cmd := `Connect-AzAccount -ApplicationId %s -Tenant %s -FederatedToken %s`
 				script = fmt.Sprintf(cmd, clientId, tenId, token)
