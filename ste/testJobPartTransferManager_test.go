@@ -39,6 +39,7 @@ type testJobPartTransferManager struct {
 	jobPartMgr jobPartMgr
 	ctx        context.Context
 	status     common.TransferStatus
+	transport  policy.Transporter
 }
 
 func (t *testJobPartTransferManager) DeleteDestinationFileIfNecessary() bool {
@@ -57,6 +58,8 @@ func (t *testJobPartTransferManager) SrcServiceClient() *common.ServiceClient {
 			AllowTrailingDot: true,
 		}
 	}
+
+	options.Transport = t.transport
 
 	client, _ := common.GetServiceClientForLocation(
 		t.fromTo.From(),
