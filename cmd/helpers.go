@@ -159,3 +159,52 @@ func GetPreserveInfoFlagDefault(cmd *cobra.Command, isNFSCopy bool) bool {
 	// These default values are important to set here for the logic of file preservation based on the system and copy type.
 	return (runtime.GOOS == "linux" && isNFSCopy) || (runtime.GOOS == "windows" && !isNFSCopy)
 }
+
+// performNFSSpecificValidation performs validation specific to NFS (Network File System) configurations
+// for a synchronization command. It checks NFS-related flags and settings and ensures that the necessary
+// properties are set correctly for NFS copy operations.
+//
+// The function checks the following:
+//   - Validates the "preserve-info" flag to ensure it is set correctly for NFS-aware locations.
+//   - Validates the "preserve-permissions" flag, ensuring that user input is correct and provides feedback
+//     if the flag is set to false and NFS info is being preserved.
+//   - Ensures that both source and destination locations are NFS-aware for relevant operations.
+//
+// Returns:
+// - An error if any validation fails, otherwise nil indicating successful validation.
+func performNFSSpecificValidation(fromTo common.FromTo,
+	isNFSCopy,
+	preserveInfo,
+	preservePermissions,
+	preserveSMBInfo,
+	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
+
+	if (preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions {
+		err = fmt.Errorf(InvalidFlagsForNFSMsg)
+		return
+	}
+	isNFSCopyVal = isNFSCopy
+	preserveInfoVal = preserveInfo && areBothLocationsNFSAware(fromTo)
+	if err = validatePreserveNFSPropertyOption(preserveInfoVal,
+		fromTo,
+		PreserveInfoFlag); err != nil {
+		return
+	}
+
+	isUserPersistingPermissions := preservePermissions
+	if preserveInfoVal && !isUserPersistingPermissions {
+		glcm.Info(PreserveNFSPermissionsDisabledMsg)
+	}
+	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions,
+		fromTo,
+		PreservePermissionsFlag); err != nil {
+		return
+	}
+	//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
+	// Using the same EPreservePermissionsOption that we have today for NFS as well
+	// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
+	preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
+		true,
+		fromTo)
+	return
+}
