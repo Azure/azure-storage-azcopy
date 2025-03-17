@@ -1,7 +1,8 @@
-//go:build smslidingwindow
-// +build smslidingwindow
+//go:build !smslidingwindow
+// +build !smslidingwindow
 
-// // Copyright © 2017 Microsoft <wastore@microsoft.com>
+//
+// // // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +31,7 @@ import (
 	"io/fs"
 	"net/http"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -88,7 +90,10 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 
 	if so.entityType == common.EEntityType.Folder() {
 		// st.sub_dirs = append(st.sub_dirs, child_path)
+		so.entityType = common.EEntityType.Folder()
 		st.sub_dirs = append(st.sub_dirs, so)
+	} else {
+		so.entityType = common.EEntityType.File()
 	}
 
 	// st.children = append(st.children, so.relativePath)
@@ -116,6 +121,7 @@ func (st *SyncTraverser) my_comparator(so StoredObject) error {
 	}
 
 	so.relativePath = child_path
+	glcm.Info(fmt.Sprintf("Comparing %s\n", so.relativePath))
 
 	syncMutex.Lock()
 	err := st.comparator(so)
@@ -130,9 +136,14 @@ func (st *SyncTraverser) Finalize() error {
 		so, present := st.enumerator.objectIndexer.indexMap[child.relativePath]
 		syncMutex.Unlock()
 		if present {
-			err := st.enumerator.ctp.scheduleCopyTransfer(so)
-			if err != nil {
-				return err
+			if so.entityType == common.EEntityType.File() {
+				glcm.Info(fmt.Sprintf("Scheduling copy transfer %s", so.relativePath))
+				err := st.enumerator.ctp.scheduleCopyTransfer(so)
+				if err != nil {
+					return err
+				}
+			} else {
+				glcm.Info(fmt.Sprintf("Skipping copy transfer %s", so.relativePath))
 			}
 			syncMutex.Lock()
 			delete(st.enumerator.objectIndexer.indexMap, so.relativePath)
@@ -258,6 +269,95 @@ func syncMonitor() {
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
+func getRootStoredObjectLocal(path string) (StoredObject, error) {
+	glcm.Info(fmt.Sprintf("OS Stat on source = %s \n", path))
+	fi, err := os.Stat(path)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	var entityType common.EntityType = common.EEntityType.File()
+	if fi.IsDir() {
+		entityType = common.EEntityType.Folder()
+	}
+
+	root := newStoredObject(
+		nil,
+		fi.Name(),
+		"",
+		entityType,
+		time.Time{},
+		0,
+		noContentProps,
+		noBlobProps,
+		noMetadata,
+		"")
+
+	glcm.Info(fmt.Sprintf("Root object created: %s, Entity type: %s", root.relativePath, entityType.String()))
+
+	return root, nil
+}
+
+func getRootStoredObjectS3(sourcePath string) (StoredObject, error) {
+
+	parsedURL, err := url.Parse(sourcePath)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	s3UrlParts, err := common.NewS3URLParts(*parsedURL)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	var entityType common.EntityType = common.EEntityType.Folder()
+	if s3UrlParts.IsObjectSyntactically() && !s3UrlParts.IsDirectorySyntactically() && !s3UrlParts.IsBucketSyntactically() {
+		entityType = common.EEntityType.File()
+	}
+
+	var searchPrefix string = strings.Join([]string{s3UrlParts.BucketName, s3UrlParts.ObjectKey}, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	root := newStoredObject(
+		nil,
+		searchPrefix,
+		"",
+		entityType,
+		time.Time{},
+		0,
+		noContentProps,
+		noBlobProps,
+		nil,
+		s3UrlParts.BucketName)
+
+	glcm.Info(fmt.Sprintf("S3 Root: %s, Entity type: %s", searchPrefix, entityType.String()))
+
+	return root, nil
+}
+
+// GetRootStoredObject returns the root object for the sync orchestrator
+// based on the source path and fromTo
+// We don't really the StoredObject but just the relative path and the entityType
+// The rest of the fields are not used at the time of creation
+func GetRootStoredObject(path string, fromTo common.FromTo) (StoredObject, error) {
+
+	glcm.Info(fmt.Sprintf("Getting root object for path = %s\n", path))
+
+	switch fromTo.From() {
+	case common.ELocation.Local():
+		return getRootStoredObjectLocal(path)
+	case common.ELocation.S3():
+		return getRootStoredObjectS3(path)
+	default:
+		return StoredObject{}, fmt.Errorf("Sync orchestrator is not supported for %s source.", fromTo.From().String())
+	}
+}
+
+func PrintIndexMap(st *SyncTraverser) {
+	for key, value := range st.enumerator.objectIndexer.indexMap {
+		fmt.Printf("Key: %s, Value: %+v\n", key, value.relativePath)
+	}
+}
+
 func syncOrchestratorHandler(cca *cookedSyncCmdArgs, ctx context.Context) error {
 	// Start the profiling
 	go func() {
@@ -271,11 +371,14 @@ func syncOrchestratorHandler(cca *cookedSyncCmdArgs, ctx context.Context) error 
 func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err error) {
 	go syncMonitor()
 	go monitorGoroutines()
+	glcm.Info("SyncOrchestratorHandler running...\n")
 
 	enumerator, err := cca.InitEnumerator(ctx, nil)
 	if err != nil {
 		return err
 	}
+
+	glcm.Info("Enumerator initialized...\n")
 
 	goroutineThreshold = 30000
 
@@ -294,14 +397,33 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			WarnStdoutAndScanningLog("Continuing sync traversal...\n")
 		}
 
-		sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
-		sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+		var sync_src, sync_dst []string
+		var pt_src, st_src common.ResourceString
 
-		pt_src := cca.Source
-		st_src := cca.Destination
+		switch cca.fromTo {
+		// in case of S2S, enumerator would have source and destination swapped
+		case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
+
+			sync_src = []string{cca.Source.Value, dir.(StoredObject).relativePath}
+			sync_dst = []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+
+			pt_src = cca.Source
+			st_src = cca.Destination
+
+		default:
+			// in case of S2S, the destination is scanned/indexed first
+			// then the source is scanned and filtered based on what the destination contains
+
+			sync_dst = []string{cca.Source.Value, dir.(StoredObject).relativePath}
+			sync_src = []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+
+			st_src = cca.Source
+			pt_src = cca.Destination
+		}
 
 		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
 		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
+		glcm.Info(fmt.Sprintf("Syncing: %s to %s", pt_src.Value, st_src.Value))
 
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate
@@ -315,7 +437,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			return err
 		}
 
-		pt, err := InitResourceTraverser(pt_src,
+		pt, err := InitResourceTraverser(
+			pt_src,
 			ptt.location,
 			&ctx,
 			ptt.credential,
@@ -344,7 +467,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			return err
 		}
 
-		st, err := InitResourceTraverser(st_src,
+		st, err := InitResourceTraverser(
+			st_src,
 			stt.location,
 			&ctx,
 			stt.credential,
@@ -373,13 +497,14 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		if err != nil {
-			WarnStdoutAndScanningLog(fmt.Sprintf("Creating target traverser failed : %s\n", err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("Creating source traverser failed : %s", err))
 			return err
 		}
+
 		err = st.Traverse(noPreProccessor, stra.my_comparator, enumerator.filters)
 		if err != nil {
 			if !strings.Contains(err.Error(), "RESPONSE 404") {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Sync traversal failed type = %s \n", err))
+				WarnStdoutAndScanningLog(fmt.Sprintf("Secondary traversal failed type = %s", err))
 				return err
 			}
 		}
@@ -401,22 +526,28 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		}
 
 		atomic.AddInt64(&syncQDepth, -1)
-
+		glcm.Info(fmt.Sprintf("Syncing %s to %s completed\n", pt_src.Value, st_src.Value))
 		return nil
 	}
 
-	fi, err := os.Stat(cca.Source.Value)
+	root, err := GetRootStoredObject(cca.Source.Value, cca.fromTo)
+
 	if err != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Root object creation failed: %s", err))
 		return err
 	}
 
-	root := newStoredObject(nil, fi.Name(), "", common.EEntityType.Folder(),
-		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
+	if root.entityType == common.EEntityType.File() {
+		WarnStdoutAndScanningLog("Root object is a file, exiting sync orchestrator...")
+		return err
+	}
 
 	parallelism := 4
-		atomic.AddInt64(&syncQDepth, 1)
+	atomic.AddInt64(&syncQDepth, 1)
+	glcm.Info(fmt.Sprintf("Starting sync crawl with parallelism = %d on root %s", parallelism, root.relativePath))
 	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
+	glcm.Info("Sync crawl started...\n")
 	cca.waitUntilJobCompletion(false)
 
 	// XXX consider using wg

@@ -416,6 +416,7 @@ type cookedSyncCmdArgs struct {
 	atomicSourceFilesScanned uint64
 	// defines the number of files listed at the destination and compared.
 	atomicDestinationFilesScanned uint64
+	// defines the number of files listed at the destination and compared.
 	// defines the scanning status of the sync operation.
 	// 0 means scanning is in progress and 1 means scanning is complete.
 	atomicScanningStatus uint32
@@ -662,7 +663,7 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 		if cca.FirstPartOrdered() {
 			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", jobsAdmin.ToFixed(throughput, 4))
 		}
-		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
+		return fmt.Sprintf("\n%v Files Scanned at Source, %v Files Scanned at Destination%s\n",
 			srcScanned, dstScanned, throughputString)
 	})
 }
@@ -702,7 +703,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) (tot
 	// first part not dispatched, and we are still scanning
 	// so a special message is outputted to notice the user that we are not stalling
 	if !cca.ScanningComplete() {
-		cca.reportScanningProgress(lcm, throughput)
+		//cca.reportScanningProgress(lcm, throughput)
 		return
 	}
 
@@ -851,6 +852,9 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 	if err != nil {
 		return err
 	}
+
+	glcm.Info(fmt.Sprintf("Source: %s, Destination: %s", cca.Source.Value, cca.Destination.Value))
+	glcm.Info(fmt.Sprintf("Source: %s, Destination: %s", cca.fromTo.From(), cca.fromTo.To()))
 
 	if !UseSyncOrchestrator {
 		enumerator, err := cca.InitEnumerator(ctx, nil)

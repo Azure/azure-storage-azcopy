@@ -142,6 +142,7 @@ func (f *syncDestinationComparator) processIfNecessary(destinationObject StoredO
 			return nil
 		} else if sourceObjectInMap.isMoreRecentThan(destinationObject, f.preferSMBTime) {
 			syncComparatorLog(sourceObjectInMap.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+			glcm.Info(fmt.Sprintf("Comparator Scheduling transfer: K: %s, V: %s", sourceObjectInMap.relativePath, destinationObject.relativePath))
 			return f.copyTransferScheduler(sourceObjectInMap)
 		} else {
 			// Neither data nor metadata for the file has changed, hence file is not transferred.
@@ -232,6 +233,7 @@ func (f *syncSourceComparator) processIfNecessary(sourceObject StoredObject) err
 		} else if sourceObject.isMoreRecentThan(destinationObjectInMap, f.preferSMBTime) {
 			// if destination is stale, schedule source
 			syncComparatorLog(sourceObject.relativePath, syncStatusOverwritten, syncOverwriteReasonNewerLMT, false)
+			glcm.Info(fmt.Sprintf("Comparator Scheduling transfer: source: %s, V: %s", relPath, destinationObjectInMap.relativePath))
 			return f.copyTransferScheduler(sourceObject)
 		}
 

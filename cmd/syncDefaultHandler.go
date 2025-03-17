@@ -1,5 +1,5 @@
-//go:build !smslidingwindow
-// +build !smslidingwindow
+//go:build smslidingwindow
+// +build smslidingwindow
 
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //

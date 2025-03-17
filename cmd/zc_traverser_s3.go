@@ -126,12 +126,15 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	// Ignore *s in URLs and treat them as normal characters
 	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
+	//glcm.Info(fmt.Sprintf("S3 Traverser Start for: %s, recursive: %t", searchPrefix, t.recursive))
 
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
 		if objectInfo.Err != nil {
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
+
+		//glcm.Info(fmt.Sprintf("Enumerating: %s", objectInfo.Key))
 
 		if objectInfo.StorageClass == "" {
 			// Directories are the only objects without storage classes.

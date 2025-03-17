@@ -67,6 +67,7 @@ func (f *jpptFolderTracker) RegisterPropertiesTransfer(folder string, transferIn
 		return // Never persist to dev-null
 	}
 
+	fmt.Printf("Registering folder %s with transfer index %d\n", folder, transferIndex)
 	f.contents[folder] = transferIndex
 
 	// We created it before it was enumerated-- Let's register that now.
@@ -166,6 +167,14 @@ func (f *jpptFolderTracker) StopTracking(folder string) {
 	if folder == common.Dev_Null {
 		return // Not possible to track this
 	}
+
+	currentContents := ""
+
+	for k, v := range f.contents {
+		currentContents += fmt.Sprintf("K: %s V: %d\n", k, v)
+	}
+
+	fmt.Printf("Folder %s has finished tracking. Current Contents: %s\n", folder, currentContents)
 
 	// no-op, because tracking is now handled by jppt, anyway.
 	if _, ok := f.contents[folder]; ok {

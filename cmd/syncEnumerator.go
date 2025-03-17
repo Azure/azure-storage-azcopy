@@ -76,27 +76,33 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	dest := cca.fromTo.To()
 
 	srcTraverserTemplate := ResourceTraverserTemplate{
-		location:                    cca.fromTo.From(),
-		credential:                  &srcCredInfo,
-		symlinkHandling:             common.ESymlinkHandlingType.Skip(),
-		listOfFilesChannel:          nil,
-		recursive:                   cca.recursive,
-		getProperties:               true,
-		includeDirectoryStubs:       includeDirStubs,
-		permanentDeleteOption:       common.EPermanentDeleteOption.None(),
-		incrementEnumerationCounter: func(entityType common.EntityType) {},
-		listOfVersionIds:            nil,
-		s2sPreserveBlobTags:         cca.s2sPreserveBlobTags,
-		syncHashType:                cca.compareHash,
-		preservePermissions:         cca.preservePermissions,
-		logLevel:                    AzcopyLogVerbosity,
-		cpkOptions:                  cca.cpkOptions,
-		errorChannel:                nil,
-		stripTopDir:                 false,
-		trailingDot:                 cca.trailingDot,
-		destination:                 &dest,
-		excludeContainerNames:       nil,
-		includeVersionsList:         false,
+		location:              cca.fromTo.From(),
+		credential:            &srcCredInfo,
+		symlinkHandling:       common.ESymlinkHandlingType.Skip(),
+		listOfFilesChannel:    nil,
+		recursive:             cca.recursive,
+		getProperties:         true,
+		includeDirectoryStubs: includeDirStubs,
+		permanentDeleteOption: common.EPermanentDeleteOption.None(),
+		incrementEnumerationCounter: func(entityType common.EntityType) {
+			if entityType == common.EEntityType.File() {
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+			} else if entityType == common.EEntityType.Folder() {
+				atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
+			}
+		},
+		listOfVersionIds:      nil,
+		s2sPreserveBlobTags:   cca.s2sPreserveBlobTags,
+		syncHashType:          cca.compareHash,
+		preservePermissions:   cca.preservePermissions,
+		logLevel:              AzcopyLogVerbosity,
+		cpkOptions:            cca.cpkOptions,
+		errorChannel:          nil,
+		stripTopDir:           false,
+		trailingDot:           cca.trailingDot,
+		destination:           &dest,
+		excludeContainerNames: nil,
+		includeVersionsList:   false,
 	}
 
 	sourceTraverser, err := InitResourceTraverser(cca.Source, cca.fromTo.From(), &ctx, &srcCredInfo, common.ESymlinkHandlingType.Skip(), nil, cca.recursive, true, includeDirStubs, common.EPermanentDeleteOption.None(), func(entityType common.EntityType) {

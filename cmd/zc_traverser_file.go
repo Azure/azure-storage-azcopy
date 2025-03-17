@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
-	"runtime"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -151,6 +152,8 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	if err != nil {
 		return err
 	}
+
+	//glcm.Info(fmt.Sprintf("File Traverser Start for: %s, recursive: %t", t.rawURL, t.recursive))
 
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
@@ -305,6 +308,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
 					}
 				}
+				//glcm.Info(fmt.Sprintf("Enumerating file: %s", *fileInfo.Name))
 				enqueueOutput(newAzFileFileEntity(currentDirectoryClient, fileInfo), nil)
 
 			}
@@ -318,6 +322,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *dirInfo.Name))
 					}
 				}
+				//glcm.Info(fmt.Sprintf("Enumerating file: %s", *dirInfo.Name))
 				enqueueOutput(newAzFileSubdirectoryEntity(currentDirectoryClient, *dirInfo.Name), nil)
 				if t.recursive {
 					// If recursive is turned on, add sub directories to be processed

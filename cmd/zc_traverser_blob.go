@@ -302,7 +302,8 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 	//	2. either we are scanning recursively with includeDirectoryStubs set to true,
 	//	   then we add the stub blob that represents the directory
 	if (isBlob && !strings.HasSuffix(blobURLParts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)) ||
-		(t.includeDirectoryStubs && isDirStub && t.recursive) {
+		(t.includeDirectoryStubs && isDirStub && t.recursive) ||
+		(UseSyncOrchestrator && isDirStub) {
 		// sanity checking so highlighting doesn't highlight things we're not worried about.
 		if blobProperties == nil {
 			panic("isBlob should never be set if getting properties is an error")
@@ -322,6 +323,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		}
 
 		blobPropsAdapter := blobPropertiesResponseAdapter{blobProperties}
+
 		storedObject := newStoredObject(
 			preprocessor,
 			getObjectNameOnly(blobName),
@@ -348,6 +350,7 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			t.incrementEnumerationCounter(storedObject.entityType)
 		}
 
+		//glcm.Info(fmt.Sprintf("Enumerating blob (root): %s", blobName))
 		err := processIfPassedFilters(filters, storedObject, processor)
 		_, err = getProcessingError(err)
 
@@ -412,6 +415,9 @@ func (t *blobTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 
 func (t *blobTraverser) parallelList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
+
+	glcm.Info(fmt.Sprintf("Blob Traverser Start for: %s, recursive: %t", searchPrefix, t.recursive))
+
 	// Define how to enumerate its contents
 	// This func must be thread safe/goroutine safe
 	enumerateOneDir := func(dir parallel.Directory, enqueueDir func(parallel.Directory), enqueueOutput func(parallel.DirectoryEntry, error)) error {
@@ -428,16 +434,21 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			// queue up the sub virtual directories if recursive is true
-			if t.recursive || UseSyncOrchestrator{
+			if t.recursive || UseSyncOrchestrator {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
-					enqueueDir(*virtualDir.Name)
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
+					if t.recursive {
+						enqueueDir(*virtualDir.Name)
+						if azcopyScanningLogger != nil {
+							azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
+						}
 					}
 
-					if t.includeDirectoryStubs {
+					var isVirtualDirectoryEnqueued bool = false
+					var dName string
+					if t.includeDirectoryStubs || UseSyncOrchestrator {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
-						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+						// NOTE: GetProperties is failing with 404 for virtual directories.
+						dName = strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
 					altNameCheck:
 						pResp, err := blobClient.GetProperties(t.ctx, nil)
@@ -481,6 +492,8 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							}
 
 							enqueueOutput(storedObject, err)
+							//glcm.Info(fmt.Sprintf("Enumerating blob: %s", dName))
+							isVirtualDirectoryEnqueued = true
 						} else {
 							// There was nothing there, but is there folder/?
 							if !strings.HasSuffix(dName, "/") {
@@ -491,6 +504,26 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 						}
 					skipDirAdd:
 					}
+
+					if UseSyncOrchestrator && !isVirtualDirectoryEnqueued {
+						// If we're using the sync orchestrator, we need to enqueue the directory even if it's not a directory.
+						dName = strings.TrimSuffix(dName, common.AZCOPY_PATH_SEPARATOR_STRING)
+						folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
+						storedObject := newStoredObject(
+							preprocessor,
+							getObjectNameOnly(dName),
+							folderRelativePath,
+							common.EEntityType.Folder(),
+							time.Time{},
+							0,
+							noContentProps,
+							noBlobProps,
+							noMetadata,
+							containerName,
+						)
+						enqueueOutput(storedObject, nil)
+						//glcm.Info(fmt.Sprintf("Enumerating blob: %s", dName))
+					}
 				}
 			}
 
@@ -500,6 +533,7 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 				if t.doesBlobRepresentAFolder(blobInfo.Metadata) {
 					continue
 				}
+				//glcm.Info(fmt.Sprintf("Enumerating: %s", *blobInfo.Name))
 
 				storedObject := t.createStoredObjectForBlob(preprocessor, blobInfo, strings.TrimPrefix(*blobInfo.Name, searchPrefix), containerName)
 
@@ -624,7 +658,6 @@ func (t *blobTraverser) doesBlobRepresentAFolder(metadata map[string]*string) bo
 
 func (t *blobTraverser) serialList(containerClient *container.Client, containerName string, searchPrefix string,
 	extraSearchPrefix string, preprocessor objectMorpher, processor objectProcessor, filters []ObjectFilter) error {
-
 	// see the TO DO in GetEnumerationPreFilter if/when we make this more directory-aware
 	// TODO optimize for the case where recursive is off
 	prefix := searchPrefix + extraSearchPrefix

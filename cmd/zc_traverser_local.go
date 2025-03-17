@@ -821,6 +821,8 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 	finalizer, hashingProcessor := t.prepareHashingThreads(preprocessor, processor, filters)
 
+	glcm.Info(fmt.Sprintf("Local Traverser Start for: %s, recursive: %t", t.fullPath, t.recursive))
+
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 		if t.incrementEnumerationCounter != nil {
@@ -846,7 +848,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 
 		return finalizer(err)
 	} else {
-		if t.recursive || UseSyncOrchestrator {
+		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
 				if fileError != nil {
 					WarnStdoutAndScanningLog(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError.Error()))
@@ -974,6 +976,7 @@ func (t *localTraverser) Traverse(preprocessor objectMorpher, processor objectPr
 					}
 				}
 
+				glcm.Info(fmt.Sprintf("Enumerating local: %s", entry.Name()))
 				err := processIfPassedFilters(filters,
 					newStoredObject(
 						preprocessor,
