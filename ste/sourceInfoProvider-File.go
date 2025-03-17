@@ -50,6 +50,9 @@ type shareFilePropertyProvider interface {
 	ContentLanguage() string
 	ContentType() string
 	ContentMD5() []byte
+	GetOwner() *string
+	GetGroup() *string
+	GetFileMode() *string
 }
 
 type fileGetPropertiesAdapter struct {
@@ -104,6 +107,18 @@ func (f fileGetPropertiesAdapter) LastModified() time.Time {
 	return common.IffNotNil(f.GetProperties.LastModified, time.Time{})
 }
 
+func (f fileGetPropertiesAdapter) GetOwner() *string {
+	return common.IffNotNil(&f.GetProperties.Owner, to.Ptr(""))
+}
+
+func (f fileGetPropertiesAdapter) GetGroup() *string {
+	return common.IffNotNil(&f.GetProperties.Group, to.Ptr(""))
+}
+
+func (f fileGetPropertiesAdapter) GetFileMode() *string {
+	return common.IffNotNil(&f.GetProperties.FileMode, to.Ptr(""))
+}
+
 type directoryGetPropertiesAdapter struct {
 	GetProperties directory.GetPropertiesResponse
 }
@@ -154,6 +169,18 @@ func (d directoryGetPropertiesAdapter) Metadata() map[string]*string {
 
 func (d directoryGetPropertiesAdapter) LastModified() time.Time {
 	return common.IffNotNil(d.GetProperties.LastModified, time.Time{})
+}
+
+func (f directoryGetPropertiesAdapter) GetOwner() *string {
+	return common.IffNotNil(&f.GetProperties.Owner, to.Ptr(""))
+}
+
+func (f directoryGetPropertiesAdapter) GetGroup() *string {
+	return common.IffNotNil(&f.GetProperties.Group, to.Ptr(""))
+}
+
+func (f directoryGetPropertiesAdapter) GetFileMode() *string {
+	return common.IffNotNil(&f.GetProperties.FileMode, to.Ptr(""))
 }
 
 // Source info provider for Azure blob
@@ -263,6 +290,14 @@ func (p *fileSourceInfoProvider) GetSDDL() (string, error) {
 	sddlString, err := sipm.GetSDDLFromID(key, p.srcShareClient)
 
 	return sddlString, err
+}
+
+func (p *fileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, error) {
+	return p.getCachedProperties()
+}
+
+func (p *fileSourceInfoProvider) GetNFSPermissions() (TypedNFSPermissionsHolder, error) {
+	return p.getCachedProperties()
 }
 
 func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {

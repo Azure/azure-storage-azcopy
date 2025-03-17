@@ -208,10 +208,11 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			jptm.FailActiveSend(stage, err)
 			return
 		}
-		createOptions.NFSProperties.Owner = u.nfsPermissionsToApply.Owner
-		createOptions.NFSProperties.Group = u.nfsPermissionsToApply.Group
-		createOptions.NFSProperties.FileMode = u.nfsPermissionsToApply.FileMode
-
+		createOptions.NFSProperties = &file.NFSProperties{
+			Owner:    u.nfsPermissionsToApply.Owner,
+			Group:    u.nfsPermissionsToApply.Group,
+			FileMode: u.nfsPermissionsToApply.FileMode,
+		}
 	} else {
 		stage, err := u.addPermissionsToHeaders(info, u.getFileClient().URL())
 		if err != nil {
@@ -500,10 +501,11 @@ func (u *azureFileSenderBase) SetFolderProperties() (err error) {
 		if err != nil {
 			return
 		}
-		setPropertiesOptions.FileNFSProperties.Owner = u.nfsPermissionsToApply.Owner
-		setPropertiesOptions.FileNFSProperties.Group = u.nfsPermissionsToApply.Group
-		setPropertiesOptions.FileNFSProperties.FileMode = u.nfsPermissionsToApply.FileMode
-
+		setPropertiesOptions.FileNFSProperties = &file.NFSProperties{
+			Owner:    u.nfsPermissionsToApply.Owner,
+			Group:    u.nfsPermissionsToApply.Group,
+			FileMode: u.nfsPermissionsToApply.FileMode,
+		}
 	} else {
 		_, err = u.addPermissionsToHeaders(info, u.getDirectoryClient().URL())
 		if err != nil {
