@@ -428,14 +428,16 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			// queue up the sub virtual directories if recursive is true
-			if t.recursive || UseSyncOrchestrator{
+			if t.recursive ||UseSyncOrchestrator{
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
+					if !UseSyncOrchestrator{
 					enqueueDir(*virtualDir.Name)
+					}
 					if azcopyScanningLogger != nil {
 						azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
 					}
 
-					if t.includeDirectoryStubs {
+					if t.includeDirectoryStubs ||UseSyncOrchestrator{
 						// try to get properties on the directory itself, since it's not listed in BlobItems
 						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
