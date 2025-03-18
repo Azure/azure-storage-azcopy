@@ -44,6 +44,10 @@ import (
 
 var UseSyncOrchestrator = true
 
+// This is temporary flag and logs while we stabilize the sync orchestrator.
+// This will be removed once we are confident about the orchestrator.
+var enableDebugLogs bool = false
+
 type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
 
 var customSyncHandler CustomSyncHandler = syncOrchestratorHandler
@@ -62,20 +66,91 @@ func IncrementCounter(entry fs.DirEntry, t *localTraverser) error {
 }
 
 func GetCustomSyncHandlerInfo() string {
-	return "Sync Handler: Sliding Window"
+	return "Sync Handler: Sync Orchestrator"
 }
 
 type SyncTraverser struct {
 	enumerator *syncEnumerator
 	comparator objectProcessor
 	dir        string
-	// sub_dirs []string
-	// children []string
-	sub_dirs []StoredObject
-	children []StoredObject
+	sub_dirs   []StoredObject
+	children   []StoredObject
 }
 
+// AddToObjectIndexer adds a StoredObject to the object indexer of the SyncTraverser.
+// It locks the syncMutex before storing the object to ensure thread safety.
+// The function returns an error if storing the object fails.
+//
+// Parameters:
+// - so: The StoredObject to be added to the object indexer.
+//
+// Returns:
+// - error: An error if storing the object fails, otherwise nil.
+func (st *SyncTraverser) AddToObjectIndexer(so StoredObject) error {
+
+	if enableDebugLogs {
+		glcm.Info(fmt.Sprintf("%s: Adding %s to object indexer", st.dir, so.relativePath))
+	}
+	syncMutex.Lock()
+	err := st.enumerator.objectIndexer.store(so)
+	syncMutex.Unlock()
+
+	return err
+}
+
+// RemoveFromObjectIndexer removes a StoredObject from the object indexer of the SyncTraverser.
+// It locks the syncMutex before deleting the object to ensure thread safety.
+//
+// Parameters:
+// - so: The StoredObject to be removed from the object indexer.
+func (st *SyncTraverser) RemoveFromObjectIndexer(so StoredObject) {
+
+	if enableDebugLogs {
+		glcm.Info(fmt.Sprintf("%s: Removing %s from object indexer", st.dir, so.relativePath))
+	}
+	syncMutex.Lock()
+	delete(st.enumerator.objectIndexer.indexMap, so.relativePath)
+	syncMutex.Unlock()
+}
+
+// GetFromObjectIndexer retrieves a StoredObject from the object indexer using the provided key.
+// It returns the StoredObject and a boolean indicating whether the object was found.
+//
+// Parameters:
+//   - key: A string representing the key to look up in the object indexer.
+//
+// Returns:
+//   - StoredObject: The object associated with the provided key.
+//   - bool: A boolean indicating whether the object was found (true) or not (false).
+func (st *SyncTraverser) GetFromObjectIndexer(key string) (StoredObject, bool) {
+	syncMutex.Lock()
+	so, present := st.enumerator.objectIndexer.indexMap[key]
+	syncMutex.Unlock()
+
+	return so, present
+}
+
+// processor processes a StoredObject by determining its path and type, and then adds it to the appropriate list
+// (sub_dirs or children) or marks it as the root object. It also adds the object to the object indexer.
+//
+// All primary traversals will send the files and directories to the processor.
+// NOTE: Blob and file traversals may also send the root directory to the processor.
+//
+// Parameters:
+// - so: The StoredObject to be processed.
+//
+// Returns:
+// - error: An error if adding the object to the indexer fails, otherwise nil.
 func (st *SyncTraverser) processor(so StoredObject) error {
+
+	if (so.relativePath == "") && (st.dir == "") {
+		// It is the first root. Ignore it.
+		if enableDebugLogs {
+			glcm.Info(fmt.Sprintf("Processor: Ignoring the absolute root"))
+		}
+		return nil
+	}
+
 	var child_path string
 	var strs []string
 	if st.dir != "" {
@@ -85,23 +160,39 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	}
 	child_path = strings.Join(strs, common.AZCOPY_PATH_SEPARATOR_STRING)
 	so.relativePath = child_path
+	so.relativePath = strings.Trim(so.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-	if so.entityType == common.EEntityType.Folder() {
-		// st.sub_dirs = append(st.sub_dirs, child_path)
-		st.sub_dirs = append(st.sub_dirs, so)
+	if so.relativePath != st.dir {
+		// It is a child object. Ignore the root object.
+		if so.entityType == common.EEntityType.Folder() {
+			st.sub_dirs = append(st.sub_dirs, so)
+		}
+
+		st.children = append(st.children, so)
+	} else {
+		// It is the root object
+		if enableDebugLogs {
+			glcm.Info(fmt.Sprintf("%s: Processor: Root %s", st.dir, so.relativePath))
+		}
+		return nil
 	}
 
-	// st.children = append(st.children, so.relativePath)
-	st.children = append(st.children, so)
-
-	syncMutex.Lock()
-	err := st.enumerator.objectIndexer.store(so)
-	syncMutex.Unlock()
-
-	return err
+	return st.AddToObjectIndexer(so)
 }
 
-func (st *SyncTraverser) my_comparator(so StoredObject) error {
+// comparator compares a StoredObject with the objects in the SyncTraverser's indexer.
+//
+// All secondary traversals will send the files and directories to the comparator.
+// NOTE: Blob and file traversals may also send the root directory to the comparator
+// which we want to ignore.
+//
+// Parameters:
+// - so: The StoredObject to be compared.
+//
+// Returns:
+// - error: An error if the comparison fails, otherwise nil.
+func (st *SyncTraverser) customComparator(so StoredObject) error {
+
 	var child_path string
 
 	if so.relativePath == "" {
@@ -117,6 +208,17 @@ func (st *SyncTraverser) my_comparator(so StoredObject) error {
 
 	so.relativePath = child_path
 
+	if so.relativePath == st.dir {
+		// Skip the root object if it is present in the indexer. We have already processed it.
+		if enableDebugLogs {
+			glcm.Info(fmt.Sprintf("%s: Comparator: Skip root %s", st.dir, so.relativePath))
+		}
+		return nil
+	}
+
+	if enableDebugLogs {
+		glcm.Info(fmt.Sprintf("%s: Comparator: Compare %s", st.dir, so.relativePath))
+	}
 	syncMutex.Lock()
 	err := st.comparator(so)
 	syncMutex.Unlock()
@@ -124,19 +226,26 @@ func (st *SyncTraverser) my_comparator(so StoredObject) error {
 	return err
 }
 
-func (st *SyncTraverser) Finalize() error {
+// finalize finalizes the sync process for the SyncTraverser by scheduling copy transfers for objects in indexer
+// that need to be transferred. It ensures that each object is only transferred once and removes it from the object indexer
+// after scheduling the transfer.
+//
+// Returns:
+// - error: An error if scheduling a copy transfer fails, otherwise nil.
+func (st *SyncTraverser) finalize() error {
+
 	for _, child := range st.children {
-		syncMutex.Lock()
-		so, present := st.enumerator.objectIndexer.indexMap[child.relativePath]
-		syncMutex.Unlock()
+		so, present := st.GetFromObjectIndexer(child.relativePath)
 		if present {
+
+			if enableDebugLogs {
+				glcm.Info(fmt.Sprintf("%s: Finalizer: Transfer %s", st.dir, so.relativePath))
+			}
 			err := st.enumerator.ctp.scheduleCopyTransfer(so)
 			if err != nil {
 				return err
 			}
-			syncMutex.Lock()
-			delete(st.enumerator.objectIndexer.indexMap, so.relativePath)
-			syncMutex.Unlock()
+			st.RemoveFromObjectIndexer(so)
 		}
 	}
 
@@ -254,7 +363,9 @@ func syncMonitor() {
 		run = atomic.AddInt32(&syncMonitorRun, 0)
 	}
 
-	WarnStdoutAndScanningLog("Exiting SyncMonitor...\n")
+	if enableDebugLogs {
+		WarnStdoutAndScanningLog("Exiting SyncMonitor...\n")
+	}
 	atomic.AddInt32(&syncMonitorExited, 1)
 }
 
@@ -306,15 +417,6 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate
 
-		syncMutex.Lock()
-		err := enumerator.objectIndexer.store(dir.(StoredObject))
-		syncMutex.Unlock()
-
-		if err != nil {
-			WarnStdoutAndScanningLog(fmt.Sprintf("Storing root object failed: %s\n", err))
-			return err
-		}
-
 		pt, err := InitResourceTraverser(pt_src,
 			ptt.location,
 			&ctx,
@@ -340,7 +442,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			ptt.includeVersionsList,
 			NewDefaultSyncTraverserOptions())
 		if err != nil {
-			WarnStdoutAndScanningLog(fmt.Sprintf("Creating source traverser failed : %s\n", err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("Creating primary traverser failed : %s\n", err))
 			return err
 		}
 
@@ -368,32 +470,35 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			stt.excludeContainerNames,
 			stt.includeVersionsList,
 			NewDefaultSyncTraverserOptions())
+		if err != nil {
+			WarnStdoutAndScanningLog(fmt.Sprintf("Creating secondary traverser failed : %s", err))
+			return err
+		}
 
+		if enableDebugLogs {
+			glcm.Info(fmt.Sprintf("Crawl %s", dir.(StoredObject).relativePath))
+		}
 		stra := newSyncTraverser(enumerator, dir.(StoredObject).relativePath, enumerator.objectComparator)
 
 		err = pt.Traverse(noPreProccessor, stra.processor, enumerator.filters)
 		if err != nil {
-			WarnStdoutAndScanningLog(fmt.Sprintf("Creating target traverser failed : %s\n", err))
+			WarnStdoutAndScanningLog(fmt.Sprintf("Primary traversal failed : %s", err))
 			return err
 		}
-		err = st.Traverse(noPreProccessor, stra.my_comparator, enumerator.filters)
+
+		err = st.Traverse(noPreProccessor, stra.customComparator, enumerator.filters)
 		if err != nil {
 			if !strings.Contains(err.Error(), "RESPONSE 404") {
-				WarnStdoutAndScanningLog(fmt.Sprintf("Sync traversal failed type = %s \n", err))
+				WarnStdoutAndScanningLog(fmt.Sprintf("Sync traversal failed type = %s", err))
 				return err
 			}
 		}
 
-		err = stra.Finalize()
+		err = stra.finalize()
 		if err != nil {
 			WarnStdoutAndScanningLog("Sync finalize failed!!\n")
 			return err
 		}
-
-		// XXX should we worry about case??
-		syncMutex.Lock()
-		delete(stra.enumerator.objectIndexer.indexMap, dir.(StoredObject).relativePath)
-		syncMutex.Unlock()
 
 		atomic.AddInt64(&syncQDepth, int64(len(stra.sub_dirs)))
 		for _, sub_dir := range stra.sub_dirs {
@@ -401,8 +506,11 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		}
 
 		atomic.AddInt64(&syncQDepth, -1)
-
 		return nil
+	}
+
+	if enableDebugLogs {
+		glcm.Info(fmt.Sprintf("Syncing %s to %s", cca.Source.Value, cca.Destination.Value))
 	}
 
 	fi, err := os.Stat(cca.Source.Value)
@@ -414,7 +522,7 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
 
 	parallelism := 4
-		atomic.AddInt64(&syncQDepth, 1)
+	atomic.AddInt64(&syncQDepth, 1)
 	var _ = parallel.Crawl(ctx, root, syncOneDir, parallelism)
 
 	cca.waitUntilJobCompletion(false)
@@ -423,7 +531,9 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		qd := atomic.AddInt64(&syncQDepth, 0)
 		if qd == 0 {
-			WarnStdoutAndScanningLog("Sync traversers exited..\n")
+			if enableDebugLogs {
+				WarnStdoutAndScanningLog("Sync traversers exited..\n")
+			}
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -434,13 +544,15 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 	for {
 		exited := atomic.AddInt32(&syncMonitorExited, 0)
 		if exited == 1 {
-			WarnStdoutAndScanningLog("Sync monitor exited, quitting..\n")
+			if enableDebugLogs {
+				WarnStdoutAndScanningLog("Sync monitor exited, quitting..\n")
+			}
 			break
 		}
 		time.Sleep(1 * time.Second)
 	}
 
-	WarnStdoutAndScanningLog("Enumerator finalize running...\n")
+	// This should be a no-op
 	err = enumerator.finalize()
 	if err != nil {
 		WarnStdoutAndScanningLog("Sync finalize failed!!\n")
