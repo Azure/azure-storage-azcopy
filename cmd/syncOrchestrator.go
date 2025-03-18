@@ -30,6 +30,7 @@ import (
 	"io/fs"
 	"net/http"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -46,7 +47,7 @@ var UseSyncOrchestrator = true
 
 // This is temporary flag and logs while we stabilize the sync orchestrator.
 // This will be removed once we are confident about the orchestrator.
-var enableDebugLogs bool = false
+var enableDebugLogs bool = true
 
 type CustomSyncHandler func(cca *cookedSyncCmdArgs, ctx context.Context) error
 
@@ -151,6 +152,8 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 		return nil
 	}
 
+	so.relativePath = strings.Trim(so.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+
 	var child_path string
 	var strs []string
 	if st.dir != "" {
@@ -160,7 +163,6 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 	}
 	child_path = strings.Join(strs, common.AZCOPY_PATH_SEPARATOR_STRING)
 	so.relativePath = child_path
-	so.relativePath = strings.Trim(so.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	if so.relativePath != st.dir {
 		// It is a child object. Ignore the root object.
@@ -192,6 +194,8 @@ func (st *SyncTraverser) processor(so StoredObject) error {
 // Returns:
 // - error: An error if the comparison fails, otherwise nil.
 func (st *SyncTraverser) customComparator(so StoredObject) error {
+
+	so.relativePath = strings.Trim(so.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 	var child_path string
 
@@ -250,6 +254,98 @@ func (st *SyncTraverser) finalize() error {
 	}
 
 	return nil
+}
+
+func getRootStoredObjectLocal(path string) (StoredObject, error) {
+	glcm.Info(fmt.Sprintf("OS Stat on source = %s \n", path))
+	fi, err := os.Stat(path)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	var entityType common.EntityType = common.EEntityType.File()
+	if fi.IsDir() {
+		entityType = common.EEntityType.Folder()
+	}
+
+	root := newStoredObject(
+		nil,
+		fi.Name(),
+		"",
+		entityType,
+		time.Time{},
+		0,
+		noContentProps,
+		noBlobProps,
+		noMetadata,
+		"")
+
+	glcm.Info(fmt.Sprintf("Root object created: %s, Entity type: %s", root.relativePath, entityType.String()))
+
+	return root, nil
+}
+
+// getRootStoredObjectS3 returns the root object for the sync orchestrator based on the S3 source path.
+// It parses the S3 URL and determines the entity type (file or folder) based on the URL structure.
+//
+// Parameters:
+// - sourcePath: The S3 source path as a string.
+//
+// Returns:
+// - StoredObject: The root StoredObject for the given S3 source path.
+// - error: An error if parsing the URL or creating the StoredObject fails.
+func getRootStoredObjectS3(sourcePath string) (StoredObject, error) {
+
+	parsedURL, err := url.Parse(sourcePath)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	s3UrlParts, err := common.NewS3URLParts(*parsedURL)
+	if err != nil {
+		return StoredObject{}, err
+	}
+
+	var entityType common.EntityType = common.EEntityType.Folder()
+	if s3UrlParts.IsObjectSyntactically() && !s3UrlParts.IsDirectorySyntactically() && !s3UrlParts.IsBucketSyntactically() {
+		entityType = common.EEntityType.File()
+	}
+
+	var searchPrefix string = strings.Join([]string{s3UrlParts.BucketName, s3UrlParts.ObjectKey}, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+	root := newStoredObject(
+		nil,
+		searchPrefix,
+		"",
+		entityType,
+		time.Time{},
+		0,
+		noContentProps,
+		noBlobProps,
+		nil,
+		s3UrlParts.BucketName)
+
+	glcm.Info(fmt.Sprintf("S3 Root: %s, Entity type: %s", searchPrefix, entityType.String()))
+
+	return root, nil
+}
+
+// GetRootStoredObject returns the root object for the sync orchestrator
+// based on the source path and fromTo
+// We don't really the StoredObject but just the relative path and the entityType
+// The rest of the fields are not used at the time of creation
+func GetRootStoredObject(path string, fromTo common.FromTo) (StoredObject, error) {
+
+	glcm.Info(fmt.Sprintf("Getting root object for path = %s\n", path))
+
+	switch fromTo.From() {
+	case common.ELocation.Local():
+		return getRootStoredObjectLocal(path)
+	case common.ELocation.S3():
+		return getRootStoredObjectS3(path)
+	default:
+		return StoredObject{}, fmt.Errorf("Sync orchestrator is not supported for %s source.", fromTo.From().String())
+	}
 }
 
 func newSyncTraverser(enumerator *syncEnumerator, dir string, comparator objectProcessor) *SyncTraverser {
@@ -405,11 +501,29 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			WarnStdoutAndScanningLog("Continuing sync traversal...\n")
 		}
 
-		sync_src := []string{cca.Source.Value, dir.(StoredObject).relativePath}
-		sync_dst := []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+		var sync_src, sync_dst []string
+		var pt_src, st_src common.ResourceString
 
-		pt_src := cca.Source
-		st_src := cca.Destination
+		switch cca.fromTo {
+		// in case of S2S, enumerator would have source and destination swapped
+		case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
+
+			sync_src = []string{cca.Source.Value, dir.(StoredObject).relativePath}
+			sync_dst = []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+
+			pt_src = cca.Source
+			st_src = cca.Destination
+
+		default:
+			// in case of S2S, the destination is scanned/indexed first
+			// then the source is scanned and filtered based on what the destination contains
+
+			sync_dst = []string{cca.Source.Value, dir.(StoredObject).relativePath}
+			sync_src = []string{cca.Destination.Value, dir.(StoredObject).relativePath}
+
+			st_src = cca.Source
+			pt_src = cca.Destination
+		}
 
 		pt_src.Value = strings.Join(sync_src, common.AZCOPY_PATH_SEPARATOR_STRING)
 		st_src.Value = strings.Join(sync_dst, common.AZCOPY_PATH_SEPARATOR_STRING)
@@ -417,7 +531,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		ptt := enumerator.primaryTraverserTemplate
 		stt := enumerator.secondaryTraverserTemplate
 
-		pt, err := InitResourceTraverser(pt_src,
+		pt, err := InitResourceTraverser(
+			pt_src,
 			ptt.location,
 			&ctx,
 			ptt.credential,
@@ -446,7 +561,8 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 			return err
 		}
 
-		st, err := InitResourceTraverser(st_src,
+		st, err := InitResourceTraverser(
+			st_src,
 			stt.location,
 			&ctx,
 			stt.credential,
@@ -513,13 +629,17 @@ func (cca *cookedSyncCmdArgs) runSyncOrchestrator(ctx context.Context) (err erro
 		glcm.Info(fmt.Sprintf("Syncing %s to %s", cca.Source.Value, cca.Destination.Value))
 	}
 
-	fi, err := os.Stat(cca.Source.Value)
+	root, err := GetRootStoredObject(cca.Source.Value, cca.fromTo)
+
 	if err != nil {
+		WarnStdoutAndScanningLog(fmt.Sprintf("Root object creation failed: %s", err))
 		return err
 	}
 
-	root := newStoredObject(nil, fi.Name(), "", common.EEntityType.Folder(),
-		fi.ModTime(), fi.Size(), noContentProps, noBlobProps, noMetadata, "")
+	if root.entityType == common.EEntityType.File() {
+		WarnStdoutAndScanningLog("Root object is a file, exiting sync orchestrator...")
+		return err
+	}
 
 	parallelism := 4
 	atomic.AddInt64(&syncQDepth, 1)
