@@ -200,48 +200,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	return int64(math.Round(rawSizeInBytes)), nil
 }
 
-// performNFSSpecificValidation performs validation specific to NFS (Network File System) configurations
-// for a synchronization command. It checks NFS-related flags and settings and ensures that the necessary
-// properties are set correctly for NFS copy operations.
-//
-// The function checks the following:
-//   - Validates the "preserve-info" flag to ensure it is set correctly for NFS-aware locations.
-//   - Validates the "preserve-permissions" flag, ensuring that user input is correct and provides feedback
-//     if the flag is set to false and NFS info is being preserved.
-//   - Ensures that both source and destination locations are NFS-aware for relevant operations.
-//
-// Returns:
-// - An error if any validation fails, otherwise nil indicating successful validation.
-func (raw rawCopyCmdArgs) performNFSSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	if (raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions {
-		return fmt.Errorf(InvalidFlagsForNFSMsg)
-	}
-	cooked.isNFSCopy = raw.isNFSCopy
-	cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.FromTo)
-	if err = validatePreserveNFSPropertyOption(cooked.preserveInfo,
-		cooked.FromTo,
-		PreserveInfoFlag); err != nil {
-		return err
-	}
-
-	isUserPersistingPermissions := raw.preservePermissions
-	if cooked.preserveInfo && !isUserPersistingPermissions {
-		glcm.Info(PreserveNFSPermissionsDisabledMsg)
-	}
-	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions,
-		cooked.FromTo,
-		PreservePermissionsFlag); err != nil {
-		return err
-	}
-	//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
-	// Using the same EPreservePermissionsOption that we have today for NFS as well
-	// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		true,
-		cooked.FromTo)
-	return nil
-}
-
 // performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
 // for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
 // properties are set correctly for SMB copy operations.
@@ -685,7 +643,9 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if raw.isNFSCopy {
-		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
+		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.FromTo,
+			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
+		if err != nil {
 			return cooked, err
 		}
 	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
@@ -2052,7 +2012,7 @@ func init() {
 
 			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
 			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
-				// we give preserdence to raw.preserveInfo flag value if both flags are set
+				// we give precedence to raw.preserveInfo flag value if both flags are set
 			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
 				raw.preserveInfo = raw.preserveSMBInfo
 			} else {
@@ -2123,7 +2083,7 @@ func init() {
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, "nfs", false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
-	//TBD: should we mark this flag hidden?
+	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Preserve properties. TODO: Add flag description")
 

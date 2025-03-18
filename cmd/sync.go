@@ -269,7 +269,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// }
 
 	if raw.isNFSCopy {
-		if err = raw.performNFSSpecificValidation(&cooked); err != nil {
+		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.fromTo,
+			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
+		if err != nil {
 			return cooked, err
 		}
 	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
@@ -367,50 +369,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeRoot = raw.includeRoot
 
 	return cooked, nil
-}
-
-// @performNFSSpecificValidation
-// performs validation specific to NFS (Network File System) configurations
-// for a synchronization command. It checks NFS-related flags and settings and ensures that the necessary
-// properties are set correctly for NFS copy operations.
-//
-// The function checks the following:
-//   - Validates the "preserve-info" flag to ensure it is set correctly for NFS-aware locations.
-//   - Validates the "preserve-permissions" flag, ensuring that user input is correct and provides feedback
-//     if the flag is set to false and NFS info is being preserved.
-//   - Ensures that both source and destination locations are NFS-aware for relevant operations.
-//
-// Returns:
-// - An error if any validation fails, otherwise nil indicating successful validation.
-func (raw rawSyncCmdArgs) performNFSSpecificValidation(cooked *cookedSyncCmdArgs) (err error) {
-	if (raw.preserveSMBInfo && runtime.GOOS == "linux") || raw.preserveSMBPermissions {
-		return fmt.Errorf(InvalidFlagsForNFSMsg)
-	}
-
-	cooked.isNFSCopy = raw.isNFSCopy
-	cooked.preserveInfo = raw.preserveInfo && areBothLocationsNFSAware(cooked.fromTo)
-	if err = validatePreserveNFSPropertyOption(cooked.preserveInfo,
-		cooked.fromTo,
-		PreserveInfoFlag); err != nil {
-		return err
-	}
-
-	isUserPersistingPermissions := raw.preservePermissions
-	if cooked.preserveInfo && !isUserPersistingPermissions {
-		glcm.Info(PreserveNFSPermissionsDisabledMsg)
-	}
-	if err = validatePreserveNFSPropertyOption(isUserPersistingPermissions,
-		cooked.fromTo,
-		PreservePermissionsFlag); err != nil {
-		return err
-	}
-	//TBD: We will be preserving ACLs and ownership info in case of NFS. (UserID,GroupID and FileMode)
-	// Using the same EPreservePermissionsOption that we have today for NFS as well
-	// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		true,
-		cooked.fromTo)
-	return nil
 }
 
 // performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
@@ -915,7 +873,7 @@ func init() {
 		"(e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
 
 	syncCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, "nfs", false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
-	//TBD: should we mark this flag hidden?
+	//Marking this flag as hidden as we might not support it in the future
 	_ = syncCmd.PersistentFlags().MarkHidden("preserve-smb-info")
 	syncCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Preserves properties. TODO: Add flag description")
 
