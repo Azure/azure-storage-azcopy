@@ -428,16 +428,19 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 				return fmt.Errorf("cannot list files due to reason %s", err)
 			}
 			// queue up the sub virtual directories if recursive is true
-			if t.recursive || UseSyncOrchestrator{
+			if t.recursive || UseSyncOrchestrator {
 				for _, virtualDir := range lResp.Segment.BlobPrefixes {
-					enqueueDir(*virtualDir.Name)
-					if azcopyScanningLogger != nil {
-						azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
+					if t.recursive {
+						enqueueDir(*virtualDir.Name)
+						if azcopyScanningLogger != nil {
+							azcopyScanningLogger.Log(common.LogDebug, fmt.Sprintf("Enqueuing sub-directory %s for enumeration.", *virtualDir.Name))
+						}
 					}
 
-					if t.includeDirectoryStubs {
+					var isVirtualDirectoryEnqueued bool = false
+					dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
+					if t.includeDirectoryStubs || UseSyncOrchestrator {
 						// try to get properties on the directory itself, since it's not listed in BlobItems
-						dName := strings.TrimSuffix(*virtualDir.Name, common.AZCOPY_PATH_SEPARATOR_STRING)
 						blobClient := containerClient.NewBlobClient(dName)
 					altNameCheck:
 						pResp, err := blobClient.GetProperties(t.ctx, nil)
@@ -481,6 +484,8 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							}
 
 							enqueueOutput(storedObject, err)
+							isVirtualDirectoryEnqueued = true
+							//glcm.Info(fmt.Sprintf("%s: Enqueued directory %s for enumeration. Prefix: %s", t.rawURL, folderRelativePath, searchPrefix))
 						} else {
 							// There was nothing there, but is there folder/?
 							if !strings.HasSuffix(dName, "/") {
@@ -490,6 +495,26 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 							}
 						}
 					skipDirAdd:
+					}
+
+					if UseSyncOrchestrator && !isVirtualDirectoryEnqueued {
+						// If we're using the sync orchestrator, we need to enqueue the directory even if it's not a directory.
+						// Above section fails to fetch properties for a directory so it's not enqueued.
+						dName = strings.TrimSuffix(dName, common.AZCOPY_PATH_SEPARATOR_STRING)
+						folderRelativePath := strings.TrimPrefix(dName, searchPrefix)
+						storedObject := newStoredObject(
+							preprocessor,
+							getObjectNameOnly(dName),
+							folderRelativePath,
+							common.EEntityType.Folder(),
+							time.Time{},
+							0,
+							noContentProps,
+							noBlobProps,
+							noMetadata,
+							containerName,
+						)
+						enqueueOutput(storedObject, nil)
 					}
 				}
 			}
@@ -554,12 +579,12 @@ func (t *blobTraverser) parallelList(containerClient *container.Client, containe
 			writeToBlobErrorChannel(t.errorChannel, ErrorBlobInfo{ErrorMsg: workerError, Source: t.syncOptions.isSource})
 			return workerError
 		}
+		object := item.(StoredObject)
 
 		if t.incrementEnumerationCounter != nil {
-			t.incrementEnumerationCounter(common.EEntityType.File())
+			t.incrementEnumerationCounter(object.entityType)
 		}
 
-		object := item.(StoredObject)
 		processErr := processIfPassedFilters(filters, object, processor)
 		_, processErr = getProcessingError(processErr)
 		if processErr != nil {

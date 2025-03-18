@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
@@ -133,49 +134,75 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
 		}
 
-		if objectInfo.StorageClass == "" {
-			// Directories are the only objects without storage classes.
-			continue
-		}
-
 		if invalidAzureBlobName(objectInfo.Key) {
 			//Throw a warning on console and continue
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
 			continue
 		}
 
+		// Process a file
 		objectPath := strings.Split(objectInfo.Key, "/")
 		objectName := objectPath[len(objectPath)-1]
 
 		// re-join the unescaped path.
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
 
-		if strings.HasSuffix(relativePath, "/") {
-			// If a file has a suffix of /, it's still treated as a folder.
-			// Thus, akin to the old code. skip it.
-			continue
+		var storedObject StoredObject
+		if objectInfo.StorageClass == "" {
+
+			// Directories are the only objects without storage classes.
+			if !UseSyncOrchestrator {
+				// Skip directories if not using sync orchestrator
+				continue
+			} else {
+				// For sync orchestrator, we need to treat directories as objects.
+				storedObject = newStoredObject(
+					preprocessor,
+					objectName,
+					relativePath,
+					common.EEntityType.Folder(),
+					time.Time{},
+					0,
+					noContentProps,
+					noBlobProps,
+					noMetadata,
+					t.s3URLParts.BucketName)
+			}
+
+		} else {
+
+			if strings.HasSuffix(relativePath, "/") {
+				// If a file has a suffix of /, it's still treated as a folder.
+				// Thus, akin to the old code. skip it.
+				// NOTE: In case of UseSyncOrchestrator, what do we do??
+				continue
+			}
+
+			// default to empty props, but retrieve real ones if required
+			oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
+			if t.getProperties {
+				oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+				if err != nil {
+					return err
+				}
+				oie = common.ObjectInfoExtension{ObjectInfo: oi}
+			}
+			storedObject = newStoredObject(
+				preprocessor,
+				objectName,
+				relativePath,
+				common.EEntityType.File(),
+				objectInfo.LastModified,
+				objectInfo.Size,
+				&oie,
+				noBlobProps,
+				oie.NewCommonMetadata(),
+				t.s3URLParts.BucketName)
 		}
 
-		// default to empty props, but retrieve real ones if required
-		oie := common.ObjectInfoExtension{ObjectInfo: minio.ObjectInfo{}}
-		if t.getProperties {
-			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
-			if err != nil {
-				return err
-			}
-			oie = common.ObjectInfoExtension{ObjectInfo: oi}
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(storedObject.entityType)
 		}
-		storedObject := newStoredObject(
-			preprocessor,
-			objectName,
-			relativePath,
-			common.EEntityType.File(),
-			objectInfo.LastModified,
-			objectInfo.Size,
-			&oie,
-			noBlobProps,
-			oie.NewCommonMetadata(),
-			t.s3URLParts.BucketName)
 
 		err = processIfPassedFilters(filters,
 			storedObject,
