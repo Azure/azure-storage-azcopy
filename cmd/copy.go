@@ -217,16 +217,13 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 
 		preserveLastModifiedTime: raw.preserveLastModifiedTime,
 		preserveSMBPermissions:   raw.preserveSMBPermissions,
-		PreserveOwner: boolDefaultTrue{
-			value:         raw.preserveOwner,
-			isManuallySet: cpCmd.Flags().Changed("preserve-owner"),
-		},
-		preserveSMBInfo:         raw.preserveSMBInfo,
-		preservePOSIXProperties: raw.preservePOSIXProperties,
-		preserveSymlinks:        raw.preserveSymlinks,
-		followSymlinks:          raw.followSymlinks,
-		preservePermissions:     raw.preservePermissions,
-		backupMode:              raw.backupMode,
+		PreserveOwner:            raw.preserveOwner,
+		preserveSMBInfo:          raw.preserveSMBInfo,
+		preservePOSIXProperties:  raw.preservePOSIXProperties,
+		preserveSymlinks:         raw.preserveSymlinks,
+		followSymlinks:           raw.followSymlinks,
+		preservePermissions:      raw.preservePermissions,
+		backupMode:               raw.backupMode,
 
 		putMd5:      raw.putMd5,
 		CheckLength: raw.CheckLength,
@@ -580,7 +577,7 @@ type CookedCopyCmdArgs struct {
 	cpkByName                   string
 	cpkByValue                  bool
 	preserveSMBPermissions      bool
-	PreserveOwner               boolDefaultTrue
+	PreserveOwner               bool
 	preserveSymlinks            bool
 	followSymlinks              bool
 	preservePermissions         bool

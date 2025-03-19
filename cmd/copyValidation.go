@@ -87,7 +87,7 @@ func (cca *CookedCopyCmdArgs) validate() (err error) {
 	if err = validatePreserveSMBPropertyOption(cca.isUserPersistingPermissions, cca.FromTo, PreservePermissionsFlag); err != nil {
 		return err
 	}
-	if err = validatePreserveOwner(cca.PreserveOwner.ValueToValidate(), cca.FromTo); err != nil {
+	if err = validatePreserveOwner(cca.PreserveOwner, cca.FromTo); err != nil {
 		return err
 	}
 
