@@ -33,6 +33,14 @@ func Iff[T any](test bool, trueVal, falseVal T) T {
 	return falseVal
 }
 
+func IffEmpty(wanted, instead string) string {
+	if wanted != "" {
+		return wanted
+	} else {
+		return instead
+	}
+}
+
 func IffNotNil[T any](wanted *T, instead T) T {
 	if wanted == nil {
 		return instead
