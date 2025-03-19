@@ -833,7 +833,7 @@ func init() {
 
 			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
 			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
-				// we give preserdence to raw.preserveInfo flag value if both flags are set
+				// we give precedence to raw.preserveInfo flag value if both flags are set
 			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
 				raw.preserveInfo = raw.preserveSMBInfo
 			} else {
