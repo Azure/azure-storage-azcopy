@@ -164,7 +164,7 @@ func (cca *CookedCopyCmdArgs) processArgs() (err error) {
 	if cca.preserveSMBInfo && !cca.isUserPersistingPermissions {
 		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
 	}
-	cca.preservePermissionsOption = common.NewPreservePermissionsOption(cca.isUserPersistingPermissions, cca.PreserveOwner, cca.FromTo)
+	cca.preservePermissionsOption = common.NewPreservePermissionsOption(cca.isUserPersistingPermissions, cca.PreserveOwner.Value(), cca.FromTo)
 
 	return nil
 }

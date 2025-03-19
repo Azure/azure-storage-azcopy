@@ -87,7 +87,7 @@ func (cca *CookedCopyCmdArgs) validate() (err error) {
 	if err = validatePreserveSMBPropertyOption(cca.isUserPersistingPermissions, cca.FromTo, PreservePermissionsFlag); err != nil {
 		return err
 	}
-	if err = validatePreserveOwner(cca.PreserveOwner, cca.FromTo); err != nil {
+	if err = validatePreserveOwner(cca.PreserveOwner.ValueToValidate(), cca.FromTo); err != nil {
 		return err
 	}
 
@@ -113,10 +113,10 @@ func (cca *CookedCopyCmdArgs) validate() (err error) {
 		if cca.preservePermissionsOption.IsTruthy() {
 			return fmt.Errorf("preserve-smb-permissions is not supported while uploading to ADLS Gen 2")
 		}
-		if cca.s2sPreserveProperties {
+		if cca.s2sPreserveProperties.ValueToValidate() {
 			return fmt.Errorf("s2s-preserve-properties is not supported while uploading")
 		}
-		if cca.s2sPreserveAccessTier {
+		if cca.s2sPreserveAccessTier.ValueToValidate() {
 			return fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
 		}
 		if cca.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
@@ -129,10 +129,10 @@ func (cca *CookedCopyCmdArgs) validate() (err error) {
 		if cca.preserveLastModifiedTime {
 			return fmt.Errorf("preserve-last-modified-time is not supported while uploading to Blob Storage")
 		}
-		if cca.s2sPreserveProperties {
+		if cca.s2sPreserveProperties.ValueToValidate() {
 			return fmt.Errorf("s2s-preserve-properties is not supported while uploading to Blob Storage")
 		}
-		if cca.s2sPreserveAccessTier {
+		if cca.s2sPreserveAccessTier.ValueToValidate() {
 			return fmt.Errorf("s2s-preserve-access-tier is not supported while uploading to Blob Storage")
 		}
 		if cca.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
@@ -149,10 +149,10 @@ func (cca *CookedCopyCmdArgs) validate() (err error) {
 			cca.pageBlobTier != common.EPageBlobTier.None() {
 			return fmt.Errorf("blob-tier is not supported while uploading to Azure File")
 		}
-		if cca.s2sPreserveProperties {
+		if cca.s2sPreserveProperties.ValueToValidate() {
 			return fmt.Errorf("s2s-preserve-properties is not supported while uploading")
 		}
-		if cca.s2sPreserveAccessTier {
+		if cca.s2sPreserveAccessTier.ValueToValidate() {
 			return fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
 		}
 		if cca.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
@@ -180,10 +180,10 @@ func (cca *CookedCopyCmdArgs) validate() (err error) {
 		if len(cca.contentType) > 0 || len(cca.contentEncoding) > 0 || len(cca.contentLanguage) > 0 || len(cca.contentDisposition) > 0 || len(cca.cacheControl) > 0 || len(cca.metadata) > 0 {
 			return fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while downloading")
 		}
-		if cca.s2sPreserveProperties {
+		if cca.s2sPreserveProperties.ValueToValidate() {
 			return fmt.Errorf("s2s-preserve-properties is not supported while downloading")
 		}
-		if cca.s2sPreserveAccessTier {
+		if cca.s2sPreserveAccessTier.ValueToValidate() {
 			return fmt.Errorf("s2s-preserve-access-tier is not supported while downloading")
 		}
 		if cca.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {

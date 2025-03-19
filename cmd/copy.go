@@ -217,19 +217,28 @@ func (raw *rawCopyCmdArgs) toOptions() (cooked CookedCopyCmdArgs, err error) {
 
 		preserveLastModifiedTime: raw.preserveLastModifiedTime,
 		preserveSMBPermissions:   raw.preserveSMBPermissions,
-		PreserveOwner:            raw.preserveOwner,
-		preserveSMBInfo:          raw.preserveSMBInfo,
-		preservePOSIXProperties:  raw.preservePOSIXProperties,
-		preserveSymlinks:         raw.preserveSymlinks,
-		followSymlinks:           raw.followSymlinks,
-		preservePermissions:      raw.preservePermissions,
-		backupMode:               raw.backupMode,
+		PreserveOwner: boolDefaultTrue{
+			value:         raw.preserveOwner,
+			isManuallySet: cpCmd.Flags().Changed("preserve-owner"),
+		},
+		preserveSMBInfo:         raw.preserveSMBInfo,
+		preservePOSIXProperties: raw.preservePOSIXProperties,
+		preserveSymlinks:        raw.preserveSymlinks,
+		followSymlinks:          raw.followSymlinks,
+		preservePermissions:     raw.preservePermissions,
+		backupMode:              raw.backupMode,
 
 		putMd5:      raw.putMd5,
 		CheckLength: raw.CheckLength,
 
-		s2sPreserveProperties:     raw.s2sPreserveProperties,
-		s2sPreserveAccessTier:     raw.s2sPreserveAccessTier,
+		s2sPreserveProperties: boolDefaultTrue{
+			value:         raw.s2sPreserveProperties,
+			isManuallySet: cpCmd.Flags().Changed("s2s-preserve-properties"),
+		},
+		s2sPreserveAccessTier: boolDefaultTrue{
+			value:         raw.s2sPreserveAccessTier,
+			isManuallySet: cpCmd.Flags().Changed("s2s-preserve-access-tier"),
+		},
 		s2sGetPropertiesInBackend: raw.s2sGetPropertiesInBackend,
 		s2sSourceChangeValidation: raw.s2sSourceChangeValidation,
 		S2sPreserveBlobTags:       raw.s2sPreserveBlobTags,
@@ -475,7 +484,7 @@ type CookedCopyCmdArgs struct {
 	deleteSnapshotsOption    common.DeleteSnapshotsOption
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
-	CheckLength              bool
+	CheckLength              bool // TODO: This is default true, how do we deal with this in AzCopy as a library
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -510,19 +519,19 @@ type CookedCopyCmdArgs struct {
 	backupMode bool
 
 	// Whether to rename/share the root
-	asSubdir bool
+	asSubdir bool // TODO: This is default true, how do we deal with this in AzCopy as a library
 
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
-	s2sPreserveProperties bool
+	s2sPreserveProperties boolDefaultTrue
 	// useful when preserveS3Properties set to true, enables get S3 objects' or Azure files' properties during s2s copy in backend, the default value is true
-	s2sGetPropertiesInBackend bool
+	s2sGetPropertiesInBackend bool // TODO: This is default true, how do we deal with this in AzCopy as a library
 	// whether user wants to preserve access tier during service to service copy, the default value is true.
 	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
 	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
 	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	s2sPreserveAccessTier bool
+	s2sPreserveAccessTier boolDefaultTrue
 	// whether user wants to check if source has changed after enumerating, the default value is true.
 	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
 	s2sSourceChangeValidation bool
@@ -571,7 +580,7 @@ type CookedCopyCmdArgs struct {
 	cpkByName                   string
 	cpkByValue                  bool
 	preserveSMBPermissions      bool
-	PreserveOwner               bool
+	PreserveOwner               boolDefaultTrue
 	preserveSymlinks            bool
 	followSymlinks              bool
 	preservePermissions         bool
@@ -1356,12 +1365,14 @@ func isStdinPipeIn() (bool, error) {
 	return info.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0, nil
 }
 
+var cpCmd *cobra.Command
+
 // TODO check file size, max is 4.75TB
 func init() {
 	raw := rawCopyCmdArgs{}
 
 	// cpCmd represents the cp command
-	cpCmd := &cobra.Command{
+	cpCmd = &cobra.Command{
 		Use:        "copy [source] [destination]",
 		Aliases:    []string{"cp", "c"},
 		SuggestFor: []string{"cpy", "cy", "mv"}, // TODO why does message appear twice on the console

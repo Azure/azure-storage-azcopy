@@ -34,6 +34,23 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
+type boolDefaultTrue struct {
+	value         bool
+	isManuallySet bool // whether the variable was manually set by the user
+}
+
+func (b boolDefaultTrue) Value() bool {
+	return b.value
+}
+
+func (b boolDefaultTrue) ValueToValidate() bool {
+	if b.isManuallySet {
+		return b.value
+	} else {
+		return false
+	}
+}
+
 const (
 	NumOfFilesPerDispatchJobPart = 10000
 )
