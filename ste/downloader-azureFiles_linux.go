@@ -6,9 +6,13 @@ package ste
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
@@ -230,4 +234,74 @@ func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
 	sep := common.DeterminePathSeparator(path)
 	splitPath := strings.Split(strings.Trim(path, sep), sep)
 	return path != "" && len(splitPath) == 1
+}
+
+// works for both folders and files
+func (*azureFilesDownloader) PutNFSProperties(sip INFSPropertyBearingSourceInfoProvider,
+	txInfo *TransferInfo) error {
+	propHolder, err := sip.GetNFSProperties()
+	if err != nil {
+		return fmt.Errorf("Failed to get NFS properties for %s: %w", txInfo.Destination, err)
+	}
+
+	nfsLastWrite := propHolder.FileLastWriteTime()
+
+	if txInfo.ShouldTransferLastWriteTime() {
+		newTimes := []syscall.Timeval{
+			{Sec: nfsLastWrite.Unix(), Usec: int64(nfsLastWrite.Nanosecond() / 1000)},
+			{Sec: nfsLastWrite.Unix(), Usec: int64(nfsLastWrite.Nanosecond() / 1000)},
+		}
+
+		// Use syscall to change the file times
+		err = syscall.Utimes(txInfo.Destination, newTimes)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Printf("Successfully updated times for %s", txInfo.Destination)
+	}
+	return nil
+}
+
+// works for both folders and files
+func (*azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceInfoProvider,
+	txInfo *TransferInfo) error {
+
+	permHolder, err := sip.GetNFSPermissions()
+	if err != nil {
+		return fmt.Errorf("Failed to get NFS permissions for %s: %w", txInfo.Destination, err)
+	}
+
+	owner := permHolder.GetOwner()
+	group := permHolder.GetGroup()
+	fileMode := permHolder.GetFileMode()
+
+	// Convert to int
+	uidInt, err := strconv.Atoi(*owner)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	gidInt, err := strconv.Atoi(*group)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Change the owner, group, and permissions of the file
+	err = os.Chown(txInfo.Destination, uidInt, gidInt)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Parse the mode string as an octal number
+	parsedMode, err := strconv.ParseUint(*fileMode, 8, 32)
+	if err != nil {
+		return fmt.Errorf("invalid file mode: %v", err)
+	}
+
+	err = os.Chmod(txInfo.Destination, os.FileMode(parsedMode))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return nil
 }

@@ -96,7 +96,6 @@ type ISMBPropertyBearingSourceInfoProvider interface {
 type TypedNFSPropertyHolder interface {
 	FileCreationTime() time.Time
 	FileLastWriteTime() time.Time
-	FileAccessTime() time.Time
 }
 
 type TypedNFSPermissionsHolder interface {
