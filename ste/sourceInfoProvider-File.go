@@ -108,15 +108,15 @@ func (f fileGetPropertiesAdapter) LastModified() time.Time {
 }
 
 func (f fileGetPropertiesAdapter) GetOwner() *string {
-	return f.GetProperties.Owner
+	return common.IffNotNil(&f.GetProperties.Owner, to.Ptr(""))
 }
 
 func (f fileGetPropertiesAdapter) GetGroup() *string {
-	return f.GetProperties.Group
+	return common.IffNotNil(&f.GetProperties.Group, to.Ptr(""))
 }
 
 func (f fileGetPropertiesAdapter) GetFileMode() *string {
-	return f.GetProperties.FileMode
+	return common.IffNotNil(&f.GetProperties.FileMode, to.Ptr(""))
 }
 
 type directoryGetPropertiesAdapter struct {
@@ -172,15 +172,15 @@ func (d directoryGetPropertiesAdapter) LastModified() time.Time {
 }
 
 func (f directoryGetPropertiesAdapter) GetOwner() *string {
-	return f.GetProperties.Owner
+	return common.IffNotNil(&f.GetProperties.Owner, to.Ptr(""))
 }
 
 func (f directoryGetPropertiesAdapter) GetGroup() *string {
-	return f.GetProperties.Group
+	return common.IffNotNil(&f.GetProperties.Group, to.Ptr(""))
 }
 
 func (f directoryGetPropertiesAdapter) GetFileMode() *string {
-	return f.GetProperties.FileMode
+	return common.IffNotNil(&f.GetProperties.FileMode, to.Ptr(""))
 }
 
 // Source info provider for Azure blob

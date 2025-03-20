@@ -64,20 +64,19 @@ type azureFileSenderBase struct {
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
 	// the properties of the local file
-	headersToApply        file.HTTPHeaders
-	smbPropertiesToApply  file.SMBProperties
-	permissionsToApply    file.Permissions
-	metadataToApply       common.Metadata
-	nfsPermissionsToApply NFSPermissions
+	headersToApply       file.HTTPHeaders
+	smbPropertiesToApply file.SMBProperties
+	permissionsToApply   file.Permissions
+	metadataToApply      common.Metadata
+	nfsPropertiesToApply NFSProperties
 }
 
-type NFSPermissions struct {
+type NFSProperties struct {
+	CreationTime  *time.Time
+	LastWriteTime *time.Time
 	Owner         *string
 	Group         *string
 	FileMode      *string
-	CreationTime  *time.Time
-	LastWriteTime *time.Time
-	ChangeTime    *time.Time
 }
 
 func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer pacer, sip ISourceInfoProvider) (*azureFileSenderBase, error) {
@@ -208,10 +207,13 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			jptm.FailActiveSend(stage, err)
 			return
 		}
-		createOptions.NFSProperties.Owner = u.nfsPermissionsToApply.Owner
-		createOptions.NFSProperties.Group = u.nfsPermissionsToApply.Group
-		createOptions.NFSProperties.FileMode = u.nfsPermissionsToApply.FileMode
-
+		createOptions.NFSProperties = &file.NFSProperties{
+			CreationTime:  u.nfsPropertiesToApply.CreationTime,
+			LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+			Owner:         u.nfsPropertiesToApply.Owner,
+			Group:         u.nfsPropertiesToApply.Group,
+			FileMode:      u.nfsPropertiesToApply.FileMode,
+		}
 	} else {
 		stage, err := u.addPermissionsToHeaders(info, u.getFileClient().URL())
 		if err != nil {
@@ -224,9 +226,9 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) (destinationM
 			jptm.FailActiveSend(stage, err)
 			return
 		}
+		createOptions.SMBProperties = &u.smbPropertiesToApply
+		createOptions.Permissions = &u.permissionsToApply
 	}
-	createOptions.SMBProperties = &u.smbPropertiesToApply
-	createOptions.Permissions = &u.permissionsToApply
 
 	// Turn off readonly at creation time (because if its set at creation time, we won't be
 	// able to upload any data to the file!). We'll set it in epilogue, if necessary.
@@ -279,7 +281,7 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 		if err != nil {
 			return "Obtaining NFS properties", err
 		}
-
+		// TODO: commenting out for now. If required will add it while adding support o]
 		// fromTo := u.jptm.FromTo()
 		// if fromTo.From() == common.ELocation.File() { // Files SDK can panic when the service hands it something unexpected!
 		// 	defer func() { // recover from potential panics and output raw properties for debug purposes
@@ -297,11 +299,11 @@ func (u *azureFileSenderBase) addNFSPropertiesToHeaders(info *TransferInfo) (sta
 
 		if info.ShouldTransferLastWriteTime() {
 			lwTime := nfsProps.FileLastWriteTime()
-			u.smbPropertiesToApply.LastWriteTime = &lwTime
+			u.nfsPropertiesToApply.LastWriteTime = &lwTime
 		}
 
 		creationTime := nfsProps.FileCreationTime()
-		u.smbPropertiesToApply.CreationTime = &creationTime
+		u.nfsPropertiesToApply.CreationTime = &creationTime
 	}
 	return "", nil
 }
@@ -316,9 +318,9 @@ func (u *azureFileSenderBase) addNFSPermissionsToHeaders(info *TransferInfo, des
 		if err != nil {
 			return "Obtaining NFS permissions", err
 		}
-		u.nfsPermissionsToApply.Owner = nfsPerms.GetOwner()
-		u.nfsPermissionsToApply.Group = nfsPerms.GetGroup()
-		u.nfsPermissionsToApply.FileMode = nfsPerms.GetFileMode()
+		u.nfsPropertiesToApply.Owner = nfsPerms.GetOwner()
+		u.nfsPropertiesToApply.Group = nfsPerms.GetGroup()
+		u.nfsPropertiesToApply.FileMode = nfsPerms.GetFileMode()
 	}
 	return "", nil
 }
@@ -425,13 +427,13 @@ func (u *azureFileSenderBase) Epilogue() {
 		// This is an extra round trip, but we can live with that for these relatively rare cases
 		if u.jptm.Info().IsNFSCopy {
 			_, err := u.getFileClient().SetHTTPHeaders(u.ctx, &file.SetHTTPHeadersOptions{
-				HTTPHeaders:   &u.headersToApply,
-				Permissions:   &u.permissionsToApply,
-				SMBProperties: &u.smbPropertiesToApply,
+				HTTPHeaders: &u.headersToApply,
 				NFSProperties: &file.NFSProperties{
-					FileMode: u.nfsPermissionsToApply.FileMode,
-					Owner:    u.nfsPermissionsToApply.Owner,
-					Group:    u.nfsPermissionsToApply.Group,
+					CreationTime:  u.nfsPropertiesToApply.CreationTime,
+					LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+					FileMode:      u.nfsPropertiesToApply.FileMode,
+					Owner:         u.nfsPropertiesToApply.Owner,
+					Group:         u.nfsPropertiesToApply.Group,
 				},
 			})
 			if err != nil {
@@ -494,16 +496,18 @@ func (u *azureFileSenderBase) SetFolderProperties() (err error) {
 		if err != nil {
 			return
 		}
-		setPropertiesOptions.FileSMBProperties = &u.smbPropertiesToApply
 
 		_, err = u.addNFSPermissionsToHeaders(info, u.getDirectoryClient().URL())
 		if err != nil {
 			return
 		}
-		setPropertiesOptions.FileNFSProperties.Owner = u.nfsPermissionsToApply.Owner
-		setPropertiesOptions.FileNFSProperties.Group = u.nfsPermissionsToApply.Group
-		setPropertiesOptions.FileNFSProperties.FileMode = u.nfsPermissionsToApply.FileMode
-
+		setPropertiesOptions.FileNFSProperties = &file.NFSProperties{
+			CreationTime:  u.nfsPropertiesToApply.CreationTime,
+			LastWriteTime: u.nfsPropertiesToApply.LastWriteTime,
+			Owner:         u.nfsPropertiesToApply.Owner,
+			Group:         u.nfsPropertiesToApply.Group,
+			FileMode:      u.nfsPropertiesToApply.FileMode,
+		}
 	} else {
 		_, err = u.addPermissionsToHeaders(info, u.getDirectoryClient().URL())
 		if err != nil {

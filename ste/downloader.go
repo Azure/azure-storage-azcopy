@@ -78,10 +78,12 @@ type smbACLAwareDownloader interface {
 	PutSDDL(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }
 
+// nfsPropertyAwareDownloader
 type nfsPropertyAwareDownloader interface {
 	PutNFSProperties(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }
 
+// nfsPermissionsAwareDownloader
 type nfsPermissionsAwareDownloader interface {
 	PutNFSPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error
 }

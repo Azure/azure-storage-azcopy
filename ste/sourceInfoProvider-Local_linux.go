@@ -211,7 +211,7 @@ func (f localFileSourceInfoProvider) GetSDDL() (string, error) {
 }
 
 func (f localFileSourceInfoProvider) GetSMBProperties() (TypedSMBPropertyHolder, error) {
-	info, err := common.GetFileInformation(f.jptm.Info().Source)
+	info, err := common.GetFileInformation(f.jptm.Info().Source, false)
 
 	return HandleInfo{info}, err
 }
@@ -241,7 +241,7 @@ func (hi HandleInfo) FileAccessTime() time.Time {
 }
 
 func (f localFileSourceInfoProvider) GetNFSProperties() (TypedNFSPropertyHolder, error) {
-	info, err := common.GetFileInformation(f.jptm.Info().Source)
+	info, err := common.GetFileInformation(f.jptm.Info().Source, true)
 	return HandleInfo{info}, err
 }
 
