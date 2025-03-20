@@ -276,7 +276,7 @@ func (cooked *cookedSyncCmdArgs) validate() (err error) {
 
 	// Check if user has provided `s2s-preserve-blob-tags` flag.
 	// If yes, we have to ensure that both source and destination must be blob storages.
-	if cooked.s2sPreserveBlobTags && cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob() {
+	if cooked.s2sPreserveBlobTags && (cooked.fromTo.From() != common.ELocation.Blob() || cooked.fromTo.To() != common.ELocation.Blob()) {
 		return fmt.Errorf("either source or destination is not a blob storage. " +
 			"blob index tags is a property of blobs only therefore both source and destination must be blob storage")
 	}
