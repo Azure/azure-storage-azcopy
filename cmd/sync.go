@@ -263,19 +263,22 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
-	// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
-	// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
-	//	return cooked, err
-	// }
-
 	if raw.isNFSCopy {
 		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.fromTo,
 			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
 		if err != nil {
 			return cooked, err
 		}
-	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
-		return cooked, err
+	} else {
+		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePOSIXProperties, cooked.preservePermissions, err = performSMBSpecificValidation(cooked.fromTo,
+			raw.isNFSCopy, raw.preserveInfo, raw.preservePOSIXProperties, raw.preservePermissions, raw.preserveOwner, raw.preserveSMBPermissions)
+		if err != nil {
+			return cooked, err
+		}
+		// TODO: the check on raw.preservePermissions on the next line can be removed once we have full support for these properties in sync
+		// if err = validatePreserveOwner(raw.preserveOwner, cooked.fromTo); raw.preservePermissions && err != nil {
+		//	return cooked, err
+		// }
 	}
 
 	if err = cooked.compareHash.Parse(raw.compareHash); err != nil {
@@ -369,50 +372,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.includeRoot = raw.includeRoot
 
 	return cooked, nil
-}
-
-// performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
-// for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
-// properties are set correctly for SMB copy operations.
-//
-// The function performs the following checks:
-// - Validates the "preserve-info" flag to ensure both source and destination are SMB-aware.
-// - Validates the "preserve-posix-properties" flag, ensuring both locations are POSIX-aware if set.
-// - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
-// - Validates the preservation of file owner information based on user flags.
-//
-// Returns:
-// - An error if any validation fails, otherwise nil indicating successful validation.
-
-func (raw rawSyncCmdArgs) performSMBSpecificValidation(cooked *cookedSyncCmdArgs) (err error) {
-
-	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
-	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
-		cooked.fromTo,
-		PreserveInfoFlag); err != nil {
-		return err
-	}
-
-	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.fromTo) {
-		return fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
-	}
-
-	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
-	if cooked.preserveInfo && !isUserPersistingPermissions {
-		glcm.Info(PreservePermissionsDisabledMsg)
-	}
-
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
-		cooked.fromTo,
-		PreservePermissionsFlag); err != nil {
-		return err
-	}
-
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		raw.preserveOwner,
-		cooked.fromTo)
-	return
 }
 
 type cookedSyncCmdArgs struct {

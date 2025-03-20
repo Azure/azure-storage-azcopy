@@ -208,3 +208,54 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 		fromTo)
 	return
 }
+
+// performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
+// for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
+// properties are set correctly for SMB copy operations.
+//
+// The function performs the following checks:
+// - Validates the "preserve-info" flag to ensure both source and destination are SMB-aware.
+// - Validates the "preserve-posix-properties" flag, ensuring both locations are POSIX-aware if set.
+// - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
+// - Validates the preservation of file owner information based on user flags.
+//
+// Returns:
+// - An error if any validation fails, otherwise nil indicating successful validation.
+
+func performSMBSpecificValidation(fromTo common.FromTo,
+	isNFSCopy,
+	preserveInfo,
+	preservePermissions,
+	preservePOSIXProperties,
+	preserveSMBPermissions,
+	preserveOwner bool) (isNFSCopyVal bool, preserveInfoVal, preservePOSIXPropertiesVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
+
+	preserveInfoVal = preserveInfo && areBothLocationsSMBAware(fromTo)
+	if err = validatePreserveSMBPropertyOption(preserveInfo,
+		fromTo,
+		PreserveInfoFlag); err != nil {
+		return
+	}
+
+	preservePOSIXPropertiesVal = preservePOSIXProperties
+	if preservePOSIXPropertiesVal && !areBothLocationsPOSIXAware(fromTo) {
+		err = fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
+		return
+	}
+
+	isUserPersistingPermissions := preservePermissions || preserveSMBPermissions
+	if preserveInfoVal && !isUserPersistingPermissions {
+		glcm.Info(PreservePermissionsDisabledMsg)
+	}
+
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
+		fromTo,
+		PreservePermissionsFlag); err != nil {
+		return
+	}
+
+	preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
+		preserveOwner,
+		fromTo)
+	return
+}
