@@ -13,7 +13,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -24,6 +23,7 @@ import (
 )
 
 // This file implements the linux-triggered smbPropertyAwareDownloader and nfsPropertyAwareDownloader interface.
+
 // works for both folders and files
 func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
 	propHolder, err := sip.GetSMBProperties()
@@ -261,6 +261,7 @@ func (*azureFilesDownloader) PutNFSProperties(sip INFSPropertyBearingSourceInfoP
 	if err != nil {
 		return fmt.Errorf("Failed to set lastModifiedTime for %s. Error: %w", txInfo.Destination, err)
 	}
+	// TODO: Remove this debug statement
 	fmt.Printf("Successfully updated file timestamps for %s\n", txInfo.Destination)
 	return nil
 }
@@ -271,7 +272,7 @@ func (a *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceIn
 	if err != nil {
 		return fmt.Errorf("Failed to get source nfs permissions for file %s: %w", txInfo.Destination, err)
 	}
-	fmt.Println("Fetched Permissions")
+
 	ownerStr := nfsPermissions.GetOwner()
 	groupStr := nfsPermissions.GetGroup()
 	filemodeStr := nfsPermissions.GetFileMode()
@@ -279,10 +280,6 @@ func (a *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceIn
 	if ownerStr == nil && groupStr == nil && filemodeStr == nil {
 		return errorNoNFSPermissionsFound
 	}
-
-	fmt.Println("Owner", to.Ptr(ownerStr))
-	fmt.Println("Group", to.Ptr(groupStr))
-	fmt.Println("FileMode", to.Ptr(filemodeStr))
 
 	var uid int
 	if ownerStr != nil {
@@ -312,11 +309,9 @@ func (a *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceIn
 		if err != nil {
 			return fmt.Errorf("invalid mode value for %s: %v", txInfo.Destination, err)
 		}
-		fmt.Println("Parsed filemode", parsedMode)
 		mode = os.FileMode(parsedMode)
 	}
 
-	// Apply mode if specified
 	if err := os.Chmod(txInfo.Destination, mode); err != nil {
 		return fmt.Errorf("failed to change file mode for %s: %w", txInfo.Destination, err)
 	}
