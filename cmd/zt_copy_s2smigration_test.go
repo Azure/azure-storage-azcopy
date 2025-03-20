@@ -48,7 +48,7 @@ const (
 	defaultS2SPreserveProperties     = true
 	defaultS2SPreserveAccessTier     = true
 	defaultS2SGetPropertiesInBackend = true
-	defaultS2SSourceChangeValidation = true
+	defaultS2SSourceChangeValidation = false
 	debugMode                        = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
 )
 
@@ -1318,9 +1318,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	// set up the parent
 	parentDirNameSource := generateName("dir", 0)
 	parentDirClientSource := fsClientSource.NewDirectoryClient(parentDirNameSource)
-	_, err := parentDirClientSource.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
-		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
-			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+	_, err := parentDirClientSource.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	// set up the file
@@ -1341,9 +1339,7 @@ func TestCopyWithDFSResource(t *testing.T) {
 	// set up the parent
 	parentDirName := generateName("dir", 0)
 	parentDirClient := fsClient.NewDirectoryClient(parentDirName)
-	_, err = parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions:
-		&datalakedirectory.AccessConditions{ModifiedAccessConditions:
-			&datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
+	_, err = parentDirClient.Create(ctx, &datalakedirectory.CreateOptions{AccessConditions: &datalakedirectory.AccessConditions{ModifiedAccessConditions: &datalakedirectory.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETagAny)}}})
 	a.Nil(err)
 
 	dirClientWithSAS := serviceClientWithSAS.NewFileSystemClient(fsName).NewDirectoryClient(parentDirName)
