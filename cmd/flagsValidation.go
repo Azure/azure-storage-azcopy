@@ -231,7 +231,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal, preservePOSIXPropertiesVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
 
 	preserveInfoVal = preserveInfo && areBothLocationsSMBAware(fromTo)
-	if err = validatePreserveSMBPropertyOption(preserveInfo,
+	if err = validatePreserveSMBPropertyOption(preserveInfoVal,
 		fromTo,
 		PreserveInfoFlag); err != nil {
 		return
