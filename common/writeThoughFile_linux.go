@@ -114,7 +114,7 @@ func StatxTimestampToFiletime(ts unix.StatxTimestamp) Filetime {
 	return NsecToFiletime(ts.Sec*int64(time.Second) + int64(ts.Nsec))
 }
 
-func GetFileInformation(path string) (ByHandleFileInformation, error) {
+func GetFileInformation(path string, isNFSCopy bool) (ByHandleFileInformation, error) {
 	var stx unix.Statx_t
 
 	// We want all attributes including Btime (aka creation time).
@@ -125,20 +125,19 @@ func GetFileInformation(path string) (ByHandleFileInformation, error) {
 	} else if err != nil {
 		return ByHandleFileInformation{}, fmt.Errorf("statx(%s) failed: %v", path, err)
 	}
-
-	// For getting FileAttributes we need to query the CIFS_XATTR_ATTRIB extended attribute.
-	// Note: This doesn't necessarily cause a new QUERY_PATH_INFO call to the SMB server, instead
-	//       the value cached in the inode (likely as a result of the above Statx call) will be
-	//       returned.
-	xattrbuf, err := xattr.Get(path, CIFS_XATTR_ATTRIB)
-	if err != nil {
-		return ByHandleFileInformation{},
-			fmt.Errorf("xattr.Get(%s, %s) failed: %v", path, CIFS_XATTR_ATTRIB, err)
-	}
-
 	var info ByHandleFileInformation
-
-	info.FileAttributes = binary.LittleEndian.Uint32(xattrbuf)
+	if !isNFSCopy {
+		// For getting FileAttributes we need to query the CIFS_XATTR_ATTRIB extended attribute.
+		// Note: This doesn't necessarily cause a new QUERY_PATH_INFO call to the SMB server, instead
+		//       the value cached in the inode (likely as a result of the above Statx call) will be
+		//       returned.
+		xattrbuf, err := xattr.Get(path, CIFS_XATTR_ATTRIB)
+		if err != nil {
+			return ByHandleFileInformation{},
+				fmt.Errorf("xattr.Get(%s, %s) failed: %v", path, CIFS_XATTR_ATTRIB, err)
+		}
+		info.FileAttributes = binary.LittleEndian.Uint32(xattrbuf)
+	}
 
 	info.CreationTime = StatxTimestampToFiletime(stx.Btime)
 	info.LastAccessTime = StatxTimestampToFiletime(stx.Atime)
