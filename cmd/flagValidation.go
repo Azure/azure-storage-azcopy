@@ -225,10 +225,10 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 func performSMBSpecificValidation(fromTo common.FromTo,
 	isNFSCopy,
 	preserveInfo,
-	preservePermissions,
 	preservePOSIXProperties,
-	preserveSMBPermissions,
-	preserveOwner bool) (isNFSCopyVal bool, preserveInfoVal, preservePOSIXPropertiesVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
+	preservePermissions,
+	preserveOwner,
+	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal, preservePOSIXPropertiesVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
 
 	preserveInfoVal = preserveInfo && areBothLocationsSMBAware(fromTo)
 	if err = validatePreserveSMBPropertyOption(preserveInfo,
