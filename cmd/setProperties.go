@@ -74,7 +74,7 @@ func (cca *CookedCopyCmdArgs) makeTransferEnum() error {
 	}
 
 	// BLOB TAGS
-	if cca.blobTags != nil {
+	if cca.blobTagsMap != nil {
 		// the fact that fromto is not filenone is taken care of by the cook function
 		cca.propertiesToTransfer |= common.ESetPropertiesFlags.SetBlobTags()
 	}

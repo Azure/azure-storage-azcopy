@@ -1155,7 +1155,7 @@ type CopyTransfer struct {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Metadata used in AzCopy.
+// MetadataAndBlobTagsClearFlag used in AzCopy.
 const MetadataAndBlobTagsClearFlag = "clear" // clear flag used for metadata and tags
 
 type Metadata map[string]*string
