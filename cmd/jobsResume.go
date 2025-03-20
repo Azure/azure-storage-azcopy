@@ -137,13 +137,11 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 			// indicate whether constrained by disk or not
 			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
 
-			var xfersDoneFailSkip = summary.TransfersCompleted + summary.TransfersFailed + summary.TransfersSkipped
-			pending := common.Iff(summary.TotalTransfers > xfersDoneFailSkip, summary.TotalTransfers-xfersDoneFailSkip, 0)
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.PercentComplete,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
-				pending,
+				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
 				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	})
@@ -163,6 +161,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 				return fmt.Sprintf(
 					`
 
+PENDING COUNT FIX: 
 Job %s summary
 Elapsed Time (Minutes): %v
 Number of File Transfers: %v

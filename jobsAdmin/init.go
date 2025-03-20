@@ -354,10 +354,10 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 				CredentialInfo: req.CredentialInfo,
 			})
 
-		jpp0.SetJobStatus(common.EJobStatus.InProgress())
+		// Prevents previous number of failed transfers seeping into a new run
+		jm.ResetFailedTransfersCount()
 
-		// Prevents previous number of failed transfers seeping into new run
-		jpm.ResetFailedTransfersCount()
+		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
 		// Jank, force the jstm to recognize that it's also in progress
 		summaryResp := jm.ListJobSummary()
@@ -434,12 +434,30 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	part0PlanStatus := part0.Plan().JobStatus()
 
 	// Add on byte count from files in flight, to get a more accurate running total
-	js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
+	// Check is added to prevent double counting
+	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
+		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
+	}
+
+	var glcm common.LifecycleMgr = common.GetLifecycleMgr()
+	glcm.Progress(func(format common.OutputFormat) string {
+		if js.TotalBytesTransferred > js.TotalBytesExpected {
+			return fmt.Sprintf("SuccessfulBytesInActiveFiles() incorrect")
+		}
+
+		return fmt.Sprintf("Bytes transferred: %v, \n Bytes Expected: %v, "+
+			"\n Successful bytes in active files: %v",
+			js.TotalBytesTransferred, js.TotalBytesExpected, jm.SuccessfulBytesInActiveFiles())
+	})
+
 	if js.TotalBytesExpected == 0 {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
 	} else {
 		js.PercentComplete = 100 * (float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected))
+	}
+	if js.PercentComplete > 100 {
+		js.PercentComplete = 100
 	}
 
 	// This is added to let FE to continue fetching the Job Progress Summary
@@ -571,14 +589,29 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	})
 
 	// Add on byte count from files in flight, to get a more accurate running total
-	js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
-	fmt.Printf("TotalBytesTransferred: %d, SuccessfulBytesInActiveFiles: %d, TotalBytesExpected: %d\n",
-		js.TotalBytesTransferred, jm.SuccessfulBytesInActiveFiles(), js.TotalBytesExpected)
+	// Check is added to prevent double counting
+	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
+		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
+	}
+
+	var glcm common.LifecycleMgr = common.GetLifecycleMgr()
+	glcm.Progress(func(format common.OutputFormat) string {
+		if js.TotalBytesTransferred > js.TotalBytesExpected {
+			return fmt.Sprintf("SuccessfulBytesInActiveFiles() incorrect")
+		}
+
+		return fmt.Sprintf("Bytes transferred: %v, \n Bytes Expected: %v, "+
+			"\n Successful bytes in active files: %v",
+			js.TotalBytesTransferred, js.TotalBytesExpected, jm.SuccessfulBytesInActiveFiles())
+	})
 	if js.TotalBytesExpected == 0 {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
 	} else {
 		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	}
+	if js.PercentComplete > 100 {
+		js.PercentComplete = 100
 	}
 
 	// This is added to let FE to continue fetching the Job Progress Summary

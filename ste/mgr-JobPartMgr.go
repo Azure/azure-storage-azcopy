@@ -588,6 +588,8 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
 	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
+	case common.ETransferStatus.Restarted(): // When a job is resumed, number of failed should reset to 0
+		atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
 	case common.ETransferStatus.Cancelled():
 	default:
 		jpm.Log(common.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
