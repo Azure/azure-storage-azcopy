@@ -59,7 +59,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		}
 	}
 
-	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissions.IsTruthy()) || cca.includeDirectoryStubs
+	includeDirStubs := (cca.fromTo.From().SupportsHnsACLs() && cca.fromTo.To().SupportsHnsACLs() && cca.preservePermissionsOption.IsTruthy()) || cca.includeDirectoryStubs
 
 	// TODO: enable symlink support in a future release after evaluating the implications
 	// TODO: Consider passing an errorChannel so that enumeration errors during sync can be conveyed to the caller.
@@ -70,7 +70,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissionsOption, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false)
 
 	if err != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		if entityType == common.EEntityType.File() {
 			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, nil, false)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissionsOption, azcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 
 	// decide our folder transfer strategy
 	// sync always acts like stripTopDir=true, but if we intend to persist the root, we must tell NewFolderPropertyOption stripTopDir=false.
-	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveSMBInfo, cca.preservePermissions.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
+	fpo, folderMessage := NewFolderPropertyOption(cca.fromTo, cca.recursive, !cca.includeRoot, filters, cca.preserveSMBInfo, cca.preservePermissionsOption.IsTruthy(), false, strings.EqualFold(cca.destination.Value, common.Dev_Null), cca.includeDirectoryStubs)
 	if !cca.dryrunMode {
 		glcm.Info(folderMessage)
 	}
@@ -208,7 +208,7 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 		ForceWrite:                     common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		ForceIfReadOnly:                cca.forceIfReadOnly,
 		LogLevel:                       azcopyLogVerbosity,
-		PreserveSMBPermissions:         cca.preservePermissions,
+		PreserveSMBPermissions:         cca.preservePermissionsOption,
 		PreserveSMBInfo:                cca.preserveSMBInfo,
 		PreservePOSIXProperties:        cca.preservePOSIXProperties,
 		S2SSourceChangeValidation:      true,
