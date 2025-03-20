@@ -58,6 +58,7 @@ type IJobMgr interface {
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
+	ResetFailedTransfersCount()
 	AllTransfersScheduled() bool
 	ConfirmAllTransfersScheduled()
 	ResetAllTransfersScheduled()
@@ -592,10 +593,17 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.Reset(appCtx, "")
 	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
-	// jm.ResetAllTransfersScheduled()
+	jm.ResetAllTransfersScheduled()
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		jm.QueueJobParts(jpm)
 		// jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
+	})
+}
+
+// When a job is resumed, resets the number of failed transfers
+func (jm *jobMgr) ResetFailedTransfersCount() {
+	jm.jobPartMgrs.Iterate(false, func(partNum common.PartNumber, jpm IJobPartMgr) {
+		jpm.ResetFailedTransfersCount()
 	})
 }
 
