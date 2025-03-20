@@ -5,12 +5,13 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/sddl"
@@ -196,7 +197,7 @@ func (a *azureFilesDownloader) PutSDDL(sip ISMBPropertyBearingSourceInfoProvider
 		securityInfoFlags |= windows.PROTECTED_DACL_SECURITY_INFORMATION
 	}
 
-	if txInfo.PreserveSMBPermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
+	if txInfo.PreservePermissions == common.EPreservePermissionsOption.OwnershipAndACLs() {
 		securityInfoFlags |= windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION
 	}
 

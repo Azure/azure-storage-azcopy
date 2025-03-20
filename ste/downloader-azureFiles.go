@@ -43,7 +43,7 @@ func newAzureFilesDownloader(jptm IJobPartTransferMgr) (downloader, error) {
 	}
 
 	source := fsc.NewShareClient(jptm.Info().SrcContainer)
-	
+
 	if jptm.Info().SnapshotID != "" {
 		source, err = source.WithSnapshot(jptm.Info().SnapshotID)
 		if err != nil {
@@ -77,7 +77,7 @@ var errorNoSddlFound = errors.New("no SDDL found")
 func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	info := bd.jptm.Info()
 
-	if info.PreserveSMBPermissions.IsTruthy() {
+	if info.PreservePermissions.IsTruthy() {
 		// We're about to call into Windows-specific code.
 		// Some functions here can't be called on other OSes, to the extent that they just aren't present in the library due to compile flags.
 		// In order to work around this, we'll do some trickery with interfaces.
@@ -97,7 +97,7 @@ func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 		}
 	}
 
-	if info.PreserveSMBInfo {
+	if info.PreserveInfo {
 		// must be done AFTER we preserve the permissions (else some of the flags/dates set here may be lost)
 		if spdl, ok := interface{}(bd).(smbPropertyAwareDownloader); ok {
 			// We don't need to worry about the sip not being a ISMBPropertyBearingSourceInfoProvider as Azure Files always is.

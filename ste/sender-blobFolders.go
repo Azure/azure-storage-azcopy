@@ -110,7 +110,7 @@ func (b *blobFolderSender) overwriteDFSProperties() (string, error) {
 
 	// Upload ADLS Gen 2 ACLs
 	fromTo := b.jptm.FromTo()
-	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
+	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && b.jptm.Info().PreservePermissions.IsTruthy() {
 		b.setDatalakeACLs()
 	}
 
@@ -234,7 +234,7 @@ func (b *blobFolderSender) EnsureFolderExists() error {
 
 	// Upload ADLS Gen 2 ACLs
 	fromTo := b.jptm.FromTo()
-	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && b.jptm.Info().PreserveSMBPermissions.IsTruthy() {
+	if fromTo.From().SupportsHnsACLs() && fromTo.To().SupportsHnsACLs() && b.jptm.Info().PreservePermissions.IsTruthy() {
 		b.setDatalakeACLs()
 	}
 

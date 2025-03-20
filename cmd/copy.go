@@ -48,22 +48,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
 )
 
-const pipingUploadParallelism = 5
-const pipingDefaultBlockSize = 8 * 1024 * 1024
-
-// For networking throughput in Mbps, (and only for networking), we divide by 1000*1000 (not 1024 * 1024) because
-// networking is traditionally done in base 10 units (not base 2).
-// E.g. "gigabit ethernet" means 10^9 bits/sec, not 2^30. So by using base 10 units
-// we give the best correspondence to the sizing of the user's network pipes.
-// See https://networkengineering.stackexchange.com/questions/3628/iec-or-si-units-binary-prefixes-used-for-network-measurement
-// NOTE that for everything else in the app (e.g. sizes of files) we use the base 2 units (i.e. 1024 * 1024) because
-// for RAM and disk file sizes, it is conventional to use the power-of-two-based units.
-const base10Mega = 1000 * 1000
-
-const pipeLocation = "~pipe~"
-
-const PreservePermissionsFlag = "preserve-permissions"
-
 // represents the raw copy command input from the user
 type rawCopyCmdArgs struct {
 	// from arguments
@@ -187,6 +171,10 @@ type rawCopyCmdArgs struct {
 
 	// when specified, AzCopy deletes the destination blob that has uncommitted blocks, not just the uncommitted blocks
 	deleteDestinationFileIfNecessary bool
+	// Opt-in flag to state if the copy is nfs copy
+	isNFSCopy bool
+	// Opt-in flag to persist additional properties to Azure Files
+	preserveInfo bool
 }
 
 // blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
@@ -210,6 +198,51 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
 	}
 	return int64(math.Round(rawSizeInBytes)), nil
+}
+
+// performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
+// for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
+// properties are set correctly for SMB copy operations.
+//
+// The function performs the following checks:
+// - Validates the "preserve-info" flag to ensure both source and destination are SMB-aware.
+// - Validates the "preserve-posix-properties" flag, ensuring both locations are POSIX-aware if set.
+// - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
+// - Validates the preservation of file owner information based on user flags.
+//
+// Returns:
+// - An error if any validation fails, otherwise nil indicating successful validation.
+
+func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
+	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
+	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
+		cooked.FromTo,
+		PreserveInfoFlag); err != nil {
+		return err
+	}
+
+	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
+	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
+		return fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
+	}
+
+	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
+	if cooked.preserveInfo && !isUserPersistingPermissions {
+		glcm.Info(PreservePermissionsDisabledMsg)
+	}
+
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
+		cooked.FromTo,
+		PreservePermissionsFlag); err != nil {
+		return err
+	}
+	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
+		return err
+	}
+	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
+		raw.preserveOwner,
+		cooked.FromTo)
+	return
 }
 
 func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
@@ -609,29 +642,15 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
-	cooked.preserveSMBInfo = raw.preserveSMBInfo && areBothLocationsSMBAware(cooked.FromTo)
-
-	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
-		return cooked, fmt.Errorf("in order to use --preserve-posix-properties, both the source and destination must be POSIX-aware (Linux->Blob, Blob->Linux, Blob->Blob)")
-	}
-
-	if err = validatePreserveSMBPropertyOption(cooked.preserveSMBInfo, cooked.FromTo, &cooked.ForceWrite, "preserve-smb-info"); err != nil {
+	if raw.isNFSCopy {
+		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePermissions, err = performNFSSpecificValidation(cooked.FromTo,
+			raw.isNFSCopy, raw.preserveInfo, raw.preservePermissions, raw.preserveSMBInfo, raw.preserveSMBPermissions)
+		if err != nil {
+			return cooked, err
+		}
+	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
 		return cooked, err
 	}
-
-	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
-	if cooked.preserveSMBInfo && !isUserPersistingPermissions {
-		glcm.Info("Please note: the preserve-permissions flag is set to false, thus AzCopy will not copy SMB ACLs between the source and destination. To learn more: https://aka.ms/AzCopyandAzureFiles.")
-	}
-
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions, cooked.FromTo, &cooked.ForceWrite, PreservePermissionsFlag); err != nil {
-		return cooked, err
-	}
-	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
-		return cooked, err
-	}
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions, raw.preserveOwner, cooked.FromTo)
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.asSubdir = raw.asSubdir
@@ -872,21 +891,6 @@ func validateForceIfReadOnly(toForce bool, fromTo common.FromTo) error {
 	return nil
 }
 
-func areBothLocationsSMBAware(fromTo common.FromTo) bool {
-	// preserverSMBInfo will be true by default for SMB-aware locations unless specified false.
-	// 1. Upload (Windows/Linux -> Azure File)
-	// 2. Download (Azure File -> Windows/Linux)
-	// 3. S2S (Azure File -> Azure File)
-	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") &&
-		(fromTo == common.EFromTo.LocalFile() || fromTo == common.EFromTo.FileLocal()) {
-		return true
-	} else if fromTo == common.EFromTo.FileFile() {
-		return true
-	} else {
-		return false
-	}
-}
-
 func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	// POSIX properties are stored in blob metadata-- They don't need a special persistence strategy for S2S methods.
 	switch fromTo {
@@ -897,24 +901,6 @@ func areBothLocationsPOSIXAware(fromTo common.FromTo) bool {
 	default:
 		return false
 	}
-}
-
-func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, overwrite *common.OverwriteOption, flagName string) error {
-	if toPreserve && flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
-		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
-		return nil
-	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
-		fromTo == common.EFromTo.FileLocal() ||
-		fromTo == common.EFromTo.FileFile()) {
-		return fmt.Errorf("%s is set but the job is not between %s-aware resources", flagName, common.Iff(flagName == PreservePermissionsFlag, "permission", "SMB"))
-	}
-
-	if toPreserve && (fromTo.IsUpload() || fromTo.IsDownload()) &&
-		runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		return fmt.Errorf("%s is set but persistence for up/downloads is supported only in Windows and Linux", flagName)
-	}
-
-	return nil
 }
 
 func validatePreserveOwner(preserve bool, fromTo common.FromTo) error {
@@ -1121,8 +1107,7 @@ type CookedCopyCmdArgs struct {
 
 	// Whether the user wants to preserve the SMB ACLs assigned to their files when moving between resources that are SMB ACL aware.
 	preservePermissions common.PreservePermissionsOption
-	// Whether the user wants to preserve the SMB properties ...
-	preserveSMBInfo bool
+
 	// Whether the user wants to preserve the POSIX properties ...
 	preservePOSIXProperties bool
 
@@ -1181,6 +1166,10 @@ type CookedCopyCmdArgs struct {
 	trailingDot common.TrailingDotOption
 
 	deleteDestinationFileIfNecessary bool
+	// Whether the user wants to preserve the properties of a file...
+	preserveInfo bool
+	// Specifies whether the copy operation is an NFS copy
+	isNFSCopy bool
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -1606,6 +1595,13 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
+	if err := validateProtocolCompatibility(ctx, cca.FromTo,
+		cca.Destination,
+		jobPartOrder.DstServiceClient,
+		cca.isNFSCopy); err != nil {
+		return err
+	}
+
 	switch {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
@@ -2013,11 +2009,20 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+
+			preserveInfoDefaultVal := GetPreserveInfoFlagDefault(cmd, raw.isNFSCopy)
+			if cmd.Flags().Changed(PreserveInfoFlag) && cmd.Flags().Changed(PreserveSMBInfoFlag) || cmd.Flags().Changed(PreserveInfoFlag) {
+				// we give precedence to raw.preserveInfo flag value if both flags are set
+			} else if cmd.Flags().Changed(PreserveSMBInfoFlag) {
+				raw.preserveInfo = raw.preserveSMBInfo
+			} else {
+				raw.preserveInfo = preserveInfoDefaultVal
+			}
+
 			cooked, err := raw.cook()
 			if err != nil {
 				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
-
 			glcm.Info("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
@@ -2075,7 +2080,13 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBPermissions, "preserve-smb-permissions", false, "False by default. Preserves SMB ACLs between aware resources (Windows and Azure Files). For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 	cpCmd.PersistentFlags().BoolVar(&raw.asSubdir, "as-subdir", true, "True by default. Places folder sources as subdirectories under the destination.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
+
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
+	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, "nfs", false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
+	//Marking this flag as hidden as we might not support it in the future
+	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Preserve properties. TODO: Add flag description")
+
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false, "False by default. If enabled, symlink destinations are preserved as the blob content, rather than uploading the file/folder on the other end of the symlink")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceIfReadOnly, "force-if-read-only", false, "False by default. When overwriting an existing file on Windows or Azure Files, force the overwrite to work even if the existing file has its read-only attribute set")
