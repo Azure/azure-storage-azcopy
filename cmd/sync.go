@@ -118,29 +118,33 @@ func validateURLIsNotServiceLevel(url string, location common.Location) error {
 
 func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked = cookedSyncCmdArgs{
-		dryrunMode: raw.dryrun,
+		includeDirectoryStubs: raw.includeDirectoryStubs,
+		includeRoot:           raw.includeRoot,
 
-		blockSizeMB:                      raw.blockSizeMB,
-		putBlobSizeMB:                    raw.putBlobSizeMB,
-		followSymlinks:                   raw.followSymlinks,
-		preserveSymlinks:                 raw.preserveSymlinks,
 		recursive:                        raw.recursive,
-		forceIfReadOnly:                  raw.forceIfReadOnly,
-		backupMode:                       raw.backupMode,
-		preserveSMBInfo:                  raw.preserveSMBInfo,
-		preserveSMBPermissions:           raw.preserveSMBPermissions,
-		preservePermissions:              raw.preservePermissions,
-		preserveOwner:                    raw.preserveOwner,
-		preservePOSIXProperties:          raw.preservePOSIXProperties,
-		localHashStorageMode:             raw.localHashStorageMode,
-		putMd5:                           raw.putMd5,
-		s2sPreserveBlobTags:              raw.s2sPreserveBlobTags,
-		cpkByName:                        raw.cpkScopeInfo,
-		cpkByValue:                       raw.cpkInfo,
-		mirrorMode:                       raw.mirrorMode,
+		dryrunMode:                       raw.dryrun,
 		deleteDestinationFileIfNecessary: raw.deleteDestinationFileIfNecessary,
-		includeDirectoryStubs:            raw.includeDirectoryStubs,
-		includeRoot:                      raw.includeRoot,
+		forceIfReadOnly:                  raw.forceIfReadOnly,
+		mirrorMode:                       raw.mirrorMode,
+
+		blockSizeMB:   raw.blockSizeMB,
+		putBlobSizeMB: raw.putBlobSizeMB,
+
+		s2sPreserveBlobTags: raw.s2sPreserveBlobTags,
+		cpkByName:           raw.cpkScopeInfo,
+		cpkByValue:          raw.cpkInfo,
+
+		preserveSMBPermissions:  raw.preserveSMBPermissions,
+		preserveSMBInfo:         raw.preserveSMBInfo,
+		preservePermissions:     raw.preservePermissions,
+		preserveOwner:           raw.preserveOwner,
+		preservePOSIXProperties: raw.preservePOSIXProperties,
+
+		followSymlinks:       raw.followSymlinks,
+		preserveSymlinks:     raw.preserveSymlinks,
+		backupMode:           raw.backupMode,
+		localHashStorageMode: raw.localHashStorageMode,
+		putMd5:               raw.putMd5,
 	}
 	cooked.fromTo, err = ValidateFromTo(raw.src, raw.dst, raw.fromTo)
 	if err != nil {
@@ -175,16 +179,6 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 		cooked.destination = common.ResourceString{Value: common.ToExtendedPath(cleanLocalPath(raw.dst))}
 	}
 
-	err = cooked.trailingDot.Parse(raw.trailingDot)
-	if err != nil {
-		return cooked, err
-	}
-
-	// determine whether we should prompt the user to delete extra files
-	err = cooked.deleteDestination.Parse(raw.deleteDestination)
-	if err != nil {
-		return cooked, err
-	}
 	// warn on legacy filters
 	if raw.legacyInclude != "" || raw.legacyExclude != "" {
 		return cooked, fmt.Errorf("the include and exclude parameters have been replaced by include-pattern and exclude-pattern. They work on filenames only (not paths)")
@@ -193,13 +187,22 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	cooked.includePatterns = parsePatterns(raw.include)
 	cooked.excludePatterns = parsePatterns(raw.exclude)
 	cooked.excludePaths = parsePatterns(raw.excludePath)
-
 	// parse the attribute filter patterns
 	cooked.includeFileAttributes = parsePatterns(raw.includeFileAttributes)
 	cooked.excludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
-
 	cooked.includeRegex = parsePatterns(raw.includeRegex)
 	cooked.excludeRegex = parsePatterns(raw.excludeRegex)
+
+	// determine whether we should prompt the user to delete extra files
+	err = cooked.deleteDestination.Parse(raw.deleteDestination)
+	if err != nil {
+		return cooked, err
+	}
+
+	err = cooked.trailingDot.Parse(raw.trailingDot)
+	if err != nil {
+		return cooked, err
+	}
 
 	cooked.preserveSMBInfo = cooked.preserveSMBInfo && areBothLocationsSMBAware(cooked.fromTo)
 
@@ -215,7 +218,7 @@ func (raw rawSyncCmdArgs) toOptions() (cooked cookedSyncCmdArgs, err error) {
 	switch cooked.compareHash {
 	case common.ESyncHashType.MD5():
 		// Save any new MD5s on files we download.
-		raw.putMd5 = true
+		cooked.putMd5 = true
 	default: // no need to put a hash of any kind.
 	}
 	if cooked.fromTo.IsS2S() {
