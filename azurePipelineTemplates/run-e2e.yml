@@ -76,12 +76,13 @@ jobs:
             
             # Print "Building executable"
             Write-Output "Building executable"
-            
+            Write-Output "***************: $env:build_name"
             # Set platform-specific environment variables and tags
             $tags = ""
             $suffix = ""
             $build_name = ""
             $display_name = ""
+            
             if ($IsWindows) {
               $env:GOOS = "windows"
               $env:GOARCH = "amd64"
