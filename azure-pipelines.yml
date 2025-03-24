@@ -55,6 +55,11 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
+          GOARCH=arm64 GOOS=linux go build -tags "smslidingwindow" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_arm64_sd"
+        displayName: 'Generate Linux ARM64'
+        condition: eq(variables.type, 'linux')
+
+      - script: |
           go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
         displayName: 'Generate Windows AMD64'
         condition: eq(variables.type, 'windows')

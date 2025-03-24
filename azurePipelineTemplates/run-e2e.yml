@@ -23,6 +23,11 @@ jobs:
           imageName: 'macos-latest'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
+        Ubuntu-20-SM:
+          imageName: 'ubuntu-latest'
+          build_name: 'azcopy_linux_arm64_sd'
+          display_name: "Linux"
+        
     pool:
       vmImage: $(imageName)
 
