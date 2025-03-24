@@ -374,50 +374,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	return cooked, nil
 }
 
-// performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
-// for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
-// properties are set correctly for SMB copy operations.
-//
-// The function performs the following checks:
-// - Validates the "preserve-info" flag to ensure both source and destination are SMB-aware.
-// - Validates the "preserve-posix-properties" flag, ensuring both locations are POSIX-aware if set.
-// - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
-// - Validates the preservation of file owner information based on user flags.
-//
-// Returns:
-// - An error if any validation fails, otherwise nil indicating successful validation.
-
-func (raw rawSyncCmdArgs) performSMBSpecificValidation(cooked *cookedSyncCmdArgs) (err error) {
-
-	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.fromTo)
-	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
-		cooked.fromTo,
-		PreserveInfoFlag); err != nil {
-		return err
-	}
-
-	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.fromTo) {
-		return fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
-	}
-
-	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
-	if cooked.preserveInfo && !isUserPersistingPermissions {
-		glcm.Info(PreservePermissionsDisabledMsg)
-	}
-
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
-		cooked.fromTo,
-		PreservePermissionsFlag); err != nil {
-		return err
-	}
-
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		raw.preserveOwner,
-		cooked.fromTo)
-	return
-}
-
 type cookedSyncCmdArgs struct {
 	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
 	// so the 64 bit integers are placed first in the struct to avoid future breaks

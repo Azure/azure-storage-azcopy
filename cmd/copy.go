@@ -200,51 +200,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	return int64(math.Round(rawSizeInBytes)), nil
 }
 
-// performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
-// for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
-// properties are set correctly for SMB copy operations.
-//
-// The function performs the following checks:
-// - Validates the "preserve-info" flag to ensure both source and destination are SMB-aware.
-// - Validates the "preserve-posix-properties" flag, ensuring both locations are POSIX-aware if set.
-// - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
-// - Validates the preservation of file owner information based on user flags.
-//
-// Returns:
-// - An error if any validation fails, otherwise nil indicating successful validation.
-
-func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
-	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
-		cooked.FromTo,
-		PreserveInfoFlag); err != nil {
-		return err
-	}
-
-	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
-		return fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
-	}
-
-	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
-	if cooked.preserveInfo && !isUserPersistingPermissions {
-		glcm.Info(PreservePermissionsDisabledMsg)
-	}
-
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
-		cooked.FromTo,
-		PreservePermissionsFlag); err != nil {
-		return err
-	}
-	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
-		return err
-	}
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		raw.preserveOwner,
-		cooked.FromTo)
-	return
-}
-
 func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked := CookedCopyCmdArgs{
 		jobID: azcopyCurrentJobID,
