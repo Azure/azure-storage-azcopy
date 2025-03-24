@@ -12,10 +12,6 @@ steps:
       scriptPath: "$(System.DefaultWorkingDirectory)/go_installer.sh"
       args: "$(System.DefaultWorkingDirectory)/ $(AZCOPY_GOLANG_VERSION)"
     displayName: "Installing Go tools"
-
-  - script: |
-      go vet
-    displayName: 'Golang Vet - Linux'
   # install dependencies required for compiling azcopy
   - script: |
       sudo apt-get clean

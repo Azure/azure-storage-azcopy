@@ -193,53 +193,9 @@ extends:
             variables:
               - name: binaries
                 value: '$(System.DefaultWorkingDirectory)\binaries'
+
             steps:
-              - task: GoTool@0
-                env:
-                  GO111MODULE: 'on'
-                inputs:
-                  version: $(AZCOPY_GOLANG_VERSION)
-
-              - script: |
-                  go vet
-                displayName: 'Golang Vet - Windows'
-
-              - script: |
-                  mkdir -p $(binaries)
-                displayName: 'Create output path'
-
-              - script: |
-                  go build -o "$(binaries)\azcopy_windows_amd64.exe"
-                displayName: 'Generate Windows AMD64'
-                env:
-                  GOARCH: amd64
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - script: |
-                  go build -o "$(binaries)\azcopy_windows_386.exe"
-                displayName: 'Generate Windows i386'
-                env:
-                  GOARCH: 386
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - script: |
-                  go build -o "$(binaries)\azcopy_windows_v7_arm.exe"
-                displayName: 'Generate Windows ARM'
-                env:
-                  GOARCH: arm
-                  GOARM: 7
-                  GOOS: windows
-                  CGO_ENABLED: 0
-
-              - script: |
-                  go build -o "$(binaries)\azcopy_windows_arm64.exe"
-                displayName: 'Generate Windows ARM'
-                env:
-                  GOARCH: arm64
-                  GOOS: windows
-                  CGO_ENABLED: 0
+              - template: azurePipelineTemplates/build_windows.yml@self
 
           - job: MacOS
             timeoutInMinutes: 360
@@ -261,52 +217,7 @@ extends:
                 value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
             steps:
-              - task: GoTool@0
-                env:
-                  GO111MODULE: 'on'
-                inputs:
-                  version: $(AZCOPY_GOLANG_VERSION)
-
-              - script: |
-                  go vet
-                displayName: 'Golang Vet - Mac'
-
-              - script: |
-                  CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64"
-                displayName: 'Generate MacOS Build with AMD64'
-
-              - script: |
-                  GOARCH=arm64 CGO_ENABLED=1 go build -o "$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64"
-                displayName: 'Test Cross-compiled MacOS Build with ARM64'
-
-              - script: |
-                  darwin_amd_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_amd64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=darwin_amd_dir]$darwin_amd_dir"
-                  darwin_arm_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=darwin_arm_dir]$darwin_arm_dir"
-                  mkdir -p $darwin_amd_dir
-                  mkdir -p $darwin_arm_dir
-                  mkdir -p $(unsigned)
-                displayName: 'Create archive directories'
-
-              - script: |
-                  mv $(System.DefaultWorkingDirectory)/azcopy_darwin_amd64  $(darwin_amd_dir)/azcopy
-                  cp NOTICE.txt $(darwin_amd_dir)
-                  mv $(System.DefaultWorkingDirectory)/azcopy_darwin_arm64  $(darwin_arm_dir)/azcopy
-                  cp NOTICE.txt $(darwin_arm_dir)
-                displayName: 'Copy required files for packaging'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive MacOS AMD64 Build (must happen before signing/notarization)'
-                inputs:
-                  rootFolderOrFile: '$(darwin_amd_dir)'
-                  archiveFile: '$(unsigned)/azcopy_darwin_amd64_$(azcopy_version).zip'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive MacOS ARM64 Build (must happen before signing/notarization)'
-                inputs:
-                  rootFolderOrFile: '$(darwin_arm_dir)'
-                  archiveFile: '$(unsigned)/azcopy_darwin_arm64_$(azcopy_version).zip'
+              - template: azurePipelineTemplates/build_macos.yml@self
 
           - job: MacOS_M1
             timeoutInMinutes: 360
@@ -329,40 +240,7 @@ extends:
                 value: $[ stageDependencies.AzCopyVersion.GetAzCopyVersion.outputs['SetAzCopyVersion.azcopy_version'] ]
 
             steps:
-              - task: GoTool@0
-                env:
-                  GO111MODULE: 'on'
-                inputs:
-                  version: $(AZCOPY_GOLANG_VERSION)
-
-              - script: |
-                  sudo apt-get clean
-                  sudo apt-get update --fix-missing
-                  sudo apt-get install -y zip unzip
-                displayName: "Installing Dependencies"
-
-              - script: |
-                  go vet
-                displayName: 'Golang Vet'
-
-              - template: setup/trigger_m1_build.yml@self
-                parameters:
-                  download_path: '$(System.DefaultWorkingDirectory)'
-
-              - script: |
-                  mkdir -p $(unsigned)
-                  darwin_arm64_m1_dir="$(System.DefaultWorkingDirectory)/azcopy_darwin_m1_arm64_$(azcopy_version)"
-                  echo "##vso[task.setvariable variable=darwin_arm64_m1_dir]$darwin_arm64_m1_dir"
-                  mkdir -p $darwin_arm64_m1_dir
-                  cp $(System.DefaultWorkingDirectory)/azcopy  $darwin_arm64_m1_dir
-                  cp NOTICE.txt $darwin_arm64_m1_dir
-                displayName: 'Copy required files for packaging'
-
-              - task: ArchiveFiles@2
-                displayName: 'Archive MacOS M1_ARM64 Build (must happen before signing/notarization)'
-                inputs:
-                  rootFolderOrFile: '$(darwin_arm64_m1_dir)'
-                  archiveFile: '$(unsigned)/azcopy_darwin_m1_arm64_$(azcopy_version).zip'
+              - template: azurePipelineTemplates/build_macos_m1.yml@self
 
         # BuildArtifacts end here
 
