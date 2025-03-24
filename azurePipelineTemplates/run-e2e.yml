@@ -89,6 +89,7 @@ jobs:
               $build_name = "azcopy_windows_amd64.exe"
               $display_name = "Windows"
             } elseif ($IsLinux -and $env:build_name -eq "azcopy_linux_arm64_sd") {
+                Write-Output "Building for Linux ARM64 slidingwindow"
                 $env:GOOS = "linux"
                 $env:GOARCH = "arm64"
                 $tags = "smslidingwindow"
