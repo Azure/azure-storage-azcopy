@@ -113,7 +113,7 @@ extends:
             timeoutInMinutes: 120
             pool:
               name: azcopy-pool
-              image: ubuntu22-1espt
+              image: ubuntu20-custom1espt
               os: linux
             templateContext:
               outputs:
@@ -146,7 +146,7 @@ extends:
             timeoutInMinutes: 120
             pool:
               name: azcopy-arm-pool
-              image: ubuntu22arm-custom1espt
+              image: ubuntu20arm-custom1espt
               os: linux
               hostArchitecture: Arm64
             templateContext:
