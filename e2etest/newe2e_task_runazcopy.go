@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -112,7 +113,7 @@ type AzCopyCommand struct {
 }
 
 type AzCopyEnvironment struct {
-	// `env:"XYZ"` is re-used but does not inherit the traits of config's env trait. Merely used for low-code mapping.
+	// `env:"XYZ"` is reused but does not inherit the traits of config's env trait. Merely used for low-code mapping.
 
 	LogLocation                  *string `env:"AZCOPY_LOG_LOCATION,defaultfunc:DefaultLogLoc"`
 	JobPlanLocation              *string `env:"AZCOPY_JOB_PLAN_LOCATION,defaultfunc:DefaultPlanLoc"`
@@ -127,6 +128,12 @@ type AzCopyEnvironment struct {
 
 	InheritEnvironment bool
 	ManualLogin        bool
+
+	// If this is set, the logs have already been persisted.
+	// These should never be set by a test writer.
+	SessionId    *string
+	LogUploadDir *string
+	RunCount     *uint
 }
 
 func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter) {
@@ -134,7 +141,7 @@ func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter) {
 	a.NoError("create tempdir", err)
 	env.LogLocation = &dir
 	env.JobPlanLocation = &dir
-	a.Cleanup(func(a ScenarioAsserter) {
+	a.Cleanup(func(a Asserter) {
 		err := os.RemoveAll(dir)
 		a.NoError("remove tempdir", err)
 	})
@@ -321,6 +328,12 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = &AzCopyParsedListStdout{}
 		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "list":
 			out = &AzCopyParsedJobsListStdout{}
+		case commandSpec.Verb == AzCopyVerbJobs && len(commandSpec.PositionalArgs) != 0 && commandSpec.PositionalArgs[0] == "resume":
+			out = &AzCopyParsedCopySyncRemoveStdout{ // Resume command treated the same as copy/sync/remove
+				JobPlanFolder: *commandSpec.Environment.JobPlanLocation,
+				LogFolder:     *commandSpec.Environment.LogLocation,
+			}
+
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}
 		}
@@ -346,6 +359,7 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 	}
 
 	err = command.Wait()
+
 	a.Assert("wait for finalize", common.Iff[Assertion](commandSpec.ShouldFail, Not{IsNil{}}, IsNil{}), err)
 	a.Assert("expected exit code",
 		common.Iff[Assertion](commandSpec.ShouldFail, Not{Equal{}}, Equal{}),
@@ -356,17 +370,15 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 		ValidateLogFileRetention(a, *commandSpec.Environment.LogLocation, 1)
 	}
 
-	a.Cleanup(func(a ScenarioAsserter) {
-		if !commandSpec.Environment.ManualLogin {
-			UploadLogs(a, out, stderr, DerefOrZero(commandSpec.Environment.LogLocation))
-			_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
-		}
+	a.Cleanup(func(a Asserter) {
+		UploadLogs(a, out, stderr, commandSpec.Environment)
+		_ = os.RemoveAll(DerefOrZero(commandSpec.Environment.LogLocation))
 	})
 
 	return out, &AzCopyJobPlan{}
 }
 
-func UploadLogs(a ScenarioAsserter, stdout AzCopyStdout, stderr *bytes.Buffer, logDir string) {
+func UploadLogs(a Asserter, stdout AzCopyStdout, stderr *bytes.Buffer, env *AzCopyEnvironment) {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("Log cleanup failed", err, "\n", string(debug.Stack()))
@@ -378,70 +390,66 @@ func UploadLogs(a ScenarioAsserter, stdout AzCopyStdout, stderr *bytes.Buffer, l
 		return
 	}
 
-	// sometimes, the log dir cannot be copied because the destination is on another drive. So, we'll copy the files instead by hand.
-	files, err := os.ReadDir(logDir)
-	a.NoError("Failed to read log dir", err)
-	jobId := ""
+	if env.LogUploadDir == nil {
+		logDir := DerefOrZero(env.LogLocation)
 
-	if jobStdout, ok := stdout.(*AzCopyParsedCopySyncRemoveStdout); ok {
-		if jobStdout.InitMsg.JobID != "" {
-			jobId = jobStdout.InitMsg.JobID
-		}
-	} else {
-		for _, file := range files { // first, find the job ID
-			if strings.HasSuffix(file.Name(), ".log") {
-				jobId = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(file.Name(), "-chunks"), "-scanning"), ".log")
-				break
+		var err error
+		// Previously, we searched for a job ID to upload. Instead, we now treat shared environments as "sessions", and upload the logs all together.
+		sessionId := uuid.NewString()
+		env.SessionId = &sessionId
+
+		// Create the destination log directory
+		destLogDir := filepath.Join(logDropPath, sessionId)
+		err = os.MkdirAll(destLogDir, os.ModePerm|os.ModeDir)
+		a.NoError("Failed to create log dir", err)
+
+		// Copy the files by hand
+		err = filepath.WalkDir(logDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
+			relPath := strings.TrimPrefix(path, logDir)
+			if d.IsDir() {
+				err = os.MkdirAll(filepath.Join(destLogDir, relPath), os.ModePerm|os.ModeDir)
+				return err
+			}
+
+			// copy the file
+			srcFile, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+
+			destFile, err := os.Create(filepath.Join(destLogDir, relPath))
+			if err != nil {
+				return err
+			}
+
+			defer srcFile.Close()
+			defer destFile.Close()
+
+			_, err = io.Copy(destFile, srcFile)
+			if err != nil {
+				return err
+			}
+
+			return err
+		})
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			a.NoError("Failed to copy log files", err)
 		}
+
+		env.LogUploadDir = &destLogDir
 	}
 
-	if jobId == "" {
-		// If we still don't have a job ID, let's make one up. Maybe the job never started, or this isn't a copy/sync/remove job anyway.
-		jobId = uuid.NewString()
-	}
-
-	// Create the destination log directory
-	destLogDir := filepath.Join(logDropPath, jobId)
-	err = os.MkdirAll(destLogDir, os.ModePerm|os.ModeDir)
-	a.NoError("Failed to create log dir", err)
-
-	// Copy the files by hand
-	err = filepath.WalkDir(logDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath := strings.TrimPrefix(path, logDir)
-		if d.IsDir() {
-			err = os.MkdirAll(filepath.Join(destLogDir, relPath), os.ModePerm|os.ModeDir)
-			return err
-		}
-
-		// copy the file
-		srcFile, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-
-		destFile, err := os.Create(filepath.Join(destLogDir, relPath))
-		if err != nil {
-			return err
-		}
-
-		defer srcFile.Close()
-		defer destFile.Close()
-
-		_, err = io.Copy(destFile, srcFile)
-		if err != nil {
-			return err
-		}
-
-		return err
-	})
-	a.NoError("Failed to copy log files", err)
+	sessionId := *env.SessionId
+	destLogDir := *env.LogUploadDir
+	runCount := DerefOrZero(env.RunCount)
+	runCount++
+	env.RunCount = &runCount
 
 	// Write stdout to the folder instead of the job log
-	f, err := os.OpenFile(filepath.Join(destLogDir, "stdout.txt"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
+	f, err := os.OpenFile(filepath.Join(destLogDir, fmt.Sprintf("stdout-%03d.txt", runCount)), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
 	a.NoError("Failed to create stdout file", err)
 	_, err = f.WriteString(stdout.String())
 	a.NoError("Failed to write stdout file", err)
@@ -450,7 +458,7 @@ func UploadLogs(a ScenarioAsserter, stdout AzCopyStdout, stderr *bytes.Buffer, l
 
 	// If stderr is non-zero, output that too!
 	if stderr != nil && stderr.Len() > 0 {
-		f, err := os.OpenFile(filepath.Join(destLogDir, "stderr.txt"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
+		f, err := os.OpenFile(filepath.Join(destLogDir, fmt.Sprintf("stderr-%03d.txt", runCount)), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
 		a.NoError("Failed to create stdout file", err)
 		_, err = stderr.WriteTo(f)
 		a.NoError("Failed to write stdout file", err)
@@ -458,5 +466,7 @@ func UploadLogs(a ScenarioAsserter, stdout AzCopyStdout, stderr *bytes.Buffer, l
 		a.NoError("Failed to close stdout file", err)
 	}
 
-	a.Log("Uploaded failed run logs for job %s", jobId)
+	if runCount == 1 {
+		a.Log("Uploaded failed run logs for session %s", sessionId)
+	}
 }

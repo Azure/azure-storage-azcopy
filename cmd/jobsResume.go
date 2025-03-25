@@ -59,7 +59,12 @@ type resumeJobController struct {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
+	// Output the log location if log-level is set to other then NONE
+	var logPathFolder string
+	if azcopyLogPathFolder != "" {
+		logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+	}
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), logPathFolder, false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -227,13 +232,13 @@ func init() {
 	}
 
 	jobsCmd.AddCommand(resumeCmd)
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: only include these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: Include only these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: Exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	// oauth options
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "Source SAS token of the source for a given Job ID.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination SAS token of the destination for a given Job ID.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "Destination SAS token of the destination for a given Job ID.")
 }
 
 type resumeCmdArgs struct {
@@ -294,13 +299,19 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		}
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := tc.(common.AuthenticateToken); ok { // We don't need two different tokens here since it gets passed in just the same either way.
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// Error for invalid JobId format
-		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+		return nil, nil, fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
 	}
 
+	// But we don't want to supply a reauth token if we're not using OAuth. That could cause problems if say, a SAS is invalid.
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, common.Iff(srcCredType.IsAzureOAuth(), reauthTok, nil))
 	var getJobDetailsResponse common.GetJobDetailsResponse
 	// Get job details from the STE
 	Rpc(common.ERpcCmd.GetJobDetails(),
@@ -321,11 +332,11 @@ func (rca resumeCmdArgs) getSourceAndDestinationServiceClients(
 		return nil, nil, err
 	}
 
-	var srcCred *common.ScopedCredential
+	var srcCred *common.ScopedToken
 	if fromTo.IsS2S() && srcCredType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(tc, srcCredType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, common.Iff(dstCredType.IsAzureOAuth(), reauthTok, nil))
 	var fileClientOptions any
 	if fromTo.To() == common.ELocation.File() {
 		fileClientOptions = &common.FileClientOptions{
@@ -347,7 +358,12 @@ func (rca resumeCmdArgs) process() error {
 	jobID, err := common.ParseJobID(rca.jobID)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
-		return fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+		return fmt.Errorf("error parsing the jobId %s. Failed with error %w", rca.jobID, err)
+	}
+
+	// if no logging, set this empty so that we don't display the log location
+	if azcopyLogVerbosity == common.LogNone {
+		azcopyLogPathFolder = ""
 	}
 
 	includeTransfer := make(map[string]int)

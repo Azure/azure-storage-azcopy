@@ -189,20 +189,6 @@ type rawCopyCmdArgs struct {
 	deleteDestinationFileIfNecessary bool
 }
 
-func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
-	cookedPatterns = make([]string, 0)
-	rawPatterns := strings.Split(pattern, ";")
-	for _, pattern := range rawPatterns {
-
-		// skip the empty patterns
-		if len(pattern) != 0 {
-			cookedPatterns = append(cookedPatterns, pattern)
-		}
-	}
-
-	return
-}
-
 // blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
 // A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
 // The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
@@ -226,47 +212,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	return int64(math.Round(rawSizeInBytes)), nil
 }
 
-// returns result of stripping and if striptopdir is enabled
-// if nothing happens, the original source is returned
-func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
-	result = raw.src
-	resourceURL, err := url.Parse(result)
-	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
-
-	if err != nil {
-		err = fmt.Errorf("failed to parse url %s; %s", result, err)
-		return
-	}
-
-	if strings.Contains(gURLParts.GetContainerName(), "*") {
-		// Disallow container name search and object specifics
-		if gURLParts.GetObjectName() != "" {
-			err = errors.New("cannot combine a specific object name with an account-level search")
-			return
-		}
-
-		// Return immediately here because we know this will be safe.
-		return
-	}
-
-	// Trim the trailing /*.
-	if strings.HasSuffix(resourceURL.RawPath, "/*") {
-		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")
-		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
-		stripTopDir = true
-	}
-
-	// Ensure there aren't any extra *s floating around.
-	if strings.Contains(resourceURL.RawPath, "*") {
-		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
-		return
-	}
-
-	result = resourceURL.String()
-
-	return
-}
-
 func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked := CookedCopyCmdArgs{
 		jobID: azcopyCurrentJobID,
@@ -278,6 +223,11 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	glcm.RegisterCloseFunc(func() {
 		azcopyScanningLogger.CloseLog()
 	})
+
+	// if no logging, set this empty so that we don't display the log location
+	if azcopyLogVerbosity == common.LogNone {
+		azcopyLogPathFolder = ""
+	}
 
 	fromTo, err := ValidateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
@@ -293,7 +243,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	// Check if source has a trailing wildcard on a URL
 	if fromTo.From().IsRemote() {
-		tempSrc, cooked.StripTopDir, err = raw.stripTrailingWildcardOnRemoteSource(fromTo.From())
+		tempSrc, cooked.StripTopDir, err = stripTrailingWildcardOnRemoteSource(raw.src, fromTo.From())
 
 		if err != nil {
 			return cooked, err
@@ -405,7 +355,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
-	raw.warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
+	warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
 
 	// unbuffered so this reads as we need it to rather than all at once in bulk
 	listChan := make(chan string)
@@ -428,7 +378,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		addToChannel := func(v string, paramName string) {
 			// empty strings should be ignored, otherwise the source root itself is selected
 			if len(v) > 0 {
-				raw.warnIfHasWildcard(includeWarningOncer, paramName, v)
+				warnIfHasWildcard(includeWarningOncer, paramName, v)
 				listChan <- v
 			}
 		}
@@ -472,7 +422,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 
 		// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
-		includePathList := raw.parsePatterns(raw.includePath)
+		includePathList := parsePatterns(raw.includePath)
 
 		for _, v := range includePathList {
 			addToChannel(v, "include-path")
@@ -549,7 +499,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.metadata, common.MetadataAndBlobTagsClearFlag) { // in case of Blob, BlobFS and Files
-		glcm.Info("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
+		glcm.Warn("*** WARNING *** Metadata will be cleared because of input --metadata=clear ")
 	}
 	cooked.metadata = raw.metadata
 	if err = validateMetadataString(cooked.metadata); err != nil {
@@ -573,7 +523,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		return cooked, errors.New("blob tags can only be set when transferring to blob storage")
 	}
 	if cooked.FromTo.To() == common.ELocation.None() && strings.EqualFold(raw.blobTags, common.MetadataAndBlobTagsClearFlag) { // in case of Blob and BlobFS
-		glcm.Info("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
+		glcm.Warn("*** WARNING *** BlobTags will be cleared because of input --blob-tags=clear ")
 	}
 	blobTags := common.ToCommonBlobTagsMap(raw.blobTags)
 	err = validateBlobTagsKeyValue(blobTags)
@@ -863,19 +813,19 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// parse the filter patterns
-	cooked.IncludePatterns = raw.parsePatterns(raw.include)
-	cooked.ExcludePatterns = raw.parsePatterns(raw.exclude)
-	cooked.ExcludePathPatterns = raw.parsePatterns(raw.excludePath)
-	cooked.excludeContainer = raw.parsePatterns(raw.excludeContainer)
+	cooked.IncludePatterns = parsePatterns(raw.include)
+	cooked.ExcludePatterns = parsePatterns(raw.exclude)
+	cooked.ExcludePathPatterns = parsePatterns(raw.excludePath)
+	cooked.excludeContainer = parsePatterns(raw.excludeContainer)
 
 	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.From() != common.ELocation.Local() {
 		return cooked, errors.New("cannot check file attributes on remote objects")
 	}
-	cooked.IncludeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
-	cooked.ExcludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
+	cooked.IncludeFileAttributes = parsePatterns(raw.includeFileAttributes)
+	cooked.ExcludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
-	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
-	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
+	cooked.includeRegex = parsePatterns(raw.includeRegex)
+	cooked.excludeRegex = parsePatterns(raw.excludeRegex)
 
 	cooked.dryrunMode = raw.dryrun
 
@@ -897,16 +847,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 var excludeWarningOncer = &sync.Once{}
 var includeWarningOncer = &sync.Once{}
-
-func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
-	if strings.Contains(value, "*") || strings.Contains(value, "?") {
-		oncer.Do(func() {
-			glcm.Info(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
-				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
-				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
-		})
-	}
-}
 
 // When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
 // else parsing the arguments will fail.
@@ -1305,7 +1245,8 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	}
 
 	// step 1: create client options
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil)}
+	// note: dstCred is nil, as we could not reauth effectively because stdout is a pipe.
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(azcopyScanningLogger, nil, nil)}
 
 	// step 2: parse source url
 	u, err := blobResource.FullURL()
@@ -1349,7 +1290,7 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// Use the concurrency environment value
-	concurrencyEnvVar := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
+	concurrencyEnvVar := common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue())
 
 	pipingUploadParallelism := pipingUploadParallelism
 	if concurrencyEnvVar != "" {
@@ -1381,8 +1322,15 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
 	}
 
+	var reauthTok *common.ScopedAuthenticator
+	if at, ok := credInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		reauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
 	// step 0: initialize pipeline
-	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil)}
+	// Reauthentication is theoretically possible here, since stdin is blocked.
+	options := &blockblob.ClientOptions{ClientOptions: createClientOptions(common.AzcopyCurrentJobLogger, nil, reauthTok)}
 
 	// step 1: parse destination url
 	u, err := blobResource.FullURL()
@@ -1485,7 +1433,7 @@ func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Make AUTO default for Azure Files since Azure Files throttles too easily unless user specified concurrency value
-	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
+	if jobsAdmin.JobsAdmin != nil && (cca.FromTo.From() == common.ELocation.File() || cca.FromTo.To() == common.ELocation.File()) && common.GetEnvironmentVariable(common.EEnvironmentVariable.ConcurrencyValue()) == "" {
 		jobsAdmin.JobsAdmin.SetConcurrencySettingsToAuto()
 	}
 
@@ -1564,7 +1512,18 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
-	options := createClientOptions(common.AzcopyCurrentJobLogger, nil)
+	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
+	if err != nil {
+		return err
+	}
+
+	var srcReauth *common.ScopedAuthenticator
+	if at, ok := srcCredInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		srcReauth = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	options := createClientOptions(common.AzcopyCurrentJobLogger, nil, srcReauth)
 	var azureFileSpecificOptions any
 	if cca.FromTo.From() == common.ELocation.File() {
 		azureFileSpecificOptions = &common.FileClientOptions{
@@ -1572,10 +1531,6 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	srcCredInfo, err := cca.getSrcCredential(ctx, &jobPartOrder)
-	if err != nil {
-		return err
-	}
 	jobPartOrder.SrcServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.From(),
 		cca.Source,
@@ -1595,11 +1550,17 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
-	var srcCred *common.ScopedCredential
+	var dstReauthTok *common.ScopedAuthenticator
+	if at, ok := cca.credentialInfo.OAuthTokenInfo.TokenCredential.(common.AuthenticateToken); ok {
+		// This will cause a reauth with StorageScope, which is fine, that's the original Authenticate call as it stands.
+		dstReauthTok = (*common.ScopedAuthenticator)(common.NewScopedCredential(at, common.ECredentialType.OAuthToken()))
+	}
+
+	var srcCred *common.ScopedToken
 	if cca.FromTo.IsS2S() && srcCredInfo.CredentialType.IsAzureOAuth() {
 		srcCred = common.NewScopedCredential(srcCredInfo.OAuthTokenInfo.TokenCredential, srcCredInfo.CredentialType)
 	}
-	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred)
+	options = createClientOptions(common.AzcopyCurrentJobLogger, srcCred, dstReauthTok)
 	jobPartOrder.DstServiceClient, err = common.GetServiceClientForLocation(
 		cca.FromTo.To(),
 		cca.Destination,
@@ -1632,6 +1593,17 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// TODO: Remove this check when FileBlob w/ File OAuth works.
 	if cca.FromTo.IsS2S() && cca.FromTo.From() == common.ELocation.File() && srcCredInfo.CredentialType.IsAzureOAuth() && cca.FromTo.To() != common.ELocation.File() {
 		return fmt.Errorf("S2S copy from Azure File authenticated with Azure AD to Blob/BlobFS is not supported")
+	}
+
+	// Check if destination is system container
+	if cca.FromTo.IsS2S() || cca.FromTo.IsUpload() {
+		dstContainerName, err := GetContainerName(cca.Destination.Value, cca.FromTo.To())
+		if err != nil {
+			return fmt.Errorf("failed to get container name from destination (is it formatted correctly?): %w", err)
+		}
+		if common.IsSystemContainer(dstContainerName) {
+			return fmt.Errorf("cannot copy to system container '%s'", dstContainerName)
+		}
 	}
 
 	switch {
@@ -1689,11 +1661,13 @@ func (cca *CookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	// if on dry run mode do not want to print message since no  job is being done
 	if !cca.dryrunMode {
+		// Output the log location if log-level is set to other then NONE
+		var logPathFolder string
+		if azcopyLogPathFolder != "" {
+			logPathFolder = fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)
+		}
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
-			fmt.Sprintf("%s%s%s.log",
-				azcopyLogPathFolder,
-				common.OS_PATH_SEPARATOR,
-				cca.jobID),
+			logPathFolder,
 			cca.isCleanupJob,
 			cca.cleanupJobMessage))
 	}
@@ -1971,7 +1945,7 @@ func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfCo
 }
 
 func shouldDisplayPerfStates() bool {
-	return glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
+	return common.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
 }
 
 func isStdinPipeIn() (bool, error) {
@@ -2063,12 +2037,12 @@ func init() {
 
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "False by default. Follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files modified before or on the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
+	cpCmd.PersistentFlags().StringVar(&raw.includeBefore, common.IncludeBeforeFlagName, "", "Include only those files were modified before or on the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.7, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
 	cpCmd.PersistentFlags().StringVar(&raw.includeAfter, common.IncludeAfterFlagName, "", "Include only those files modified on or after the given date/time. The value should be in ISO8601 format. If no timezone is specified, the value is assumed to be in the local timezone of the machine running AzCopy. E.g. '2020-08-19T15:04:00Z' for a UTC time, or '2020-08-19' for midnight (00:00) in the local timezone. As of AzCopy 10.5, this flag applies only to files, not folders, so folder properties won't be copied when using this flag with --preserve-smb-info or --preserve-smb-permissions.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "Include only these files when copying. "+
 		"This option supports wildcard characters (*). Separate files by using a ';' (For example: *.jpg;*.pdf;exactName).")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "Include only these paths when copying. "+
-		"This option does not support wildcard characters (*). Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
+		"This option does not support wildcard characters (*). Checks the relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf).")
 	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "Exclude these paths when copying. "+ // Currently, only exclude-path is supported alongside account traversal.
 		"This option does not support wildcard characters (*). Checks relative path prefix (For example: myFolder;myFolder/subDirName/file.pdf). When used in combination with account traversal, paths do not include the container name.")
 	cpCmd.PersistentFlags().StringVar(&raw.includeRegex, "include-regex", "", "Include only the relative path of the files that align with regular expressions. Separate regular expressions with ';'.")
@@ -2164,7 +2138,7 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or ADLS Gen 2 to ADLS Gen 2). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or Data Lake Storage to Data Lake Storage). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")

@@ -58,6 +58,7 @@ const (
 	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
 	BLOB_NOT_FOUND         = "BlobNotFound"
 	FILE_NOT_FOUND         = "The specified file was not found."
+	EINTR_RETRY_COUNT      = 5
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1119,6 +1120,7 @@ const (
 	MaxNumberOfBlocksPerBlob       = 50000
 	BlockSizeThreshold             = 256 * 1024 * 1024
 	MinParallelChunkCountThreshold = 4 /* minimum number of chunks in parallel for AzCopy to be performant. */
+	GigaByte                       = 1024 * 1024 * 1024
 	MegaByte                       = 1024 * 1024
 	KiloByte                       = 1024
 )

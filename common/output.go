@@ -68,6 +68,7 @@ var EPromptType = PromptType("")
 
 type PromptType string
 
+func (PromptType) Reauth() PromptType            { return PromptType("Reauth") }
 func (PromptType) Cancel() PromptType            { return PromptType("Cancel") }
 func (PromptType) Overwrite() PromptType         { return PromptType("Overwrite") }
 func (PromptType) DeleteDestination() PromptType { return PromptType("DeleteDestination") }
@@ -118,7 +119,9 @@ func GetStandardInitOutputBuilder(jobID string, logFileLocation string, isCleanu
 			sb.WriteString(cleanupHeader)
 		} else {
 			sb.WriteString("\nJob " + jobID + " has started\n")
-			sb.WriteString("Log file is located at: " + logFileLocation)
+			if logFileLocation != "" {
+				sb.WriteString("Log file is located at: " + logFileLocation)
+			}
 			sb.WriteString("\n")
 		}
 		return sb.String()

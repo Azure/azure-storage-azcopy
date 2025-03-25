@@ -175,14 +175,19 @@ func ValidateListOutput(a Asserter, stdout AzCopyStdout, expectedObjects map[AzC
 	a.Assert("summary must match", Equal{}, listStdout.Summary, DerefOrZero(expectedSummary))
 }
 
-func ValidateMessageOutput(a Asserter, stdout AzCopyStdout, message string) {
+func ValidateMessageOutput(a Asserter, stdout AzCopyStdout, message string, shouldContain bool) {
 	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
 		return
 	}
+	var contains bool
 	for _, line := range stdout.RawStdout() {
 		if strings.Contains(line, message) {
-			return
+			contains = true
+			break
 		}
+	}
+	if (!contains && !shouldContain) || (contains && shouldContain) {
+		return
 	}
 	fmt.Println(stdout.String())
 	a.Error(fmt.Sprintf("expected message (%s) not found in azcopy output", message))
@@ -209,7 +214,21 @@ func ValidateContainsError(a Asserter, stdout AzCopyStdout, errorMsg []string) {
 		}
 	}
 	fmt.Println(stdout.String())
-	a.Error("expected error message not found in azcopy output")
+	a.Error(fmt.Sprintf("expected error message %v not found in azcopy output", errorMsg))
+}
+
+// ValidateDoesNotContainError Validates specific errorMsg is not returned in AzCopy run
+func ValidateDoesNotContainError(a Asserter, stdout AzCopyStdout, errorMsg []string) {
+	if dryrunner, ok := a.(DryrunAsserter); ok && dryrunner.Dryrun() {
+		return
+	}
+	for _, line := range stdout.RawStdout() {
+		if !checkMultipleErrors(errorMsg, line) {
+			return
+		}
+	}
+	fmt.Println(stdout.String())
+	a.Error(fmt.Sprintf("error message %v not expected was found in azcopy output", errorMsg))
 }
 
 func checkMultipleErrors(errorMsg []string, line string) bool {
