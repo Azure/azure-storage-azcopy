@@ -286,7 +286,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 		}
 	case common.ECredentialType.GoogleAppCredentials():
 		if resourceType != common.ELocation.GCP() {
-			return fmt.Errorf("Google Application Credentials to %s is not valid", resourceType.String())
+			return fmt.Errorf("google application credentials to %s is not valid", resourceType.String())
 		}
 
 		u, err := url.Parse(resource)

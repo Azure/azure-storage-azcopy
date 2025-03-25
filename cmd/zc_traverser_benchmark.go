@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -49,7 +50,7 @@ func (t *benchmarkTraverser) IsDirectory(bool) (bool, error) {
 	return true, nil
 }
 
-func (_ *benchmarkTraverser) toReversedString(i uint) string {
+func (*benchmarkTraverser) toReversedString(i uint) string {
 	s := fmt.Sprintf("%d", i)
 	count := len(s)
 	b := []byte(s)
