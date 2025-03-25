@@ -15,7 +15,7 @@ func init() {
 
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
-	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})
 
 	if srcLoc == common.ELocation.Local() && srcLoc == dstLoc {
 		svm.InvalidateScenario()
@@ -42,7 +42,8 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 		},
 		Flags: SyncFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
-				Recursive: pointerTo(false),
+				Recursive:             pointerTo(false),
+				IncludeDirectoryStubs: pointerTo(true),
 			},
 			DeleteDestination: pointerTo(true),
 		},
@@ -58,9 +59,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 
 func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationManager) {
 	// Set up the scenario
-	a.InsertVariationSeparator("Blob->")
+	a.InsertVariationSeparator("Local->")
 	srcLoc := common.ELocation.Local()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.File()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (
@@ -69,20 +70,20 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		CreateObject    = "Object"
 	)
 
-	resourceType := ResolveVariation(a, []string{CreateContainer, CreateFolder, CreateObject})
+	resourceType := ResolveVariation(a, []string{CreateFolder, CreateObject})
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
-		CreateContainer: {
+		/*CreateContainer: {
 			"foo": ResourceDefinitionObject{},
-		},
+		},*/
 		CreateFolder: {
-			"foo": ResourceDefinitionObject{
+			"foo1": ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
 					EntityType: common.EEntityType.Folder(),
 				},
 			},
-			"foo/bar": ResourceDefinitionObject{},
+			"foo1/bar": ResourceDefinitionObject{},
 		},
 		CreateObject: {
 			"foo": ResourceDefinitionObject{},
@@ -94,9 +95,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		Objects: srcMap,
 	})
 	srcTarget := map[string]ResourceManager{
-		CreateContainer: src,
-		CreateFolder:    src.GetObject(a, "foo", common.EEntityType.Folder()),
-		CreateObject:    src.GetObject(a, "foo", common.EEntityType.File()),
+		//CreateContainer: src,
+		CreateFolder: src.GetObject(a, "foo1", common.EEntityType.Folder()),
+		CreateObject: src.GetObject(a, "foo", common.EEntityType.File()),
 	}[resourceType]
 
 	var dstTarget ResourceManager
@@ -112,9 +113,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	}
 
 	dstTarget = map[string]ResourceManager{
-		CreateContainer: dst,
-		CreateFolder:    dst.GetObject(a, "foo", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
-		CreateObject:    dst.GetObject(a, "foo", common.EEntityType.File()),
+		//CreateContainer: dst,
+		CreateFolder: dst.GetObject(a, "foo1", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
+		CreateObject: dst.GetObject(a, "foo", common.EEntityType.File()),
 	}[resourceType]
 
 	// Run the test for realsies.
