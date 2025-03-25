@@ -184,6 +184,8 @@ type params struct {
 	deleteDestinationFile  bool
 	trailingDot            common.TrailingDotOption
 	decompress             bool
+	preserveInfo           *bool
+	isNFSCopy              bool
 	// looks like this for a folder transfer:
 	/*
 		INFO: source: /New folder/New Text Document.txt dest: /Test/New folder/New Text Document.txt
@@ -201,10 +203,9 @@ type params struct {
 	ignoreErrorIfCompleted bool
 
 	// benchmark params
-	mode         string
-	fileCount    int
-	sizePerFile  string
-	preserveInfo *bool
+	mode        string
+	fileCount   int
+	sizePerFile string
 }
 
 // we expect folder transfers to be allowed (between folder-aware resources) if there are no filters that act at file level
