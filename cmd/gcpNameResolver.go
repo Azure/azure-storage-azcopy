@@ -62,7 +62,7 @@ func (resolver *GCPBucketNameToAzureResourcesResolver) ResolveName(bucketName st
 		resolver.resolveNewBucketNameInternal(bucketName)
 		return resolver.ResolveName(bucketName)
 	} else if resolvedName == failToResolveMapValue {
-		return "", fmt.Errorf("%s: container name %q is invalid for destination.", gcpBucketNameResolveError, bucketName)
+		return "", fmt.Errorf("%s: container name %q is invalid for destination", gcpBucketNameResolveError, bucketName)
 	} else {
 		return resolvedName, nil
 	}
@@ -137,10 +137,7 @@ func (resolver *GCPBucketNameToAzureResourcesResolver) hasCollision(name string)
 }
 
 func validateResolvedNameGCP(name string) bool {
-	if len(name) > gcpBucketNameMaxLength {
-		return false
-	}
-	return true
+	return len(name) <= gcpBucketNameMaxLength
 }
 
 func (resolver *GCPBucketNameToAzureResourcesResolver) addSuffix(bucketName string) string {

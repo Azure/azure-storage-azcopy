@@ -25,7 +25,7 @@ const (
 	PreservePermissionsDisabledMsg            = "Note: The preserve-permissions flag is set to false. As a result, AzCopy will not copy SMB ACLs between the source and destination. For more information, visit: https://aka.ms/AzCopyandAzureFiles."
 
 	PreserveNFSPermissionsDisabledMsg = "Note: The preserve-nfs-permissions flag is set to false. As a result, AzCopy will not copy NFS permissions between the source and destination."
-	InvalidFlagsForNFSMsg             = "NFS copy cannot be used with SMB-related flags. Please use the --preserve-info or --preserve-permissions flags instead."
+	InvalidFlagsForNFSMsg             = "nfs copy cannot be used with SMB-related flags. Please use the --preserve-info or --preserve-permissions flags instead"
 )
 
 // Flags associated with copy and sync commands

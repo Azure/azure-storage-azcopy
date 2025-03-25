@@ -223,7 +223,7 @@ func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs
 
 	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
 	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
-		return fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
+		return errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
 	}
 
 	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
@@ -1636,14 +1636,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate()
 
 	default:
-		return fmt.Errorf("copy direction %v is not supported\n", cca.FromTo)
+		return fmt.Errorf("copy direction %v is not supported", cca.FromTo)
 	}
 
 	if err != nil {
-		if err == NothingToRemoveError || err == NothingScheduledError {
+		if err == ErrNothingToRemove || err == NothingScheduledError {
 			return err // don't wrap it with anything that uses the word "error"
 		} else {
-			return fmt.Errorf("cannot start job due to error: %s.\n", err)
+			return fmt.Errorf("cannot start job due to error %s", err)
 		}
 	}
 
@@ -1717,7 +1717,7 @@ func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
 		glcm.AllowReinitiateProgressReporting()
 		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
 		err := cca.followupJobArgs.process()
-		if err == NothingToRemoveError {
+		if err == ErrNothingToRemove {
 			glcm.Info("Cleanup completed (nothing needed to be deleted)")
 			glcm.Exit(nil, common.EExitCode.Success())
 		} else if err != nil {
