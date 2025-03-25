@@ -92,8 +92,8 @@ jobs:
             } elseif ($IsLinux) {
               $env:GOOS = "linux"
               $env:GOARCH = "amd64"
-              $tags = "netgo"
-              $build_name = "azcopy_linux_amd64"
+              $tags = "smslidingwindow"
+              $build_name = "azcopy_linux_amd64_sd"
               $display_name = "Linux"
             }  elseif ($IsMacOS) {
               $env:GOOS = "darwin"
