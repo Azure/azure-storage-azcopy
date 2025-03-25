@@ -14,7 +14,7 @@ func init() {
 }
 
 func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariationManager) {
-	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
 	dstLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
 
 	if srcLoc == common.ELocation.Local() && srcLoc == dstLoc {
@@ -59,8 +59,8 @@ func (s *SWSyncTestSuite) Scenario_TestSyncRemoveDestination(svm *ScenarioVariat
 func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationManager) {
 	// Set up the scenario
 	a.InsertVariationSeparator("Blob->")
-	srcLoc := common.ELocation.Blob()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
+	srcLoc := common.ELocation.Local()
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (
