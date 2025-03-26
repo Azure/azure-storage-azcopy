@@ -78,12 +78,12 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 			"foo": ResourceDefinitionObject{},
 		},
 		CreateFolder: {
-			"foo1/": ResourceDefinitionObject{
+			"foo/": ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
 					EntityType: common.EEntityType.Folder(),
 				},
 			},
-			"foo1/bar": ResourceDefinitionObject{},
+			"foo/bar": ResourceDefinitionObject{},
 		},
 		CreateObject: {
 			"foo": ResourceDefinitionObject{},
@@ -96,7 +96,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	})
 	srcTarget := map[string]ResourceManager{
 		CreateContainer: src,
-		CreateFolder:    src.GetObject(a, "foo1", common.EEntityType.Folder()),
+		CreateFolder:    src.GetObject(a, "foo", common.EEntityType.Folder()),
 		CreateObject:    src.GetObject(a, "foo", common.EEntityType.File()),
 	}[resourceType]
 
@@ -114,7 +114,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 
 	dstTarget = map[string]ResourceManager{
 		CreateContainer: dst,
-		CreateFolder:    dst.GetObject(a, "foo1", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
+		CreateFolder:    dst.GetObject(a, "foo", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
 		CreateObject:    dst.GetObject(a, "foo", common.EEntityType.File()),
 	}[resourceType]
 
