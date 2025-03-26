@@ -1,10 +1,11 @@
 package e2etest
 
 import (
+	"time"
+
 	blobsas "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/google/uuid"
-	//"github.com/google/uuid"
 )
 
 type SWSyncTestSuite struct{}
@@ -61,22 +62,18 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	// Set up the scenario
 	a.InsertVariationSeparator("Local->")
 	srcLoc := common.ELocation.Local()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.File()})
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.File(), common.ELocation.Blob()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (
-		CreateContainer = "Container"
 		CreateFolder    = "Folder"
-		CreateObject    = "Object"
+		CreateContainer = "Container"
 	)
 
 	resourceType := ResolveVariation(a, []string{CreateFolder})
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
-		/*CreateContainer: {
-			"foo": ResourceDefinitionObject{},
-		},*/
 		CreateFolder: {
 			"fooNew": ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
@@ -85,9 +82,6 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 			},
 			"fooNew/bar": ResourceDefinitionObject{},
 		},
-		/*CreateObject: {
-			"foobar": ResourceDefinitionObject{},
-		},*/
 	}[resourceType]
 
 	// Create resources and targets
@@ -95,9 +89,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		Objects: srcMap,
 	})
 	srcTarget := map[string]ResourceManager{
-		//CreateContainer: src,
 		CreateFolder: src.GetObject(a, "fooNew", common.EEntityType.Folder()),
-		//CreateObject: src.GetObject(a, "foobar", common.EEntityType.File()),
 	}[resourceType]
 
 	var dstTarget ResourceManager
@@ -113,9 +105,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	}
 
 	dstTarget = map[string]ResourceManager{
-		//CreateContainer: dst,
 		CreateFolder: dst.GetObject(a, "fooNew", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
-		//CreateObject: dst.GetObject(a, "foobar", common.EEntityType.File()),
 	}[resourceType]
 
 	// Run the test for realsies.
@@ -155,15 +145,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	})
 
 	srcMapValidation := map[string]ObjectResourceMappingFlat{
-		/*CreateContainer: {
-			"foo": ResourceDefinitionObject{},
-		},*/
 		CreateFolder: {
 			"fooNew/bar": ResourceDefinitionObject{},
 		},
-		/*CreateObject: {
-			"foobar": ResourceDefinitionObject{},
-		},*/
 	}[resourceType]
 	ValidateResource(a, dst, ResourceDefinitionContainer{
 		Objects: srcMapValidation,
@@ -183,21 +167,13 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 		CreateObject    = "Object"
 	)
 
-	resourceType := ResolveVariation(a, []string{CreateObject})
+	resourceType := ResolveVariation(a, []string{CreateContainer, CreateObject})
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
-		/*CreateContainer: {
+		CreateContainer: {
 			"foo": ResourceDefinitionObject{},
 		},
-		CreateFolder: {
-			"foo": ResourceDefinitionObject{
-				ObjectProperties: ObjectProperties{
-					EntityType: common.EEntityType.Folder(),
-				},
-			},
-			"foo/bar": ResourceDefinitionObject{},
-		},*/
 		CreateObject: {
 			"foobar": ResourceDefinitionObject{},
 		},
@@ -208,7 +184,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 		Objects: srcMap,
 	})
 	srcTarget := map[string]ResourceManager{
-		//CreateContainer: src,
+		CreateContainer: src,
 		//CreateFolder: src.GetObject(a, "foo", common.EEntityType.Folder()),
 		CreateObject: src.GetObject(a, "foobar", common.EEntityType.File()),
 	}[resourceType]
@@ -226,9 +202,8 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 	}
 
 	dstTarget = map[string]ResourceManager{
-		//CreateContainer: dst,
-		//CreateFolder: dst.GetObject(a, "foo", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
-		CreateObject: dst.GetObject(a, "foobar", common.EEntityType.File()),
+		CreateContainer: dst,
+		CreateObject:    dst.GetObject(a, "foobar", common.EEntityType.File()),
 	}[resourceType]
 
 	// Run the test for realsies.
@@ -268,12 +243,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 	})
 
 	srcMapValidation := map[string]ObjectResourceMappingFlat{
-		/*CreateContainer: {
+		CreateContainer: {
 			"foo": ResourceDefinitionObject{},
 		},
-		CreateFolder: {
-			"foo/bar": ResourceDefinitionObject{},
-		},*/
 		CreateObject: {
 			"foobar": ResourceDefinitionObject{},
 		},
@@ -282,3 +254,131 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 		Objects: srcMapValidation,
 	}, false)
 }
+
+func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync})
+	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+	// The object must exist already if we're syncing.
+	if azCopyVerb == AzCopyVerbSync {
+		dstObj.Create(svm, NewZeroObjectContentContainer(0), ObjectProperties{})
+
+		if !svm.Dryrun() {
+			// Make sure the LMT is in the past
+			time.Sleep(time.Second * 10)
+		}
+	}
+
+	body := NewRandomObjectContentContainer(SizeFromString("10K"))
+	// Scale up from service to object
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local()})), ResourceDefinitionObject{
+		ObjectName: pointerTo("test"),
+		Body:       body,
+	})
+
+	// no local->local
+	if srcObj.Location().IsLocal() && dstObj.Location().IsLocal() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(false),
+				},
+			},
+		})
+
+	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
+		Body: body,
+	}, true)
+
+	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
+		Objects: map[PlanFilePath]PlanFileObject{
+			PlanFilePath{SrcPath: "", DstPath: ""}: {
+				Properties: ObjectProperties{},
+			},
+		},
+	})
+}
+
+/*
+func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariationManager) {
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	// Resolve variation early so name makes sense
+	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
+	// Scale up from service to object
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File()})), ResourceDefinitionContainer{})
+
+	// Scale up from service to object
+	srcDef := ResourceDefinitionContainer{
+		Objects: ObjectResourceMappingFlat{
+			"abc":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"def":    ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+			"foobar": ResourceDefinitionObject{Body: NewRandomObjectContentContainer(SizeFromString("10K"))},
+		},
+	}
+	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, srcLoc), srcDef)
+
+	// no s2s, no local->local
+	if srcContainer.Location().IsRemote() == dstContainer.Location().IsRemote() {
+		svm.InvalidateScenario()
+		return
+	}
+
+	sasOpts := GenericAccountSignatureValues{}
+
+	stdOut, _ := RunAzCopy(
+		svm,
+		AzCopyCommand{
+			// Sync is not included at this moment, because sync requires
+			Verb: azCopyVerb,
+			Targets: []ResourceManager{
+				TryApplySpecificAuthType(srcContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+					SASTokenOptions: sasOpts,
+				}),
+			},
+			Flags: CopyFlags{
+				CopySyncCommonFlags: CopySyncCommonFlags{
+					Recursive: pointerTo(false),
+				},
+
+				AsSubdir: nil, // defaults true
+			},
+		})
+
+	fromTo := common.FromToValue(srcContainer.Location(), dstContainer.Location())
+
+	ValidatePlanFiles(svm, stdOut, ExpectedPlanFile{
+		// todo: service level resource to object mapping
+		Objects: GeneratePlanFileObjectsFromMapping(ObjectResourceMappingOverlay{
+			Base: srcDef.Objects,
+			Overlay: common.Iff(fromTo.AreBothFolderAware() && azCopyVerb == AzCopyVerbCopy, // If we're running copy and in a folder aware , we need to include the root
+				ObjectResourceMappingFlat{"": {ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}},
+				nil),
+		}, GeneratePlanFileObjectsOptions{
+			DestPathProcessor: common.Iff(asSubdir, ParentDirDestPathProcessor(srcContainer.ContainerName()), nil),
+		}),
+	})
+
+	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
+		Objects: common.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
+	}, true)
+}
+*/

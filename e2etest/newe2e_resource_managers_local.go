@@ -3,15 +3,16 @@ package e2etest
 import (
 	"bytes"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/cmd"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"github.com/google/uuid"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/cmd"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/ste"
+	"github.com/google/uuid"
 )
 
 // enforce interface compliance at compile time
@@ -287,7 +288,9 @@ func (l *LocalObjectResourceManager) Create(a Asserter, body ObjectContentContai
 		a.NoError("Write file", err)
 	} else if l.entityType == common.EEntityType.Folder() {
 		err := os.Mkdir(l.getWorkingPath(), 0775)
-		a.NoError("Mkdir", err)
+		if !os.IsExist(err) {
+			a.NoError("Mkdir", err)
+		}
 	}
 
 	l.SetObjectProperties(a, properties)
