@@ -70,15 +70,15 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		CreateObject    = "Object"
 	)
 
-	resourceType := ResolveVariation(a, []string{CreateFolder, CreateObject})
+	resourceType := ResolveVariation(a, []string{CreateFolder, CreateObject, CreateContainer})
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
-		/*CreateContainer: {
+		CreateContainer: {
 			"foo": ResourceDefinitionObject{},
-		},*/
+		},
 		CreateFolder: {
-			"foo1": ResourceDefinitionObject{
+			"foo1/": ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
 					EntityType: common.EEntityType.Folder(),
 				},
@@ -95,9 +95,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		Objects: srcMap,
 	})
 	srcTarget := map[string]ResourceManager{
-		//CreateContainer: src,
-		CreateFolder: src.GetObject(a, "foo1", common.EEntityType.Folder()),
-		CreateObject: src.GetObject(a, "foo", common.EEntityType.File()),
+		CreateContainer: src,
+		CreateFolder:    src.GetObject(a, "foo1", common.EEntityType.Folder()),
+		CreateObject:    src.GetObject(a, "foo", common.EEntityType.File()),
 	}[resourceType]
 
 	var dstTarget ResourceManager
@@ -113,9 +113,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	}
 
 	dstTarget = map[string]ResourceManager{
-		//CreateContainer: dst,
-		CreateFolder: dst.GetObject(a, "foo1", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
-		CreateObject: dst.GetObject(a, "foo", common.EEntityType.File()),
+		CreateContainer: dst,
+		CreateFolder:    dst.GetObject(a, "foo1", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
+		CreateObject:    dst.GetObject(a, "foo", common.EEntityType.File()),
 	}[resourceType]
 
 	// Run the test for realsies.
