@@ -1,3 +1,8 @@
+---
+name: Bug report
+about: This template should be used for bug reports
+---
+
 ### Which version of the AzCopy was used? 
 ##### Note: The version is visible when running AzCopy without any argument
 
