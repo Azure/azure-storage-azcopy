@@ -23,10 +23,6 @@ jobs:
           imageName: 'macos-latest'
           build_name: 'azcopy_darwin_amd64'
           display_name: "MacOS"
-        Ubuntu-20-SM:
-          imageName: 'ubuntu-latest'
-          build_name: 'azcopy_linux_arm64_sd'
-          display_name: "Linux"
         
     pool:
       vmImage: $(imageName)
@@ -87,20 +83,17 @@ jobs:
               $env:GOOS = "windows"
               $env:GOARCH = "amd64"
               $suffix = ".exe"
-              $tags = "smslidingwindow"
               $build_name = "azcopy_windows_amd64.exe"
               $display_name = "Windows"
             } elseif ($IsLinux) {
               $env:GOOS = "linux"
               $env:GOARCH = "amd64"
-              $tags = "smslidingwindow"
               $build_name = "azcopy_linux_amd64_sd"
               $display_name = "Linux"
             }  elseif ($IsMacOS) {
               $env:GOOS = "darwin"
               $env:GOARCH = "amd64"
               $env:CGO_ENABLED = "1"
-              $tags = "smslidingwindow"
               $build_name = "azcopy_darwin_amd64"
               $display_name = "MacOS"
             } else {
@@ -111,6 +104,8 @@ jobs:
             # Build the Go program
             if ($tags -ne "") {
               go build -cover -tags $tags -o $build_name
+            }else if parameters.test_cli_param contains "smslidingwindow" {
+              go build -cover -tags smslidingwindow -o $build_name
             } else {
               go build -cover -o $build_name
             }
