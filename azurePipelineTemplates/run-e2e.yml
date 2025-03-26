@@ -105,7 +105,7 @@ jobs:
             if ($tags -ne "") {
               go build -cover -tags $tags -o $build_name
             } else {
-              if ("${{ parameters.test_cli_param }}" -like "smslidingwindow") {
+              if ("${{ parameters.test_cli_param }}" -like "*smslidingwindow*") {
                 go build -cover -tags smslidingwindow -o $build_name
               } else {
                 go build -cover -o $build_name
