@@ -9,7 +9,7 @@ import (
 
 func WorkloadIdentitySetup(a Asserter) {
 	// Run only in environments that support and are set up for Workload Identity (ex: Azure Pipeline, Azure Kubernetes Service)
-	if os.Getenv("NEW_E2E_ENVIRONMENT") != "AzurePipeline" {
+	if os.Getenv("NEW_E2E_ENVIRONMENT") != "TestEnvironmentAzurePipelines" {
 		return // This is OK to skip, because other tests also skip if it isn't present.
 	}
 
