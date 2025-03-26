@@ -70,24 +70,24 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		CreateObject    = "Object"
 	)
 
-	resourceType := ResolveVariation(a, []string{CreateFolder, CreateObject, CreateContainer})
+	resourceType := ResolveVariation(a, []string{CreateFolder})
 
 	// Select source map
 	srcMap := map[string]ObjectResourceMappingFlat{
-		CreateContainer: {
+		/*CreateContainer: {
 			"foo": ResourceDefinitionObject{},
-		},
+		},*/
 		CreateFolder: {
-			"foo/": ResourceDefinitionObject{
+			"fooNew": ResourceDefinitionObject{
 				ObjectProperties: ObjectProperties{
 					EntityType: common.EEntityType.Folder(),
 				},
 			},
-			"foo/bar": ResourceDefinitionObject{},
+			"fooNew/bar": ResourceDefinitionObject{},
 		},
-		CreateObject: {
-			"foo": ResourceDefinitionObject{},
-		},
+		/*CreateObject: {
+			"foobar": ResourceDefinitionObject{},
+		},*/
 	}[resourceType]
 
 	// Create resources and targets
@@ -95,9 +95,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		Objects: srcMap,
 	})
 	srcTarget := map[string]ResourceManager{
-		CreateContainer: src,
-		CreateFolder:    src.GetObject(a, "foo", common.EEntityType.Folder()),
-		CreateObject:    src.GetObject(a, "foo", common.EEntityType.File()),
+		//CreateContainer: src,
+		CreateFolder: src.GetObject(a, "fooNew", common.EEntityType.Folder()),
+		//CreateObject: src.GetObject(a, "foobar", common.EEntityType.File()),
 	}[resourceType]
 
 	var dstTarget ResourceManager
@@ -113,9 +113,9 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 	}
 
 	dstTarget = map[string]ResourceManager{
-		CreateContainer: dst,
-		CreateFolder:    dst.GetObject(a, "foo", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
-		CreateObject:    dst.GetObject(a, "foo", common.EEntityType.File()),
+		//CreateContainer: dst,
+		CreateFolder: dst.GetObject(a, "fooNew", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
+		//CreateObject: dst.GetObject(a, "foobar", common.EEntityType.File()),
 	}[resourceType]
 
 	// Run the test for realsies.
@@ -154,7 +154,131 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResources(a *ScenarioVariationM
 		},
 	})
 
+	srcMapValidation := map[string]ObjectResourceMappingFlat{
+		/*CreateContainer: {
+			"foo": ResourceDefinitionObject{},
+		},*/
+		CreateFolder: {
+			"fooNew/bar": ResourceDefinitionObject{},
+		},
+		/*CreateObject: {
+			"foobar": ResourceDefinitionObject{},
+		},*/
+	}[resourceType]
 	ValidateResource(a, dst, ResourceDefinitionContainer{
+		Objects: srcMapValidation,
+	}, false)
+}
+
+func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVariationManager) {
+	// Set up the scenario
+	a.InsertVariationSeparator("Local->")
+	srcLoc := common.ELocation.Local()
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File()})
+	a.InsertVariationSeparator("|Create:")
+
+	const (
+		CreateContainer = "Container"
+		CreateFolder    = "Folder"
+		CreateObject    = "Object"
+	)
+
+	resourceType := ResolveVariation(a, []string{CreateObject})
+
+	// Select source map
+	srcMap := map[string]ObjectResourceMappingFlat{
+		/*CreateContainer: {
+			"foo": ResourceDefinitionObject{},
+		},
+		CreateFolder: {
+			"foo": ResourceDefinitionObject{
+				ObjectProperties: ObjectProperties{
+					EntityType: common.EEntityType.Folder(),
+				},
+			},
+			"foo/bar": ResourceDefinitionObject{},
+		},*/
+		CreateObject: {
+			"foobar": ResourceDefinitionObject{},
+		},
+	}[resourceType]
+
+	// Create resources and targets
+	src := CreateResource(a, GetRootResource(a, srcLoc), ResourceDefinitionContainer{
 		Objects: srcMap,
+	})
+	srcTarget := map[string]ResourceManager{
+		//CreateContainer: src,
+		//CreateFolder: src.GetObject(a, "foo", common.EEntityType.Folder()),
+		CreateObject: src.GetObject(a, "foobar", common.EEntityType.File()),
+	}[resourceType]
+
+	var dstTarget ResourceManager
+	var dst ContainerResourceManager
+	if dstLoc == common.ELocation.Local() {
+		dst = GetRootResource(a, dstLoc).(ContainerResourceManager) // No need to grab a container
+	} else {
+		dst = GetRootResource(a, dstLoc).(ServiceResourceManager).GetContainer(uuid.NewString())
+	}
+
+	if resourceType != CreateContainer {
+		dst.Create(a, ContainerProperties{})
+	}
+
+	dstTarget = map[string]ResourceManager{
+		//CreateContainer: dst,
+		//CreateFolder: dst.GetObject(a, "foo", common.EEntityType.File()), // Intentionally don't end with a trailing slash, so Sync has to pick that up for us.
+		CreateObject: dst.GetObject(a, "foobar", common.EEntityType.File()),
+	}[resourceType]
+
+	// Run the test for realsies.
+	RunAzCopy(a, AzCopyCommand{
+		Verb: AzCopyVerbSync,
+		Targets: []ResourceManager{
+			srcTarget,
+			AzCopyTarget{
+				ResourceManager: dstTarget,
+				AuthType:        EExplicitCredentialType.SASToken(),
+				Opts: CreateAzCopyTargetOptions{
+					SASTokenOptions: GenericAccountSignatureValues{
+						Permissions: (&blobsas.AccountPermissions{
+							Read:   true,
+							Write:  true,
+							Delete: true,
+							List:   true,
+							Add:    true,
+							Create: true,
+						}).String(),
+						ResourceTypes: (&blobsas.AccountResourceTypes{
+							Service:   true,
+							Container: true,
+							Object:    true,
+						}).String(),
+					},
+				},
+			},
+		},
+		Flags: SyncFlags{
+			CopySyncCommonFlags: CopySyncCommonFlags{
+				Recursive:             pointerTo(false),
+				IncludeDirectoryStubs: pointerTo(true),
+			},
+			IncludeRoot: pointerTo(true),
+		},
+	})
+
+	srcMapValidation := map[string]ObjectResourceMappingFlat{
+		/*CreateContainer: {
+			"foo": ResourceDefinitionObject{},
+		},
+		CreateFolder: {
+			"foo/bar": ResourceDefinitionObject{},
+		},*/
+		CreateObject: {
+			"foobar": ResourceDefinitionObject{},
+		},
+	}[resourceType]
+	ValidateResource(a, dst, ResourceDefinitionContainer{
+		Objects: srcMapValidation,
 	}, false)
 }
