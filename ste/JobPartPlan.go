@@ -302,6 +302,9 @@ type JobPartPlanDstBlob struct {
 	// Controls uploading of MD5 hashes
 	PutMd5 bool
 
+	// Specifies tamper proof storage to store MD5 hash
+	TamperProof string
+
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
 
