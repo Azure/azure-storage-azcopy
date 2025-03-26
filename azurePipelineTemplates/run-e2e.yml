@@ -87,6 +87,7 @@ jobs:
               $env:GOOS = "windows"
               $env:GOARCH = "amd64"
               $suffix = ".exe"
+              $tags = "smslidingwindow"
               $build_name = "azcopy_windows_amd64.exe"
               $display_name = "Windows"
             } elseif ($IsLinux) {
@@ -99,6 +100,7 @@ jobs:
               $env:GOOS = "darwin"
               $env:GOARCH = "amd64"
               $env:CGO_ENABLED = "1"
+              $tags = "smslidingwindow"
               $build_name = "azcopy_darwin_amd64"
               $display_name = "MacOS"
             } else {
