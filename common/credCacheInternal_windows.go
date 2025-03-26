@@ -22,7 +22,7 @@ package common
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -114,7 +114,7 @@ func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
 // segmentTokenInfo is used to present information about segmented token saved in credential manager.
 type segmentedTokenHeader struct {
 	SegmentNum string `json:"SegmentNum"`
-	MD5Hash    string `json:"MD5Hash"`
+	SHA256Hash string `json:"SHA256Hash"`
 }
 
 // loadTokenInternal restores a Token object from file cache.
@@ -147,12 +147,12 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 		}
 		tokenInfo = buffer.Bytes()
 
-		// Do md5 validation, ensuring the token is consistent
-		md5OfReadTokenInfo := fmt.Sprintf("%x", md5.Sum(tokenInfo))
-		if md5OfReadTokenInfo != segmentedTokenHeader.MD5Hash {
+		// Do sha256 validation, ensuring the token is consistent
+		sha256OfReadTokenInfo := fmt.Sprintf("%x", sha256.Sum256(tokenInfo)) // returns 32 byte checksum
+		if sha256OfReadTokenInfo != segmentedTokenHeader.SHA256Hash {
 			return nil, fmt.Errorf(
-				"segmented token broken, MD5 mismatch, expected: %s, get: %s",
-				segmentedTokenHeader.MD5Hash, md5OfReadTokenInfo)
+				"segmented token broken, SHA256 hash mismatch, expected: %s, get: %s",
+				segmentedTokenHeader.SHA256Hash, sha256OfReadTokenInfo)
 		}
 	}
 
