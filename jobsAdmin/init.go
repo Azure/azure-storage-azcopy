@@ -439,10 +439,10 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
 	}
 
-	var glcm common.LifecycleMgr = common.GetLifecycleMgr()
+	var glcm = common.GetLifecycleMgr()
 	glcm.Progress(func(format common.OutputFormat) string {
 		if js.TotalBytesTransferred > js.TotalBytesExpected {
-			return fmt.Sprintf("SuccessfulBytesInActiveFiles() incorrect")
+			return "SuccessfulBytesInActiveFiles() incorrect"
 		}
 
 		return fmt.Sprintf("Bytes transferred: %v, \n Bytes Expected: %v, "+
@@ -593,8 +593,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
 		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
 	}
-
-	var glcm common.LifecycleMgr = common.GetLifecycleMgr()
+	var glcm = common.GetLifecycleMgr()
 	glcm.Progress(func(format common.OutputFormat) string {
 		if js.TotalBytesTransferred > js.TotalBytesExpected {
 			return fmt.Sprintf("SuccessfulBytesInActiveFiles() incorrect")
