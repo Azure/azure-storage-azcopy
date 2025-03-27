@@ -1,3 +1,6 @@
+//go:build smslidingwindow
+// +build smslidingwindow
+
 package e2etest
 
 import (
@@ -315,7 +318,6 @@ func (s *SWSyncTestSuite) Scenario_SingleFile(svm *ScenarioVariationManager) {
 	})
 }
 
-/*
 func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariationManager) {
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	// Resolve variation early so name makes sense
@@ -373,12 +375,12 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariatio
 				ObjectResourceMappingFlat{"": {ObjectProperties: ObjectProperties{EntityType: common.EEntityType.Folder()}}},
 				nil),
 		}, GeneratePlanFileObjectsOptions{
-			DestPathProcessor: common.Iff(asSubdir, ParentDirDestPathProcessor(srcContainer.ContainerName()), nil),
+			DestPathProcessor: nil,
 		}),
 	})
 
 	ValidateResource[ContainerResourceManager](svm, dstContainer, ResourceDefinitionContainer{
-		Objects: common.Iff[ObjectResourceMapping](asSubdir, ObjectResourceMappingParentFolder{srcContainer.ContainerName(), srcDef.Objects}, srcDef.Objects),
+		Objects: srcDef.Objects,
 	}, true)
 }
-*/
+
