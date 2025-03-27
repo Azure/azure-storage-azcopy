@@ -70,6 +70,7 @@ type IJobPartMgr interface {
 	/* Status Manager Updates */
 	SendXferDoneMsg(msg xferDoneMsg)
 	PropertiesToTransfer() common.SetPropertiesFlags
+	ResetFailedTransfersCount() // Resets number of failed transfers after a job is resumed
 }
 
 // NewAzcopyHTTPClient creates a new HTTP client.
@@ -231,7 +232,8 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader {
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jobCtx = context.WithValue(jobCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
-	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
+	jpm.atomicTransfersDone = 0   // Reset the # of transfers done back to 0
+	jpm.atomicTransfersFailed = 0 // Resets the # transfers failed back to 0 during resume operation
 	// partplan file is opened and mapped when job part is added
 	// jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
@@ -538,7 +540,6 @@ func (jpm *jobPartMgr) IsSourceEncrypted() bool {
 func (jpm *jobPartMgr) PropertiesToTransfer() common.SetPropertiesFlags {
 	return jpm.SetPropertiesFlags
 }
-
 func (jpm *jobPartMgr) ShouldPutMd5() bool {
 	return jpm.putMd5
 }
@@ -587,6 +588,8 @@ func (jpm *jobPartMgr) updateJobPartProgress(status common.TransferStatus) {
 		atomic.AddUint32(&jpm.atomicTransfersFailed, 1)
 	case common.ETransferStatus.SkippedEntityAlreadyExists(), common.ETransferStatus.SkippedBlobHasSnapshots():
 		atomic.AddUint32(&jpm.atomicTransfersSkipped, 1)
+	case common.ETransferStatus.Restarted(): // When a job is resumed, number of failed should reset to 0
+		atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
 	case common.ETransferStatus.Cancelled():
 	default:
 		jpm.Log(common.LogError, fmt.Sprintf("Unexpected status: %v", status.String()))
@@ -663,6 +666,10 @@ func (jpm *jobPartMgr) SourceIsOAuth() bool {
 /* Status update messages should not fail */
 func (jpm *jobPartMgr) SendXferDoneMsg(msg xferDoneMsg) {
 	jpm.jobMgr.SendXferDoneMsg(msg)
+}
+
+func (jpm *jobPartMgr) ResetFailedTransfersCount() {
+	atomic.StoreUint32(&jpm.atomicTransfersFailed, 0)
 }
 
 // TODO: Can we delete this method?
