@@ -167,6 +167,7 @@ func (jm *jobMgr) handleStatusUpdateMessage() {
 				}
 				js.TransfersSkipped++
 				js.SkippedTransfers = append(js.SkippedTransfers, msg)
+				js.TotalBytesSkipped += msg.TransferSize
 			}
 
 		case <-jstm.listReq:
