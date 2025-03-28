@@ -159,7 +159,7 @@ func (s *SWSyncTestSuite) Scenario_TestSyncCreateResourceObject(a *ScenarioVaria
 	// Set up the scenario
 	a.InsertVariationSeparator("Local->")
 	srcLoc := common.ELocation.Local()
-	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File(),, common.ELocation.BlobFS()})
+	dstLoc := ResolveVariation(a, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})
 	a.InsertVariationSeparator("|Create:")
 
 	const (
@@ -323,7 +323,7 @@ func (s *SWSyncTestSuite) Scenario_MultiFileUploadDownload(svm *ScenarioVariatio
 	// Resolve variation early so name makes sense
 	srcLoc := ResolveVariation(svm, []common.Location{common.ELocation.Local()})
 	// Scale up from service to object
-	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(),common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
+	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionContainer{})
 
 	// Scale up from service to object
 	srcDef := ResourceDefinitionContainer{
