@@ -1,3 +1,6 @@
+//go:build smslidingwindow
+// +build smslidingwindow
+
 package e2etest
 
 import (
