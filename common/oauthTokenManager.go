@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"net"
 	"net/http"
 	"net/url"
@@ -35,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
@@ -503,7 +504,7 @@ func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error)
 	if err != nil {
 		return nil, err
 	}
-	return u.Parse(tenantID)
+	return u, nil //u.Parse(tenantID)
 }
 
 const minimumTokenValidDuration = time.Minute * 5
