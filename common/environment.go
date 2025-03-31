@@ -38,6 +38,16 @@ type EnvironmentVariable struct {
 	Hidden       bool
 }
 
+var IsDiscoveryDisabled bool = false
+
+func SetInstanceDiscovery() {
+	instanceDiscovery := os.Getenv("DISABLE_INSTANCE_DISCOVERY")
+	if instanceDiscovery == "TRUE" { //if hidden env variable has been set to false, we want to turn on
+		IsDiscoveryDisabled = true
+		fmt.Println("Instance discovery is disabled")
+	}
+}
+
 // GetEnvironmentVariable gets the environment variable or its default value
 func GetEnvironmentVariable(env EnvironmentVariable) string {
 	value := os.Getenv(env.Name)
