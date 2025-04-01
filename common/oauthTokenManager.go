@@ -500,11 +500,12 @@ func (credInfo OAuthTokenInfo) toJSON() ([]byte, error) {
 }
 
 func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error) {
+	fmt.Println("tenantID: ", tenantID, "aad", activeDirectoryEndpoint)
 	u, err := url.Parse(activeDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	return u, nil //u.Parse(tenantID)
+	return u.Parse(tenantID)
 }
 
 const minimumTokenValidDuration = time.Minute * 5
