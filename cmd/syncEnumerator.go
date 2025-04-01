@@ -365,6 +365,58 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 	var finalize func() error
 
 	switch cca.fromTo {
+	//based on UseSynOrchestrator flag add case for Blobfs
+	case common.EFromTo.LocalBlobFS():
+		if UseSyncOrchestrator {
+			// Upload implies transferring from a local disk to a remote resource.
+			// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
+			// Then the destination is scanned and filtered based on what the destination contains
+			destinationCleaner, err := newSyncDeleteProcessor(cca, fpo, copyJobTemplate.DstServiceClient)
+			if err != nil {
+				return nil, fmt.Errorf("unable to instantiate destination cleaner due to: %s", err.Error())
+			}
+			destCleanerFunc := newFpoAwareProcessor(fpo, destinationCleaner.removeImmediately)
+
+			// when uploading, we can delete remote objects immediately, because as we traverse the remote location
+			// we ALREADY have available a complete map of everything that exists locally
+			// so as soon as we see a remote destination object we can know whether it exists in the local source
+
+			comparator = newSyncDestinationComparator(
+				indexer,
+				transferScheduler.scheduleCopyTransfer,
+				destCleanerFunc,
+				cca.compareHash,
+				cca.preserveSMBInfo,
+				cca.mirrorMode,
+				func(entityType common.EntityType) {
+					if entityType == common.EEntityType.File() {
+						atomic.AddUint64(&cca.atomicSourceFilesTransferNotRequired, 1)
+					} else if entityType == common.EEntityType.Folder() {
+						atomic.AddUint64(&cca.atomicSourceFoldersTransferNotRequired, 1)
+					}
+				}).processIfNecessary
+
+			finalize = func() error {
+				// schedule every local file that doesn't exist at the destination
+				err = indexer.traverse(transferScheduler.scheduleCopyTransfer, filters)
+				if err != nil {
+					return err
+				}
+
+				jobInitiated, err := transferScheduler.dispatchFinalPart()
+				// sync cleanly exits if nothing is scheduled.
+				if err != nil && err != NothingScheduledError {
+					return err
+				}
+
+				quitIfInSync(jobInitiated, cca.GetDeletionCount() > 0, cca)
+				cca.setScanningComplete()
+				return nil
+			}
+			return newSyncEnumerator(srcTraverserTemplate, dstTraverserTemplate, sourceTraverser, destinationTraverser, indexer, filters, comparator, finalize, transferScheduler), nil
+		}
+		fallthrough
+
 	case common.EFromTo.LocalBlob(), common.EFromTo.LocalFile():
 		// Upload implies transferring from a local disk to a remote resource.
 		// In this scenario, the local disk (source) is scanned/indexed first because it is assumed that local file systems will be faster to enumerate than remote resources
