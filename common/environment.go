@@ -115,6 +115,10 @@ func (AutoLoginType) PsCred() AutoLoginType     { return AutoLoginType(4) }
 func (AutoLoginType) Workload() AutoLoginType   { return AutoLoginType(5) }
 func (AutoLoginType) TokenStore() AutoLoginType { return AutoLoginType(255) } // Storage Explorer internal integration only. Do not add this to ValidAutoLoginTypes.
 
+func (d AutoLoginType) IsInteractive() bool {
+	return d == d.Device()
+}
+
 func (d AutoLoginType) String() string {
 	return strings.ToLower(enum.StringInt(d, reflect.TypeOf(d)))
 }
@@ -303,6 +307,13 @@ func (EnvironmentVariable) CacheProxyLookup() EnvironmentVariable {
 		Name:         "AZCOPY_CACHE_PROXY_LOOKUP",
 		Description:  "By default AzCopy on Windows will cache proxy server lookups at hostname level (not taking URL path into account). Set to any other value than 'true' to disable the cache.",
 		DefaultValue: "true",
+	}
+}
+
+func (EnvironmentVariable) LoginCacheName() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_LOGIN_CACHE_NAME",
+		Description: "Do not use in production. Overrides the file name or key name used to cache azcopy's token. Do not use in production. This feature is not documented, intended for testing, and may break. Do not use in production.",
 	}
 }
 
