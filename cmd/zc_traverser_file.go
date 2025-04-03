@@ -35,7 +35,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
-const trailingDotErrMsg = "EDIT: File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner."
+const trailingDotErrMsg = "File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner." +
+	"To avoid this, use --trailing-dot=Enable"
 const invalidNameErrorMsg = "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
 
 // allow us to iterate through a path pointing to the file endpoint
@@ -113,12 +114,12 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 func (t *fileTraverser) getPropertiesIfSingleFile() (*file.GetPropertiesResponse, bool, error) {
 	fileURLParts, err := file.ParseURL(t.rawURL)
 	if err != nil {
-		return nil, false, nil
+		return nil, false, fmt.Errorf("error parsing URL %w", err)
 	}
 
 	fileClient, err := createFileClientFromServiceClient(fileURLParts, t.serviceClient)
 	if err != nil {
-		return nil, false, nil
+		return nil, false, fmt.Errorf("error creating file client %w", err)
 	}
 
 	fileProps, filePropertiesErr := fileClient.GetProperties(t.ctx, nil)
@@ -163,9 +164,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
 
-		// Abort remove operation for files with only dots. E.g "..." when trailing dot flag is Disabled. The dots are stripped,
-		// and the file is treated as seen as directory; incorrectly removing all files within the parent folder.
-		// with Disable, "dir/..." is seen as "dir/" and other child files of dir would be removed.
+		// Abort remove operation for files with only dots. E.g  a file named "..." when trailing dot flag is Disabled. The dots are stripped,
+		// and the file is seen as a directory; incorrectly removing all other files within the parent folder.
+		// with Disable, "..." is seen as "dir/..." folder and other child files of dir would be removed.
 		allDots := true
 		for _, c := range getObjectNameOnly(targetURLParts.DirectoryOrFilePath) {
 			if c != '.' {
