@@ -1,0 +1,40 @@
+parameters:
+  host_architecture: ''
+  host_suffix: ''
+
+steps:
+  - checkout: none
+
+  - script: |
+      chmod +x $(binaries)/*
+      $(binaries)/azcopy_linux_${{ parameters.host_architecture }} --version
+      $(binaries)/azcopy_linux_se_${{ parameters.host_architecture }} --version
+      rm -rf /usr/local/bin/azcopy
+      rm -rf /usr/bin/azcopy
+    displayName: 'Verify binaries'
+  - script: |
+      sudo apt-get clean
+      sudo apt-get update --fix-missing
+      sudo apt-get install build-essential -y
+    displayName: "Installing Dependencies"
+  - script: |
+      sudo dpkg --info $(signed)/azcopy-*${{ parameters.host_suffix }}.deb
+      sudo dpkg -i $(signed)/azcopy-*${{ parameters.host_suffix }}.deb
+      azcopy --version
+      sudo apt remove -y azcopy
+    displayName: 'Verify deb'
+  - script: |
+      mkdir -p $(extracted)
+      tar xf $(signed)/azcopy_linux_${{ parameters.host_architecture }}*.tar.gz -C $(extracted)
+      $(extracted)/azcopy --version
+      rm -rf $(extracted)
+    displayName: 'Verify tar gz'
+  - script: |
+      sudo apt-get install libsecret-1-dev -y
+    displayName: "Installing Dependencies"
+  - script: |
+      mkdir -p $(extracted)
+      tar xf $(signed)/azcopy_linux_se_${{ parameters.host_architecture }}*.tar.gz -C $(extracted)
+      $(extracted)/azcopy --version
+      rm -rf $(extracted)
+    displayName: 'Verify SE Integration tar gz'
