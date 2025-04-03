@@ -6,9 +6,12 @@ package ste
 import (
 	"encoding/binary"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 
@@ -19,7 +22,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// This file implements the linux-triggered smbPropertyAwareDownloader interface.
+// This file implements the linux-triggered smbPropertyAwareDownloader and nfsPropertyAwareDownloader interface.
 
 // works for both folders and files
 func (*azureFilesDownloader) PutSMBProperties(sip ISMBPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
@@ -230,4 +233,87 @@ func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
 	sep := common.DeterminePathSeparator(path)
 	splitPath := strings.Split(strings.Trim(path, sep), sep)
 	return path != "" && len(splitPath) == 1
+}
+
+// works for both folders and files
+func (*azureFilesDownloader) PutNFSProperties(sip INFSPropertyBearingSourceInfoProvider,
+	txInfo *TransferInfo) error {
+	propHolder, err := sip.GetNFSProperties()
+	if err != nil {
+		return fmt.Errorf("Failed to get NFS properties for %s: %w", txInfo.Destination, err)
+	}
+
+	lastWriteTime := propHolder.FileLastWriteTime()
+
+	// Convert the time to Unix timestamp (seconds and nanoseconds)
+	lastModifiedTimeSec := lastWriteTime.Unix()        // Seconds part
+	lastModifiedTimeNsec := lastWriteTime.Nanosecond() // Nanoseconds part
+
+	// Convert the time to syscall.Timeval type (seconds and microseconds)
+	// syscall.Timeval expects seconds and microseconds, so we convert the nanoseconds
+	tv := []syscall.Timeval{
+		{Sec: lastModifiedTimeSec, Usec: int64(lastModifiedTimeNsec / 1000)}, // Convert nanoseconds to microseconds
+		{Sec: lastModifiedTimeSec, Usec: int64(lastModifiedTimeNsec / 1000)}, // Set both atime and mtime to the same timestamp
+	}
+
+	// Use syscall.Utimes to set modification times
+	err = syscall.Utimes(txInfo.Destination, tv)
+	if err != nil {
+		return fmt.Errorf("Failed to set lastModifiedTime for %s. Error: %w", txInfo.Destination, err)
+	}
+	// TODO: Remove this debug statement
+	fmt.Printf("Successfully updated file timestamps for %s\n", txInfo.Destination)
+	return nil
+}
+
+// works for both folders and files
+func (a *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
+	nfsPermissions, err := sip.GetNFSPermissions()
+	if err != nil {
+		return fmt.Errorf("Failed to get source nfs permissions for file %s: %w", txInfo.Destination, err)
+	}
+
+	ownerStr := nfsPermissions.GetOwner()
+	groupStr := nfsPermissions.GetGroup()
+	filemodeStr := nfsPermissions.GetFileMode()
+
+	if ownerStr == nil && groupStr == nil && filemodeStr == nil {
+		return errorNoNFSPermissionsFound
+	}
+
+	var uid int
+	if ownerStr != nil {
+		owner, err := strconv.Atoi(*ownerStr)
+		if err != nil {
+			return fmt.Errorf("invalid owner value: %v", err)
+		}
+		uid = owner
+	}
+
+	var gid int
+	if groupStr != nil {
+		group, err := strconv.Atoi(*groupStr)
+		if err != nil {
+			return fmt.Errorf("invalid group value for %s: %v", txInfo.Destination, err)
+		}
+		gid = group
+	}
+
+	if err := os.Chown(txInfo.Destination, uid, gid); err != nil {
+		return fmt.Errorf("failed to change owner/group for %s: %w", txInfo.Destination, err)
+	}
+
+	var mode os.FileMode
+	if filemodeStr != nil {
+		parsedMode, err := strconv.ParseUint(*filemodeStr, 8, 32) // Parse mode as octal
+		if err != nil {
+			return fmt.Errorf("invalid mode value for %s: %v", txInfo.Destination, err)
+		}
+		mode = os.FileMode(parsedMode)
+	}
+
+	if err := os.Chmod(txInfo.Destination, mode); err != nil {
+		return fmt.Errorf("failed to change file mode for %s: %w", txInfo.Destination, err)
+	}
+	return nil
 }
