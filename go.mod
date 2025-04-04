@@ -99,3 +99,5 @@ require (
 go 1.24.0
 
 replace github.com/Azure/azure-sdk-for-go/sdk/azcore => github.com/ramkumar-ganapathy/azure-sdk-for-go/sdk/azcore v0.0.0-20250331180020-c00af4ee0fb8
+
+replace github.com/Azure/azure-sdk-for-go => github.com/ramkumar-ganapathy/azure-sdk-for-go v0.0.0-20250404155243-1e96c1d20f1c
