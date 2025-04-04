@@ -2,9 +2,10 @@ package e2etest
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/google/uuid"
-	"strings"
 )
 
 // AccountRegistry is a set of accounts that are intended to be initialized when the tests start running.
@@ -122,9 +123,10 @@ func DeleteAccount(a Asserter, arm AccountResourceManager) {
 }
 
 const (
-	PrimaryStandardAcct string = "PrimaryStandard"
-	PrimaryHNSAcct      string = "PrimaryHNS"
-	PremiumPageBlobAcct string = "PremiumPageBlob"
+	PrimaryStandardAcct  string = "PrimaryStandard"
+	PrimaryHNSAcct       string = "PrimaryHNS"
+	PremiumPageBlobAcct  string = "PremiumPageBlob"
+	PremiumFileShareAcct string = "PremiumFileShare"
 )
 
 func AccountRegistryInitHook(a Asserter) {
@@ -146,11 +148,17 @@ func AccountRegistryInitHook(a Asserter) {
 			accountKey:  acctInfo.PremiumPage.AccountKey,
 			accountType: EAccountType.PremiumPageBlobs(),
 		}
+		AccountRegistry[PremiumFileShareAcct] = &AzureAccountResourceManager{
+			accountName: acctInfo.PremiumFileShare.AccountName,
+			accountKey:  acctInfo.PremiumFileShare.AccountKey,
+			accountType: EAccountType.PremiumPageBlobs(),
+		}
 	} else {
 		// Create standard accounts
 		AccountRegistry[PrimaryStandardAcct] = CreateAccount(a, EAccountType.Standard(), nil)
 		AccountRegistry[PrimaryHNSAcct] = CreateAccount(a, EAccountType.HierarchicalNamespaceEnabled(), nil)
 		AccountRegistry[PremiumPageBlobAcct] = CreateAccount(a, EAccountType.PremiumPageBlobs(), nil)
+		AccountRegistry[PremiumFileShareAcct] = CreateAccount(a, EAccountType.PremiumFileShares(), nil)
 	}
 }
 
