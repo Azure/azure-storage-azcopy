@@ -16,7 +16,7 @@ import (
 )
 
 // getHandle obtains a windows file handle with generic read permissions & backup semantics
-func (l LocalObjectResourceManager) getHandle(path string, a Asserter) ntdll.Handle {
+func (l *LocalObjectResourceManager) getHandle(path string, a Asserter) ntdll.Handle {
 	srcPtr, err := syscall.UTF16PtrFromString(path)
 	a.NoError("Get UTF16 pointer", err)
 
@@ -29,7 +29,7 @@ func (l LocalObjectResourceManager) getHandle(path string, a Asserter) ntdll.Han
 	return ntdll.Handle(fd)
 }
 
-func (l LocalObjectResourceManager) GetSDDL(a Asserter) string {
+func (l *LocalObjectResourceManager) GetSDDL(a Asserter) string {
 	filePath := l.getWorkingPath()
 	fd := l.getHandle(filePath, a)
 
@@ -80,7 +80,7 @@ func (l LocalObjectResourceManager) GetSMBProperties(a Asserter) ste.TypedSMBPro
 	return ste.HandleInfo{ByHandleFileInformation: info}
 }
 
-func (l LocalObjectResourceManager) PutSMBProperties(a Asserter, properties FileProperties) {
+func (l *LocalObjectResourceManager) PutSMBProperties(a Asserter, properties FileProperties) {
 	filePath := l.getWorkingPath()
 	pathPtr, err := syscall.UTF16PtrFromString(filePath)
 	a.NoError("get UTF16 pointer for path", err)
@@ -126,7 +126,7 @@ func (l LocalObjectResourceManager) PutSMBProperties(a Asserter, properties File
 var globalSetAclMu = &sync.Mutex{}
 
 // PutSDDL sets SDDLs like AzCopy does for downloads
-func (l LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {
+func (l *LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {
 	filePath := l.getWorkingPath()
 
 	sd, err := windows.SecurityDescriptorFromString(sddlstr)
@@ -199,11 +199,21 @@ func (l LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {
 }
 
 // TODO: Add NFS handling for windows later
-func (l LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
+func (l *LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
 	return nil
 }
 
 // TODO: Add NFS handling for windows later
-func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
+func (l *LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
 	return nil
+}
+
+// TODO: Add NFS handling for windows later
+func (l *LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {
+	return
+}
+
+// TODO: Add NFS handling for windows later
+func (l *LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
+	return
 }

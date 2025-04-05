@@ -403,7 +403,7 @@ func (l *LocalObjectResourceManager) SetObjectProperties(a Asserter, props Objec
 	//	fmt.Printf("l struct: %+v\n", l)
 	//}
 }
-
+TestChange_DetectFileChangedDuringTransfer
 func (l *LocalObjectResourceManager) Download(a Asserter) io.ReadSeeker {
 	a.HelperMarker().Helper()
 	a.AssertNow("Entity type must be file to have content to download", Equal{}, l.entityType, common.EEntityType.File())
