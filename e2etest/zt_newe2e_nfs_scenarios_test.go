@@ -2,7 +2,6 @@ package e2etest
 
 import (
 	"fmt"
-
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
@@ -14,14 +13,21 @@ type FilesNFSTestSuite struct{}
 
 func (s *FilesNFSTestSuite) Scenario_TransferData(svm *ScenarioVariationManager) {
 
-	dstObj := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File(), GetResourceOptions{
-		PreferredAccount: pointerTo(PremiumFileShareAcct),
-	}), ResourceDefinitionContainer{}).GetObject(svm, "test", common.EEntityType.File())
+	dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 
 	body := NewRandomObjectContentContainer(SizeFromString("10K"))
-	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local(), common.ELocation.Blob(), common.ELocation.File(), common.ELocation.BlobFS()})), ResourceDefinitionObject{
-		ObjectName: pointerTo("test"),
+	srcObj := CreateResource[ObjectResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.Local()})), ResourceDefinitionObject{
+		ObjectName: pointerTo("test.txt"),
 		Body:       body,
+		ObjectProperties: ObjectProperties{
+			//FileNFSProperties: &FileNFSProperties{
+			//	FileCreationTime:  pointerTo(time.Now()),
+			//	FileLastWriteTime: pointerTo(time.Now()),
+			//},
+			FileNFSPermissions: &FileNFSPermissions{
+				FileMode: pointerTo("0755"),
+			},
+		},
 	})
 
 	sasOpts := GenericAccountSignatureValues{}
@@ -34,19 +40,23 @@ func (s *FilesNFSTestSuite) Scenario_TransferData(svm *ScenarioVariationManager)
 				TryApplySpecificAuthType(srcObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
 				}),
-				TryApplySpecificAuthType(dstObj, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
+				TryApplySpecificAuthType(dstContainer, EExplicitCredentialType.SASToken(), svm, CreateAzCopyTargetOptions{
 					SASTokenOptions: sasOpts,
 				}),
 			},
 			Flags: CopyFlags{
 				CopySyncCommonFlags: CopySyncCommonFlags{
-					Recursive: pointerTo(true),
+					Recursive:           pointerTo(true),
+					NFS:                 pointerTo(true),
+					PreserveProperties:  pointerTo(true),
+					PreservePermissions: pointerTo(true),
 				},
 			},
 		})
 	fmt.Println("stdOut", stdOut)
+	dstObj := dstContainer.GetObject(svm, "test.txt", common.EEntityType.File())
 	ValidateResource[ObjectResourceManager](svm, dstObj, ResourceDefinitionObject{
-		Body: body,
+		Body:             body,
+		ObjectProperties: srcObj.GetProperties(svm),
 	}, true)
-
 }

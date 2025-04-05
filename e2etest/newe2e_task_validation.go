@@ -21,7 +21,6 @@ func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
 	if expected == nil {
 		return
 	}
-
 	a.Assert(name+" must match", Equal{Deep: true}, expected, real)
 }
 
@@ -143,6 +142,17 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 				ValidatePropertyPtr(a, "Creation time", vProps.FileProperties.FileCreationTime, oProps.FileProperties.FileCreationTime)
 				ValidatePropertyPtr(a, "Last write time", vProps.FileProperties.FileLastWriteTime, oProps.FileProperties.FileLastWriteTime)
 				ValidatePropertyPtr(a, "Permissions", vProps.FileProperties.FilePermissions, oProps.FileProperties.FilePermissions)
+				if vProps.FileNFSProperties != nil && oProps.FileNFSProperties != nil {
+					ValidateTimePtr(a, "NFS Creation Time", vProps.FileNFSProperties.FileCreationTime, oProps.FileNFSProperties.FileCreationTime)
+					ValidateTimePtr(a, "NFS Last Write Time", vProps.FileNFSProperties.FileLastWriteTime, oProps.FileNFSProperties.FileLastWriteTime)
+
+				}
+				if vProps.FileNFSPermissions != nil && oProps.FileNFSPermissions != nil {
+					ValidatePropertyPtr(a, "Owner", vProps.FileNFSPermissions.Owner, oProps.FileNFSPermissions.Owner)
+					ValidatePropertyPtr(a, "Group", vProps.FileNFSPermissions.Group, oProps.FileNFSPermissions.Group)
+					ValidatePropertyPtr(a, "FileMode", vProps.FileNFSPermissions.FileMode, oProps.FileNFSPermissions.FileMode)
+
+				}
 			case common.ELocation.BlobFS():
 				ValidatePropertyPtr(a, "Permissions", vProps.BlobFSProperties.Permissions, oProps.BlobFSProperties.Permissions)
 				ValidatePropertyPtr(a, "Owner", vProps.BlobFSProperties.Owner, oProps.BlobFSProperties.Owner)

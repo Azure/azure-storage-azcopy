@@ -151,7 +151,7 @@ func AccountRegistryInitHook(a Asserter) {
 		AccountRegistry[PremiumFileShareAcct] = &AzureAccountResourceManager{
 			accountName: acctInfo.PremiumFileShare.AccountName,
 			accountKey:  acctInfo.PremiumFileShare.AccountKey,
-			accountType: EAccountType.PremiumPageBlobs(),
+			accountType: EAccountType.PremiumFileShares(),
 		}
 	} else {
 		// Create standard accounts

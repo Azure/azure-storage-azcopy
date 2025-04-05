@@ -584,6 +584,15 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FilePermissions:   permissions,
 				LastModifiedTime:  resp.LastModified,
 			},
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
 		}
 	case common.EEntityType.File():
 		resp, err := f.getFileClient().GetProperties(ctx, &file.GetPropertiesOptions{})
@@ -616,11 +625,19 @@ func (f *FileObjectResourceManager) GetProperties(a Asserter) (out ObjectPropert
 				FilePermissions:   permissions,
 				LastModifiedTime:  resp.LastModified,
 			},
+			FileNFSProperties: &FileNFSProperties{
+				FileCreationTime:  resp.FileCreationTime,
+				FileLastWriteTime: resp.FileLastWriteTime,
+			},
+			FileNFSPermissions: &FileNFSPermissions{
+				Owner:    resp.Owner,
+				Group:    resp.Group,
+				FileMode: resp.FileMode,
+			},
 		}
 	default:
 		a.Error("EntityType must be Folder or File. Currently: " + f.entityType.String())
 	}
-
 	return
 }
 

@@ -197,3 +197,13 @@ func (l LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {
 	)
 	a.Assert("Set ACLs status must be successful", Equal{}, status, ntdll.STATUS_SUCCESS)
 }
+
+// TODO: Add NFS handling for windows later
+func (l LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
+	return nil
+}
+
+// TODO: Add NFS handling for windows later
+func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
+	return nil
+}

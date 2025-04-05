@@ -14,6 +14,7 @@ jobs:
           imageName: 'ubuntu-latest'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
+          #pool_name: "azcopy-nfs-pool"
         Windows:
           imageName: 'windows-latest'
           build_name: 'azcopy_windows_amd64.exe'
@@ -25,7 +26,6 @@ jobs:
           display_name: "MacOS"
     pool:
       vmImage: $(imageName)
-
     steps:
       - task: PowerShell@2
         inputs:

@@ -271,6 +271,8 @@ type CopySyncCommonFlags struct {
 	CPKByValue              *bool                        `flag:"cpk-by-value"`
 	IncludePattern          *string                      `flag:"include-pattern"`
 	IncludeDirectoryStubs   *bool                        `flag:"include-directory-stub"`
+	NFS                     *bool                        `flag:"nfs"`
+	PreserveProperties      *bool                        `flag:"preserve-info"`
 }
 
 // CopyFlags is a more exclusive struct including flags exclusi
