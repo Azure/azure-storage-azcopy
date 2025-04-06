@@ -199,21 +199,21 @@ func (l *LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {
 }
 
 // TODO: Add NFS handling for windows later
-func (l *LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
+func (l LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
 	return nil
 }
 
 // TODO: Add NFS handling for windows later
-func (l *LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
+func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
 	return nil
 }
 
 // TODO: Add NFS handling for windows later
-func (l *LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {
+func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {
 	return
 }
 
 // TODO: Add NFS handling for windows later
-func (l *LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
+func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
 	return
 }

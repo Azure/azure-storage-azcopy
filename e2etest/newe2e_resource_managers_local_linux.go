@@ -13,7 +13,7 @@ import (
 	"syscall"
 )
 
-func (l *LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {
+func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {
 	filePath := l.getWorkingPath()
 	lastWriteTime := properties.FileLastWriteTime
 	// Convert the time to Unix timestamp (seconds and nanoseconds)
@@ -36,7 +36,7 @@ func (l *LocalObjectResourceManager) PutNFSProperties(a Asserter, properties Fil
 	return
 }
 
-func (l *LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
+func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions FileNFSPermissions) {
 	filePath := l.getWorkingPath()
 
 	ownerStr := permissions.Owner
@@ -90,14 +90,14 @@ func (l *LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions F
 	return
 }
 
-func (l *LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
+func (l LocalObjectResourceManager) GetNFSProperties(a Asserter) ste.TypedNFSPropertyHolder {
 	filePath := l.getWorkingPath()
 	info, err := common.GetFileInformation(filePath, true)
 	a.NoError("get file NFS props", err)
 	return ste.HandleInfo{info}
 }
 
-func (l *LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
+func (l LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSPermissionsHolder {
 	filePath := l.getWorkingPath()
 	{ // attempt to call statx, if ENOSYS is returned, statx is unavailable
 		var stat unix.Statx_t
@@ -129,17 +129,17 @@ func (l *LocalObjectResourceManager) GetNFSPermissions(a Asserter) ste.TypedNFSP
 }
 
 // TODO: Add SMB handling for linux later
-func (l *LocalObjectResourceManager) GetSDDL(a Asserter) string { return "" }
+func (l LocalObjectResourceManager) GetSDDL(a Asserter) string { return "" }
 
 // TODO: Add SMB handling for linux later
-func (l *LocalObjectResourceManager) GetSMBProperties(a Asserter) ste.TypedSMBPropertyHolder {
+func (l LocalObjectResourceManager) GetSMBProperties(a Asserter) ste.TypedSMBPropertyHolder {
 	return nil
 }
 
 // TODO: Add SMB handling for linux later
-func (l *LocalObjectResourceManager) PutSMBProperties(a Asserter, properties FileProperties) {
+func (l LocalObjectResourceManager) PutSMBProperties(a Asserter, properties FileProperties) {
 	return
 }
 
 // TODO: Add SMB handling for linux later
-func (l *LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {}
+func (l LocalObjectResourceManager) PutSDDL(sddlstr string, a Asserter) {}
