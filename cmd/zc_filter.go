@@ -22,11 +22,12 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"path"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -347,11 +348,11 @@ func (f *IncludeAfterDateFilter) DoesPass(storedObject StoredObject) bool {
 		storedObject.lastModifiedTime.Equal(f.Threshold) // >= is easier for users to understand than >
 }
 
-func (_ IncludeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
+func (IncludeAfterDateFilter) ParseISO8601(s string, chooseEarliest bool) (time.Time, error) {
 	return parseISO8601(s, chooseEarliest)
 }
 
-func (_ IncludeAfterDateFilter) FormatAsUTC(t time.Time) string {
+func (IncludeAfterDateFilter) FormatAsUTC(t time.Time) string {
 	return formatAsUTC(t)
 }
 
