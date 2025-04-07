@@ -174,7 +174,7 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 				break
 			}
 		}
-		if !t.trailingDot.IsEnabled() && strings.HasSuffix(targetURLParts.DirectoryOrFilePath, ".") && allDots {
+		if !t.trailingDot.IsEnabled() && allDots {
 			glcm.Error(fmt.Sprintf("File/ Directory name: %s consists of only dots. Using --trailing-dot=Disable is dangerous here. "+
 				"Retry remove command with default --trailing-dot=Enable", getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
