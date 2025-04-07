@@ -1,6 +1,14 @@
 
 # Change Log
 
+## Version 10.28.1
+
+### Dependency updates
+1.	Golang 1.22.7 -> 1.24.0 ([#2948](https://github.com/Azure/azure-storage-azcopy/pull/2948))
+2.	golang.org/x/oauth2 v0.23.0 -> v0.27.0 (CVE-2025-22868)([#2992](https://github.com/Azure/azure-storage-azcopy/pull/2992))
+3.	golang.org/x/net v0.33.0 -> v0.36.0 (CVE-2025-22870)([#2978](https://github.com/Azure/azure-storage-azcopy/pull/2978))
+4.	github.com/golang-jwt 5.2.1 -> 5.2.2 (CVE-2025-30204)([#2990](https://github.com/Azure/azure-storage-azcopy/pull/2990))
+
 ## Version 10.28.0
 
 ### New Features
