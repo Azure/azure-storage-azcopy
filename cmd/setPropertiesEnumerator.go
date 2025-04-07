@@ -23,10 +23,11 @@ package cmd
 import (
 	"context"
 	"errors"
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"github.com/Azure/azure-storage-azcopy/v10/ste"
-	"strings"
 )
 
 // provides an enumerator that lists a given resource and schedules setProperties on them
@@ -105,7 +106,7 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 				return nil
 			} else if err == NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
-				return NothingToRemoveError
+				return ErrNothingToRemove
 			}
 
 			return err
