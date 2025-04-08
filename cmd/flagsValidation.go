@@ -55,7 +55,8 @@ func validatePreserveSMBPropertyOption(toPreserve bool, fromTo common.FromTo, fl
 	// 1. Upload (Windows/Linux -> Azure File)
 	// 2. Download (Azure File -> Windows/Linux)
 	// 3. S2S (Azure File -> Azure File)
-	if toPreserve && flagName == PreservePermissionsFlag && (fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
+	if toPreserve && flagName == PreservePermissionsFlag &&
+		(fromTo == common.EFromTo.BlobBlob() || fromTo == common.EFromTo.BlobFSBlob() || fromTo == common.EFromTo.BlobBlobFS() || fromTo == common.EFromTo.BlobFSBlobFS()) {
 		// the user probably knows what they're doing if they're trying to persist permissions between blob-type endpoints.
 		return nil
 	} else if toPreserve && !(fromTo == common.EFromTo.LocalFile() ||
@@ -205,6 +206,57 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	// Please provide the feedback if we should introduce new EPreservePermissionsOption instead.
 	preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
 		true,
+		fromTo)
+	return
+}
+
+// performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
+// for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
+// properties are set correctly for SMB copy operations.
+//
+// The function performs the following checks:
+// - Validates the "preserve-info" flag to ensure both source and destination are SMB-aware.
+// - Validates the "preserve-posix-properties" flag, ensuring both locations are POSIX-aware if set.
+// - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
+// - Validates the preservation of file owner information based on user flags.
+//
+// Returns:
+// - An error if any validation fails, otherwise nil indicating successful validation.
+
+func performSMBSpecificValidation(fromTo common.FromTo,
+	isNFSCopy,
+	preserveInfo,
+	preservePOSIXProperties,
+	preservePermissions,
+	preserveOwner,
+	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal, preservePOSIXPropertiesVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
+
+	preserveInfoVal = preserveInfo && areBothLocationsSMBAware(fromTo)
+	if err = validatePreserveSMBPropertyOption(preserveInfoVal,
+		fromTo,
+		PreserveInfoFlag); err != nil {
+		return
+	}
+
+	preservePOSIXPropertiesVal = preservePOSIXProperties
+	if preservePOSIXPropertiesVal && !areBothLocationsPOSIXAware(fromTo) {
+		err = fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
+		return
+	}
+
+	isUserPersistingPermissions := preservePermissions || preserveSMBPermissions
+	if preserveInfoVal && !isUserPersistingPermissions {
+		glcm.Info(PreservePermissionsDisabledMsg)
+	}
+
+	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
+		fromTo,
+		PreservePermissionsFlag); err != nil {
+		return
+	}
+
+	preservePermissionsVal = common.NewPreservePermissionsOption(isUserPersistingPermissions,
+		preserveOwner,
 		fromTo)
 	return
 }
