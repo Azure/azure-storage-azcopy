@@ -78,7 +78,7 @@ var errorNoNFSPermissionsFound = errors.New("no NFS permissions found")
 func (bd *azureFilesDownloader) preserveAttributes() (stage string, err error) {
 	info := bd.jptm.Info()
 
-	if info.PreserveSMBPermissions.IsTruthy() {
+	if info.PreservePermissions.IsTruthy() {
 		stage, err = bd.preservePermissions(info)
 		if err != nil {
 			return
