@@ -82,7 +82,7 @@ func (svm *ScenarioVariationManager) DeleteCreatedResources() {
 			if !isDeletable {
 				return TraversalOperationContinue
 			}
-
+			//fmt.Println("Deleted:", data.res.path)
 			del.Delete(svm)
 		}
 
