@@ -226,6 +226,15 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		if invalidAzureBlobName(objectInfo.Key) {
 			//Throw a warning on console and continue
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
+			errorS3Info := ErrorS3Info{
+				S3Name:             objectInfo.Key,
+				Source:             true,
+				S3Size:             objectInfo.Size,
+				S3LastModifiedTime: objectInfo.LastModified,
+				S3Path:             t.s3URLParts.ObjectKey,
+				ErrorMsg:           objectInfo.Err,
+			}
+			writeToS3ErrorChannel(t.errorChannel, errorS3Info)
 			continue
 		}
 
