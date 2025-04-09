@@ -14,7 +14,6 @@ jobs:
           imageName: 'ubuntu-latest'
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
-          #pool_name: "azcopy-nfs-pool"
         Windows:
           imageName: 'windows-latest'
           build_name: 'azcopy_windows_amd64.exe'
@@ -193,13 +192,14 @@ jobs:
     # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
     strategy:
       matrix:
-        Linux-Signing:
+        Ubutun-22:
           vmImage: 'Ubuntu-22.04'
-          AgentName: "azcopyPerfUbuntu22"
+          agentName: "azcopyPerfUbuntu22"
+          build_name: 'azcopy_linux_amd64'
+          display_name: "Linux"
         pool:
           name: "azcopy-nfs-pool"
-          demands:
-            - ImageOverride -equals $(AgentName)
+
     steps:
       - task: PowerShell@2
         inputs:
