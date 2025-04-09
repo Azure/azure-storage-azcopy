@@ -139,6 +139,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
+			fmt.Println("Send to channel in azcopy")
 			errorS3Info := ErrorS3Info{
 				S3Name:             objectName,
 				S3Path:             t.s3URLParts.ObjectKey,
