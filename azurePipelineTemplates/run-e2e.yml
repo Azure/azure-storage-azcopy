@@ -187,7 +187,7 @@ jobs:
           summaryFileLocation: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.xml
           additionalCodeCoverageFiles: $(System.DefaultWorkingDirectory)/**/$(display_name)_coverage.html
 
-  - job: ${{ parameters.name }}
+  - job: ${{ parameters.name }}_nfs
     timeoutInMinutes: 360
     # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
     strategy:
