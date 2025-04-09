@@ -133,14 +133,11 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	}
 	invalidNameErrorMsg := "Skipping S3 object %s, as it is not a valid Blob name. Rename the object and retry the transfer"
 	// Check if resource is a single object.
-	fmt.Println("Right before channel check")
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
 		objectName := objectPath[len(objectPath)-1]
-		fmt.Println("Object Key:%s", t.s3URLParts.ObjectKey)
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
-			fmt.Println("Send to channel in azcopy")
 			errorS3Info := ErrorS3Info{
 				S3Name:             objectName,
 				S3Path:             t.s3URLParts.ObjectKey,
@@ -222,8 +219,9 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			// Directories are the only objects without storage classes.
 			continue
 		}
-
+		fmt.Println("Object:%s", objectInfo.Key)
 		if invalidAzureBlobName(objectInfo.Key) {
+			fmt.Println("Got in")
 			//Throw a warning on console and continue
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
 			errorS3Info := ErrorS3Info{
