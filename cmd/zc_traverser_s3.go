@@ -140,9 +140,12 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
 			errorS3Info := ErrorS3Info{
-				S3Path:   t.s3URLParts.ObjectKey,
-				ErrorMsg: err,
-				Source:   true,
+				S3Name:             objectName,
+				S3Path:             t.s3URLParts.ObjectKey,
+				S3LastModifiedTime: oi.LastModified,
+				S3Size:             oi.Size,
+				ErrorMsg:           err,
+				Source:             true,
 			}
 			writeToS3ErrorChannel(t.errorChannel, errorS3Info)
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, t.s3URLParts.ObjectKey))
@@ -174,6 +177,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			_, err = getProcessingError(err)
 			if err != nil {
 				errorS3Info := ErrorS3Info{
+					S3Name:             objectName,
 					S3Path:             t.s3URLParts.ObjectKey,
 					ErrorMsg:           err,
 					Source:             true,
@@ -201,8 +205,12 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
 		if objectInfo.Err != nil {
 			errorS3Info := ErrorS3Info{
-				S3Path:   t.s3URLParts.ObjectKey,
-				ErrorMsg: objectInfo.Err,
+				S3Name:             objectInfo.Key,
+				Source:             true,
+				S3Size:             objectInfo.Size,
+				S3LastModifiedTime: objectInfo.LastModified,
+				S3Path:             t.s3URLParts.ObjectKey,
+				ErrorMsg:           objectInfo.Err,
 			}
 			writeToS3ErrorChannel(t.errorChannel, errorS3Info)
 			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
@@ -237,6 +245,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
 			if err != nil {
 				errorS3Info := ErrorS3Info{
+					S3Name:             objectName,
 					S3Path:             t.s3URLParts.ObjectKey,
 					ErrorMsg:           err,
 					Source:             true,
@@ -266,6 +275,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 		_, err = getProcessingError(err)
 		if err != nil {
 			errorS3Info := ErrorS3Info{
+				S3Name:             objectName,
 				S3Path:             t.s3URLParts.ObjectKey,
 				ErrorMsg:           err,
 				Source:             true,
