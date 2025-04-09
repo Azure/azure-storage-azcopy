@@ -137,7 +137,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 	if t.s3URLParts.IsObjectSyntactically() && !t.s3URLParts.IsDirectorySyntactically() && !t.s3URLParts.IsBucketSyntactically() {
 		objectPath := strings.Split(t.s3URLParts.ObjectKey, "/")
 		objectName := objectPath[len(objectPath)-1]
-		fmt.Println("Right before invalid check")
+		fmt.Println("Object Key:%s", t.s3URLParts.ObjectKey)
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 		if invalidAzureBlobName(t.s3URLParts.ObjectKey) {
 			fmt.Println("Send to channel in azcopy")
