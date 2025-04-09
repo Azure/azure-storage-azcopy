@@ -38,6 +38,8 @@ import (
 const trailingDotErrMsg = "File share contains file/directory: %s with a trailing dot. But the trailing dot parameter was set to Disable, meaning these files could be potentially treated in an unsafe manner." +
 	"To avoid this, use --trailing-dot=Enable"
 const invalidNameErrorMsg = "Skipping File share path %s, as it is not a valid Blob or Windows name. Rename the object and retry the transfer"
+const allDotsErrorMsg = "File/ Directory name: %s consists of only dots. Using --trailing-dot=Disable is dangerous here. " +
+	"Retry remove command with default --trailing-dot=Enable"
 
 // allow us to iterate through a path pointing to the file endpoint
 type fileTraverser struct {
@@ -154,6 +156,17 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 		return err
 	}
 
+	// We stop remove operations if file/dir name is only dots
+	checkAllDots := func(path string) bool {
+		allDots := true
+		for _, c := range path {
+			if c != '.' {
+				allDots = false
+				break
+			}
+		}
+		return allDots
+	}
 	// if not pointing to a share, check if we are pointing to a single file
 	if targetURLParts.DirectoryOrFilePath != "" {
 		if invalidBlobOrWindowsName(targetURLParts.DirectoryOrFilePath) {
@@ -164,19 +177,12 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
 		}
 
-		// Abort remove operation for files with only dots. E.g  a file named "..." when trailing dot flag is Disabled. The dots are stripped,
-		// and the file is seen as a directory; incorrectly removing all other files within the parent folder.
-		// with Disable, "..." is seen as "dir/..." folder and other child files of dir would be removed.
-		allDots := true
-		for _, c := range getObjectNameOnly(targetURLParts.DirectoryOrFilePath) {
-			if c != '.' {
-				allDots = false
-				break
-			}
-		}
-		if !t.trailingDot.IsEnabled() && allDots {
-			glcm.Error(fmt.Sprintf("File/ Directory name: %s consists of only dots. Using --trailing-dot=Disable is dangerous here. "+
-				"Retry remove command with default --trailing-dot=Enable", getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
+		// Abort remove operation for files with only dots. i.e  a file named "dir/..." with trailing dot flag Disabled.
+		// The dot is stripped and the file is seen as a directory; incorrectly removing all other files within the parent dir/
+		// with Disable, "..." is seen as "dir/..." folder and other child files of dir would be wrongly deleted.
+		if !t.trailingDot.IsEnabled() && checkAllDots(getObjectNameOnly(targetURLParts.DirectoryOrFilePath)) {
+			glcm.Error(fmt.Sprintf(allDotsErrorMsg, getObjectNameOnly(targetURLParts.DirectoryOrFilePath)))
+
 		}
 
 		// check if the url points to a single file
@@ -322,6 +328,9 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 					if !t.trailingDot.IsEnabled() && strings.HasSuffix(*fileInfo.Name, ".") {
 						azcopyScanningLogger.Log(common.LogWarning, fmt.Sprintf(trailingDotErrMsg, *fileInfo.Name))
 					}
+					if !t.trailingDot.IsEnabled() && checkAllDots(*fileInfo.Name) {
+						glcm.Error(fmt.Sprintf(allDotsErrorMsg, *fileInfo.Name))
+					}
 				}
 				enqueueOutput(newAzFileFileEntity(currentDirectoryClient, fileInfo), nil)
 
@@ -393,7 +402,11 @@ func (t *fileTraverser) Traverse(preprocessor objectMorpher, processor objectPro
 			if item != nil {
 				relativePath = item.(StoredObject).relativePath
 			}
-			glcm.Info("Failed to scan directory/file " + relativePath + ". Logging errors in scanning logs.")
+			if !t.trailingDot.IsEnabled() && checkAllDots(relativePath) {
+				glcm.Error(fmt.Sprintf(allDotsErrorMsg, relativePath))
+			}
+			glcm.Info("Failed to scan Directory/File " + relativePath + ". Logging errors in scanning logs.")
+
 			if azcopyScanningLogger != nil {
 				azcopyScanningLogger.Log(common.LogWarning, workerError.Error())
 			}
