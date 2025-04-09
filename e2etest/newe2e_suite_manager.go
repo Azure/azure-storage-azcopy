@@ -1,6 +1,7 @@
 package e2etest
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -47,9 +48,21 @@ runAllSuites:
 		teardownIdx := -1
 		testIdxs := make(map[string]int)
 		for idx := 0; idx < mCount; idx++ {
+
 			method := sTyp.Method(idx)
 			mName := method.Name
-
+			fmt.Println("sName", sName, "mName", mName)
+			runNFSSuite := GlobalInputManager{}.GetNFSConfiguration()
+			fmt.Println("------------------Value:", runNFSSuite)
+			if runNFSSuite == "TRUE" {
+				if sName != "FilesNFSTestSuite" {
+					continue
+				}
+			} else {
+				if sName == "FilesNFSTestSuite" {
+					continue
+				}
+			}
 			// in (self, asserter) out ()
 			if method.Type.NumIn() != 2 || method.Type.NumOut() != 0 {
 				continue

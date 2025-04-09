@@ -229,3 +229,11 @@ func (gim GlobalInputManager) SetupClassicOAuthCache() error {
 
 	return nil
 }
+
+func (GlobalInputManager) GetNFSConfiguration() string {
+	path := os.Getenv("RUN_NFS_TESTSUITE")
+	if path == "" {
+		path = "FALSE"
+	}
+	return path
+}

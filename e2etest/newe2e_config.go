@@ -82,6 +82,10 @@ type NewE2EConfig struct {
 
 		LogDropPath string `env:"AZCOPY_E2E_LOG_OUTPUT"`
 	} `env:",required"`
+
+	NFSConfig struct {
+		RunNFSSuite string `env:"RUN_NFS_TESTSUITE,required"`
+	}
 }
 
 func (e NewE2EConfig) StaticResources() bool {
