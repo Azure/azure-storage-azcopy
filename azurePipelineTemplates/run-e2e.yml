@@ -261,91 +261,73 @@ jobs:
           scriptType: bash
           scriptLocation: inlineScript
           inlineScript: |
+            set -e
+
             # Create coverage directory
-            if (-Not (Test-Path -Path "./coverage")) {
-              New-Item -Path "./coverage" -ItemType Directory
-            }
+            mkdir -p ./coverage
 
             # Create log directory
-            if (-Not (Test-Path -Path "${env:AZCOPY_E2E_LOG_OUTPUT}")) {
-              New-Item -Path "${env:AZCOPY_E2E_LOG_OUTPUT}" -ItemType Directory
-            }
+            mkdir -p "${AZCOPY_E2E_LOG_OUTPUT}"
 
-            # Print "Building executable"
-            Write-Output "Building executable"
+            echo "Building executable"
 
-            # Set platform-specific environment variables and tags
-            $tags = ""
-            $suffix = ""
-            $build_name = ""
-            $display_name = ""
-            if ($IsWindows) {
-              $env:GOOS = "windows"
-              $env:GOARCH = "amd64"
-              $suffix = ".exe"
-              $build_name = "azcopy_windows_amd64.exe"
-              $display_name = "Windows"
-            } elseif ($IsLinux) {
-              $env:GOOS = "linux"
-              $env:GOARCH = "amd64"
-              $tags = "netgo"
-              $build_name = "azcopy_linux_amd64"
-              $display_name = "Linux"
-            } elseif ($IsMacOS) {
-              $env:GOOS = "darwin"
-              $env:GOARCH = "amd64"
-              $env:CGO_ENABLED = "1"
-              $build_name = "azcopy_darwin_amd64"
-              $display_name = "MacOS"
-            } else {
-              Write-Error "Unsupported operating system"
-              exit 1
-            }
+            # Set platform-specific variables
+            tags=""
+            suffix=""
+            build_name=""
+            display_name=""
 
-            # Build the Go program
-            if ($tags -ne "") {
-              go build -cover -tags $tags -o $build_name
-            } else {
-              go build -cover -o $build_name
-            }
+            unameOut="$(uname -s)"
+            case "${unameOut}" in
+                Linux*)
+                  export GOOS="linux"
+                  export GOARCH="amd64"
+                  tags="netgo"
+                  build_name="azcopy_linux_amd64"
+                  display_name="Linux"
+                  ;;
+                Darwin*)
+                  export GOOS="darwin"
+                  export GOARCH="amd64"
+                  export CGO_ENABLED="1"
+                  build_name="azcopy_darwin_amd64"
+                  display_name="MacOS"
+                  ;;
+                CYGWIN*|MINGW*|MSYS*)
+                  export GOOS="windows"
+                  export GOARCH="amd64"
+                  suffix=".exe"
+                  build_name="azcopy_windows_amd64.exe"
+                  display_name="Windows"
+                  ;;
+                *)
+                  echo "Unsupported OS: ${unameOut}"
+                  exit 1
+                  ;;
+            esac
 
-            # Print "Running tests"
-            Write-Output "Running tests"
+            if [[ -n "$tags" ]]; then
+              go build -cover -tags "$tags" -o "$build_name"
+            else
+              go build -cover -o "$build_name"
+            fi
 
-            # Run tests and pipe output to test.txt
-            go test -timeout=2h -v ${{ parameters.test_cli_param }} ./e2etest | Tee-Object -FilePath test.txt
+            echo "Running tests"
+            go test -timeout=2h -v ${{ parameters.test_cli_param }} ./e2etest | tee test.txt
+            exitCode=$?
 
-            # Save the exit code from the previous command
-            $exitCode = $LASTEXITCODE
+            echo "Generating junit report"
+            cat test.txt | "$(go env GOPATH)/bin/go-junit-report" > "${display_name}_report.xml"
 
-            # Print the contents of test.txt
-            # Get-Content test.txt
-
-            # Print "Generating junit report"
-            Write-Output "Generating junit report"
-
-            # Pipe info in test.txt to go-junit-report and save output to report.xml
-            Get-Content test.txt | & "$(go env GOPATH)/bin/go-junit-report" > "${display_name}_report.xml"
-
-            # Print "Formatting coverage directory to legacy txt format"
-            Write-Output "Formatting coverage directory to legacy txt format"
-
-            # Format coverage data to text format
+            echo "Formatting coverage directory to legacy txt format"
             go tool covdata textfmt -i=coverage -o "${display_name}_coverage.txt"
 
-            # Print "Formatting coverage to json format"
-            Write-Output "Formatting coverage to json format"
+            echo "Formatting coverage to json format"
+            "$(go env GOPATH)/bin/gocov${suffix}" convert "${display_name}_coverage.txt" > "${display_name}_coverage.json"
 
-            # Convert coverage.txt to coverage.json
-            & "$(go env GOPATH)/bin/gocov$suffix" convert "${display_name}_coverage.txt" > "${display_name}_coverage.json"
+            echo "Formatting coverage to xml format"
+            cat "${display_name}_coverage.json" | "$(go env GOPATH)/bin/gocov-xml${suffix}" > "${display_name}_coverage.xml"
 
-            # Print "Formatting coverage to xml format"
-            Write-Output "Formatting coverage to xml format"
-
-            # Convert coverage.json to coverage.xml
-            Get-Content "${display_name}_coverage.json" | & "$(go env GOPATH)/bin/gocov-xml$suffix" > "${display_name}_coverage.xml"
-
-            # Return the exit code from step 5
             exit $exitCode
         env:
 #          AZCOPY_E2E_ACCOUNT_KEY: $(AZCOPY_E2E_ACCOUNT_KEY)
