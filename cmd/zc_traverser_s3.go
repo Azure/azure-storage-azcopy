@@ -219,9 +219,7 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			// Directories are the only objects without storage classes.
 			continue
 		}
-		fmt.Println("Object:%s", objectInfo.Key)
 		if invalidAzureBlobName(objectInfo.Key) {
-			fmt.Println("Got in")
 			//Throw a warning on console and continue
 			WarnStdoutAndScanningLog(fmt.Sprintf(invalidNameErrorMsg, objectInfo.Key))
 			errorS3Info := ErrorS3Info{
