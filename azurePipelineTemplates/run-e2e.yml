@@ -258,7 +258,7 @@ jobs:
         inputs:
           azureSubscription: azcopytestworkloadidentity
           addSpnToEnvironment: true
-          scriptType: pscore
+          scriptType: bash
           scriptLocation: inlineScript
           inlineScript: |
             # Create coverage directory
