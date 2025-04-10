@@ -196,7 +196,7 @@ jobs:
       matrix:
         Ubutun-22:
           vmImage: 'Ubuntu-22.04'
-          agentName: "azcopyPerfUbuntu22"
+          agentName: "azcopy-nfs-vm"
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
     pool:
