@@ -85,7 +85,7 @@ type NewE2EConfig struct {
 
 	NFSConfig struct {
 		RunNFSSuite string `env:"RUN_NFS_TESTSUITE,required"`
-	}
+	} `env:",required"`
 }
 
 func (e NewE2EConfig) StaticResources() bool {
