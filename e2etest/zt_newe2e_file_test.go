@@ -552,6 +552,10 @@ func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioV
 // - correct number of non-empty files are uploaded when file share quota is hit
 // - TODO 10.29.0 release: transfers complete successfully with resume command
 func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationManager) {
+	if svm.Dryrun() {
+		return
+	}
+
 	quotaGB := int32(1) // 1 GB quota
 	shareResource := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()), ResourceDefinitionContainer{
 		Properties: ContainerProperties{
@@ -575,12 +579,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 			Body: NewRandomObjectContentContainer(common.GigaByte),
 		})
 
-	dir, err := os.MkdirTemp("", "azcopytests*")
-	svm.NoError("create tempdir", err)
-	env := &AzCopyEnvironment{
-		LogLocation:     &dir,
-		JobPlanLocation: &dir,
-	} // uses default log and plan locations
+	env := &AzCopyEnvironment{}
 
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
@@ -622,6 +621,11 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		// Will enter during dry runs
 		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
 	}
+
+	RunAzCopy(svm, AzCopyCommand{
+		Verb: AzCopyVerbLogin,
+	})
+
 	//TODO fix error "Failed to read log dir ... The system cannot find the file specified"
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobs,
