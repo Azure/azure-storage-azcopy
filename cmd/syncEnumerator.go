@@ -91,7 +91,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		preservePermissions:         cca.preservePermissions,
 		logLevel:                    AzcopyLogVerbosity,
 		cpkOptions:                  cca.cpkOptions,
-		errorChannel:                nil,
+		errorChannel:                errorChannel,
 		stripTopDir:                 false,
 		trailingDot:                 cca.trailingDot,
 		destination:                 &dest,
@@ -105,7 +105,7 @@ func (cca *cookedSyncCmdArgs) InitEnumerator(ctx context.Context, errorChannel c
 		} else if entityType == common.EEntityType.Folder() {
 			atomic.AddUint64(&cca.atomicSourceFoldersScanned, 1)
 		}
-	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, nil, false, cca.trailingDot, &dest, nil, false, *syncSrcTraverserOptions)
+	}, nil, cca.s2sPreserveBlobTags, cca.compareHash, cca.preservePermissions, AzcopyLogVerbosity, cca.cpkOptions, errorChannel, false, cca.trailingDot, &dest, nil, false, *syncSrcTraverserOptions)
 
 	if err != nil {
 		return nil, err
