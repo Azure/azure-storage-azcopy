@@ -203,30 +203,40 @@ jobs:
       name: "azcopy-nfs-pool"
 
     steps:
+      - script: |
+          sudo apt-get update
+          sudo apt-get install -y powershell
+        displayName: 'Install PowerShell Core'
+
       - task: PowerShell@2
         inputs:
           targetType: 'inline'
           script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
           pwsh: 'true'
         displayName: 'Install Powershell Az Module'
+
       - task: GoTool@0
         inputs:
           version: $(AZCOPY_GOLANG_VERSION_COVERAGE)
+
       - script: |
           go install github.com/jstemmer/go-junit-report@v0.9.1
           go install github.com/axw/gocov/gocov@v1.1.0
           go install github.com/AlekSi/gocov-xml@v1.0.0
           go install github.com/matm/gocov-html@v0.0.0-20200509184451-71874e2e203b
         displayName: 'Installing dependencies'
+
       - bash: |
           echo "##vso[task.setvariable variable=CGO_ENABLED]0"
         displayName: 'Set CGO_ENABLED for Windows'
         condition: eq(variables.type, 'windows')
+
       - bash: |
           npm install -g azurite
           mkdir azurite
           azurite --silent --location azurite --debug azurite\debug.log &
         displayName: 'Install and Run Azurite'
+        
       # Running E2E Tests on AMD64
       - task: AzureCLI@2
         inputs:

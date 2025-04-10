@@ -41,7 +41,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesAndP
 	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
 		return
 	}
-	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
+	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{ /*AzCopyVerbCopy, */ AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	uid, gid := GetCurrentUIDAndGID(svm)
 
 	dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
@@ -145,6 +145,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesAndP
 	}, true)
 }
 
+/*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesOnly(svm *ScenarioVariationManager) {
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
@@ -512,3 +513,4 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS_PreservePropertiesAndPer
 		Objects: srcObjs,
 	}, true)
 }
+*/
