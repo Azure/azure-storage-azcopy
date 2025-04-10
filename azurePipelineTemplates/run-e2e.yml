@@ -203,17 +203,24 @@ jobs:
       name: "azcopy-nfs-pool"
 
     steps:
-      - script: |
-          sudo apt-get update
-          sudo apt-get install -y powershell
-        displayName: 'Install PowerShell Core'
+      # - script: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y powershell
+      #   displayName: 'Install PowerShell Core'
 
-      - task: PowerShell@2
+      # - task: PowerShell@2
+      #   inputs:
+      #     targetType: 'inline'
+      #     script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
+      #     pwsh: 'true'
+      #   displayName: 'Install Powershell Az Module'
+
+      - task: Bash@3
+        displayName: 'Install Azure CLI'
         inputs:
           targetType: 'inline'
-          script: 'Install-Module -Name Az.Accounts -Scope CurrentUser -Repository PSGallery -AllowClobber -Force'
-          pwsh: 'true'
-        displayName: 'Install Powershell Az Module'
+          script: |
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
       - task: GoTool@0
         inputs:
@@ -232,11 +239,20 @@ jobs:
         condition: eq(variables.type, 'windows')
 
       - bash: |
+          # Install Node.js (v18 as an example)
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+
+          # Install Azurite
           npm install -g azurite
-          mkdir azurite
-          azurite --silent --location azurite --debug azurite\debug.log &
+
+          # Create a directory for Azurite data
+          mkdir -p azurite
+
+          # Run Azurite in background
+          azurite --silent --location azurite --debug azurite/debug.log &
         displayName: 'Install and Run Azurite'
-        
+
       # Running E2E Tests on AMD64
       - task: AzureCLI@2
         inputs:
