@@ -199,8 +199,8 @@ jobs:
           agentName: "azcopyPerfUbuntu22"
           build_name: 'azcopy_linux_amd64'
           display_name: "Linux"
-        pool:
-          name: "azcopy-nfs-pool"
+      pool:
+        name: "azcopy-nfs-pool"
 
     steps:
       - task: PowerShell@2
