@@ -53,16 +53,11 @@ runAllSuites:
 			mName := method.Name
 			fmt.Println("sName", sName, "mName", mName)
 			runNFSSuite := GlobalInputManager{}.GetNFSConfiguration()
-			fmt.Println("------------------Value:", runNFSSuite)
-			if runNFSSuite == "TRUE" {
-				if sName != "FilesNFSTestSuite" {
-					continue
-				}
-			} else {
-				if sName == "FilesNFSTestSuite" {
-					continue
-				}
+
+			if (runNFSSuite == "TRUE") != (sName == "FilesNFSTestSuite") {
+				continue
 			}
+
 			// in (self, asserter) out ()
 			if method.Type.NumIn() != 2 || method.Type.NumOut() != 0 {
 				continue
