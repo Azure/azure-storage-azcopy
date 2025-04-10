@@ -191,7 +191,7 @@ jobs:
 
   - job: ${{ parameters.name }}_nfs
     timeoutInMinutes: 360
-    # Creating strategies for GOOS: Windows Server 2019 /macOS X Mojave 10.15/Ubuntu 20.04
+    condition: eq(parameters.name, 'New_E2E')
     strategy:
       matrix:
         Ubutun-22:
