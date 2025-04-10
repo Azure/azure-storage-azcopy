@@ -542,7 +542,8 @@ func (f *FileObjectResourceManager) Create(a Asserter, body ObjectContentContain
 	default:
 		a.Error("File Objects only support Files and Folders")
 	}
-
+	// Reapply the properties after the resource is created, as the Last Write Time of the file will be reset when data is written.
+	f.SetObjectProperties(a, props)
 	TrackResourceCreation(a, f)
 }
 

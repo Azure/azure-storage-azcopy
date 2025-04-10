@@ -15,7 +15,12 @@ import (
 
 func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties FileNFSProperties) {
 	filePath := l.getWorkingPath()
+	// for folder the lastWriteTime will be nil
+	if properties.FileLastWriteTime == nil {
+		return
+	}
 	lastWriteTime := properties.FileLastWriteTime
+
 	// Convert the time to Unix timestamp (seconds and nanoseconds)
 	lastModifiedTimeSec := lastWriteTime.Unix()        // Seconds partGetProperties
 	lastModifiedTimeNsec := lastWriteTime.Nanosecond() // Nanoseconds part
@@ -31,8 +36,6 @@ func (l LocalObjectResourceManager) PutNFSProperties(a Asserter, properties File
 	err := syscall.Utimes(filePath, tv)
 	a.NoError(fmt.Sprintf("Failed to set lastModifiedTime for %s", filePath), err)
 
-	// TODO: Remove this debug statement
-	fmt.Printf("Successfully updated file timestamps for %s\n", filePath)
 	return
 }
 
@@ -67,7 +70,7 @@ func (l LocalObjectResourceManager) PutNFSPermissions(a Asserter, permissions Fi
 		}
 		gid = group
 	}
-	fmt.Println("---------------Owner", uid, "Group", gid)
+
 	if err := os.Chown(filePath, uid, gid); err != nil {
 		a.NoError(fmt.Sprintf("failed to change owner/group for %s:", filePath), err)
 		return
