@@ -550,7 +550,6 @@ func (s *FileTestSuite) Scenario_CopyTrailingDotUnsafeDestination(svm *ScenarioV
 
 // Test:
 // - correct number of non-empty files are uploaded when file share quota is hit
-// - TODO 10.29.0 release: transfers complete successfully with resume command
 func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationManager) {
 	if svm.Dryrun() {
 		return
@@ -621,10 +620,6 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		// Will enter during dry runs
 		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
 	}
-
-	RunAzCopy(svm, AzCopyCommand{
-		Verb: AzCopyVerbLogin,
-	})
 
 	//TODO fix error "Failed to read log dir ... The system cannot find the file specified"
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
