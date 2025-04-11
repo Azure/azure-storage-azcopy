@@ -200,51 +200,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 	return int64(math.Round(rawSizeInBytes)), nil
 }
 
-// performSMBSpecificValidation performs validation specific to SMB (Server Message Block) configurations
-// for a synchronization command. It checks SMB-related flags and settings, and ensures that necessary
-// properties are set correctly for SMB copy operations.
-//
-// The function performs the following checks:
-// - Validates the "preserve-info" flag to ensure both source and destination are SMB-aware.
-// - Validates the "preserve-posix-properties" flag, ensuring both locations are POSIX-aware if set.
-// - Ensures that the "preserve-permissions" flag is correctly set if SMB information is preserved.
-// - Validates the preservation of file owner information based on user flags.
-//
-// Returns:
-// - An error if any validation fails, otherwise nil indicating successful validation.
-
-func (raw rawCopyCmdArgs) performSMBSpecificValidation(cooked *CookedCopyCmdArgs) (err error) {
-	cooked.preserveInfo = raw.preserveInfo && areBothLocationsSMBAware(cooked.FromTo)
-	if err = validatePreserveSMBPropertyOption(cooked.preserveInfo,
-		cooked.FromTo,
-		PreserveInfoFlag); err != nil {
-		return err
-	}
-
-	cooked.preservePOSIXProperties = raw.preservePOSIXProperties
-	if cooked.preservePOSIXProperties && !areBothLocationsPOSIXAware(cooked.FromTo) {
-		return fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
-	}
-
-	isUserPersistingPermissions := raw.preservePermissions || raw.preserveSMBPermissions
-	if cooked.preserveInfo && !isUserPersistingPermissions {
-		glcm.Info(PreservePermissionsDisabledMsg)
-	}
-
-	if err = validatePreserveSMBPropertyOption(isUserPersistingPermissions,
-		cooked.FromTo,
-		PreservePermissionsFlag); err != nil {
-		return err
-	}
-	if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
-		return err
-	}
-	cooked.preservePermissions = common.NewPreservePermissionsOption(isUserPersistingPermissions,
-		raw.preserveOwner,
-		cooked.FromTo)
-	return
-}
-
 func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	cooked := CookedCopyCmdArgs{
 		jobID: azcopyCurrentJobID,
@@ -648,8 +603,15 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		if err != nil {
 			return cooked, err
 		}
-	} else if err = raw.performSMBSpecificValidation(&cooked); err != nil {
-		return cooked, err
+	} else {
+		cooked.isNFSCopy, cooked.preserveInfo, cooked.preservePOSIXProperties, cooked.preservePermissions, err = performSMBSpecificValidation(cooked.FromTo,
+			raw.isNFSCopy, raw.preserveInfo, raw.preservePOSIXProperties, raw.preservePermissions, raw.preserveOwner, raw.preserveSMBPermissions)
+		if err != nil {
+			return cooked, err
+		}
+		if err = validatePreserveOwner(raw.preserveOwner, cooked.FromTo); err != nil {
+			return cooked, err
+		}
 	}
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
@@ -1636,14 +1598,14 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate()
 
 	default:
-		return fmt.Errorf("copy direction %v is not supported\n", cca.FromTo)
+		return fmt.Errorf("copy direction %v is not supported", cca.FromTo)
 	}
 
 	if err != nil {
-		if err == NothingToRemoveError || err == NothingScheduledError {
+		if err == ErrNothingToRemove || err == NothingScheduledError {
 			return err // don't wrap it with anything that uses the word "error"
 		} else {
-			return fmt.Errorf("cannot start job due to error: %s.\n", err)
+			return fmt.Errorf("cannot start job due to error %s", err)
 		}
 	}
 
@@ -1717,7 +1679,7 @@ func (cca *CookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
 		glcm.AllowReinitiateProgressReporting()
 		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
 		err := cca.followupJobArgs.process()
-		if err == NothingToRemoveError {
+		if err == ErrNothingToRemove {
 			glcm.Info("Cleanup completed (nothing needed to be deleted)")
 			glcm.Exit(nil, common.EExitCode.Success())
 		} else if err != nil {
@@ -2082,10 +2044,10 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveOwner, common.PreserveOwnerFlagName, common.PreserveOwnerDefault, "Only has an effect in downloads, and only when --preserve-smb-permissions is used. If true (the default), the file Owner and Group are preserved in downloads. If set to false, --preserve-smb-permissions will still preserve ACLs but Owner and Group will be based on the user running AzCopy")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSMBInfo, "preserve-smb-info", (runtime.GOOS == "windows"), "Preserves SMB property info (last write time, creation time, attribute bits) between SMB-aware resources (Windows and Azure Files). On windows, this flag will be set to true by default. If the source or destination is a volume mounted on Linux using SMB protocol, this flag will have to be explicitly set to true. Only the attribute bits supported by Azure Files will be transferred; any others will be ignored. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern). The info transferred for folders is the same as that for files, except for Last Write Time which is never preserved for folders.")
-	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, "nfs", false, "False by default. Specifies whether the copy operation is an NFS copy. TODO: Add flag description")
+	cpCmd.PersistentFlags().BoolVar(&raw.isNFSCopy, IsNFSProtocolFlag, false, "False by default. Specify this flag if you intend to transfer data to NFS file share. This flag is only applicable when the destination is an NFS file share.")
 	//Marking this flag as hidden as we might not support it in the future
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-info")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Preserve properties. TODO: Add flag description")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveInfo, PreserveInfoFlag, false, "Specify this flag if you want to preserve properties during the transfer operation.The previously available flag for SMB (--preserve-smb-info) is now redirected to --preserve-info flag for both SMB and NFS operations. The default value is true for Windows when copying to Azure Files SMB share and for Linux when copying to Azure Files NFS share. ")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preservePOSIXProperties, "preserve-posix-properties", false, "False by default. 'Preserves' property info gleaned from stat or statx into object metadata.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveSymlinks, common.PreserveSymlinkFlagName, false, "False by default. If enabled, symlink destinations are preserved as the blob content, rather than uploading the file/folder on the other end of the symlink")
@@ -2149,7 +2111,7 @@ func init() {
 
 	// Deprecate the old persist-smb-permissions flag
 	_ = cpCmd.PersistentFlags().MarkHidden("preserve-smb-permissions")
-	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files, or Data Lake Storage to Data Lake Storage). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
+	cpCmd.PersistentFlags().BoolVar(&raw.preservePermissions, PreservePermissionsFlag, false, "False by default. Preserves ACLs between aware resources (Windows and Azure Files SMB, or Data Lake Storage to Data Lake Storage) and permissions between aware resourcec(Linux to Azure Files NFS). For accounts that have a hierarchical namespace, your security principal must be the owning user of the target container or it must be assigned the Storage Blob Data Owner role, scoped to the target container, storage account, parent resource group, or subscription. For downloads, you will also need the --backup flag to restore permissions where the new Owner will not be the user running AzCopy. This flag applies to both files and folders, unless a file-only filter is specified (e.g. include-pattern).")
 
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")

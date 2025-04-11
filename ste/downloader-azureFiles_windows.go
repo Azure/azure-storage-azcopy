@@ -259,3 +259,13 @@ func (a *azureFilesDownloader) parentIsShareRoot(source string) bool {
 	splitPath := strings.Split(strings.Trim(path, sep), sep)
 	return path != "" && len(splitPath) == 1
 }
+
+// place holders added. //Implementation will be added at the time of supporting Azure Files NFS to windows download
+func (bd *azureFilesDownloader) PutNFSProperties(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
+	return nil
+}
+
+// place holders added. //Implementation will be added at the time of supporting Azure Files NFS to windows download
+func (bd *azureFilesDownloader) PutNFSPermissions(sip INFSPropertyBearingSourceInfoProvider, txInfo *TransferInfo) error {
+	return nil
+}

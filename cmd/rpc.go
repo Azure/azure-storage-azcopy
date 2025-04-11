@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 )
@@ -63,7 +64,7 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 		*(responseData.(*common.GetJobDetailsResponse)) = jobsAdmin.GetJobDetails(*requestData.(*common.GetJobDetailsRequest))
 
 	default:
-		panic(fmt.Errorf("Unrecognized RpcCmd: %q", rpcCmd.String()))
+		panic(fmt.Errorf("unrecognized RpcCmd: %q", rpcCmd.String()))
 	}
 	return nil
 }
