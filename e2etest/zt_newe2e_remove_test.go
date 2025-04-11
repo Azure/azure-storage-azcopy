@@ -156,9 +156,7 @@ func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *Sc
 func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsEnabled(svm *ScenarioVariationManager) {
 	// File Share
 	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
-		ResourceDefinitionContainer{
-			ContainerName: pointerTo("cont"),
-		})
+		ResourceDefinitionContainer{})
 
 	// Create parent directory to replicate scenario
 	dirName := "dir"
