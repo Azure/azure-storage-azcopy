@@ -23,14 +23,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
-	"runtime"
-	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
@@ -86,8 +87,8 @@ func (t *fileTraverser) IsDirectory(bool) (bool, error) {
 		if err != nil {
 			return true, err
 		}
-		directoryClient := t.serviceClient.NewShareClient(fileURLParts.ShareName)
-		p := directoryClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
+		shareClient := t.serviceClient.NewShareClient(fileURLParts.ShareName)
+		p := shareClient.NewRootDirectoryClient().NewListFilesAndDirectoriesPager(nil)
 		_, err = p.NextPage(t.ctx)
 
 		return true, err
