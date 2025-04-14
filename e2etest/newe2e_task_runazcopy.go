@@ -139,9 +139,11 @@ type AzCopyEnvironment struct {
 }
 
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter) map[string]bool {
-	return map[string]bool{
+	env.InheritEnvironment = map[string]bool{
 		"path": true,
 	}
+
+	return env.InheritEnvironment
 }
 
 func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter) {
