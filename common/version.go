@@ -1,6 +1,6 @@
 package common
 
-const AzcopyVersion = "10.28.0"
+const AzcopyVersion = "10.29.0-Preview"
 const UserAgent = "AzCopy/" + AzcopyVersion
 const S3ImportUserAgent = "S3Import " + UserAgent
 const GCPImportUserAgent = "GCPImport " + UserAgent
