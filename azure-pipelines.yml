@@ -44,7 +44,7 @@ jobs:
           sudo apt-get install -y libsecret-1-dev libglib2.0-dev
         displayName: 'Install dependencies'
         condition: eq(variables['type'], 'linux')
-
+        
       - script: |
           GOARCH=amd64 GOOS=linux go build -tags "netgo" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
         displayName: 'Generate Linux AMD64'
@@ -141,7 +141,7 @@ jobs:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
         inputs:
-          versionSpec: '3.7'
+          versionSpec: '3.10'
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
