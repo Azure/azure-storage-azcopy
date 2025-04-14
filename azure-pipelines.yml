@@ -136,7 +136,7 @@ jobs:
       - task: UsePythonVersion@0
         name: 'Set_up_Python'
         inputs:
-          versionSpec: '3.7'
+          versionSpec: '3.12.9'
       - task: GoTool@0
         name: 'Set_up_Golang'
         inputs:
