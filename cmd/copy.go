@@ -189,20 +189,6 @@ type rawCopyCmdArgs struct {
 	deleteDestinationFileIfNecessary bool
 }
 
-func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
-	cookedPatterns = make([]string, 0)
-	rawPatterns := strings.Split(pattern, ";")
-	for _, pattern := range rawPatterns {
-
-		// skip the empty patterns
-		if len(pattern) != 0 {
-			cookedPatterns = append(cookedPatterns, pattern)
-		}
-	}
-
-	return
-}
-
 // blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
 // A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
 // The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
@@ -224,47 +210,6 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (int64, error) {
 		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
 	}
 	return int64(math.Round(rawSizeInBytes)), nil
-}
-
-// returns result of stripping and if striptopdir is enabled
-// if nothing happens, the original source is returned
-func (raw rawCopyCmdArgs) stripTrailingWildcardOnRemoteSource(location common.Location) (result string, stripTopDir bool, err error) {
-	result = raw.src
-	resourceURL, err := url.Parse(result)
-	gURLParts := common.NewGenericResourceURLParts(*resourceURL, location)
-
-	if err != nil {
-		err = fmt.Errorf("failed to parse url %s; %w", result, err)
-		return
-	}
-
-	if strings.Contains(gURLParts.GetContainerName(), "*") {
-		// Disallow container name search and object specifics
-		if gURLParts.GetObjectName() != "" {
-			err = errors.New("cannot combine a specific object name with an account-level search")
-			return
-		}
-
-		// Return immediately here because we know this will be safe.
-		return
-	}
-
-	// Trim the trailing /*.
-	if strings.HasSuffix(resourceURL.RawPath, "/*") {
-		resourceURL.RawPath = strings.TrimSuffix(resourceURL.RawPath, "/*")
-		resourceURL.Path = strings.TrimSuffix(resourceURL.Path, "/*")
-		stripTopDir = true
-	}
-
-	// Ensure there aren't any extra *s floating around.
-	if strings.Contains(resourceURL.RawPath, "*") {
-		err = errors.New("cannot use wildcards in the path section of the URL except in trailing \"/*\". If you wish to use * in your URL, manually encode it to %2A")
-		return
-	}
-
-	result = resourceURL.String()
-
-	return
 }
 
 func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
@@ -298,7 +243,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 	// Check if source has a trailing wildcard on a URL
 	if fromTo.From().IsRemote() {
-		tempSrc, cooked.StripTopDir, err = raw.stripTrailingWildcardOnRemoteSource(fromTo.From())
+		tempSrc, cooked.StripTopDir, err = stripTrailingWildcardOnRemoteSource(raw.src, fromTo.From())
 
 		if err != nil {
 			return cooked, err
@@ -410,7 +355,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// warn on exclude unsupported wildcards here. Include have to be later, to cover list-of-files
-	raw.warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
+	warnIfHasWildcard(excludeWarningOncer, "exclude-path", raw.excludePath)
 
 	// unbuffered so this reads as we need it to rather than all at once in bulk
 	listChan := make(chan string)
@@ -433,7 +378,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		addToChannel := func(v string, paramName string) {
 			// empty strings should be ignored, otherwise the source root itself is selected
 			if len(v) > 0 {
-				raw.warnIfHasWildcard(includeWarningOncer, paramName, v)
+				warnIfHasWildcard(includeWarningOncer, paramName, v)
 				listChan <- v
 			}
 		}
@@ -477,7 +422,7 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 		}
 
 		// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
-		includePathList := raw.parsePatterns(raw.includePath)
+		includePathList := parsePatterns(raw.includePath)
 
 		for _, v := range includePathList {
 			addToChannel(v, "include-path")
@@ -868,19 +813,19 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 	}
 
 	// parse the filter patterns
-	cooked.IncludePatterns = raw.parsePatterns(raw.include)
-	cooked.ExcludePatterns = raw.parsePatterns(raw.exclude)
-	cooked.ExcludePathPatterns = raw.parsePatterns(raw.excludePath)
-	cooked.excludeContainer = raw.parsePatterns(raw.excludeContainer)
+	cooked.IncludePatterns = parsePatterns(raw.include)
+	cooked.ExcludePatterns = parsePatterns(raw.exclude)
+	cooked.ExcludePathPatterns = parsePatterns(raw.excludePath)
+	cooked.excludeContainer = parsePatterns(raw.excludeContainer)
 
 	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.From() != common.ELocation.Local() {
 		return cooked, errors.New("cannot check file attributes on remote objects")
 	}
-	cooked.IncludeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
-	cooked.ExcludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
+	cooked.IncludeFileAttributes = parsePatterns(raw.includeFileAttributes)
+	cooked.ExcludeFileAttributes = parsePatterns(raw.excludeFileAttributes)
 
-	cooked.includeRegex = raw.parsePatterns(raw.includeRegex)
-	cooked.excludeRegex = raw.parsePatterns(raw.excludeRegex)
+	cooked.includeRegex = parsePatterns(raw.includeRegex)
+	cooked.excludeRegex = parsePatterns(raw.excludeRegex)
 
 	cooked.dryrunMode = raw.dryrun
 
@@ -902,16 +847,6 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 
 var excludeWarningOncer = &sync.Once{}
 var includeWarningOncer = &sync.Once{}
-
-func (raw *rawCopyCmdArgs) warnIfHasWildcard(oncer *sync.Once, paramName string, value string) {
-	if strings.Contains(value, "*") || strings.Contains(value, "?") {
-		oncer.Do(func() {
-			glcm.Warn(fmt.Sprintf("*** Warning *** The %s parameter does not support wildcards. The wildcard "+
-				"character provided will be interpreted literally and will not have any wildcard effect. To use wildcards "+
-				"(in filenames only, not paths) use include-pattern or exclude-pattern", paramName))
-		})
-	}
-}
 
 // When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
 // else parsing the arguments will fail.

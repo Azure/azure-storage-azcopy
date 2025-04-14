@@ -38,8 +38,7 @@ var _ = chk.Suite(&genericFilterSuite{})
 func TestIncludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
-	raw := rawSyncCmdArgs{}
-	includePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
+	includePatternList := parsePatterns("*.pdf;*.jpeg;exactName")
 	includeFilter := buildIncludeFilters(includePatternList)[0]
 
 	// test the positive cases
@@ -60,8 +59,7 @@ func TestIncludeFilter(t *testing.T) {
 func TestExcludeFilter(t *testing.T) {
 	a := assert.New(t)
 	// set up the filters
-	raw := rawSyncCmdArgs{}
-	excludePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
+	excludePatternList := parsePatterns("*.pdf;*.jpeg;exactName")
 	excludeFilterList := buildExcludeFilters(excludePatternList, false)
 
 	// test the positive cases

@@ -1,0 +1,43 @@
+steps:
+  - task: GoTool@0
+    env:
+      GO111MODULE: 'on'
+    inputs:
+      version: $(AZCOPY_GOLANG_VERSION)
+
+  - script: |
+      mkdir -p $(binaries)
+    displayName: 'Create output path'
+
+  - script: |
+      go build -o "$(binaries)\azcopy_windows_amd64.exe"
+    displayName: 'Generate Windows AMD64'
+    env:
+      GOARCH: amd64
+      GOOS: windows
+      CGO_ENABLED: 0
+
+  - script: |
+      go build -o "$(binaries)\azcopy_windows_386.exe"
+    displayName: 'Generate Windows i386'
+    env:
+      GOARCH: 386
+      GOOS: windows
+      CGO_ENABLED: 0
+
+  - script: |
+      go build -o "$(binaries)\azcopy_windows_v7_arm.exe"
+    displayName: 'Generate Windows ARM'
+    env:
+      GOARCH: arm
+      GOARM: 7
+      GOOS: windows
+      CGO_ENABLED: 0
+
+  - script: |
+      go build -o "$(binaries)\azcopy_windows_arm64.exe"
+    displayName: 'Generate Windows ARM'
+    env:
+      GOARCH: arm64
+      GOOS: windows
+      CGO_ENABLED: 0
