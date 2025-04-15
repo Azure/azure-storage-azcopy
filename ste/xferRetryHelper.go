@@ -23,6 +23,7 @@ package ste
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,7 +33,7 @@ var RetryStatusCodes RetryCodes
 
 var platformRetryPolicy func(response *http.Response, err error) bool
 
-func getShouldRetry() func(*http.Response, error) bool {
+func getShouldRetry(log *LogOptions) func(*http.Response, error) bool {
 	if len(RetryStatusCodes) == 0 {
 		return nil
 	}
@@ -41,12 +42,24 @@ func getShouldRetry() func(*http.Response, error) bool {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
 				// no status codes specified to compare to
 				if len(storageErrorCodes) == 0 {
+					if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
+						log.Log(
+							common.ELogLevel.Debug(),
+							fmt.Sprintf("Request %s retried on custom condition %d", resp.Header.Get("x-ms-client-request-id"), resp.StatusCode))
+					}
+
 					return true
 				}
 				// compare to status codes
 				errorCode := getErrorCode(resp)
 				if errorCode != "" {
 					if _, ok = storageErrorCodes[errorCode]; ok {
+						if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
+							log.Log(
+								common.ELogLevel.Debug(),
+								fmt.Sprintf("Request %s retried on custom condition %s", resp.Header.Get("x-ms-client-request-id"), errorCode))
+						}
+
 						return true
 					}
 				}
