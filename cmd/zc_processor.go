@@ -142,42 +142,24 @@ func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
 }
 
 func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
-	derefString := func(str *string) string {
-		if str == nil {
-			return ""
-		}
-
-		return *str
-	}
-
-	var aTier blob.AccessTier
-	var srcSize int64
-	if d.SourceSize != nil {
-		srcSize = *d.SourceSize
-	}
-
-	if d.BlobTier != nil {
-		aTier = *d.BlobTier
-	}
-
 	surrogate := dryrunTransferSurrogate{
 		d.EntityType.String(),
 		d.BlobType.String(),
 		d.FromTo.String(),
 		d.Source,
 		d.Destination,
-		srcSize,
-		derefString(d.HttpHeaders.BlobContentType),
-		derefString(d.HttpHeaders.BlobContentEncoding),
-		derefString(d.HttpHeaders.BlobContentDisposition),
-		derefString(d.HttpHeaders.BlobContentLanguage),
-		derefString(d.HttpHeaders.BlobCacheControl),
+		common.IffNotNil(d.SourceSize, 0),
+		common.IffNotNil(d.HttpHeaders.BlobContentType, ""),
+		common.IffNotNil(d.HttpHeaders.BlobContentEncoding, ""),
+		common.IffNotNil(d.HttpHeaders.BlobContentDisposition, ""),
+		common.IffNotNil(d.HttpHeaders.BlobContentLanguage, ""),
+		common.IffNotNil(d.HttpHeaders.BlobCacheControl, ""),
 		d.HttpHeaders.BlobContentMD5,
 		d.BlobTags,
 		d.Metadata,
-		aTier,
-		derefString(d.BlobVersion),
-		derefString(d.BlobSnapshot),
+		common.IffNotNil(d.BlobTier, ""),
+		common.IffNotNil(d.BlobVersion, ""),
+		common.IffNotNil(d.BlobSnapshot, ""),
 	}
 
 	return json.Marshal(surrogate)
