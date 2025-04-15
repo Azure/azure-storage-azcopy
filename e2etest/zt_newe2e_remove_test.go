@@ -113,9 +113,7 @@ func (s *RemoveSuite) Scenario_RemoveVirtualDirectory(svm *ScenarioVariationMana
 func (s *RemoveSuite) Scenario_RemoveFileWithOnlyDotsTrailingDotDisabled(svm *ScenarioVariationManager) {
 	// File Share
 	fileShare := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.File()),
-		ResourceDefinitionContainer{
-			ContainerName: pointerTo("cont"),
-		})
+		ResourceDefinitionContainer{})
 
 	// File to remove with multiple dots
 	srcObject := fileShare.GetObject(svm, "...", common.EEntityType.File())
