@@ -316,6 +316,8 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 				for _, v := range os.Environ() {
 					key := v[:strings.Index(v, "=")]
 
+					a.Log("env: %s included %s", key, ieMap[strings.ToLower(key)])
+
 					if ieMap[strings.ToLower(key)] {
 						out = append(out, v)
 					}
