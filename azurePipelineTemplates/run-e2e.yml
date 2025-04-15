@@ -302,10 +302,11 @@ jobs:
             fi
 
             echo "Running azcopy version"
-            $build_name version
+            chmod +x "./$build_name"
+            ./$build_name version
             echo "Hello, world!" > myfile.txt
             echo "Copying file to NFS share"
-            $build_name copy "myfile.txt" "https://seancanaryfilepremium.file.core.windows.net/aznfs3?sv=2024-11-04&ss=f&srt=sco&sp=rwdlc&se=2026-04-15T14:04:04Z&st=2025-04-15T06:04:04Z&spr=https&sig=sliitsNJRVpDV8fqQa7R0ocvejcyxS%2BOygKHqdFBkB8%3D" --nfs
+            ./$build_name copy "myfile.txt" "https://seancanaryfilepremium.file.core.windows.net/aznfs3?sv=2024-11-04&ss=f&srt=sco&sp=rwdlc&se=2026-04-15T14:04:04Z&st=2025-04-15T06:04:04Z&spr=https&sig=sliitsNJRVpDV8fqQa7R0ocvejcyxS%2BOygKHqdFBkB8%3D" --nfs
             echo "Copying successfully"
             echo "Running tests"
             go test -timeout=2h -v ${{ parameters.test_cli_param }} ./e2etest | tee test.txt
