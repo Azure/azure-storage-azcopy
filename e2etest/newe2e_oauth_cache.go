@@ -46,8 +46,12 @@ func SetupOAuthCache(a Asserter) {
 		)
 	}
 	a.NoError("create credentials", err)
+	a.AssertNow("cred cannot be nil", Not{IsNil{}}, cred)
 
 	PrimaryOAuthCache = NewOAuthCache(cred, tenantId)
+	if PrimaryOAuthCache == nil {
+		panic("??????? wut")
+	}
 }
 
 /*
