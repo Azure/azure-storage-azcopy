@@ -26,8 +26,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/v10/common"
-	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 	"hash"
 	"io"
 	"io/fs"
@@ -38,6 +36,10 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"github.com/Azure/azure-storage-azcopy/v10/common/parallel"
 )
 
 const MAX_SYMLINKS_TO_FOLLOW = 40
@@ -250,7 +252,7 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 				WarnStdoutAndScanningLog(err.Error())
 				return nil
 			}
-
+			fileStat := fileInfo.Sys().(*syscall.Stat_t)
 			if fileInfo.Mode()&os.ModeSymlink != 0 {
 				if symlinkHandling.Preserve() {
 					// Handle it like it's not a symlink
@@ -348,6 +350,9 @@ func WalkWithSymlinks(appCtx context.Context, fullPath string, walkFunc filepath
 					_, err = getProcessingError(err)
 					return err
 				}
+				return nil
+			} else if fileStat.Nlink > 1 {
+				// We will skip the hardlinks, because we don't want to process it.
 				return nil
 			} else {
 				// not a symlink
