@@ -108,7 +108,7 @@ jobs:
             }
             
             # Az PS login
-            Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId
+            Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId -ApplicationId $env:servicePrincipalId
             
             # Print "Running tests"
             Write-Output "Running tests"
