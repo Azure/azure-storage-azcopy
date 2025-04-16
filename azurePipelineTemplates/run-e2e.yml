@@ -107,6 +107,9 @@ jobs:
               go build -cover -o $build_name
             }
             
+            # Az PS login
+            Connect-AzAccount -FederatedToken $env:idToken -Tenant $env:tenantId
+            
             # Print "Running tests"
             Write-Output "Running tests"
             
