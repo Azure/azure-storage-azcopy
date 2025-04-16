@@ -28,7 +28,7 @@ All immediate fields of a mutually exclusive struct will be treated as required,
 Structs that are not marked "required" will present Environment errors from "required" fields when one or more options are successfully set
 */
 
-const TestEnvironmentAzurePipelines = "AzurePipelines"
+const TestEnvironmentAzurePipelines = "AzurePipeline"
 
 type NewE2EConfig struct {
 	E2EAuthConfig struct { // mutually exclusive
