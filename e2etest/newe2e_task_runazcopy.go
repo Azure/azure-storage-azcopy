@@ -138,6 +138,11 @@ type AzCopyEnvironment struct {
 	RunCount     *uint
 }
 
+func (env *AzCopyEnvironment) InheritEnvVar(name string) {
+	env.EnsureInheritEnvironment()
+	env.InheritEnvironment[strings.ToLower(name)] = true
+}
+
 func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 	if env.InheritEnvironment == nil {
 		env.DefaultInheritEnvironment(nil)
@@ -229,9 +234,9 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					if oAuthInfo.Environment == AzurePipeline {
 						// No need to force keep path, we already inherit that.
 						c.Environment.EnsureInheritEnvironment()
-						c.Environment.InheritEnvironment[WorkloadIdentityToken] = true
-						c.Environment.InheritEnvironment[WorkloadIdentityServicePrincipalID] = true
-						c.Environment.InheritEnvironment[WorkloadIdentityTenantID] = true
+						c.Environment.InheritEnvVar(WorkloadIdentityToken)
+						c.Environment.InheritEnvVar(WorkloadIdentityServicePrincipalID)
+						c.Environment.InheritEnvVar(WorkloadIdentityTenantID)
 
 						c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.Workload.TenantId != "", &oAuthInfo.DynamicOAuth.Workload.TenantId, nil)
 						c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
@@ -326,8 +331,6 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			} else {
 				for _, v := range os.Environ() {
 					key := v[:strings.Index(v, "=")]
-
-					a.Log("env: %s included %s", key, ieMap[strings.ToLower(key)])
 
 					if ieMap[strings.ToLower(key)] {
 						out = append(out, v)
