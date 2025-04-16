@@ -600,11 +600,31 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	})
 }
 
-// When a job is resumed, resets the number of failed transfers
+// When a previously job is resumed, ResetFailedTransfersCount
+// resets the number of failed transfers
+// persists the correct count of TotalBytesExpected
 func (jm *jobMgr) ResetFailedTransfersCount() {
+	// Ensure total bytes expected is correct
+	totalBytesExpected := uint64(0)
+
 	jm.jobPartMgrs.Iterate(false, func(partNum common.PartNumber, jpm IJobPartMgr) {
 		jpm.ResetFailedTransfersCount()
+
+		// After resuming a failed job, the percentComplete reporting needs to carry correct value for bytes expected.
+		jpp := jpm.Plan()
+		for t := uint32(0); t < jpp.NumTransfers; t++ {
+			jppt := jpp.Transfer(t)
+			totalBytesExpected += uint64(jppt.SourceSize)
+		}
 	})
+
+	// Reset job summary in status manager
+	summaryResp := jm.ListJobSummary()
+	summaryResp.TransfersFailed = 0
+	summaryResp.FailedTransfers = []common.TransferDetail{}
+	summaryResp.TotalBytesExpected = totalBytesExpected
+
+	jm.ResurrectSummary(summaryResp)
 }
 
 // AllTransfersScheduled returns whether Job has completely resumed or not

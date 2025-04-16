@@ -438,18 +438,6 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
 		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
 	}
-
-	var glcm = common.GetLifecycleMgr()
-	glcm.Progress(func(format common.OutputFormat) string {
-		if js.TotalBytesTransferred > js.TotalBytesExpected {
-			return "SuccessfulBytesInActiveFiles() incorrect"
-		}
-
-		return fmt.Sprintf("Bytes transferred: %v, \n Bytes Expected: %v, "+
-			"\n Successful bytes in active files: %v",
-			js.TotalBytesTransferred, js.TotalBytesExpected, jm.SuccessfulBytesInActiveFiles())
-	})
-
 	if js.TotalBytesExpected == 0 {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
@@ -525,7 +513,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	}
 	part0PlanStatus := part0.Plan().JobStatus()
 
-	// Now iterate and count things up
+	// Now iterate and count things up, rebuild job summary by examining the current state of all transfers
 	jm.IterateJobParts(true, func(partNum common.PartNumber, jpm ste.IJobPartMgr) {
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
@@ -593,16 +581,6 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
 		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
 	}
-	var glcm = common.GetLifecycleMgr()
-	glcm.Progress(func(format common.OutputFormat) string {
-		if js.TotalBytesTransferred > js.TotalBytesExpected {
-			return fmt.Sprintf("SuccessfulBytesInActiveFiles() incorrect")
-		}
-
-		return fmt.Sprintf("Bytes transferred: %v, \n Bytes Expected: %v, "+
-			"\n Successful bytes in active files: %v",
-			js.TotalBytesTransferred, js.TotalBytesExpected, jm.SuccessfulBytesInActiveFiles())
-	})
 	if js.TotalBytesExpected == 0 {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
