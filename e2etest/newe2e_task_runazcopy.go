@@ -233,8 +233,11 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
 					if oAuthInfo.Environment == AzurePipeline {
 						// No need to force keep path, we already inherit that.
-						c.Environment.EnsureInheritEnvironment()
 						c.Environment.InheritEnvVar("home")
+						c.Environment.InheritEnvVar("USERPROFILE")
+						c.Environment.InheritEnvVar("HOMEPATH")
+						c.Environment.InheritEnvVar("HOMEDRIVE")
+						c.Environment.InheritEnvVar("AZURE_CONFIG_DIR")
 						c.Environment.InheritEnvVar(WorkloadIdentityToken)
 						c.Environment.InheritEnvVar(WorkloadIdentityServicePrincipalID)
 						c.Environment.InheritEnvVar(WorkloadIdentityTenantID)
