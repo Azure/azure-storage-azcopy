@@ -138,6 +138,12 @@ type AzCopyEnvironment struct {
 	RunCount     *uint
 }
 
+func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
+	if env.InheritEnvironment == nil {
+		env.DefaultInheritEnvironment(nil)
+	}
+}
+
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter) map[string]bool {
 	env.InheritEnvironment = map[string]bool{
 		"path": true,
@@ -222,6 +228,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
 					if oAuthInfo.Environment == AzurePipeline {
 						// No need to force keep path, we already inherit that.
+						c.Environment.EnsureInheritEnvironment()
 						c.Environment.InheritEnvironment[WorkloadIdentityToken] = true
 						c.Environment.InheritEnvironment[WorkloadIdentityServicePrincipalID] = true
 						c.Environment.InheritEnvironment[WorkloadIdentityTenantID] = true
