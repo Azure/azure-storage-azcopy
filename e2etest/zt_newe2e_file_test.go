@@ -578,7 +578,9 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 			Body: NewRandomObjectContentContainer(common.GigaByte),
 		})
 
-	env := &AzCopyEnvironment{}
+	env := &AzCopyEnvironment{
+		AutoLoginMode: pointerTo(common.EAutoLoginType.AzCLI().String()),
+	}
 
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:    AzCopyVerbCopy,
