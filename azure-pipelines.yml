@@ -51,7 +51,6 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          sudo apt-get install libsecret-1-dev
           GOARCH=amd64 GOOS=linux go build -tags "netgo,se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
