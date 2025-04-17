@@ -577,14 +577,15 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		ResourceDefinitionObject{
 			Body: NewRandomObjectContentContainer(common.GigaByte),
 		})
-
 	env := &AzCopyEnvironment{
-		AutoLoginMode: pointerTo(common.EAutoLoginType.AzCLI().String()),
+		InheritEnvironment: map[string]bool{},
 	}
-
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
-		Verb:    AzCopyVerbCopy,
-		Targets: []ResourceManager{srcOverflowObject, shareResource},
+		Verb: AzCopyVerbCopy,
+		Targets: []ResourceManager{
+			TryApplySpecificAuthType(srcOverflowObject, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+			TryApplySpecificAuthType(shareResource, EExplicitCredentialType.OAuth(), svm, CreateAzCopyTargetOptions{}),
+		},
 		Flags: CopyFlags{
 			CopySyncCommonFlags: CopySyncCommonFlags{
 				Recursive: pointerTo(true),
@@ -622,8 +623,6 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		// Will enter during dry runs
 		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
 	}
-
-	//TODO fix error "Failed to read log dir ... The system cannot find the file specified"
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb:           AzCopyVerbJobs,
 		PositionalArgs: []string{"resume", jobId},
