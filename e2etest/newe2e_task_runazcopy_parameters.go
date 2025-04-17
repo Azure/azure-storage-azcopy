@@ -183,7 +183,7 @@ type RawFlags map[string]string
 type GlobalFlags struct {
 	CapMbps          *float64 `flag:"cap-mbps"`
 	TrustedSuffixes  []string `flag:"trusted-microsoft-suffixes"`
-	SkipVersionCheck *bool    `flag:"skip-version-check"`
+	SkipVersionCheck *bool    `flag:"skip-version-check,default:true"`
 
 	// TODO : Flags default seems to be broken; WI#26954065
 	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
