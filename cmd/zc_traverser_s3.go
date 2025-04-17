@@ -276,6 +276,9 @@ func (t *s3Traverser) Traverse(preprocessor objectMorpher, processor objectProce
 			oie.NewCommonMetadata(),
 			t.s3URLParts.BucketName)
 
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter(storedObject.entityType)
+		}
 		err = processIfPassedFilters(filters,
 			storedObject,
 			processor)
