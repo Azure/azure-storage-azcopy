@@ -70,6 +70,7 @@ type rawSyncCmdArgs struct {
 	preserveSymlinks        bool
 	backupMode              bool
 	putMd5                  bool
+	tamperProof             string
 	md5ValidationOption     string
 	includeRoot             bool
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
@@ -304,6 +305,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
+	cooked.tamperProof = raw.tamperProof
+
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return cooked, err
@@ -418,6 +421,7 @@ type cookedSyncCmdArgs struct {
 	preserveSMBInfo         bool
 	preservePOSIXProperties bool
 	putMd5                  bool
+	tamperProof             string
 	md5ValidationOption     common.HashValidationOption
 	blockSize               int64
 	putBlobSize             int64
@@ -843,6 +847,7 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "Defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, the user will be asked a question before scheduling files and blobs for deletion. (default 'false').")
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "Create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob or file. (By default the hash is NOT created.) Only available when uploading.")
+	syncCmd.PersistentFlags().StringVar(&raw.tamperProof, "tamper-proof", "", "Writes the MD5 hash of each file to a specified tamper-proof storage.")
 	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "Specifies how strictly MD5 hashes should be validated when downloading. This option is only available when downloading. Available values include: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing. (default 'FailIfDifferent').")
 	syncCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "Preserve access tier during service to service copy. "+
 		"Please refer to [Azure Blob storage: hot, cool, and archive access tiers](https://docs.microsoft.com/azure/storage/blobs/storage-blob-storage-tiers) to ensure destination storage account supports setting access tier. "+

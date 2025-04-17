@@ -239,6 +239,7 @@ type BlobTransferAttributes struct {
 	NoGuessMimeType                  bool                  // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime         bool                  // when downloading, tell engine to set file's timestamp to timestamp of blob
 	PutMd5                           bool                  // when uploading, should we create and PUT Content-MD5 hashes
+	TamperProof                      string                // when uploading/downloading should we upload/download hash from a tamper-proof ledger
 	MD5ValidationOption              HashValidationOption  // when downloading, how strictly should we validate MD5 hashes?
 	BlockSizeInBytes                 int64                 // when uploading/downloading/copying, specify the size of each chunk
 	PutBlobSizeInBytes               int64                 // when uploading, specify the threshold to determine if the blob should be uploaded in a single PUT request
