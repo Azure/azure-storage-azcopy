@@ -354,6 +354,9 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 				CredentialInfo: req.CredentialInfo,
 			})
 
+		// Prevents previous number of failed transfers seeping into a new run
+		jm.ResetFailedTransfersCount()
+
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
 		// Jank, force the jstm to recognize that it's also in progress
@@ -431,12 +434,18 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	part0PlanStatus := part0.Plan().JobStatus()
 
 	// Add on byte count from files in flight, to get a more accurate running total
-	js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
+	// Check is added to prevent double counting
+	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
+		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
+	}
 	if js.TotalBytesExpected == 0 {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
 	} else {
 		js.PercentComplete = 100 * (float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected))
+	}
+	if js.PercentComplete > 100 {
+		js.PercentComplete = 100
 	}
 
 	// This is added to let FE to continue fetching the Job Progress Summary
@@ -504,7 +513,7 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	}
 	part0PlanStatus := part0.Plan().JobStatus()
 
-	// Now iterate and count things up
+	// Now iterate and count things up, rebuild job summary by examining the current state of all transfers
 	jm.IterateJobParts(true, func(partNum common.PartNumber, jpm ste.IJobPartMgr) {
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
@@ -568,12 +577,18 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 	})
 
 	// Add on byte count from files in flight, to get a more accurate running total
-	js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
+	// Check is added to prevent double counting
+	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
+		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
+	}
 	if js.TotalBytesExpected == 0 {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
 	} else {
 		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	}
+	if js.PercentComplete > 100 {
+		js.PercentComplete = 100
 	}
 
 	// This is added to let FE to continue fetching the Job Progress Summary
