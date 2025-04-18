@@ -24,6 +24,14 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 	queue := []reflect.Value{val}
 	out := make(map[string]string)
 
+	registerKey := func(k, v string) {
+		if k == "" {
+			return
+		}
+
+		out[k] = v
+	}
+
 	for len(queue) != 0 {
 		val := queue[0]
 		queue = queue[1:]
@@ -76,7 +84,8 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 					} else if tag.defaultFunc != nil {
 						// find the function & call it
 						result := tryFindMethod(*tag.defaultFunc).Call([]reflect.Value{reflect.ValueOf(a)}) // todo: we could validate that we're getting what we expect, but no need to do that because reflect will panic for us, then the test will catch it.
-						out[tag.flagKey] = result[0].String()
+
+						registerKey(tag.flagKey, result[0].String())
 					}
 				} else {
 					if field.Kind() == reflect.Pointer {
@@ -85,9 +94,10 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 
 					if tag.serializerFunc != nil {
 						result := tryFindMethod(*tag.serializerFunc).Call([]reflect.Value{field, reflect.ValueOf(a)})
-						out[tag.flagKey] = result[0].String()
+
+						registerKey(tag.flagKey, result[0].String())
 					} else {
-						out[tag.flagKey] = fmt.Sprint(field)
+						registerKey(tag.flagKey, fmt.Sprint(field))
 					}
 				}
 			} else if val.Field(i).Kind() == reflect.Struct {
