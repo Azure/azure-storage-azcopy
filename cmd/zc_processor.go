@@ -23,6 +23,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 	"net/url"
 	"strings"
@@ -64,21 +65,42 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 }
 
 type DryrunTransfer struct {
-	EntityType  common.EntityType
-	BlobType    common.BlobType
-	FromTo      common.FromTo
-	Source      string
-	Destination string
+	EntityType   common.EntityType
+	BlobType     common.BlobType
+	FromTo       common.FromTo
+	Source       string
+	Destination  string
+	SourceSize   *int64
+	HttpHeaders  blob.HTTPHeaders
+	Metadata     common.Metadata
+	BlobTier     *blob.AccessTier
+	BlobVersion  *string
+	BlobTags     common.BlobTags
+	BlobSnapshot *string
+}
+
+type dryrunTransferSurrogate struct {
+	EntityType         string
+	BlobType           string
+	FromTo             string
+	Source             string
+	Destination        string
+	SourceSize         int64           `json:"SourceSize,omitempty"`
+	ContentType        string          `json:"ContentType,omitempty"`
+	ContentEncoding    string          `json:"ContentEncoding,omitempty"`
+	ContentDisposition string          `json:"ContentDisposition,omitempty"`
+	ContentLanguage    string          `json:"ContentLanguage,omitempty"`
+	CacheControl       string          `json:"CacheControl,omitempty"`
+	ContentMD5         []byte          `json:"ContentMD5,omitempty"`
+	BlobTags           common.BlobTags `json:"BlobTags,omitempty"`
+	Metadata           common.Metadata `json:"Metadata,omitempty"`
+	BlobTier           blob.AccessTier `json:"BlobTier,omitempty"`
+	BlobVersion        string          `json:"BlobVersion,omitempty"`
+	BlobSnapshotID     string          `json:"BlobSnapshotID,omitempty"`
 }
 
 func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
-	var surrogate struct {
-		EntityType  string
-		BlobType    string
-		FromTo      string
-		Source      string
-		Destination string
-	}
+	var surrogate dryrunTransferSurrogate
 
 	err := json.Unmarshal(bytes, &surrogate)
 	if err != nil {
@@ -103,22 +125,41 @@ func (d *DryrunTransfer) UnmarshalJSON(bytes []byte) error {
 	d.Source = surrogate.Source
 	d.Destination = surrogate.Destination
 
+	d.SourceSize = &surrogate.SourceSize
+	d.HttpHeaders.BlobContentType = &surrogate.ContentType
+	d.HttpHeaders.BlobContentEncoding = &surrogate.ContentEncoding
+	d.HttpHeaders.BlobCacheControl = &surrogate.CacheControl
+	d.HttpHeaders.BlobContentDisposition = &surrogate.ContentDisposition
+	d.HttpHeaders.BlobContentLanguage = &surrogate.ContentLanguage
+	d.HttpHeaders.BlobContentMD5 = surrogate.ContentMD5
+	d.BlobTags = surrogate.BlobTags
+	d.Metadata = surrogate.Metadata
+	d.BlobTier = &surrogate.BlobTier
+	d.BlobVersion = &surrogate.BlobVersion
+	d.BlobSnapshot = &surrogate.BlobSnapshotID
+
 	return nil
 }
 
 func (d DryrunTransfer) MarshalJSON() ([]byte, error) {
-	surrogate := struct {
-		EntityType  string
-		BlobType    string
-		FromTo      string
-		Source      string
-		Destination string
-	}{
+	surrogate := dryrunTransferSurrogate{
 		d.EntityType.String(),
 		d.BlobType.String(),
 		d.FromTo.String(),
 		d.Source,
 		d.Destination,
+		common.IffNotNil(d.SourceSize, 0),
+		common.IffNotNil(d.HttpHeaders.BlobContentType, ""),
+		common.IffNotNil(d.HttpHeaders.BlobContentEncoding, ""),
+		common.IffNotNil(d.HttpHeaders.BlobContentDisposition, ""),
+		common.IffNotNil(d.HttpHeaders.BlobContentLanguage, ""),
+		common.IffNotNil(d.HttpHeaders.BlobCacheControl, ""),
+		d.HttpHeaders.BlobContentMD5,
+		d.BlobTags,
+		d.Metadata,
+		common.IffNotNil(d.BlobTier, ""),
+		common.IffNotNil(d.BlobVersion, ""),
+		common.IffNotNil(d.BlobSnapshot, ""),
 	}
 
 	return json.Marshal(surrogate)
@@ -185,10 +226,25 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject StoredObject) 
 
 			if format == common.EOutputFormat.Json() {
 				tx := DryrunTransfer{
-					BlobType:   common.FromBlobType(storedObject.blobType),
-					EntityType: storedObject.entityType,
-					FromTo:     s.copyJobTemplate.FromTo,
-					Source:     common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
+					EntityType:  storedObject.entityType,
+					BlobType:    common.FromBlobType(storedObject.blobType),
+					FromTo:      s.copyJobTemplate.FromTo,
+					Source:      common.GenerateFullPath(s.copyJobTemplate.SourceRoot.Value, prettySrcRelativePath),
+					Destination: "",
+					SourceSize:  &storedObject.size,
+					HttpHeaders: blob.HTTPHeaders{
+						BlobCacheControl:       &storedObject.cacheControl,
+						BlobContentDisposition: &storedObject.contentDisposition,
+						BlobContentEncoding:    &storedObject.contentEncoding,
+						BlobContentLanguage:    &storedObject.contentLanguage,
+						BlobContentMD5:         storedObject.md5,
+						BlobContentType:        &storedObject.contentType,
+					},
+					Metadata:     storedObject.Metadata,
+					BlobTier:     &storedObject.blobAccessTier,
+					BlobVersion:  &storedObject.blobVersionID,
+					BlobTags:     storedObject.blobTags,
+					BlobSnapshot: &storedObject.blobSnapshotID,
 				}
 
 				if fromTo.To() != common.ELocation.None() && fromTo.To() != common.ELocation.Unknown() {
