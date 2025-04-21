@@ -260,3 +260,14 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 		fromTo)
 	return
 }
+
+func preserveHardlinkOption(preserveHardlinks bool, isNFSCopy bool) common.HardlinkHandlingType {
+	if isNFSCopy {
+		if preserveHardlinks {
+			return common.HardlinkHandlingType(common.EHardlinkHandlingType.Preserve())
+		}
+		return common.HardlinkHandlingTypeNone
+	} else {
+		return common.HardlinkHandlingTypeNone
+	}
+}

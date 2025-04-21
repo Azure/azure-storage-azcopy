@@ -174,7 +174,8 @@ type rawCopyCmdArgs struct {
 	// Opt-in flag to state if the copy is nfs copy
 	isNFSCopy bool
 	// Opt-in flag to persist additional properties to Azure Files
-	preserveInfo bool
+	preserveInfo      bool
+	preserveHardlinks bool
 }
 
 // blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
@@ -613,6 +614,8 @@ func (raw rawCopyCmdArgs) cook() (CookedCopyCmdArgs, error) {
 			return cooked, err
 		}
 	}
+
+	cooked.preserveHardlinks = preserveHardlinkOption(raw.preserveHardlinks, cooked.isNFSCopy)
 
 	// --as-subdir is OK on all sources and destinations, but additional verification has to be done down the line. (e.g. https://account.blob.core.windows.net is not a valid root)
 	cooked.asSubdir = raw.asSubdir
@@ -1131,7 +1134,8 @@ type CookedCopyCmdArgs struct {
 	// Whether the user wants to preserve the properties of a file...
 	preserveInfo bool
 	// Specifies whether the copy operation is an NFS copy
-	isNFSCopy bool
+	isNFSCopy         bool
+	preserveHardlinks common.HardlinkHandlingType
 }
 
 func (cca *CookedCopyCmdArgs) isRedirection() bool {
@@ -2116,4 +2120,6 @@ func init() {
 	// Deletes destination blobs with uncommitted blocks when staging block, hidden because we want to preserve default behavior
 	cpCmd.PersistentFlags().BoolVar(&raw.deleteDestinationFileIfNecessary, "delete-destination-file", false, "False by default. Deletes destination blobs, specifically blobs with uncommitted blocks when staging block.")
 	_ = cpCmd.PersistentFlags().MarkHidden("delete-destination-file")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveHardlinks, PreserveHardlinksFlag, false, "False by default. Preserve hardlinks for NFS resources. This flag is only applicable when the source is NFS file share or the destination is NFS file share. The default value is false for all other scenarios.")
 }

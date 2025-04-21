@@ -1793,3 +1793,23 @@ func (sht *SymlinkHandlingType) Determine(Follow, Preserve bool) error {
 
 	return nil
 }
+
+// //////////////////////////////////////////////////////////////////////////////
+type HardlinkHandlingType uint8
+
+var EHardlinkHandlingType = HardlinkHandlingType(0)
+
+func (HardlinkHandlingType) Skip() HardlinkHandlingType     { return HardlinkHandlingType(0) } // skip the hardlink file from copying
+func (HardlinkHandlingType) Preserve() HardlinkHandlingType { return HardlinkHandlingType(1) } // Copy the hard link
+func (HardlinkHandlingType) Copy() HardlinkHandlingType     { return HardlinkHandlingType(2) } // Copy the file as normal file
+
+func preserveHardlinkOption(preserveHardlinks bool, isNFSCopy bool) HardlinkHandlingType {
+	if isNFSCopy {
+		if preserveHardlinks {
+			return EHardlinkHandlingType.Preserve()
+		}
+		return EHardlinkHandlingType.Skip()
+	} else {
+		return EHardlinkHandlingType.Copy()
+	}
+}

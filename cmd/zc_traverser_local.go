@@ -58,6 +58,7 @@ type localTraverser struct {
 	hashAdapter    common.HashDataAdapter
 	// receives fullPath entries and manages hashing of files lacking metadata.
 	hashTargetChannel chan string
+	hardlinkHandling  common.HardlinkHandlingType
 }
 
 func (t *localTraverser) IsDirectory(bool) (bool, error) {
