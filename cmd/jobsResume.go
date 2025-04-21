@@ -160,6 +160,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) (t
 			} else {
 				return fmt.Sprintf(
 					`
+
 Job %s summary
 Elapsed Time (Minutes): %v
 Number of File Transfers: %v

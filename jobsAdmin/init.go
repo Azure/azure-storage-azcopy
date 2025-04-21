@@ -28,6 +28,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -35,6 +36,7 @@ import (
 )
 
 var steCtx = context.Background()
+var mu sync.Mutex // Prevent inconsistent state between check and update of TotalBytesTransferred variable
 
 const EMPTY_SAS_STRING = ""
 
@@ -576,11 +578,13 @@ func resurrectJobSummary(jm ste.IJobMgr) common.ListJobSummaryResponse {
 		}
 	})
 
+	mu.Lock()
 	// Add on byte count from files in flight, to get a more accurate running total
 	// Check is added to prevent double counting
 	if js.TotalBytesTransferred+jm.SuccessfulBytesInActiveFiles() <= js.TotalBytesExpected {
 		js.TotalBytesTransferred += jm.SuccessfulBytesInActiveFiles()
 	}
+	mu.Unlock()
 	if js.TotalBytesExpected == 0 {
 		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
 		js.PercentComplete = 100
