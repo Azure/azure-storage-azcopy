@@ -21,6 +21,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 
@@ -136,11 +137,11 @@ func validateProtocolCompatibility(ctx context.Context,
 	// for older account the EnablesProtocols will be nil
 	if properties.EnabledProtocols == nil || *properties.EnabledProtocols == "SMB" {
 		if isNFSCopy {
-			return fmt.Errorf("The destination share has SMB protocol enabled. If you want to perform copy for SMB share do not use --nfs flag")
+			return errors.New("the destination share has SMB protocol enabled. If you want to perform copy for SMB share do not use --nfs flag")
 		}
 	} else {
 		if !isNFSCopy {
-			return fmt.Errorf("The destination share has NFS protocol enabled. If you want to perform copy for NFS share please provide --nfs flag")
+			return errors.New("the destination share has NFS protocol enabled. If you want to perform copy for NFS share please provide --nfs flag")
 		}
 	}
 	return nil
@@ -180,7 +181,7 @@ func performNFSSpecificValidation(fromTo common.FromTo,
 	preserveSMBPermissions bool) (isNFSCopyVal bool, preserveInfoVal bool, preservePermissionsVal common.PreservePermissionsOption, err error) {
 
 	if (preserveSMBInfo && runtime.GOOS == "linux") || preserveSMBPermissions {
-		err = fmt.Errorf(InvalidFlagsForNFSMsg)
+		err = errors.New(InvalidFlagsForNFSMsg)
 		return
 	}
 	isNFSCopyVal = isNFSCopy
@@ -239,7 +240,11 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 
 	preservePOSIXPropertiesVal = preservePOSIXProperties
 	if preservePOSIXPropertiesVal && !areBothLocationsPOSIXAware(fromTo) {
+<<<<<<< HEAD
 		err = fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
+=======
+		err = errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
+>>>>>>> 2f1780e1c943f30b152e87645a826df53cd54594
 		return
 	}
 
