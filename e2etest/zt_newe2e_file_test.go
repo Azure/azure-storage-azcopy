@@ -578,7 +578,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 			Body: NewRandomObjectContentContainer(common.GigaByte),
 		})
 	env := &AzCopyEnvironment{
-		InheritEnvironment: map[string]bool{},
+		InheritEnvironment: map[string]bool{"*": true},
 	}
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbCopy,
