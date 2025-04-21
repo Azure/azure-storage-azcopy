@@ -21,6 +21,7 @@ func ValidatePropertyPtr[T any](a Asserter, name string, expected, real *T) {
 	if expected == nil {
 		return
 	}
+
 	a.Assert(name+" must match", Equal{Deep: true}, expected, real)
 }
 

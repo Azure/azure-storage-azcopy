@@ -240,11 +240,7 @@ func performSMBSpecificValidation(fromTo common.FromTo,
 
 	preservePOSIXPropertiesVal = preservePOSIXProperties
 	if preservePOSIXPropertiesVal && !areBothLocationsPOSIXAware(fromTo) {
-<<<<<<< HEAD
-		err = fmt.Errorf(PreservePOSIXPropertiesIncompatibilityMsg)
-=======
 		err = errors.New(PreservePOSIXPropertiesIncompatibilityMsg)
->>>>>>> 2f1780e1c943f30b152e87645a826df53cd54594
 		return
 	}
 

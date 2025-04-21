@@ -23,10 +23,11 @@ package e2etest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"os"
 	"reflect"
 	"strconv"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -228,12 +229,4 @@ func (gim GlobalInputManager) SetupClassicOAuthCache() error {
 	ClassicE2EOAuthCache = NewOAuthCache(cred, tenantId)
 
 	return nil
-}
-
-func (GlobalInputManager) GetNFSConfiguration() string {
-	path := os.Getenv("RUN_NFS_TESTSUITE")
-	if path == "" {
-		path = "FALSE"
-	}
-	return path
 }
