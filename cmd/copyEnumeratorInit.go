@@ -18,6 +18,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/datalakeerror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/fileerror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
 
@@ -482,7 +483,15 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 
 		// Create a destination share with the default service quota
 		// TODO: Create a flag for the quota
-		_, err = sc.Create(ctx, nil)
+		protocol := "SMB"
+		if cca.isNFSCopy {
+			protocol = "NFS"
+		}
+
+		createOptions := &share.CreateOptions{
+			EnabledProtocols: &protocol,
+		}
+		_, err = sc.Create(ctx, createOptions)
 		if fileerror.HasCode(err, fileerror.ShareAlreadyExists) {
 			return nil
 		}
