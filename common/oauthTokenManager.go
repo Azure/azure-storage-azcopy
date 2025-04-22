@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 	"net"
 	"net/http"
 	"net/url"
@@ -35,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
@@ -498,12 +499,12 @@ func (credInfo OAuthTokenInfo) toJSON() ([]byte, error) {
 	return json.Marshal(credInfo)
 }
 
-func getAuthorityURL(tenantID, activeDirectoryEndpoint string) (*url.URL, error) {
+func getAuthorityURL(activeDirectoryEndpoint string) (*url.URL, error) {
 	u, err := url.Parse(activeDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	return u.Parse(tenantID)
+	return u, nil
 }
 
 const minimumTokenValidDuration = time.Minute * 5
@@ -601,7 +602,7 @@ func (credInfo *OAuthTokenInfo) GetManagedIdentityCredential() (azcore.TokenCred
 }
 
 func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCredential, error) {
-	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+	authorityHost, err := getAuthorityURL(credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -627,7 +628,7 @@ func (credInfo *OAuthTokenInfo) GetClientCertificateCredential() (azcore.TokenCr
 }
 
 func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredential, error) {
-	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+	authorityHost, err := getAuthorityURL(credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -676,7 +677,7 @@ func (credInfo *OAuthTokenInfo) GetWorkloadIdentityCredential() (azcore.TokenCre
 }
 
 func (credInfo *OAuthTokenInfo) GetDeviceCodeCredential() (azcore.TokenCredential, error) {
-	authorityHost, err := getAuthorityURL(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint)
+	authorityHost, err := getAuthorityURL(credInfo.ActiveDirectoryEndpoint)
 	if err != nil {
 		return nil, err
 	}
