@@ -107,6 +107,8 @@ func ValidateResource[T ResourceManager](a Asserter, target T, definition Matche
 			oProps := objMan.GetProperties(a)
 			vProps := objDef.ObjectProperties
 
+			fmt.Println(fmt.Sprintf("ObjName: %+v", *objDef.ObjectName))
+
 			if validateObjectContent && objMan.EntityType() == common.EEntityType.File() && objDef.Body != nil {
 				objBody := objMan.Download(a)
 				validationBody := objDef.Body.Reader()
