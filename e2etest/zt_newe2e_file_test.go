@@ -578,7 +578,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 			Body: NewRandomObjectContentContainer(common.GigaByte),
 		})
 	env := &AzCopyEnvironment{
-		InheritEnvironment: map[string]bool{"*": true},
+		InheritEnvironment: map[string]bool{},
 	}
 	stdOut, _ := RunAzCopy(svm, AzCopyCommand{
 		Verb: AzCopyVerbCopy,
@@ -627,6 +627,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		Verb:           AzCopyVerbJobs,
 		PositionalArgs: []string{"resume", jobId},
 		Environment:    env, // Resume job with same log and job plan folders
+		ShouldFail:     true,
 	})
 
 	if env.LogLocation != nil {
