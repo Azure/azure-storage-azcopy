@@ -627,7 +627,6 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		Verb:           AzCopyVerbJobs,
 		PositionalArgs: []string{"resume", jobId},
 		Environment:    env, // Resume job with same log and job plan folders
-		ShouldFail:     true,
 	})
 
 	if env.LogLocation != nil {
