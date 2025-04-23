@@ -20,9 +20,9 @@ func (*TokenPersistenceSuite) Scenario_InheritCred_Persist(a *ScenarioVariationM
 	cfgTenantID := GlobalConfig.GetTenantID()
 
 	azcopyEnv := &AzCopyEnvironment{
-		LoginCacheName:     pointerTo(fmt.Sprintf("AzCopyPersist%sTest", credSource.String())),
-		InheritEnvironment: true, // we want the executables in PATH
-		ManualLogin:        true,
+		LoginCacheName: pointerTo(fmt.Sprintf("AzCopyPersist%sTest", credSource.String())),
+		// InheritEnvironment now includes PATH
+		ManualLogin: true,
 	}
 
 	_, _ = RunAzCopy(a,

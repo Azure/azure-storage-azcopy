@@ -155,10 +155,17 @@ func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 	}
 }
 
+var RunAzCopyDefaultInheritEnvironment = map[string]bool{
+	"path":             true,
+	"home":             true,
+	"userprofile":      true,
+	"homepath":         true,
+	"homedrive":        true,
+	"azure_config_dir": true,
+}
+
 func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter) map[string]bool {
-	env.InheritEnvironment = map[string]bool{
-		"path": true,
-	}
+	env.InheritEnvironment = RunAzCopyDefaultInheritEnvironment
 
 	return env.InheritEnvironment
 }
@@ -239,30 +246,15 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					} else if staticOauth.OAuthSource.PSInherit {
 						c.Environment.AutoLoginMode = pointerTo("pscred")
 						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
-						c.Environment.InheritEnvVar("home")
-						c.Environment.InheritEnvVar("USERPROFILE")
-						c.Environment.InheritEnvVar("HOMEPATH")
-						c.Environment.InheritEnvVar("HOMEDRIVE")
-						c.Environment.InheritEnvVar("AZURE_CONFIG_DIR")
 					} else if staticOauth.OAuthSource.CLIInherit {
 						c.Environment.AutoLoginMode = pointerTo("azcli")
 						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
-						c.Environment.InheritEnvVar("home")
-						c.Environment.InheritEnvVar("USERPROFILE")
-						c.Environment.InheritEnvVar("HOMEPATH")
-						c.Environment.InheritEnvVar("HOMEDRIVE")
-						c.Environment.InheritEnvVar("AZURE_CONFIG_DIR")
 					}
 				} else {
 					// oauth should reliably work
 					oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
 					if oAuthInfo.Environment == AzurePipeline {
 						// No need to force keep path, we already inherit that.
-						c.Environment.InheritEnvVar("home")
-						c.Environment.InheritEnvVar("USERPROFILE")
-						c.Environment.InheritEnvVar("HOMEPATH")
-						c.Environment.InheritEnvVar("HOMEDRIVE")
-						c.Environment.InheritEnvVar("AZURE_CONFIG_DIR")
 						c.Environment.InheritEnvVar(WorkloadIdentityToken)
 						c.Environment.InheritEnvVar(WorkloadIdentityServicePrincipalID)
 						c.Environment.InheritEnvVar(WorkloadIdentityTenantID)
@@ -278,7 +270,9 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				}
 			} else if c.Environment.AutoLoginMode != nil {
 				oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-				if strings.ToLower(*c.Environment.AutoLoginMode) == common.EAutoLoginType.Workload().String() {
+				var mode common.AutoLoginType
+				a.NoError("failed to parse auto login mode `"+*c.Environment.AutoLoginMode+"`", mode.Parse(*c.Environment.AutoLoginMode))
+				if mode == common.EAutoLoginType.Workload() {
 					// Get the value of the AZURE_FEDERATED_TOKEN environment variable
 					token := oAuthInfo.DynamicOAuth.Workload.FederatedToken
 					a.AssertNow("idToken must be specified to authenticate with workload identity", Empty{Invert: true}, token)
@@ -296,10 +290,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
 					c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicOAuth.Workload.TenantId)
 					c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicOAuth.Workload.ClientId)
-				} else if mode == common.EAutoLoginType.SPN().String() || mode == common.EAutoLoginType.MSI().String() {
-					c.Environment.InheritEnvironment = true
 				}
-
 			}
 		}
 		return target.URI(opts) // Generate like public
@@ -353,9 +344,6 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = append(out, fmt.Sprintf("%s=%s", k, v))
 		}
 
-		//if commandSpec.Environment.InheritEnvironment {
-		//	out = append(out, os.Environ()...)
-		//}
 		if commandSpec.Environment.InheritEnvironment != nil {
 			ieMap := commandSpec.Environment.InheritEnvironment
 			if ieMap["*"] {

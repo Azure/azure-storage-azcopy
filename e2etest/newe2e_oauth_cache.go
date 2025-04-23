@@ -30,7 +30,7 @@ func SetupOAuthCache(a Asserter) {
 
 	// We don't consider workload identity in here because it's only used in a few tests
 
-	if GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.Environment == TestEnvironmentAzurePipelines {
+	if GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.Environment == AzurePipeline {
 		tenantId = GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth.Workload.TenantId
 		cred, err = azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
 			TenantID: tenantId,
