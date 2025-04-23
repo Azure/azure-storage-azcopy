@@ -135,7 +135,7 @@ type AzCopyEnvironment struct {
 	// Specifying "*" as an entry with the value "true" will act as a wildcard, and inherit all env vars.
 	InheritEnvironment map[string]bool `env:",defaultfunc:DefaultInheritEnvironment"`
 
-	ManualLogin        bool
+	ManualLogin bool
 
 	// If this is set, the logs have already been persisted.
 	// These should never be set by a test writer.
@@ -239,11 +239,19 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					} else if staticOauth.OAuthSource.PSInherit {
 						c.Environment.AutoLoginMode = pointerTo("pscred")
 						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
-						c.Environment.InheritEnvironment = true
+						c.Environment.InheritEnvVar("home")
+						c.Environment.InheritEnvVar("USERPROFILE")
+						c.Environment.InheritEnvVar("HOMEPATH")
+						c.Environment.InheritEnvVar("HOMEDRIVE")
+						c.Environment.InheritEnvVar("AZURE_CONFIG_DIR")
 					} else if staticOauth.OAuthSource.CLIInherit {
 						c.Environment.AutoLoginMode = pointerTo("azcli")
 						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
-						c.Environment.InheritEnvironment = true
+						c.Environment.InheritEnvVar("home")
+						c.Environment.InheritEnvVar("USERPROFILE")
+						c.Environment.InheritEnvVar("HOMEPATH")
+						c.Environment.InheritEnvVar("HOMEDRIVE")
+						c.Environment.InheritEnvVar("AZURE_CONFIG_DIR")
 					}
 				} else {
 					// oauth should reliably work
