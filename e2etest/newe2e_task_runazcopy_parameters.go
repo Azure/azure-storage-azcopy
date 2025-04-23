@@ -24,6 +24,14 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 	queue := []reflect.Value{val}
 	out := make(map[string]string)
 
+	registerKey := func(k, v string) {
+		if k == "" {
+			return
+		}
+
+		out[k] = v
+	}
+
 	for len(queue) != 0 {
 		val := queue[0]
 		queue = queue[1:]
@@ -76,7 +84,8 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 					} else if tag.defaultFunc != nil {
 						// find the function & call it
 						result := tryFindMethod(*tag.defaultFunc).Call([]reflect.Value{reflect.ValueOf(a)}) // todo: we could validate that we're getting what we expect, but no need to do that because reflect will panic for us, then the test will catch it.
-						out[tag.flagKey] = result[0].String()
+
+						registerKey(tag.flagKey, result[0].String())
 					}
 				} else {
 					if field.Kind() == reflect.Pointer {
@@ -85,9 +94,10 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 
 					if tag.serializerFunc != nil {
 						result := tryFindMethod(*tag.serializerFunc).Call([]reflect.Value{field, reflect.ValueOf(a)})
-						out[tag.flagKey] = result[0].String()
+
+						registerKey(tag.flagKey, result[0].String())
 					} else {
-						out[tag.flagKey] = fmt.Sprint(field)
+						registerKey(tag.flagKey, fmt.Sprint(field))
 					}
 				}
 			} else if val.Field(i).Kind() == reflect.Struct {
@@ -183,7 +193,7 @@ type RawFlags map[string]string
 type GlobalFlags struct {
 	CapMbps          *float64 `flag:"cap-mbps"`
 	TrustedSuffixes  []string `flag:"trusted-microsoft-suffixes"`
-	SkipVersionCheck *bool    `flag:"skip-version-check"`
+	SkipVersionCheck *bool    `flag:"skip-version-check,default:true"`
 
 	// TODO : Flags default seems to be broken; WI#26954065
 	OutputType  *common.OutputFormat    `flag:"output-type,default:json"`
@@ -415,6 +425,31 @@ type ListFlags struct {
 	MegaUnits       *bool                     `flag:"mega-units"`
 	Properties      *string                   `flag:"properties"`
 	TrailingDot     *common.TrailingDotOption `flag:"trailing-dot"`
+}
+
+type LoginFlags struct {
+	GlobalFlags
+
+	// Generic flags
+	TenantID    *string               `flag:"tenant-id"`
+	AADEndpoint *string               `flag:"aad-endpoint"`
+	LoginType   *common.AutoLoginType `flag:"login-type"`
+
+	// Managed identity
+	IdentityClientID   *string `flag:"identity-client-id"`
+	IdentityResourceID *string `flag:"identity-resource-id"`
+
+	// SPN
+	ApplicationID *string `flag:"application-id"`
+	CertPath      *string `flag:"certificate-path"`
+}
+
+type LoginStatusFlags struct {
+	GlobalFlags
+
+	Tenant   *bool `flag:"tenant"`
+	Endpoint *bool `flag:"endpoint"`
+	Method   *bool `flag:"method"`
 }
 
 type WindowsAttribute uint32

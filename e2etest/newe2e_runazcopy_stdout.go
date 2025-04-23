@@ -211,6 +211,8 @@ func (d *AzCopyParsedDryrunStdout) Write(p []byte) (n int, err error) {
 			if err != nil {
 				continue
 			}
+
+			d.Transfers = append(d.Transfers, tx)
 		}
 	}
 
@@ -238,4 +240,63 @@ func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 		})
 	}
 	return a.AzCopyParsedStdout.Write(p)
+}
+
+type AzCopyParsedLoginStatusStdout struct {
+	AzCopyParsedStdout
+	listenChan chan<- common.JsonOutputTemplate
+	status     cmd.LoginStatusOutput
+}
+
+func (a *AzCopyParsedLoginStatusStdout) Write(p []byte) (n int, err error) {
+	if a.listenChan == nil {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
+			if line.MessageType == common.EOutputMessageType.LoginStatusInfo().String() {
+				out := &cmd.LoginStatusOutput{}
+				err = json.Unmarshal([]byte(line.MessageContent), out)
+				if err != nil {
+					return
+				}
+
+				a.status = *out
+			}
+		})
+	}
+	return a.AzCopyParsedStdout.Write(p)
+}
+
+var _ AzCopyStdout = &AzCopyInteractiveStdout{}
+
+// AzCopyInteractiveStdout is still a semi-raw stdout struct.
+type AzCopyInteractiveStdout struct {
+	Messages []string
+	asserter Asserter
+}
+
+// NewInteractiveWriter creates a new InteractiveWriter instance.
+func NewAzCopyInteractiveStdout(a Asserter) *AzCopyInteractiveStdout {
+	return &AzCopyInteractiveStdout{
+		asserter: a,
+	}
+}
+
+func (a *AzCopyInteractiveStdout) RawStdout() []string {
+	return a.Messages
+}
+
+func (a *AzCopyInteractiveStdout) Write(p []byte) (n int, err error) {
+	str := string(p)
+	lines := strings.Split(strings.TrimSuffix(str, "\n"), "\n")
+	n = len(p)
+
+	for _, v := range lines {
+		a.Messages = append(a.Messages, v)
+		a.asserter.Log(v)
+	}
+
+	return
+}
+
+func (a *AzCopyInteractiveStdout) String() string {
+	return strings.Join(a.RawStdout(), "\n")
 }

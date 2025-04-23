@@ -48,6 +48,45 @@ import (
 //	}
 //}
 
+	//GetShouldRetry returns nil if RetryStatusCodes is nil
+	RetryStatusCodes = nil
+	shouldRetry := getShouldRetry(nil)
+	a.Nil(shouldRetry)
+
+	// TestGetShouldRetry
+	RetryStatusCodes = RetryCodes{409: {"ShareAlreadyExists": {}, "ShareBeingDeleted": {}, "BlobAlreadyExists": {}}, 500: {}, 404: {"BlobNotFound": {}}}
+	shouldRetry = getShouldRetry(nil)
+	a.NotNil(shouldRetry)
+
+	header := make(http.Header)
+	header["x-ms-error-code"] = []string{"BlobAlreadyExists"}
+	response := &http.Response{Header: header, StatusCode: 409}
+	a.True(shouldRetry(response, nil))
+
+	header = make(http.Header)
+	header["x-ms-error-code"] = []string{"ServerBusy"}
+	response = &http.Response{Header: header, StatusCode: 500}
+	a.True(shouldRetry(response, nil))
+
+	header = make(http.Header)
+	header["x-ms-error-code"] = []string{"ServerBusy"}
+	response = &http.Response{Header: header, StatusCode: 502}
+	a.False(shouldRetry(response, nil))
+
+	header = make(http.Header)
+	header["x-ms-error-code"] = []string{"ContainerBeingDeleted"}
+	response = &http.Response{Header: header, StatusCode: 409}
+	a.False(shouldRetry(response, nil))
+
+	if runtime.GOOS == "windows" {
+		rawErr := syscall.Errno(10054) // magic number, in reference to windows.WSAECONNRESET, preventing OS specific shenanigans
+		strErr := errors.New("wsarecv: An existing connection was forcibly closed by the remote host.")
+
+		a.True(shouldRetry(nil, rawErr))
+		a.True(shouldRetry(nil, strErr))
+	}
+}
+
 func TestGetErrorCode(t *testing.T) {
 	a := assert.New(t)
 
