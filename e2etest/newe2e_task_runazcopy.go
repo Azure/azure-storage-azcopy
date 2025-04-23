@@ -395,6 +395,18 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			}
 		case commandSpec.Verb == AzCopyVerbLoginStatus:
 			out = &AzCopyParsedLoginStatusStdout{}
+		case commandSpec.Verb == AzCopyVerbLogin:
+			var lType common.AutoLoginType
+			if ltStr := flagMap["login-type"]; ltStr != "" {
+				_ = lType.Parse(ltStr)
+			}
+
+			if lType.IsInteractive() {
+				out = NewAzCopyInteractiveStdout(a)
+				break
+			}
+
+			fallthrough
 
 		default: // We don't know how to parse this.
 			out = &AzCopyRawStdout{}
