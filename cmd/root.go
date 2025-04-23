@@ -89,14 +89,16 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// referencing https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/azcore/policy/policy.go#L114
+		rscList := "408;429;500;502;503;504"
 		if retryStatusCodes != "" {
-			retryStatusCodes = retryStatusCodes + ";408;429;500;502;503;504"
-			rsc, err := ste.ParseRetryCodes(retryStatusCodes)
-			if err != nil {
-				return err
-			}
-			ste.RetryStatusCodes = rsc
+			rscList += ";" + retryStatusCodes
 		}
+		rsc, err := ste.ParseRetryCodes(rscList)
+		if err != nil {
+			return fmt.Errorf("failed to parse requested retry status code list: %w", err)
+		}
+		ste.RetryStatusCodes = rsc
 
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
 		if azcopyAwaitContinue {
@@ -105,7 +107,7 @@ var rootCmd = &cobra.Command{
 
 		timeAtPrestart := time.Now()
 
-		err := azcopyOutputFormat.Parse(outputFormatRaw)
+		err = azcopyOutputFormat.Parse(outputFormatRaw)
 		glcm.SetOutputFormat(azcopyOutputFormat)
 		if err != nil {
 			return err
