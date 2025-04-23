@@ -241,3 +241,26 @@ func (a *AzCopyParsedJobsListStdout) Write(p []byte) (n int, err error) {
 	}
 	return a.AzCopyParsedStdout.Write(p)
 }
+
+type AzCopyParsedLoginStatusStdout struct {
+	AzCopyParsedStdout
+	listenChan chan<- common.JsonOutputTemplate
+	status     cmd.LoginStatusOutput
+}
+
+func (a *AzCopyParsedLoginStatusStdout) Write(p []byte) (n int, err error) {
+	if a.listenChan == nil {
+		a.listenChan = a.OnParsedLine.SubscribeFunc(func(line common.JsonOutputTemplate) {
+			if line.MessageType == common.EOutputMessageType.LoginStatusInfo().String() {
+				out := &cmd.LoginStatusOutput{}
+				err = json.Unmarshal([]byte(line.MessageContent), out)
+				if err != nil {
+					return
+				}
+
+				a.status = *out
+			}
+		})
+	}
+	return a.AzCopyParsedStdout.Write(p)
+}

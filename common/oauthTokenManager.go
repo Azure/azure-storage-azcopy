@@ -176,21 +176,21 @@ func (uotm *UserOAuthTokenManager) WorkloadIdentityLogin(persist bool) error {
 	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
-func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string) error {
+func (uotm *UserOAuthTokenManager) AzCliLogin(tenantID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
 		LoginType: EAutoLoginType.AzCLI(),
 		Tenant:    tenantID,
-		Persist:   false, // AzCLI creds do not need to be persisted, AzCLI handles persistence.
+		Persist:   persist, // AzCLI creds do not need to be persisted, AzCLI handles persistence.
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo)
 }
 
-func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string) error {
+func (uotm *UserOAuthTokenManager) PSContextToken(tenantID string, persist bool) error {
 	oAuthTokenInfo := &OAuthTokenInfo{
 		LoginType: EAutoLoginType.PsCred(),
 		Tenant:    tenantID,
-		Persist:   false, // Powershell creds do not need to be persisted, Powershell handles persistence.
+		Persist:   persist, // Powershell creds do not need to be persisted, Powershell handles persistence.
 	}
 
 	return uotm.validateAndPersistLogin(oAuthTokenInfo)
@@ -646,6 +646,10 @@ func (credInfo *OAuthTokenInfo) GetClientSecretCredential() (azcore.TokenCredent
 }
 
 func (credInfo *OAuthTokenInfo) GetAzCliCredential() (azcore.TokenCredential, error) {
+	if credInfo.Tenant == DefaultTenantID {
+		credInfo.Tenant = ""
+	}
+
 	tc, err := azidentity.NewAzureCLICredential(&azidentity.AzureCLICredentialOptions{TenantID: credInfo.Tenant})
 	if err != nil {
 		return nil, err
@@ -655,7 +659,11 @@ func (credInfo *OAuthTokenInfo) GetAzCliCredential() (azcore.TokenCredential, er
 }
 
 func (credInfo *OAuthTokenInfo) GetPSContextCredential() (azcore.TokenCredential, error) {
-	tc, err := NewPowershellContextCredential(nil)
+	if credInfo.Tenant == DefaultTenantID {
+		credInfo.Tenant = ""
+	}
+
+	tc, err := NewPowershellContextCredential(&PowershellContextCredentialOptions{TenantID: credInfo.Tenant})
 	if err != nil {
 		return nil, err
 	}

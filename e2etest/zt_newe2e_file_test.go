@@ -624,8 +624,8 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 		fmt.Println("failed to cast to AzCopyParsedCopySyncRemoveStdout")
 	}
 	resStdOut, _ := RunAzCopy(svm, AzCopyCommand{
-		Verb:           AzCopyVerbJobs,
-		PositionalArgs: []string{"resume", jobId},
+		Verb:           AzCopyVerbJobsResume,
+		PositionalArgs: []string{jobId},
 		Environment:    env, // Resume job with same log and job plan folders
 	})
 

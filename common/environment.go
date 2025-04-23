@@ -306,6 +306,13 @@ func (EnvironmentVariable) CacheProxyLookup() EnvironmentVariable {
 	}
 }
 
+func (EnvironmentVariable) LoginCacheName() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_LOGIN_CACHE_NAME",
+		Description: "Do not use in production. Overrides the file name or key name used to cache azcopy's token. Do not use in production. This feature is not documented, intended for testing, and may break. Do not use in production.",
+	}
+}
+
 func (EnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",

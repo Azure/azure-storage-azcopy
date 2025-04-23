@@ -427,6 +427,31 @@ type ListFlags struct {
 	TrailingDot     *common.TrailingDotOption `flag:"trailing-dot"`
 }
 
+type LoginFlags struct {
+	GlobalFlags
+
+	// Generic flags
+	TenantID    *string               `flag:"tenant-id"`
+	AADEndpoint *string               `flag:"aad-endpoint"`
+	LoginType   *common.AutoLoginType `flag:"login-type"`
+
+	// Managed identity
+	IdentityClientID   *string `flag:"identity-client-id"`
+	IdentityResourceID *string `flag:"identity-resource-id"`
+
+	// SPN
+	ApplicationID *string `flag:"application-id"`
+	CertPath      *string `flag:"certificate-path"`
+}
+
+type LoginStatusFlags struct {
+	GlobalFlags
+
+	Tenant   *bool `flag:"tenant"`
+	Endpoint *bool `flag:"endpoint"`
+	Method   *bool `flag:"method"`
+}
+
 type WindowsAttribute uint32
 
 const (

@@ -27,7 +27,6 @@ The following options can be as follows:
 All immediate fields of a mutually exclusive struct will be treated as required, and all but one field will be expected to fail.
 Structs that are not marked "required" will present Environment errors from "required" fields when one or more options are successfully set
 */
-
 const (
 	AzurePipeline = "AzurePipeline"
 
@@ -57,9 +56,18 @@ type NewE2EConfig struct {
 
 		StaticStgAcctInfo struct {
 			StaticOAuth struct {
-				TenantID      string `env:"NEW_E2E_STATIC_TENANT_ID"`
-				ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID,required"`
-				ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET,required"`
+				TenantID string `env:"NEW_E2E_STATIC_TENANT_ID"`
+
+				OAuthSource struct { // mutually exclusive
+					SPNSecret struct {
+						ApplicationID string `env:"NEW_E2E_STATIC_APPLICATION_ID,required"`
+						ClientSecret  string `env:"NEW_E2E_STATIC_CLIENT_SECRET,required"`
+					} `env:",required"`
+
+					PSInherit bool `env:"NEW_E2E_STATIC_PS_INHERIT,required"`
+
+					CLIInherit bool `env:"NEW_E2E_STATIC_CLI_INHERIT,required"`
+				} `env:",required,mutually_exclusive"`
 			}
 
 			// todo: should we automate this somehow? Currently each of these accounts needs some marginal boilerplate.
@@ -88,6 +96,36 @@ type NewE2EConfig struct {
 
 func (e NewE2EConfig) StaticResources() bool {
 	return e.E2EAuthConfig.SubscriptionLoginInfo.SubscriptionID == "" // all subscriptionlogininfo options would have to be filled due to required
+}
+
+func (e NewE2EConfig) GetSPNOptions() (present bool, tenant, applicationId, secret string) {
+	staticInfo := e.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
+	dynamicInfo := e.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth.SPNSecret
+
+	if e.StaticResources() {
+		return staticInfo.OAuthSource.SPNSecret.ApplicationID != "",
+			staticInfo.TenantID,
+			staticInfo.OAuthSource.SPNSecret.ApplicationID,
+			staticInfo.OAuthSource.SPNSecret.ClientSecret
+	} else {
+		return dynamicInfo.ApplicationID != "",
+			dynamicInfo.TenantID,
+			dynamicInfo.ApplicationID,
+			dynamicInfo.ApplicationID
+	}
+}
+
+func (e NewE2EConfig) GetTenantID() string {
+	if e.StaticResources() {
+		return e.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth.TenantID
+	} else {
+		dynamicInfo := e.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth
+		if tid := dynamicInfo.SPNSecret.TenantID; tid != "" {
+			return tid
+		} else {
+			return dynamicInfo.Workload.TenantId // worst case if it bubbles down and it's all zero, that's OK.
+		}
+	}
 }
 
 // ========= Tag Definition ==========
