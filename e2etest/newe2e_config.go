@@ -75,10 +75,10 @@ type NewE2EConfig struct {
 				AccountName string `env:"NEW_E2E_PREMIUM_PAGE_ACCOUNT_NAME,required"`
 				AccountKey  string `env:"NEW_E2E_PREMIUM_PAGE_ACCOUNT_KEY,required"`
 			} `env:",required"`
-			PremiumFileShare struct {
-				AccountName string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME,required"`
-				AccountKey  string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY,required"`
-			} `env:",required"`
+			// PremiumFileShare struct {
+			// 	AccountName string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME,required"`
+			// 	AccountKey  string `env:"NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY,required"`
+			// } `env:",required"`
 		} `env:",required,minimum_required=1"`
 	} `env:",required,mutually_exclusive"`
 
