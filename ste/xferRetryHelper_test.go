@@ -14,12 +14,12 @@ func TestGetShouldRetry(t *testing.T) {
 
 	//GetShouldRetry returns nil if RetryStatusCodes is nil
 	RetryStatusCodes = nil
-	shouldRetry := getShouldRetry()
+	shouldRetry := getShouldRetry(nil)
 	a.Nil(shouldRetry)
 
 	// TestGetShouldRetry
 	RetryStatusCodes = RetryCodes{409: {"ShareAlreadyExists": {}, "ShareBeingDeleted": {}, "BlobAlreadyExists": {}}, 500: {}, 404: {"BlobNotFound": {}}}
-	shouldRetry = getShouldRetry()
+	shouldRetry = getShouldRetry(nil)
 	a.NotNil(shouldRetry)
 
 	header := make(http.Header)
