@@ -85,7 +85,7 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter, ctx cont
 						out[tag.flagKey] = *tag.defaultData
 					} else if tag.defaultFunc != nil {
 						// find the function & call it
-						result := tryFindMethod(*tag.defaultFunc).Call([]reflect.Value{reflect.ValueOf(a)}) // todo: we could validate that we're getting what we expect, but no need to do that because reflect will panic for us, then the test will catch it.
+						result := tryFindMethod(*tag.defaultFunc).Call([]reflect.Value{reflect.ValueOf(a), reflect.ValueOf(ctx)}) // todo: we could validate that we're getting what we expect, but no need to do that because reflect will panic for us, then the test will catch it.
 
 						registerKey(tag.flagKey, result[0].String())
 					}
@@ -95,7 +95,7 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter, ctx cont
 					}
 
 					if tag.serializerFunc != nil {
-						result := tryFindMethod(*tag.serializerFunc).Call([]reflect.Value{field, reflect.ValueOf(a)})
+						result := tryFindMethod(*tag.serializerFunc).Call([]reflect.Value{field, reflect.ValueOf(a), reflect.ValueOf(ctx)})
 
 						registerKey(tag.flagKey, result[0].String())
 					} else {

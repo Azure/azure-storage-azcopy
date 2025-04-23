@@ -164,7 +164,7 @@ func (env *AzCopyEnvironment) InheritEnvVar(name string) {
 
 func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
 	if env.InheritEnvironment == nil {
-		env.DefaultInheritEnvironment(nil)
+		env.DefaultInheritEnvironment(nil, context.TODO()) // context isn't important in this default yet
 	}
 }
 
@@ -177,7 +177,7 @@ var RunAzCopyDefaultInheritEnvironment = map[string]bool{
 	"azure_config_dir": true,
 }
 
-func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter) map[string]bool {
+func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter, ctx context.Context) map[string]bool {
 	env.InheritEnvironment = RunAzCopyDefaultInheritEnvironment
 
 	return env.InheritEnvironment
@@ -302,8 +302,6 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
 					c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicOAuth.Workload.TenantId)
 					c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicOAuth.Workload.ClientId)
-				} else if mode == common.EAutoLoginType.SPN().String() || mode == common.EAutoLoginType.MSI().String() {
-					c.Environment.InheritEnvironment = true
 				}
 
 			}
