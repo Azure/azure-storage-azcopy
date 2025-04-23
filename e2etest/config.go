@@ -79,8 +79,8 @@ func (GlobalInputManager) GetAccountAndKey(accountType AccountType) (string, str
 		name = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_NAME")
 		key = os.Getenv("AZCOPY_E2E_CLASSIC_ACCOUNT_KEY")
 	case EAccountType.PremiumFileShares():
-		name = os.Getenv("NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME")
-		key = os.Getenv("NEW_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY")
+		name = os.Getenv("AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_NAME")
+		key = os.Getenv("AZCOPY_E2E_PREMIUM_FILESHARE_ACCOUNT_KEY")
 	case EAccountType.Azurite():
 		// Note: the key below is not a secret, this is the publicly documented Azurite key
 		name = "devstoreaccount1"
