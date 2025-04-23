@@ -131,14 +131,43 @@ type AzCopyEnvironment struct {
 
 	LoginCacheName *string `env:"AZCOPY_LOGIN_CACHE_NAME"`
 
-	InheritEnvironment bool
-	ManualLogin        bool
+	// InheritEnvironment is a lowercase list of environment variables to always inherit.
+	// Specifying "*" as an entry with the value "true" will act as a wildcard, and inherit all env vars.
+	InheritEnvironment map[string]bool `env:",defaultfunc:DefaultInheritEnvironment"`
+
+	ManualLogin bool
 
 	// If this is set, the logs have already been persisted.
 	// These should never be set by a test writer.
 	SessionId    *string
 	LogUploadDir *string
 	RunCount     *uint
+}
+
+func (env *AzCopyEnvironment) InheritEnvVar(name string) {
+	env.EnsureInheritEnvironment()
+	env.InheritEnvironment[strings.ToLower(name)] = true
+}
+
+func (env *AzCopyEnvironment) EnsureInheritEnvironment() {
+	if env.InheritEnvironment == nil {
+		env.DefaultInheritEnvironment(nil)
+	}
+}
+
+var RunAzCopyDefaultInheritEnvironment = map[string]bool{
+	"path":             true,
+	"home":             true,
+	"userprofile":      true,
+	"homepath":         true,
+	"homedrive":        true,
+	"azure_config_dir": true,
+}
+
+func (env *AzCopyEnvironment) DefaultInheritEnvironment(a ScenarioAsserter) map[string]bool {
+	env.InheritEnvironment = RunAzCopyDefaultInheritEnvironment
+
+	return env.InheritEnvironment
 }
 
 func (env *AzCopyEnvironment) generateAzcopyDir(a ScenarioAsserter) {
@@ -217,17 +246,19 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					} else if staticOauth.OAuthSource.PSInherit {
 						c.Environment.AutoLoginMode = pointerTo("pscred")
 						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
-						c.Environment.InheritEnvironment = true
 					} else if staticOauth.OAuthSource.CLIInherit {
 						c.Environment.AutoLoginMode = pointerTo("azcli")
 						c.Environment.AutoLoginTenantID = common.Iff(tenant != "", &tenant, nil)
-						c.Environment.InheritEnvironment = true
 					}
 				} else {
 					// oauth should reliably work
 					oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-					if oAuthInfo.Environment == TestEnvironmentAzurePipelines {
-						c.Environment.InheritEnvironment = true
+					if oAuthInfo.Environment == AzurePipeline {
+						// No need to force keep path, we already inherit that.
+						c.Environment.InheritEnvVar(WorkloadIdentityToken)
+						c.Environment.InheritEnvVar(WorkloadIdentityServicePrincipalID)
+						c.Environment.InheritEnvVar(WorkloadIdentityTenantID)
+
 						c.Environment.AutoLoginTenantID = common.Iff(oAuthInfo.DynamicOAuth.Workload.TenantId != "", &oAuthInfo.DynamicOAuth.Workload.TenantId, nil)
 						c.Environment.AutoLoginMode = pointerTo(common.EAutoLoginType.AzCLI().String())
 					} else {
@@ -239,8 +270,9 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 				}
 			} else if c.Environment.AutoLoginMode != nil {
 				oAuthInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-				if mode := strings.ToLower(*c.Environment.AutoLoginMode); mode == common.EAutoLoginType.Workload().String() {
-					c.Environment.InheritEnvironment = true
+				var mode common.AutoLoginType
+				a.NoError("failed to parse auto login mode `"+*c.Environment.AutoLoginMode+"`", mode.Parse(*c.Environment.AutoLoginMode))
+				if mode == common.EAutoLoginType.Workload() {
 					// Get the value of the AZURE_FEDERATED_TOKEN environment variable
 					token := oAuthInfo.DynamicOAuth.Workload.FederatedToken
 					a.AssertNow("idToken must be specified to authenticate with workload identity", Empty{Invert: true}, token)
@@ -258,10 +290,7 @@ func (c *AzCopyCommand) applyTargetAuth(a Asserter, target ResourceManager) stri
 					c.Environment.AzureFederatedTokenFile = pointerTo(file.Name())
 					c.Environment.AzureTenantId = pointerTo(oAuthInfo.DynamicOAuth.Workload.TenantId)
 					c.Environment.AzureClientId = pointerTo(oAuthInfo.DynamicOAuth.Workload.ClientId)
-				} else if mode == common.EAutoLoginType.SPN().String() || mode == common.EAutoLoginType.MSI().String() {
-					c.Environment.InheritEnvironment = true
 				}
-
 			}
 		}
 		return target.URI(opts) // Generate like public
@@ -315,8 +344,19 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = append(out, fmt.Sprintf("%s=%s", k, v))
 		}
 
-		if commandSpec.Environment.InheritEnvironment {
-			out = append(out, os.Environ()...)
+		if commandSpec.Environment.InheritEnvironment != nil {
+			ieMap := commandSpec.Environment.InheritEnvironment
+			if ieMap["*"] {
+				out = append(out, os.Environ()...)
+			} else {
+				for _, v := range os.Environ() {
+					key := v[:strings.Index(v, "=")]
+
+					if ieMap[strings.ToLower(key)] {
+						out = append(out, v)
+					}
+				}
+			}
 		}
 
 		return out

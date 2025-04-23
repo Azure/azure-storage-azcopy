@@ -20,34 +20,6 @@ const (
 var PrimaryOAuthCache *OAuthCache
 
 func SetupOAuthCache(a Asserter) {
-	//if GlobalConfig.StaticResources() {
-	//	return // no-op, because there's no OAuth configured
-	//}
-	//
-	//dynamicLoginInfo := GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo
-	//staticLoginInfo := GlobalConfig.E2EAuthConfig.StaticStgAcctInfo.StaticOAuth
-	//useStatic := GlobalConfig.StaticResources()
-	//
-	//var cred azcore.TokenCredential
-	//var err error
-	//var tenantId string
-	//if dynamicLoginInfo.Environment == TestEnvironmentAzurePipelines {
-	//	tenantId = dynamicLoginInfo.DynamicOAuth.Workload.TenantId
-	//	cred, err = azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
-	//		TenantID: tenantId,
-	//	})
-	//} else {
-	//	tenantId = common.Iff(useStatic, staticLoginInfo.TenantID, dynamicLoginInfo.DynamicOAuth.SPNSecret.TenantID)
-	//	cred, err = azidentity.NewClientSecretCredential(
-	//		tenantId,
-	//		common.Iff(useStatic, staticLoginInfo.ApplicationID, dynamicLoginInfo.DynamicOAuth.SPNSecret.ApplicationID),
-	//		common.Iff(useStatic, staticLoginInfo.ClientSecret, dynamicLoginInfo.DynamicOAuth.SPNSecret.ClientSecret),
-	//		nil, // Hopefully the defaults should be OK?
-	//	)
-	//}
-	//a.NoError("create credentials", err)
-	//
-	//PrimaryOAuthCache = NewOAuthCache(cred, tenantId)
 	var (
 		cred     azcore.TokenCredential
 		err      error
@@ -58,7 +30,7 @@ func SetupOAuthCache(a Asserter) {
 
 	// We don't consider workload identity in here because it's only used in a few tests
 
-	if GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.Environment == TestEnvironmentAzurePipelines {
+	if GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.Environment == AzurePipeline {
 		tenantId = GlobalConfig.E2EAuthConfig.SubscriptionLoginInfo.DynamicOAuth.Workload.TenantId
 		cred, err = azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
 			TenantID: tenantId,
@@ -76,8 +48,11 @@ func SetupOAuthCache(a Asserter) {
 		cred, err = common.NewPowershellContextCredential(&common.PowershellContextCredentialOptions{
 			TenantID: tenantId,
 		})
+	} else {
+		a.Log("OAuth Cache unconfigured.")
 	}
 	a.NoError("create credentials", err)
+	a.AssertNow("cred cannot be nil", Not{IsNil{}}, cred)
 
 	PrimaryOAuthCache = NewOAuthCache(cred, tenantId)
 }
