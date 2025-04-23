@@ -148,11 +148,11 @@ func AccountRegistryInitHook(a Asserter) {
 			accountKey:  acctInfo.PremiumPage.AccountKey,
 			accountType: EAccountType.PremiumPageBlobs(),
 		}
-		// AccountRegistry[PremiumFileShareAcct] = &AzureAccountResourceManager{
-		// 	accountName: acctInfo.PremiumFileShare.AccountName,
-		// 	accountKey:  acctInfo.PremiumFileShare.AccountKey,
-		// 	accountType: EAccountType.PremiumFileShares(),
-		// }
+		AccountRegistry[PremiumFileShareAcct] = &AzureAccountResourceManager{
+			accountName: acctInfo.PremiumFileShare.AccountName,
+			accountKey:  acctInfo.PremiumFileShare.AccountKey,
+			accountType: EAccountType.PremiumFileShares(),
+		}
 	} else {
 		// Create standard accounts
 		AccountRegistry[PrimaryStandardAcct] = CreateAccount(a, EAccountType.Standard(), nil)
