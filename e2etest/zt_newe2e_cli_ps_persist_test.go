@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	suiteManager.RegisterSuite(&TokenPersistenceSuite{})
+	suiteManager.RegisterEarlyRunSuite(&TokenPersistenceSuite{})
 }
 
 type TokenPersistenceSuite struct{}
