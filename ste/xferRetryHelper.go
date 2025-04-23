@@ -33,7 +33,9 @@ var RetryStatusCodes RetryCodes
 
 var platformRetryPolicy func(response *http.Response, err error) bool
 
-func getShouldRetry(log *LogOptions) func(*http.Response, error) bool {
+type RetryFunc = func(*http.Response, error) bool
+
+func getShouldRetry(log *LogOptions) RetryFunc {
 	if len(RetryStatusCodes) == 0 {
 		return nil
 	}
@@ -53,13 +55,15 @@ func getShouldRetry(log *LogOptions) func(*http.Response, error) bool {
 				// compare to status codes
 				errorCode := getErrorCode(resp)
 				if errorCode != "" {
-					if _, ok = storageErrorCodes[errorCode]; ok {
-						if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
+					if policy, ok := storageErrorCodes[errorCode]; ok {
+						if policy && log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
 							log.Log(
 								common.ELogLevel.Debug(),
 								fmt.Sprintf("Request %s retried on custom condition %s", resp.Header.Get("x-ms-client-request-id"), errorCode))
 						}
 
+						return policy
+					} else if !ok && storageErrorCodes["*"] {
 						return true
 					}
 				}
