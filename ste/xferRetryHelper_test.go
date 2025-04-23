@@ -103,6 +103,10 @@ func TestGetShouldRetry(t *testing.T) {
 	}
 
 	for entryNum, v := range matrix {
+		if v.TestCond != nil && !v.TestCond() {
+			continue // ignore this test
+		}
+
 		RetryStatusCodes = v.Rules
 		shouldRetry := getShouldRetry(nil)
 
