@@ -87,12 +87,12 @@ var rootCmd = &cobra.Command{
 		glcm.RegisterCloseFunc(func() {
 			if debugMemoryProfile != "" {
 				memProfDir := filepath.Dir(debugMemoryProfile)
-				err := os.MkdirAll(memProfDir, 0644)
+				err := os.MkdirAll(memProfDir, 0777)
 				if err != nil {
 					panic(fmt.Sprintf("Failed to create memory profile parent dir: %v", err))
 				}
 
-				f, err := os.OpenFile(debugMemoryProfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+				f, err := os.OpenFile(debugMemoryProfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 				if err != nil {
 					panic(fmt.Sprintf("Failed to open memory profile: %v", err))
 				}
