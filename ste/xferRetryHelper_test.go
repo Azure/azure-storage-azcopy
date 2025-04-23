@@ -2,6 +2,7 @@ package ste
 
 import (
 	"errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"runtime"
@@ -10,44 +11,113 @@ import (
 )
 
 func TestGetShouldRetry(t *testing.T) {
-	a := assert.New(t)
+	type ResponseRetryPair struct {
+		Resp        *http.Response
+		Err         error
+		ShouldRetry bool
+	}
+	type TestEntry struct {
+		TestCond func() bool
 
-	//GetShouldRetry returns nil if RetryStatusCodes is nil
-	RetryStatusCodes = nil
-	shouldRetry := getShouldRetry(nil)
-	a.Nil(shouldRetry)
+		Rules RetryCodes
+		Tests []*ResponseRetryPair // pointers so they can be excluded by OS
+		// CustomTest overrides Tests
+		CustomTest func(t *testing.T, retryFunc RetryFunc)
+	}
 
-	// TestGetShouldRetry
-	RetryStatusCodes = RetryCodes{409: {"ShareAlreadyExists": {}, "ShareBeingDeleted": {}, "BlobAlreadyExists": {}}, 500: {}, 404: {"BlobNotFound": {}}}
-	shouldRetry = getShouldRetry(nil)
-	a.NotNil(shouldRetry)
+	ParseRules := func(in string) RetryCodes {
+		o, err := ParseRetryCodes(in)
+		assert.NoErrorf(t, err, "failed to parse rule `%s`", in)
+		return o
+	}
 
-	header := make(http.Header)
-	header["x-ms-error-code"] = []string{"BlobAlreadyExists"}
-	response := &http.Response{Header: header, StatusCode: 409}
-	a.True(shouldRetry(response, nil))
+	RespTest := func(status int, code string, retry bool) *ResponseRetryPair {
+		return &ResponseRetryPair{
+			Resp: &http.Response{
+				StatusCode: status,
+				Header: map[string][]string{
+					"x-ms-error-code": {code},
+				},
+			},
+			ShouldRetry: retry,
+		}
+	}
 
-	header = make(http.Header)
-	header["x-ms-error-code"] = []string{"ServerBusy"}
-	response = &http.Response{Header: header, StatusCode: 500}
-	a.True(shouldRetry(response, nil))
+	ErrorTest := func(err error, retry bool) *ResponseRetryPair {
+		return &ResponseRetryPair{
+			Err:         err,
+			ShouldRetry: retry,
+		}
+	}
 
-	header = make(http.Header)
-	header["x-ms-error-code"] = []string{"ServerBusy"}
-	response = &http.Response{Header: header, StatusCode: 502}
-	a.False(shouldRetry(response, nil))
+	_ = ParseRules
 
-	header = make(http.Header)
-	header["x-ms-error-code"] = []string{"ContainerBeingDeleted"}
-	response = &http.Response{Header: header, StatusCode: 409}
-	a.False(shouldRetry(response, nil))
+	matrix := []TestEntry{
+		{ // porting the original test in
+			Rules: nil,
+			CustomTest: func(t *testing.T, retryFunc RetryFunc) {
+				assert.Nil(t, retryFunc)
+			},
+		},
+		{
+			Rules: ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
+			Tests: []*ResponseRetryPair{
+				RespTest(409, string(bloberror.BlobAlreadyExists), true),
+				RespTest(500, string(bloberror.ServerBusy), true),  // matches 500 cond
+				RespTest(502, string(bloberror.ServerBusy), false), // does not match status code
+				RespTest(409, string(bloberror.ContainerBeingDeleted), false),
+			},
+		},
+		{
+			TestCond: func() bool {
+				return runtime.GOOS == "windows"
+			},
+			Rules: ParseRules("409: ShareAlreadyExists, ShareBeingDeleted, BlobAlreadyExists; 500; 404: BlobNotFound"),
+			Tests: []*ResponseRetryPair{
+				ErrorTest(syscall.Errno(10054), true),
+				ErrorTest(errors.New("wsarecv: An existing connection was forcibly closed by the remote host."), true),
+			},
+		},
+		{ // test full code removal
+			Rules: ParseRules("400; 500; -400"),
+			Tests: []*ResponseRetryPair{
+				RespTest(400, "asdf", false),
+				RespTest(500, "asdf", true),
+			},
+		},
+		{ // Partial code removal
+			Rules: ParseRules("400: foo, bar; -400: foo"),
+			Tests: []*ResponseRetryPair{
+				RespTest(400, "foo", false),
+				RespTest(400, "bar", true),
+			},
+		},
+		{ // Inverse code removal
+			Rules: ParseRules("-400: foo"),
+			Tests: []*ResponseRetryPair{
+				RespTest(400, "foo", false),
+				RespTest(400, "bar", true),
+				RespTest(400, "asdf", true),
+			},
+		},
+	}
 
-	if runtime.GOOS == "windows" {
-		rawErr := syscall.Errno(10054) // magic number, in reference to windows.WSAECONNRESET, preventing OS specific shenanigans
-		strErr := errors.New("wsarecv: An existing connection was forcibly closed by the remote host.")
+	for entryNum, v := range matrix {
+		if v.TestCond != nil && !v.TestCond() {
+			continue // ignore this test
+		}
 
-		a.True(shouldRetry(nil, rawErr))
-		a.True(shouldRetry(nil, strErr))
+		RetryStatusCodes = v.Rules
+		shouldRetry := getShouldRetry(nil)
+
+		if v.CustomTest != nil {
+			v.CustomTest(t, shouldRetry)
+		}
+
+		for testNum, v := range v.Tests {
+			res := shouldRetry(v.Resp, v.Err)
+			assert.Equalf(t, v.ShouldRetry, res, "expected result mismatch on entry %d test %d", entryNum, testNum)
+		}
 	}
 }
 
@@ -79,54 +149,62 @@ func TestGetErrorCode(t *testing.T) {
 func TestParseRetryCodes(t *testing.T) {
 	a := assert.New(t)
 
-	code := ""
-	rc, err := ParseRetryCodes(code)
-	a.Nil(rc)
-	a.Empty(rc)
-	a.Nil(err)
+	// deltas are always opposite of the default action
+	codes := func(defaultAction bool, deltas ...string) StorageErrorCodes {
+		out := StorageErrorCodes{
+			StorageErrorCodesWildcard: defaultAction,
+		}
 
-	code = "500"
-	rc, err = ParseRetryCodes(code)
-	a.Nil(err)
-	a.Len(rc, 1)
-	a.Contains(rc, 500)
-	a.Empty(rc[500])
+		for _, v := range deltas {
+			out[v] = !defaultAction
+		}
 
-	code = "500; 404:; 403:,"
-	rc, err = ParseRetryCodes(code)
-	a.Nil(err)
-	a.Len(rc, 3)
-	a.Contains(rc, 500)
-	a.Contains(rc, 404)
-	a.Contains(rc, 403)
-	a.Empty(rc[500])
-	a.Empty(rc[404])
-	a.Empty(rc[403])
+		return out
+	}
 
-	code = "409:ShareAlreadyExists, ShareBeingDeleted,BlobAlreadyExists"
-	rc, err = ParseRetryCodes(code)
-	a.Nil(err)
-	a.Len(rc, 1)
-	a.Contains(rc, 409)
-	a.Len(rc[409], 3)
-	a.Contains(rc[409], "ShareAlreadyExists")
-	a.Contains(rc[409], "ShareBeingDeleted")
-	a.Contains(rc[409], "BlobAlreadyExists")
+	// input to expected result
+	TestMatrix := map[string]RetryCodes{
+		"": nil, // no codes
+		"500": { // one code
+			500: codes(true),
+		},
+		// several codes with mixed empty data
+		"500; 404:; 403:,": {
+			500: codes(true),
+			404: codes(true),
+			403: codes(true),
+		},
+		// one code with several storage errors
+		"409:ShareAlreadyExists, ShareBeingDeleted,BlobAlreadyExists": {
+			409: codes(false, "ShareAlreadyExists", "ShareBeingDeleted", "BlobAlreadyExists"),
+		},
+		// multiple codes with mixed data
+		"409:ShareAlreadyExists, ShareBeingDeleted,BlobAlreadyExists; 500; 404: BlobNotFound": {
+			409: codes(false, "ShareAlreadyExists", "ShareBeingDeleted", "BlobAlreadyExists"),
+			500: codes(true),
+			404: codes(false, "BlobNotFound"),
+		},
+		// redacting a full code
+		"400; 500; -400": {
+			400: codes(false),
+			500: codes(true),
+		},
+		// redacting part of a code
+		"404; 500; -404: BlobNotFound": {
+			404: codes(true, "BlobNotFound"),
+			500: codes(true),
+		},
+		// stacking effects
+		"-500; 500: FooBar; 500: Baz; 500: Asdf; -500: Asdf": {
+			500: codes(false, "FooBar", "Baz"),
+		},
+	}
 
-	code = "409:ShareAlreadyExists, ShareBeingDeleted,BlobAlreadyExists; 500; 404: BlobNotFound"
-	rc, err = ParseRetryCodes(code)
-	a.Nil(err)
-	a.Len(rc, 3)
-	a.Contains(rc, 409)
-	a.Len(rc[409], 3)
-	a.Contains(rc[409], "ShareAlreadyExists")
-	a.Contains(rc[409], "ShareBeingDeleted")
-	a.Contains(rc[409], "BlobAlreadyExists")
-	a.Contains(rc, 500)
-	a.Empty(rc[500])
-	a.Contains(rc, 404)
-	a.Len(rc[404], 1)
-	a.Contains(rc[404], "BlobNotFound")
+	for k, v := range TestMatrix {
+		rc, err := ParseRetryCodes(k)
+		a.NoError(err, "Parsing error codes `"+k+"`")
+		a.Equal(v, rc, "input: `"+k+"`")
+	}
 }
 
 func TestParseRetryCodesNegative(t *testing.T) {
@@ -146,52 +224,4 @@ func TestParseRetryCodesNegative(t *testing.T) {
 	_, err = ParseRetryCodes(code)
 	a.NotNil(err)
 	a.Contains(err.Error(), "http status code must be an int")
-}
-
-func TestParseStorageErrorCodes(t *testing.T) {
-	a := assert.New(t)
-
-	code := ""
-	sec := ParseStorageErrorCodes(code)
-	a.Nil(sec)
-	a.Empty(sec)
-
-	code = ",   , "
-	sec = ParseStorageErrorCodes(code)
-	a.Empty(sec)
-
-	code = "ShareAlreadyExists,ShareBeingDeleted,BlobAlreadyExists,ContainerBeingDeleted"
-	sec = ParseStorageErrorCodes(code)
-	a.NotNil(sec)
-	a.Len(sec, 4)
-	a.Contains(sec, "ShareAlreadyExists")
-	a.Contains(sec, "ShareBeingDeleted")
-	a.Contains(sec, "BlobAlreadyExists")
-	a.Contains(sec, "ContainerBeingDeleted")
-
-	code = "ShareAlreadyExists,   ShareBeingDeleted,BlobAlreadyExists   ,ContainerBeingDeleted"
-	sec = ParseStorageErrorCodes(code)
-	a.NotNil(sec)
-	a.Len(sec, 4)
-	a.Contains(sec, "ShareAlreadyExists")
-	a.Contains(sec, "ShareBeingDeleted")
-	a.Contains(sec, "BlobAlreadyExists")
-	a.Contains(sec, "ContainerBeingDeleted")
-
-	code = "UnsupportedHeader"
-	sec = ParseStorageErrorCodes(code)
-	a.NotNil(sec)
-	a.Len(sec, 1)
-	a.Contains(sec, "UnsupportedHeader")
-
-	code = "   UnsupportedHeader   "
-	sec = ParseStorageErrorCodes(code)
-	a.NotNil(sec)
-	a.Len(sec, 1)
-	a.Contains(sec, "UnsupportedHeader")
-
-	code = ",   "
-	sec = ParseStorageErrorCodes(code)
-	a.NotNil(sec)
-	a.Len(sec, 0)
 }
