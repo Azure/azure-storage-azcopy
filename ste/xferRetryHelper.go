@@ -35,7 +35,7 @@ var platformRetryPolicy func(response *http.Response, err error) bool
 
 type RetryFunc = func(*http.Response, error) bool
 
-func getShouldRetry(log *LogOptions) RetryFunc {
+func GetShouldRetry(log *LogOptions) RetryFunc {
 	if len(RetryStatusCodes) == 0 {
 		return nil
 	}
@@ -52,9 +52,9 @@ func getShouldRetry(log *LogOptions) RetryFunc {
 								fmt.Sprintf("Request %s retried on custom condition %s", resp.Header.Get("x-ms-client-request-id"), errorCode))
 						}
 
-                        if policy {
-						    return policy
-                        }
+						if policy {
+							return policy
+						}
 					} else if !ok && storageErrorCodes["*"] {
 						return true
 					}

@@ -47,7 +47,7 @@ func GetAccountResourceManager(uri string) (e2etest.AccountResourceManager, erro
 			TryTimeout:    ste.UploadTryTimeout,
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay,
-			ShouldRetry:   ste.GetShouldRetry(),
+			ShouldRetry:   ste.GetShouldRetry(nil),
 		},
 	}
 

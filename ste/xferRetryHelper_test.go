@@ -108,7 +108,7 @@ func TestGetShouldRetry(t *testing.T) {
 		}
 
 		RetryStatusCodes = v.Rules
-		shouldRetry := getShouldRetry(nil)
+		shouldRetry := GetShouldRetry(nil)
 
 		if v.CustomTest != nil {
 			v.CustomTest(t, shouldRetry)
