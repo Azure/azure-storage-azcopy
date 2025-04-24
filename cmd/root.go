@@ -25,9 +25,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +61,7 @@ var azcopyCurrentJobID common.JobID
 var azcopySkipVersionCheck bool
 var isPipeDownload bool
 var retryStatusCodes string
+var debugMemoryProfile string
 
 type jobLoggerInfo struct {
 	jobID         common.JobID
@@ -81,6 +84,26 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		glcm.RegisterCloseFunc(func() {
+			if debugMemoryProfile != "" {
+				memProfDir := filepath.Dir(debugMemoryProfile)
+				err := os.MkdirAll(memProfDir, 0777)
+				if err != nil {
+					panic(fmt.Sprintf("Failed to create memory profile parent dir: %v", err))
+				}
+
+				f, err := os.OpenFile(debugMemoryProfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				if err != nil {
+					panic(fmt.Sprintf("Failed to open memory profile: %v", err))
+				}
+				defer f.Close()
+				runtime.GC()
+				if err := pprof.WriteHeapProfile(f); err != nil {
+					log.Fatal("could not write memory profile: ", err)
+				}
+			}
+		})
+
 		requestTryTimeout := common.GetEnvironmentVariable(common.EEnvironmentVariable.RequestTryTimeout())
 		if requestTryTimeout != "" {
 			timeout, err := time.ParseDuration(requestTryTimeout + "m")
@@ -89,14 +112,16 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// referencing https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/azcore/policy/policy.go#L114
+		rscList := "408;429;500;502;503;504"
 		if retryStatusCodes != "" {
-			retryStatusCodes = retryStatusCodes + ";408;429;500;502;503;504"
-			rsc, err := ste.ParseRetryCodes(retryStatusCodes)
-			if err != nil {
-				return err
-			}
-			ste.RetryStatusCodes = rsc
+			rscList += ";" + retryStatusCodes
 		}
+		rsc, err := ste.ParseRetryCodes(rscList)
+		if err != nil {
+			return fmt.Errorf("failed to parse requested retry status code list: %w", err)
+		}
+		ste.RetryStatusCodes = rsc
 
 		glcm.E2EEnableAwaitAllowOpenFiles(azcopyAwaitAllowOpenFiles)
 		if azcopyAwaitContinue {
@@ -105,7 +130,7 @@ var rootCmd = &cobra.Command{
 
 		timeAtPrestart := time.Now()
 
-		err := azcopyOutputFormat.Parse(outputFormatRaw)
+		err = azcopyOutputFormat.Parse(outputFormatRaw)
 		glcm.SetOutputFormat(azcopyOutputFormat)
 		if err != nil {
 			return err
@@ -281,6 +306,8 @@ func init() {
 	_ = rootCmd.PersistentFlags().MarkHidden("await-continue")
 	_ = rootCmd.PersistentFlags().MarkHidden("await-open")
 	_ = rootCmd.PersistentFlags().MarkHidden("debug-skip-files")
+	rootCmd.PersistentFlags().StringVar(&debugMemoryProfile, "memory-profile", "", "Export pprof memory profile")
+	_ = rootCmd.PersistentFlags().MarkHidden("memory-profile")
 }
 
 const versionMetadataUrl = "https://azcopyvnextrelease.z22.web.core.windows.net/releasemetadata/latest_version.txt"

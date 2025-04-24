@@ -110,7 +110,7 @@ func NewClientOptions(retry policy.RetryOptions, telemetry policy.TelemetryOptio
 	if srcCred != nil {
 		perRetryPolicies = append(perRetryPolicies, NewSourceAuthPolicy(srcCred))
 	}
-	retry.ShouldRetry = getShouldRetry()
+	retry.ShouldRetry = GetShouldRetry(&log)
 
 	return azcore.ClientOptions{
 		//APIVersion: ,
@@ -316,7 +316,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
 		if ts == common.ETransferStatus.Failed() {
 			jppt.SetTransferStatus(common.ETransferStatus.Restarted(), true)
-			atomic.AddUint32(&jpm.atomicTransfersFailed, ^uint32(0)) // Adding uint32 max is effectively subtracting 1
+			if failedCount := atomic.LoadUint32(&jpm.atomicTransfersFailed); failedCount > 0 {
+				atomic.AddUint32(&jpm.atomicTransfersFailed, ^uint32(0))
+			} // Adding uint32 max is effectively subtracting 1
 		}
 
 		if _, dst, isFolder := plan.TransferSrcDstStrings(t); isFolder {
