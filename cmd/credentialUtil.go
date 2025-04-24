@@ -283,7 +283,7 @@ func checkAuthSafeForTarget(ct common.CredentialType, resource, extraSuffixesAAD
 			parts, err := common.NewS3URLParts(*u) // strip any leading bucket name from URL, to get an endpoint we can pass to s3utils
 			if err == nil {
 				u, err := url.Parse("https://" + parts.Endpoint)
-				ok = err == nil && s3utils.IsAmazonEndpoint(*u)
+				ok = err == nil && (s3utils.IsAmazonEndpoint(*u) || strings.HasSuffix(u.Host, common.S3EssentialHostPart))
 			}
 		}
 

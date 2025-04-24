@@ -466,3 +466,12 @@ func (EnvironmentVariable) DisableBlobTransferResume() EnvironmentVariable {
 		Description:  "An incomplete transfer to blob endpoint will be resumed from start if set to true",
 	}
 }
+
+func (EnvironmentVariable) S3CompatSourceEssentialHostPart() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_S3_COMPAT_ESSENTIAL_HOST_PART",
+		DefaultValue: "amazonaws.com",
+		Description: "This is the essential host part of an S3 compatible source location. Used when transferring from S3 compat sources" +
+			"Supported sources: 'amazonaws.com', 'wasabisys.com', 'backblazeb2.com' 'digitaloceanspaces.com'",
+	}
+}

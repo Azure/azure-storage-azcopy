@@ -27,10 +27,12 @@ import (
 	"strings"
 )
 
-// S3URLParts represents the components that make up AWS S3 Service/Bucket/Object URL.
+// S3URLParts represents the components that make up AWS, Wasabi, BackBlaze, DigitalOcean or MinIO S3 Service/Bucket/Object URL.
 // You parse an existing URL into its parts by calling NewS3URLParts().
 // According to http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro and
 // https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region,
+//
+// For AWS, Wasabi, BackBlaze:
 // S3URLParts supports virtual-hosted-style and path-style URL:
 // Ex, virtual-hosted-style(the bucket name is part of the domain name in the URL) :
 // a. http://bucket.s3.amazonaws.com
@@ -38,7 +40,15 @@ import (
 // Ex,  path-style URL(the bucket name is not part of the domain (unless you use a Region-specific endpoint)):
 // a. http://s3.amazonaws.com/bucket (US East (N. Virginia) Region endpoint)
 // b. http://s3-aws-region.amazonaws.com/bucket (Region-specific endpoint)
-// Dual stack endpoint(IPv6&IPv4) is also supported (https://docs.aws.amazon.com/AmazonS3/latest/dev/dual-stack-endpoints.html#dual-stack-endpoints-description)
+// For DigitalOcean Spaces:
+// - Virtual-style: https://bucket.nyc3.digitaloceanspaces.com
+// - Path-style: https://nyc3.digitaloceanspaces.com/bucket
+//
+// For MinIO:
+// - Virtual-style: https://bucket.minio.example.com
+// - Path-style: https://minio.example.com/bucket
+//
+// For AWS S3, Dual stack endpoint(IPv6&IPv4) is also supported (https://docs.aws.amazon.com/AmazonS3/latest/dev/dual-stack-endpoints.html#dual-stack-endpoints-description)
 // i.e. the endpoint in http://bucketname.s3.dualstack.aws-region.amazonaws.com or http://s3.dualstack.aws-region.amazonaws.com/bucketname
 type S3URLParts struct {
 	Scheme         string // Ex: "https://", "s3://"
@@ -52,29 +62,104 @@ type S3URLParts struct {
 
 	isPathStyle bool
 	isDualStack bool
-	// TODO: Other S3 compatible service which might be with IP endpoint style
+
+	ServiceType S3ServiceType
+	// TODO: Extend for future work on other S3 compatible service which might be with IP endpoint style
+	// Ex: http://XXX.XXX.X.X/bucketname/objectkey
+}
+
+// S3ServiceType is the specific S3 compatible storage
+var ES3ServiceType = S3ServiceType(0)
+
+type S3ServiceType uint8
+
+func (S3ServiceType) Unknown() S3ServiceType      { return S3ServiceType(0) }
+func (S3ServiceType) AWS() S3ServiceType          { return S3ServiceType(1) }
+func (S3ServiceType) Wasabi() S3ServiceType       { return S3ServiceType(2) }
+func (S3ServiceType) Backblaze() S3ServiceType    { return S3ServiceType(3) }
+func (S3ServiceType) DigitalOcean() S3ServiceType { return S3ServiceType(4) }
+func (S3ServiceType) MinIO() S3ServiceType        { return S3ServiceType(5) }
+
+// Known S3-compatible service domains
+const (
+	awsDomain          = "amazonaws.com"
+	wasabiDomain       = "wasabisys.com"
+	backblazeDomain    = "backblazeb2.com"
+	digitalOceanDomain = "digitaloceanspaces.com"
+)
+
+// detectS3ServiceType determines which S3-compatible service a URL belongs to
+func detectS3ServiceType(host string) S3ServiceType {
+	host = strings.ToLower(host)
+
+	if strings.Contains(host, awsDomain) {
+		return ES3ServiceType.AWS()
+	} else if strings.Contains(host, wasabiDomain) {
+		return ES3ServiceType.Wasabi()
+	} else if strings.Contains(host, backblazeDomain) {
+		return ES3ServiceType.Backblaze()
+	} else if strings.Contains(host, digitalOceanDomain) {
+		return ES3ServiceType.DigitalOcean()
+	} else if strings.Contains(host, "minio") {
+		return ES3ServiceType.MinIO()
+	}
+	return ES3ServiceType.Unknown()
 }
 
 const s3HostPattern = "^(?P<bucketName>.+\\.)?s3[.-](?P<dualStackOrRegionOrAWSDomain>[a-z0-9-]+)\\.(?P<regionOrAWSDomainOrCom>[a-z0-9-]+)"
-const invalidS3URLErrorMessage = "Invalid S3 URL. AzCopy supports standard virtual-hosted-style or path-style URLs defined by AWS, E.g: https://bucket.s3.amazonaws.com or https://s3.amazonaws.com/bucket"
+
+/*
+s3HostPatternExtended is a broader pattern matching for virtual-style and path-style URLs that follow an S3 compatible structure. Ex:
+// - AWS S3: bucket.s3.amazonaws.com, s3.amazonaws.com
+// - Wasabi: bucket.s3.wasabisys.com, s3.wasabisys.com
+// - Backblaze: bucket.s3.backblazeb2.com, s3.backblazeb2.com
+// - DigitalOcean: bucket.nyc3.digitaloceanspaces.com, nyc3.digitaloceanspaces.com
+// - MinIO: bucket.minio.example.com, minio.example.com
+*/
+const S3HostPatternExtended = "`^(?P<bucketName>[a-z0-9][-a-z0-9.]*\\.)?(?:s3[.-](?P<dualStackOrRegion>[a-z0-9-]+)\\.)?(?P<domain>[a-z0-9][a-z0-9.-]+\\.[a-z0-9-]+)$"
+
+const invalidS3URLErrorMessage = "invalid S3 URL. AzCopy supports standard virtual-hosted-style or path-style URLs for AWS, Wasabi, Backblaze, DigitalOcean and MinIO. Use " +
+	"Set env AZCOPY_S3_COMPAT_ESSENTIAL_HOST_PART to tE.g: https://bucket.s3.amazonaws.com or https://s3.amazonaws.com/bucket"
 const versionQueryParamKey = "versionId"
-const s3KeywordAmazonAWS = "amazonaws"
 const s3KeywordDualStack = "dualstack"
-const s3EssentialHostPart = "amazonaws.com"
+
+// Default is "amazonaws.com"
+var S3EssentialHostPart = strings.ToLower(GetEnvironmentVariable(EEnvironmentVariable.S3CompatSourceEssentialHostPart()))
+
+// Returns the S3 storage keyword from the host part. Default is "amazonaws"
+var s3KeywordDomain = S3EssentialHostPart[:strings.LastIndex(S3EssentialHostPart, ".")]
 
 var s3HostRegex = regexp.MustCompile(s3HostPattern)
+var s3HostRegexExtended = regexp.MustCompile(S3HostPatternExtended)
 
 // IsS3URL verifies if a given URL points to S3 URL supported by AzCopy-v10
 func IsS3URL(u url.URL) bool {
-	if _, isS3URL := findS3URLMatches(strings.ToLower(u.Host)); isS3URL {
+	hostParsed := strings.ToLower(u.Host)
+	if _, isS3URL := findS3URLMatches(hostParsed); isS3URL {
+		return true
+	}
+	if isMinIOHost(hostParsed) || u.Scheme == "s3" {
+		return true
+	}
+
+	if strings.Contains(hostParsed, "digitaloceanspaces.com") {
 		return true
 	}
 	return false
 }
 
+// Checks if the host is MinIO.
+// Ex "http://localhost:9000" "http://minio.company.internal:9000" "s3://<bucket-name>/<object-key>"
+func isMinIOHost(host string) bool {
+	return strings.Contains(host, "minio") || strings.HasPrefix(host, "localhost")
+}
+
 func findS3URLMatches(host string) (matches []string, isS3Host bool) {
 	matchSlices := s3HostRegex.FindStringSubmatch(host) // If match the first element would be entire host, and then follows the sub match strings.
-	if matchSlices == nil || !strings.Contains(host, s3EssentialHostPart) {
+	if matchSlices == nil || !strings.Contains(host, S3EssentialHostPart) {
+		if matches := s3HostRegexExtended.FindStringSubmatch(host); matches != nil {
+			return matches, true
+		}
 		return nil, false
 	}
 	return matchSlices, true
@@ -95,16 +180,22 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	if path != "" && path[0] == '/' {
 		path = path[1:]
 	}
+	// Find the type of S3 compatible service
+	serviceType := detectS3ServiceType(host)
 
 	up := S3URLParts{
-		Scheme: u.Scheme,
-		Host:   host,
+		Scheme:      u.Scheme,
+		Host:        host,
+		ServiceType: serviceType,
 	}
 
 	// Check what's the path style, and parse accordingly.
 	if matchSlices[1] != "" { // Go's implementation is a bit strange, even if the first subexp fail to be matched, "" will be returned for that sub exp
 		// In this case, it would be in virtual-hosted-style URL, and has host prefix like bucket.s3[-.]
-		up.BucketName = matchSlices[1][:len(matchSlices[1])-1] // Removing the trailing '.' at the end
+		up.BucketName = matchSlices[1]
+		if strings.HasSuffix(up.BucketName, ".") {
+			up.BucketName = up.BucketName[:len(matchSlices[1])-1] // Removing the trailing '.' at the end
+		}
 		up.ObjectKey = path
 
 		up.Endpoint = host[strings.Index(host, ".")+1:]
@@ -121,16 +212,19 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 
 		up.Endpoint = host
 	}
+	// Extract region informatoin
 	// Check if dualstack is contained in host name
-	if matchSlices[2] == s3KeywordDualStack {
-		up.isDualStack = true
-		if matchSlices[3] != s3KeywordAmazonAWS {
-			up.Region = matchSlices[3]
+	if matchSlices[2] != "" {
+		if matchSlices[2] == s3KeywordDualStack {
+			up.isDualStack = true
+			if matchSlices[3] != s3KeywordDomain {
+				up.Region = matchSlices[3]
+			}
+		} else if matchSlices[2] != s3KeywordDomain {
+			up.Region = matchSlices[2]
 		}
-	} else if matchSlices[2] != s3KeywordAmazonAWS {
-		up.Region = matchSlices[2]
-	}
 
+	}
 	// Convert the query parameters to a case-sensitive map & trim whitespace
 	paramsMap := u.Query()
 
