@@ -355,11 +355,28 @@ func RunAzCopy(a ScenarioAsserter, commandSpec AzCopyCommand) (AzCopyStdout, *Az
 			out = append(out, commandSpec.applyTargetAuth(a, v))
 		}
 
-		if commandSpec.Flags != nil {
-			flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a, ctx)
-			for k, v := range flagMap {
-				out = append(out, fmt.Sprintf("--%s=%s", k, v))
+		if commandSpec.Flags == nil {
+			switch commandSpec.Verb {
+			case AzCopyVerbCopy:
+				commandSpec.Flags = CopyFlags{}
+			case AzCopyVerbSync:
+				commandSpec.Flags = SyncFlags{}
+			case AzCopyVerbList:
+				commandSpec.Flags = ListFlags{}
+			case AzCopyVerbLogin:
+				commandSpec.Flags = LoginFlags{}
+			case AzCopyVerbLoginStatus:
+				commandSpec.Flags = LoginStatusFlags{}
+			case AzCopyVerbRemove:
+				commandSpec.Flags = RemoveFlags{}
+			default:
+				commandSpec.Flags = GlobalFlags{}
 			}
+		}
+
+		flagMap = MapFromTags(reflect.ValueOf(commandSpec.Flags), "flag", a, ctx)
+		for k, v := range flagMap {
+			out = append(out, fmt.Sprintf("--%s=%s", k, v))
 		}
 
 		return out
