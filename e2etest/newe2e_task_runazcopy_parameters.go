@@ -1,10 +1,12 @@
 package e2etest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -17,10 +19,10 @@ import (
 // All flags should be nillable, because zero is always a valid state, and must be distinguishable from unspecified.
 // available extdata:
 // - "default:xyz" Defaults to something non-standard for AzCopy-- E.g. always forcing debug logging
-// - "defaultfunc:SpecialDefault" Calls a `func Default*(a ScenarioAsserter) string` named SpecialDefault on the struct. Asserts if not found.
-// - "serializer:SerializerFunc" Calls a `func Serialize*(value any, a ScenarioAsserter) string` named SerializerFunc on the struct. Asserts if not found.
+// - "defaultfunc:SpecialDefault" Calls a `func Default*(a ScenarioAsserter, ctx context.Context) string` named SpecialDefault on the struct. Asserts if not found.
+// - "serializer:SerializerFunc" Calls a `func Serialize*(value any, a ScenarioAsserter, ctx context.Context) string` named SerializerFunc on the struct. Asserts if not found.
 // If special characters , or : are for some reason used, \ can be used as an escape.
-func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[string]string {
+func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter, ctx context.Context) map[string]string {
 	queue := []reflect.Value{val}
 	out := make(map[string]string)
 
@@ -83,7 +85,7 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 						out[tag.flagKey] = *tag.defaultData
 					} else if tag.defaultFunc != nil {
 						// find the function & call it
-						result := tryFindMethod(*tag.defaultFunc).Call([]reflect.Value{reflect.ValueOf(a)}) // todo: we could validate that we're getting what we expect, but no need to do that because reflect will panic for us, then the test will catch it.
+						result := tryFindMethod(*tag.defaultFunc).Call([]reflect.Value{reflect.ValueOf(a), reflect.ValueOf(ctx)}) // todo: we could validate that we're getting what we expect, but no need to do that because reflect will panic for us, then the test will catch it.
 
 						registerKey(tag.flagKey, result[0].String())
 					}
@@ -93,7 +95,7 @@ func MapFromTags(val reflect.Value, tagName string, a ScenarioAsserter) map[stri
 					}
 
 					if tag.serializerFunc != nil {
-						result := tryFindMethod(*tag.serializerFunc).Call([]reflect.Value{field, reflect.ValueOf(a)})
+						result := tryFindMethod(*tag.serializerFunc).Call([]reflect.Value{field, reflect.ValueOf(a), reflect.ValueOf(ctx)})
 
 						registerKey(tag.flagKey, result[0].String())
 					} else {
@@ -207,10 +209,28 @@ type GlobalFlags struct {
 	//CancelFromStdin *bool `flag:"cancel-from-stdin"`
 	AwaitContinue *bool `flag:"await-continue,defaultfunc:DefaultAwaitContinue"`
 	//AwaitOpen       *bool `flag:"await-open"`
+
+	// TODO: Ongoing performance profiling work
+	MemoryProfile *string `flag:"memory-profile,defaultfunc:DefaultMemoryProfile"`
+	//CpuProfile *string `flag:"cpu-profile"`
 }
 
-func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter) string {
+func (GlobalFlags) DefaultAwaitContinue(a ScenarioAsserter, ctx context.Context) string {
 	return common.Iff(isLaunchedByDebugger, "true", "false")
+}
+
+func (GlobalFlags) DefaultMemoryProfile(a ScenarioAsserter, ctx context.Context) string {
+	envCtx := ctx.Value(AzCopyEnvironmentManagerKey{}).(*AzCopyEnvironmentContext)
+	env := ctx.Value(AzCopyEnvironmentKey{}).(*AzCopyEnvironment)
+	runNum := ctx.Value(AzCopyRunNumKey{}).(uint)
+
+	envTmpPath := envCtx.GetEnvTempPath(env)
+	memProfPath := filepath.Join(
+		envTmpPath,
+		PprofSubdir,
+		fmt.Sprintf(PprofMemFmt, runNum))
+
+	return memProfPath
 }
 
 type CommonFilterFlags struct {
@@ -235,15 +255,15 @@ type CommonFilterFlags struct {
 	ExcludeAttributes []WindowsAttribute `flag:"exclude-attributes,serializer:SerializeAttributeList"`
 }
 
-func (CommonFilterFlags) SerializeTime(t any, a ScenarioAsserter) string {
+func (CommonFilterFlags) SerializeTime(t any, a ScenarioAsserter, ctx context.Context) string {
 	return GetTypeOrAssert[*time.Time](a, t).UTC().Format(time.RFC3339)
 }
 
-func (CommonFilterFlags) SerializeStrings(list any, a ScenarioAsserter) string {
+func (CommonFilterFlags) SerializeStrings(list any, a ScenarioAsserter, ctx context.Context) string {
 	return strings.Join(GetTypeOrAssert[[]string](a, list), ";")
 }
 
-func (CommonFilterFlags) SerializeAttributeList(list any, a ScenarioAsserter) string {
+func (CommonFilterFlags) SerializeAttributeList(list any, a ScenarioAsserter, ctx context.Context) string {
 	attrs := GetTypeOrAssert[[]WindowsAttribute](a, list)
 
 	out := ""
@@ -326,7 +346,7 @@ type CopyFlags struct {
 	//BackupMode *bool `flag:"backup"`
 }
 
-func (CopyFlags) SerializeListingFile(in any, a ScenarioAsserter) string {
+func (CopyFlags) SerializeListingFile(in any, a ScenarioAsserter, ctx context.Context) string {
 	if a.Dryrun() {
 		// Dryruns won't actually run AzCopy, and dryruns shouldn't reach this code path, but just in case, we should cover it.
 		return "listingfile.txt"
@@ -375,11 +395,11 @@ func (CopyFlags) SerializeKeyValues(in any, a ScenarioAsserter, kvsep, elemsep s
 	return out
 }
 
-func (c CopyFlags) SerializeMetadata(meta any, a ScenarioAsserter) string {
+func (c CopyFlags) SerializeMetadata(meta any, a ScenarioAsserter, ctx context.Context) string {
 	return c.SerializeKeyValues(meta, a, "=", ";")
 }
 
-func (c CopyFlags) SerializeTags(tags any, a ScenarioAsserter) string {
+func (c CopyFlags) SerializeTags(tags any, a ScenarioAsserter, ctx context.Context) string {
 	return c.SerializeKeyValues(tags, a, "=", "&")
 }
 
@@ -413,8 +433,8 @@ type RemoveFlags struct {
 	CPKByValue      *bool                         `flag:"cpk-by-value"`
 }
 
-func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter) {
-	CopyFlags{}.SerializeListingFile(in, scenarioAsserter)
+func (r RemoveFlags) SerializeListingFile(in any, scenarioAsserter ScenarioAsserter, ctx context.Context) {
+	CopyFlags{}.SerializeListingFile(in, scenarioAsserter, ctx)
 }
 
 type ListFlags struct {

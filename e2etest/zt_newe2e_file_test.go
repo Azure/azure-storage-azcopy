@@ -567,7 +567,7 @@ func (s *FileTestSuite) Scenario_UploadFilesWithQuota(svm *ScenarioVariationMana
 
 	// Fill the share up
 	if !svm.Dryrun() {
-		shareClient := shareResource.(*FileShareResourceManager).internalClient
+		shareClient := shareResource.(*FileShareResourceManager).InternalClient
 		fileClient := shareClient.NewRootDirectoryClient().NewFileClient("big.txt")
 		_, err := fileClient.Create(ctx, 990*common.MegaByte, nil)
 		svm.NoError("Create large file", err)

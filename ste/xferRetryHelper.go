@@ -35,23 +35,13 @@ var platformRetryPolicy func(response *http.Response, err error) bool
 
 type RetryFunc = func(*http.Response, error) bool
 
-func getShouldRetry(log *LogOptions) RetryFunc {
+func GetShouldRetry(log *LogOptions) RetryFunc {
 	if len(RetryStatusCodes) == 0 {
 		return nil
 	}
 	return func(resp *http.Response, err error) bool {
 		if resp != nil {
 			if storageErrorCodes, ok := RetryStatusCodes[resp.StatusCode]; ok {
-				// no status codes specified to compare to
-				if len(storageErrorCodes) == 0 {
-					if log != nil && log.ShouldLog(common.ELogLevel.Debug()) {
-						log.Log(
-							common.ELogLevel.Debug(),
-							fmt.Sprintf("Request %s retried on custom condition %d", resp.Header.Get("x-ms-client-request-id"), resp.StatusCode))
-					}
-
-					return true
-				}
 				// compare to status codes
 				errorCode := getErrorCode(resp)
 				if errorCode != "" {
@@ -62,7 +52,9 @@ func getShouldRetry(log *LogOptions) RetryFunc {
 								fmt.Sprintf("Request %s retried on custom condition %s", resp.Header.Get("x-ms-client-request-id"), errorCode))
 						}
 
-						return policy
+						if policy {
+							return policy
+						}
 					} else if !ok && storageErrorCodes["*"] {
 						return true
 					}
