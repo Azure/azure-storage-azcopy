@@ -39,7 +39,7 @@ func GetCurrentUIDAndGID(a Asserter) (uid, gid string) {
 
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesAndPerms(svm *ScenarioVariationManager) {
 
-	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		return
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
@@ -154,7 +154,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesAndP
 
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesOnly(svm *ScenarioVariationManager) {
 
-	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		return
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
@@ -256,7 +256,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesOnly
 
 func (s *FilesNFSTestSuite) Scenario_LocalToAzureNFS_PreservePermissionsOnly(svm *ScenarioVariationManager) {
 
-	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		return
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
@@ -354,7 +354,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalToAzureNFS_PreservePermissionsOnly(svm
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePropertiesAndPerms(svm *ScenarioVariationManager) {
 
-	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		return
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
@@ -456,7 +456,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePropertiesAndPerms(
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePropertiesOnly(svm *ScenarioVariationManager) {
 
-	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		return
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
@@ -546,7 +546,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePropertiesOnly(svm 
 
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePermissionsOnly(svm *ScenarioVariationManager) {
 
-	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		return
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
