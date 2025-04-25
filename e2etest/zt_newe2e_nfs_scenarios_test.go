@@ -1,12 +1,14 @@
 package e2etest
 
 import (
-	"github.com/Azure/azure-storage-azcopy/v10/common"
+	"fmt"
 	"math/rand"
 	"os/user"
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/v10/common"
 )
 
 func init() {
@@ -45,6 +47,7 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesAndP
 	uid, gid := GetCurrentUIDAndGID(svm)
 
 	dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
+	fmt.Println("-----------------AccountName", GetAccount(svm, PremiumFileShareAcct).AccountName())
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
 	rootDir := "dir_file_copy_test_" + randomString(6)
