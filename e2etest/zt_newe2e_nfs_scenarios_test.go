@@ -46,11 +46,9 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesAndP
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	uid, gid := GetCurrentUIDAndGID(svm)
 
-	//dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
-		//ContainerName: pointerTo("aznfs3"),
 		Properties: ContainerProperties{
 			FileContainerProperties: FileContainerProperties{
 				EnabledProtocols: pointerTo("NFS"),
@@ -162,7 +160,6 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesAndP
 
 }
 
-/*
 func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesOnly(svm *ScenarioVariationManager) {
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
@@ -170,11 +167,14 @@ func (s *FilesNFSTestSuite) Scenario_LocalLinuxToAzureNFS_PreservePropertiesOnly
 	}
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 
-	//dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
-		ContainerName: pointerTo("aznfs3"),
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
 	})
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
@@ -277,11 +277,14 @@ func (s *FilesNFSTestSuite) Scenario_LocalToAzureNFS_PreservePermissionsOnly(svm
 	azCopyVerb := ResolveVariation(svm, []AzCopyVerb{AzCopyVerbCopy, AzCopyVerbSync}) // Calculate verb early to create the destination object early
 	uid, gid := GetCurrentUIDAndGID(svm)
 
-	//dstContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
-		ContainerName: pointerTo("aznfs3"),
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
 	})
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
@@ -381,11 +384,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePropertiesAndPerms(
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
-	//srcContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
-		ContainerName: pointerTo("aznfs3"),
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
 	})
 	rootDir := "dir_file_copy_test_" + randomString(6)
 
@@ -486,11 +492,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePropertiesOnly(svm 
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
-	//srcContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
-		ContainerName: pointerTo("aznfs3"),
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
 	})
 	rootDir := "dir_file_copy_test_" + randomString(6)
 
@@ -581,11 +590,14 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePermissionsOnly(svm
 
 	dstContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, common.ELocation.Local()), ResourceDefinitionContainer{})
 
-	//srcContainer := GetAccount(svm, PremiumFileShareAcct).GetService(svm, common.ELocation.File()).GetContainer("aznfs3")
 	srcContainer := CreateResource[ContainerResourceManager](svm, GetRootResource(svm, ResolveVariation(svm, []common.Location{common.ELocation.File()}), GetResourceOptions{
 		PreferredAccount: pointerTo(PremiumFileShareAcct),
 	}), ResourceDefinitionContainer{
-		ContainerName: pointerTo("aznfs3"),
+		Properties: ContainerProperties{
+			FileContainerProperties: FileContainerProperties{
+				EnabledProtocols: pointerTo("NFS"),
+			},
+		},
 	})
 	rootDir := "dir_file_copy_test_" + randomString(6)
 
@@ -671,6 +683,7 @@ func (s *FilesNFSTestSuite) Scenario_AzureNFSToLocal_PreservePermissionsOnly(svm
 }
 
 /*
+TODO: This test is not yet ready for execution.
 func (s *FilesNFSTestSuite) Scenario_AzureNFSToAzureNFS_PreservePropertiesAndPerms(svm *ScenarioVariationManager) {
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "macos" {
